@@ -1,0 +1,2550 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OrderPro — نظام إدارة الطلبات</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#0f172a;--accent:#6366f1;--accent-h:#4f46e5;--accent-light:#eef2ff;
+  --success:#10b981;--success-light:#d1fae5;--warn:#f59e0b;--warn-light:#fef3c7;
+  --danger:#ef4444;--danger-light:#fee2e2;--info:#3b82f6;--info-light:#dbeafe;
+  --purple:#8b5cf6;--purple-light:#ede9fe;
+  --bg:#f1f5f9;--card:#ffffff;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;
+  --sidebar-w:240px;--topbar-h:58px;
+}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--text);font-size:13px}
+.app{display:flex;height:100vh}
+.sidebar{width:var(--sidebar-w);background:var(--primary);display:flex;flex-direction:column;flex-shrink:0}
+.main-area{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.topbar{height:var(--topbar-h);background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:10px;flex-shrink:0}
+.content{flex:1;overflow-y:auto;padding:20px}
+.sb-logo{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.07)}
+.sb-logo-inner{display:flex;align-items:center;gap:10px}
+.sb-icon{width:36px;height:36px;background:var(--accent);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.sb-logo h2{font-size:16px;font-weight:800;color:#fff}
+.sb-logo p{font-size:10px;color:rgba(255,255,255,.35);margin-top:1px}
+.sb-nav{padding:12px 10px;flex:1;overflow-y:auto}
+.nav-label{font-size:10px;font-weight:700;color:rgba(255,255,255,.25);padding:10px 10px 4px;letter-spacing:.8px}
+.ni{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;cursor:pointer;color:rgba(255,255,255,.55);font-size:13px;font-weight:500;transition:all .15s;margin-bottom:2px}
+.ni:hover{background:rgba(255,255,255,.06);color:rgba(255,255,255,.85)}
+.ni.active{background:var(--accent);color:#fff;font-weight:600}
+.ni-icon{font-size:16px;width:20px;text-align:center;flex-shrink:0}
+.ni-label{flex:1}
+.nbadge{background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;min-width:18px;text-align:center}
+.nbadge.orange{background:var(--warn)}
+.sb-foot{padding:12px 10px;border-top:1px solid rgba(255,255,255,.07)}
+.sb-status{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,.04)}
+.sdot{width:7px;height:7px;border-radius:50%;background:var(--danger);flex-shrink:0}
+.sdot.on{background:var(--success);box-shadow:0 0 0 2px rgba(16,185,129,.3)}
+.sb-status-text{font-size:11px;color:rgba(255,255,255,.4)}
+.topbar-title{font-size:16px;font-weight:700;flex:1}
+.search-wrap{position:relative}
+.search-wrap input{padding:7px 12px 7px 34px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Cairo',sans-serif;color:var(--text);background:var(--bg);outline:none;width:200px;transition:border .15s}
+.search-wrap input:focus{border-color:var(--accent);background:#fff}
+.search-ic{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:none;font-family:'Cairo',sans-serif;transition:all .15s;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:var(--accent-h)}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}.btn-ghost:hover{background:var(--bg)}
+.btn-success{background:var(--success);color:#fff}
+.btn-sm{padding:5px 10px;font-size:11px;border-radius:6px}
+.btn-xs{padding:3px 8px;font-size:10px;border-radius:5px}
+.page{display:none}.page.active{display:block}
+.stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
+.sc{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;position:relative;overflow:hidden}
+.sc::before{content:'';position:absolute;top:0;right:0;width:4px;height:100%;border-radius:0 12px 12px 0}
+.sc.blue::before{background:var(--accent)}.sc.green::before{background:var(--success)}.sc.orange::before{background:var(--warn)}.sc.red::before{background:var(--danger)}.sc.purple::before{background:var(--purple)}
+.sc-icon{font-size:22px;margin-bottom:8px}.sc-label{font-size:11px;color:var(--muted);font-weight:600;margin-bottom:4px}.sc-val{font-size:22px;font-weight:800}.sc-sub{font-size:10px;color:var(--muted);margin-top:3px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px}
+.card-hd{padding:13px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.card-hd h3{font-size:13px;font-weight:700}
+.card-body{padding:16px}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{padding:9px 13px;text-align:right;font-size:11px;color:var(--muted);font-weight:700;border-bottom:1px solid var(--border);background:#fafafa;white-space:nowrap}
+td{padding:10px 13px;border-bottom:1px solid var(--border);font-size:12px;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafbff}
+.badge{display:inline-flex;align-items:center;gap:3px;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap}
+.b-new{background:var(--purple-light);color:#5b21b6}.b-wait{background:var(--warn-light);color:#92400e}
+.b-go{background:var(--success-light);color:#065f46}.b-done{background:#dcfce7;color:#14532d}
+.b-cancel{background:var(--danger-light);color:#7f1d1d}.b-shopify{background:#e8f5e9;color:#1b5e20}.b-manual{background:var(--info-light);color:#1e3a5f}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:4px 12px;border-radius:20px;border:1px solid var(--border);background:transparent;font-size:11px;cursor:pointer;font-family:'Cairo',sans-serif;color:var(--muted);transition:all .15s;font-weight:600}
+.chip:hover{border-color:var(--accent);color:var(--accent)}.chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.cgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:16px}
+.cc{border:1px solid var(--border);border-radius:10px;padding:14px;transition:all .2s}
+.cc:hover{border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,.1)}
+.cc.selected{border-color:var(--success);box-shadow:0 0 0 3px rgba(16,185,129,.15)}
+.cc-av{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;color:#fff;margin-bottom:10px}
+.cc-name{font-weight:700;font-size:13px;margin-bottom:3px}.cc-info{font-size:11px;color:var(--muted);margin-bottom:2px}
+.cc-status{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;margin-top:7px;padding:3px 9px;border-radius:10px}
+.s-active{background:var(--success-light);color:#065f46}.s-busy{background:var(--warn-light);color:#92400e}
+.pbar{height:5px;background:var(--border);border-radius:3px;margin-top:7px;overflow:hidden}
+.pbar-f{height:100%;border-radius:3px;background:var(--success)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000;opacity:0;pointer-events:none;transition:opacity .2s;backdrop-filter:blur(2px)}
+.overlay.open{opacity:1;pointer-events:all}
+.modal{background:var(--card);border-radius:16px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,.2);transform:translateY(14px);transition:transform .25s}
+.overlay.open .modal{transform:none}
+.mhd{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--card);z-index:1}
+.mhd h3{font-size:14px;font-weight:700}
+.mbd{padding:20px}.mft{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:0;background:var(--card)}
+.xbtn{width:28px;height:28px;border-radius:50%;background:var(--bg);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px}
+.xbtn:hover{background:var(--border)}
+.fg{margin-bottom:13px}
+.fg label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px}
+.fg input,.fg select,.fg textarea{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'Cairo',sans-serif;color:var(--text);outline:none;background:var(--card);transition:border .15s}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--accent)}
+.fg textarea{resize:vertical;min-height:70px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.acc-tabs{display:flex;gap:2px;background:var(--bg);border-radius:9px;padding:4px;margin-bottom:16px}
+.acc-tab{flex:1;text-align:center;padding:7px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);transition:all .15s}
+.acc-tab.on{background:var(--card);color:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.acc-sec{display:none}.acc-sec.on{display:block}
+.acc-hl{background:var(--accent-light);border-top:2px solid var(--accent)}
+.acc-hl td{color:var(--accent);font-weight:700}
+.mpos{color:var(--success);font-weight:700}.mwarn{color:var(--warn);font-weight:700}.mpurp{color:var(--purple);font-weight:700}
+.nitem{display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.nitem:hover{background:var(--bg)}.nitem.unread{background:#f8f9ff}.nitem:last-child{border-bottom:none}
+.nicon{font-size:20px;flex-shrink:0;margin-top:2px}.nbody{flex:1}
+.ntitle{font-size:12px;font-weight:700;margin-bottom:2px}.nsub{font-size:11px;color:var(--muted)}.ntime{font-size:10px;color:var(--muted);white-space:nowrap}
+.ndot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:5px}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.srow{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--bg)}
+.srow:last-child{border-bottom:none}
+.sinfo h4{font-size:13px;font-weight:600;margin-bottom:2px}.sinfo p{font-size:11px;color:var(--muted)}
+.toggle{width:38px;height:22px;border-radius:11px;background:var(--border);cursor:pointer;position:relative;transition:background .2s}
+.toggle.on{background:var(--success)}
+.toggle::after{content:'';position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.toggle.on::after{transform:translateX(-16px)}
+.banner{border-radius:12px;padding:15px 20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;color:#fff}
+.banner.disc{background:linear-gradient(135deg,#6366f1,#8b5cf6)}.banner.conn{background:linear-gradient(135deg,#10b981,#059669)}
+.banner h4{font-size:14px;font-weight:800;margin-bottom:3px}.banner p{font-size:11px;opacity:.8}
+.settle-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;background:var(--bg);border-radius:10px;padding:14px;margin-bottom:16px;text-align:center}
+.settle-n{font-size:20px;font-weight:800}.settle-l{font-size:10px;color:var(--muted);margin-top:2px}
+.uitem{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.uitem:last-child{border-bottom:none}
+.uav{width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.api-badge{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid var(--border)}
+.api-badge.ok{background:var(--success-light);color:#065f46;border-color:#86efac}
+.api-badge.fail{background:var(--danger-light);color:#7f1d1d;border-color:#fca5a5}
+.api-badge.wait{background:var(--warn-light);color:#92400e;border-color:#fcd34d}
+.wstep{display:flex;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border);align-items:flex-start}
+.wstep:last-child{border-bottom:none}
+.wnum{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;margin-top:2px}
+.wnum.done{background:var(--success)}
+.wbody h4{font-size:13px;font-weight:700;margin-bottom:4px}.wbody p{font-size:12px;color:var(--muted);line-height:1.7}
+.wcode{background:#1e293b;color:#7dd3fc;padding:8px 14px;border-radius:7px;font-family:monospace;font-size:12px;margin:8px 0;word-break:break-all;cursor:pointer}
+.wcode:hover{background:#263548}
+.wnote{background:var(--warn-light);border:1px solid #fcd34d;border-radius:7px;padding:8px 12px;font-size:12px;color:#92400e;margin:6px 0}
+/* ===== DELIVERY SHEET ===== */
+.ds-wrap{background:var(--bg);padding:0}
+.ds-ctrl{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;background:var(--card);padding:12px 16px;border-radius:12px;border:1px solid var(--border)}
+.ds-btn{padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;font-family:'Cairo',sans-serif}
+.ds-btn:hover{background:var(--bg)}
+.ds-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.ds-btn.exp-btn{border-color:#fca5a5;color:var(--danger)}
+.ds-btn.exp-btn.active{background:var(--danger-light);color:#7f1d1d;border-color:#fca5a5}
+.ds-btn.zone-btn{border-color:#fcd34d;color:var(--warn)}
+.ds-btn.zone-btn.active{background:var(--warn-light);color:#92400e;border-color:#fcd34d}
+.ds-btn.print-btn{background:var(--primary);color:#fff;border-color:var(--primary);margin-right:auto}
+.ds-btn.print-btn:hover{background:#1e293b}
+.zone-picker{display:none;gap:6px;flex-wrap:wrap;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:12px}
+.zone-picker.visible{display:flex;align-items:center}
+.zpill{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border);color:var(--muted);background:transparent;font-family:'Cairo',sans-serif;transition:all .15s}
+.zpill:hover{border-color:var(--warn);color:var(--warn)}
+.zpill.on{background:var(--warn-light);color:#92400e;border-color:#fcd34d}
+.ds{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px}
+.ds-hd{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:2px solid var(--text);margin-bottom:16px}
+.ds-title{font-size:16px;font-weight:700;color:var(--text)}
+.ds-sub{font-size:11px;color:var(--muted);margin-top:3px}
+.ds-courier-name{font-size:15px;font-weight:700;color:var(--text);text-align:right}
+.ds-date{font-size:11px;color:var(--muted);text-align:right;margin-top:3px}
+.ds-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.ds-sbox{background:var(--bg);border-radius:8px;padding:10px 12px;text-align:center}
+.ds-snum{font-size:18px;font-weight:800}
+.ds-slbl{font-size:10px;color:var(--muted);margin-top:2px}
+.ds-sec{display:flex;align-items:center;gap:10px;margin:8px 0}
+.ds-sec-line{flex:1;height:0.5px;background:var(--border)}
+.ds-sec-lbl{font-size:11px;font-weight:700;padding:3px 12px;border-radius:20px}
+.dsl-exp{background:var(--danger-light);color:#7f1d1d}
+.dsl-norm{background:var(--info-light);color:#1e3a5f}
+.ds-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px;table-layout:fixed}
+.ds-table th{padding:5px 7px;text-align:right;font-size:10px;color:var(--muted);font-weight:700;border-bottom:1px solid var(--border);background:var(--bg);white-space:nowrap}
+.ds-table td{padding:5px 7px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text)}
+.ds-table tr:last-child td{border-bottom:none}
+.ds-table tr.ds-er td{background:#fff5f5}
+.ds-table tr.ds-nr:nth-child(even) td{background:var(--bg)}
+.ds-zone-hdr td{padding:5px 10px 3px!important;background:var(--bg)!important}
+.ds-onum{font-weight:700;font-size:13px}
+.ds-cname{font-weight:700;font-size:12px}
+.ds-cphone{font-size:11px;color:var(--muted);margin-top:2px;direction:ltr;text-align:right}
+.ds-area{display:inline-block;background:var(--warn-light);color:#92400e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700}
+.ds-addr{font-size:11px;line-height:1.7}
+.ds-cod{font-size:13px;font-weight:700;color:var(--success)}
+.ds-paid{background:var(--success-light);color:#065f46;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;display:inline-block}
+.ds-chk{width:18px;height:18px;border:1.5px solid var(--border);border-radius:4px;margin:0 auto}
+.ds-foot{margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.ds-trow{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:var(--muted)}
+.ds-trow.big{font-size:14px;font-weight:700;color:var(--text);border-top:1px solid var(--border);padding-top:8px;margin-top:6px}
+.ds-trow.big span:last-child{color:var(--success)}
+.ds-sig-line{height:36px;border-bottom:1px solid var(--text);margin-bottom:5px}
+.ds-sig-lbl{font-size:10px;color:var(--muted);text-align:center}
+.ds-meta{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:10px;color:var(--muted)}
+.ds-mode-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;margin-top:4px}
+.ds-mb-full{background:var(--info-light);color:#1e3a5f}
+.ds-mb-exp{background:var(--danger-light);color:#7f1d1d}
+.ds-mb-zone{background:var(--warn-light);color:#92400e}
+@media print{
+  .sidebar,.topbar,.ds-ctrl,.zone-picker{display:none!important}
+  .main-area{overflow:visible!important;height:auto!important}
+  .content{padding:0!important;overflow:visible!important;height:auto!important}
+  .ds{border:none;border-radius:0;box-shadow:none;overflow:visible!important}
+  .ds-table{page-break-inside:auto!important;width:100%!important}
+  .ds-table tr{page-break-inside:avoid;page-break-after:auto}
+  .ds-table thead{display:table-header-group}
+  .ds-foot{page-break-inside:avoid}
+  .ds-sec{page-break-after:avoid}
+  body{background:#fff!important;overflow:visible!important}
+  *{overflow:visible!important}
+}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:#1e293b;color:#fff;padding:11px 20px;border-radius:10px;font-size:13px;font-weight:500;z-index:9999;transition:transform .3s;box-shadow:0 8px 30px rgba(0,0,0,.25);max-width:400px}
+.toast.show{transform:translateX(-50%) translateY(0)}
+@media(max-width:900px){.stats-row{grid-template-columns:repeat(2,1fr)}.cgrid{grid-template-columns:repeat(2,1fr)}.sg{grid-template-columns:1fr}.sidebar{width:64px}.sb-logo h2,.sb-logo p,.ni-label,.nbadge,.nav-label,.sb-status-text{display:none}.sb-logo-inner{justify-content:center}.ni{justify-content:center;padding:10px}.sb-status{justify-content:center}}
+</style>
+</head>
+<body>
+<div class="app">
+
+<aside class="sidebar">
+  <div class="sb-logo"><div class="sb-logo-inner"><div class="sb-icon">📦</div><div><h2>OrderPro</h2><p>نظام إدارة التوصيل</p></div></div></div>
+  <nav class="sb-nav">
+    <div class="nav-label">الرئيسية</div>
+    <div class="ni active" data-p="dashboard" onclick="goPage(this,'dashboard')"><span class="ni-icon">🏠</span><span class="ni-label">لوحة التحكم</span></div>
+    <div class="ni" data-p="orders" onclick="goPage(this,'orders')"><span class="ni-icon">📋</span><span class="ni-label">الطلبات</span><span class="nbadge" id="nb-orders">0</span></div>
+    <div class="nav-label">التوصيل</div>
+    <div class="ni" data-p="couriers" onclick="goPage(this,'couriers')"><span class="ni-icon">🚴</span><span class="ni-label">المناديب</span></div>
+    <div class="ni" data-p="assign" onclick="goPage(this,'assign')"><span class="ni-icon">📍</span><span class="ni-label">توزيع الطلبات</span><span class="nbadge orange" id="nb-assign">0</span></div>
+    <div class="ni" data-p="pickup" onclick="goPage(this,'pickup')"><span class="ni-icon">🏪</span><span class="ni-label">استلام من المحل</span><span class="nbadge" id="nb-pickup" style="background:var(--purple)">0</span></div>
+    <div class="ni" data-p="transit" onclick="goPage(this,'transit')"><span class="ni-icon">🏭</span><span class="ni-label">مخزن العبور</span><span class="nbadge" id="nb-transit" style="background:var(--warn)">0</span></div>
+    <div class="ni" data-p="bosta" onclick="goPage(this,'bosta')"><span class="ni-icon">🚚</span><span class="ni-label">بوسطة</span><span class="nbadge" id="nb-bosta" style="background:#6366f1">0</span></div>
+    <div class="ni" data-p="delivery-sheet" onclick="goPage(this,'delivery-sheet')"><span class="ni-icon">🖨️</span><span class="ni-label">ورقة التوصيل</span></div>
+    <div class="ni" data-p="courier-orders" onclick="goPage(this,'courier-orders')"><span class="ni-icon">🧑</span><span class="ni-label">طلبات المناديب</span></div>
+    <div class="nav-label">المالية</div>
+    <div class="ni" data-p="accounting" onclick="goPage(this,'accounting')"><span class="ni-icon">💰</span><span class="ni-label">محاسبة المناديب</span></div>
+    <div class="ni" data-p="reports" onclick="goPage(this,'reports')"><span class="ni-icon">📊</span><span class="ni-label">التقارير</span></div>
+    <div class="nav-label">النظام</div>
+    <div class="ni" data-p="notifs" onclick="goPage(this,'notifs')"><span class="ni-icon">🔔</span><span class="ni-label">الإشعارات</span><span class="nbadge" id="nb-notifs">0</span></div>
+    <div class="ni" data-p="settings" onclick="goPage(this,'settings')"><span class="ni-icon">⚙️</span><span class="ni-label">الإعدادات</span></div>
+  </nav>
+  <div class="sb-foot"><div class="sb-status"><div class="sdot" id="sdot"></div><span class="sb-status-text" id="stxt">غير متصل</span></div></div>
+</aside>
+
+<div class="main-area">
+  <div class="topbar">
+    <h1 class="topbar-title" id="ptitle">لوحة التحكم</h1>
+    <div class="search-wrap"><span class="search-ic">🔍</span><input type="text" placeholder="بحث..." id="srch" oninput="onSearch(this.value)"></div>
+    <div class="api-badge wait" id="api-badge">⏳ جاري...</div>
+    <button class="btn btn-ghost" onclick="syncNow()">🔄 مزامنة</button>
+      <button class="btn btn-ghost" onclick="openM('m-import')" style="color:var(--purple);border-color:var(--purple)">📥 استيراد من Shopify</button>
+    <button class="btn btn-primary" onclick="openM('m-order')">＋ طلب جديد</button>
+  </div>
+
+  <div class="content">
+
+  <!-- DASHBOARD -->
+  <div class="page active" id="page-dashboard">
+    <div class="banner disc" id="main-banner">
+      <div><h4>🔌 Backend غير متصل</h4><p>اضبط رابط الـ API من الإعدادات لتفعيل الربط مع Shopify</p></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="syncNow()">🔄 مزامنة</button>
+        <button class="btn btn-sm" style="background:#fff;color:#6366f1;font-weight:700" onclick="goPage(document.querySelector('[data-p=settings]'),'settings')">الإعدادات</button>
+      </div>
+    </div>
+    <div class="stats-row">
+      <div class="sc blue"><div class="sc-icon">📦</div><div class="sc-label">إجمالي الطلبات</div><div class="sc-val" id="st-total">0</div></div>
+      <div class="sc orange"><div class="sc-icon">⏳</div><div class="sc-label">تحتاج توزيع</div><div class="sc-val" id="st-wait">0</div></div>
+      <div class="sc blue"><div class="sc-icon">🚴</div><div class="sc-label">قيد التوصيل</div><div class="sc-val" id="st-go">0</div></div>
+      <div class="sc green"><div class="sc-icon">✅</div><div class="sc-label">مكتملة</div><div class="sc-val" id="st-done">0</div></div>
+      <div class="sc purple"><div class="sc-icon">💰</div><div class="sc-label">إيرادات اليوم</div><div class="sc-val" id="st-rev">0 ج</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:3fr 2fr;gap:16px">
+      <div class="card"><div class="card-hd"><h3>⚡ أحدث الطلبات</h3><button class="btn btn-ghost btn-sm" onclick="goPage(document.querySelector('[data-p=orders]'),'orders')">الكل</button></div><div class="tw"><table><thead><tr><th>الطلب</th><th>العميل</th><th>المنطقة</th><th>الإجمالي</th><th>الحالة</th></tr></thead><tbody id="dash-orders"></tbody></table></div></div>
+      <div class="card"><div class="card-hd"><h3>🚴 المناديب</h3></div><div class="tw"><table><thead><tr><th>المندوب</th><th>نشط</th><th>مكتمل</th></tr></thead><tbody id="dash-couriers"></tbody></table></div></div>
+    </div>
+  </div>
+
+  <!-- ORDERS -->
+  <div class="page" id="page-orders">
+    <div class="card">
+      <div class="card-hd">
+        <div class="chips" id="order-chips">
+          <button class="chip on" onclick="filterSt(this,'all')">الكل</button>
+          <button class="chip" onclick="filterSt(this,'جديد')">جديد</button>
+          <button class="chip" onclick="filterSt(this,'في الانتظار')">في الانتظار</button>
+          <button class="chip" onclick="filterSt(this,'جاري التوصيل')">جاري التوصيل</button>
+          <button class="chip" onclick="filterType(this,'pickup')">🏪 استلام من المحل</button>
+          <button class="chip" onclick="filterType(this,'express')">⚡ مستعجل</button>
+          <button class="chip" onclick="filterSt(this,'مكتمل')">مكتمل</button>
+          <button class="chip" onclick="filterSt(this,'ملغي')">ملغي</button>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openM('m-order')">＋</button>
+      </div>
+      <div class="tw"><table><thead><tr><th>رقم الطلب</th><th>المصدر</th><th>العميل</th><th>الهاتف</th><th>المنطقة</th><th>نوع التوصيل</th><th>COD</th><th>الشحن</th><th>المندوب</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody id="orders-tbody"></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- COURIERS -->
+  <div class="page" id="page-couriers">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="btn btn-primary" onclick="openM('m-courier')">＋ إضافة مندوب</button></div>
+    <div class="card"><div class="card-hd"><h3>🚴 فريق التوصيل</h3><span id="courier-count" style="font-size:12px;color:var(--muted)"></span></div><div class="cgrid" id="couriers-grid"></div></div>
+  </div>
+
+  <!-- ASSIGN -->
+  <div class="page" id="page-assign">
+    <div class="card"><div class="card-hd"><h3>📍 الطلبات بدون مندوب</h3><span id="assign-count" style="font-size:12px;color:var(--muted)"></span></div>
+    <div class="tbl-wrap"><table><thead><tr>
+  <th style="width:30px"><input type="checkbox" id="assign-check-all" onchange="assignToggleAll(this.checked)"></th>
+  <th style="width:75px">الطلب</th>
+  <th style="width:70px">النوع</th>
+  <th style="width:85px">العميل</th>
+  <th style="width:60px">المنطقة</th>
+  <th>العنوان</th>
+  <th style="width:80px">COD</th>
+  <th style="width:280px">التوزيع (مناديب / بوسطة)</th>
+</tr></thead><tbody id="assign-tbody"></tbody></table></div></div>
+  </div>
+
+  <!-- PICKUP PAGE -->
+  <div class="page" id="page-pickup">
+    <div class="card">
+      <div class="card-hd">
+        <h3>🏪 طلبات الاستلام من المحل</h3>
+        <span id="pickup-count" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center">
+        <button class="btn btn-ghost btn-sm" id="pickup-sel-all" onclick="pickupSelAll()">☐ تحديد الكل</button>
+        <button class="btn btn-success btn-sm" onclick="pickupBulkDone()" id="pickup-bulk-done" style="display:none">✅ تسليم المحدد</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger);display:none" onclick="pickupBulkCancel()" id="pickup-bulk-cancel">❌ إلغاء المحدد</button>
+        <span id="pickup-sel-count" style="font-size:12px;color:var(--muted)"></span>
+        <div style="margin-right:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="printPickupSlip('pending')">🖨️ الطلبات المعلقة</button>
+          <button class="btn btn-ghost btn-sm" onclick="printPickupSlip('new')">🆕 جديدة منذ آخر طباعة</button>
+          <span id="pickup-last-print" style="font-size:10px;color:var(--muted)">لم تتم طباعة بعد</span>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th style="width:36px"><input type="checkbox" id="pickup-check-all" onchange="pickupToggleAll(this.checked)"></th><th>رقم الطلب</th><th>العميل</th><th>المنتجات</th><th>إجمالي</th><th>الدفع</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+          <tbody id="pickup-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRANSIT PAGE -->
+  <div class="page" id="page-transit">
+    <div class="card">
+      <div class="card-hd">
+        <h3>🏭 طلبات مخزن العبور</h3>
+        <span id="transit-count" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center">
+        <button class="btn btn-ghost btn-sm" onclick="transitSelAll()">☐ تحديد الكل</button>
+        <button class="btn btn-success btn-sm" style="display:none" onclick="transitBulkDone()" id="transit-bulk-done">✅ تسليم المحدد</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger);display:none" onclick="transitBulkCancel()" id="transit-bulk-cancel">❌ إلغاء المحدد</button>
+        <span id="transit-sel-count" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th style="width:36px"><input type="checkbox" id="transit-check-all" onchange="transitToggleAll(this.checked)"></th><th>رقم الطلب</th><th>المصدر</th><th>العميل</th><th>الهاتف</th><th>المنتجات</th><th>إجمالي</th><th>الدفع</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+          <tbody id="transit-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOSTA PAGE -->
+  <div class="page" id="page-bosta">
+    <!-- إعداد بوسطة (يظهر لو مش متربط) -->
+    <div id="bosta-setup-banner" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:3px">🚚 ربط بوسطة API</div>
+        <div style="font-size:12px;opacity:.85">حط الـ API Key بتاع بوسطة عشان ترفع البوليصات تلقائياً</div>
+      </div>
+      <button class="btn btn-sm" style="background:#fff;color:#6366f1;font-weight:700" onclick="toggleBostaSetup()">⚙️ إعداد الـ API</button>
+    </div>
+
+    <!-- فورم الإعداد (مخفي بالأصل) -->
+    <div id="bosta-setup-form" style="display:none" class="card">
+      <div class="card-hd"><h3>⚙️ إعداد بوسطة API</h3></div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="fg"><label>Bosta API Key</label><input type="password" id="bosta-api-key" placeholder="أدخل الـ API Key من داشبورد بوسطة"></div>
+          <div class="fg"><label>البيئة</label>
+            <select id="bosta-env">
+              <option value="production">Production (الحقيقي)</option>
+              <option value="staging">Staging (تجريبي)</option>
+            </select>
+          </div>
+          <div class="fg"><label>Business Location ID (اختياري)</label><input type="text" id="bosta-location-id" placeholder="ID موقع الاستلام من داشبورد بوسطة"></div>
+          <div class="fg"><label>اسم المحل</label><input type="text" id="bosta-business-name" placeholder="مثال: متجر النور"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="fg"><label>عنوان المحل (للبوليصة) *</label><input type="text" id="bosta-pickup-address" placeholder="مثال: شارع التحرير، الدقي، الجيزة"></div>
+          <div class="fg"><label>مدينة المحل</label><input type="text" id="bosta-pickup-city" placeholder="القاهرة"></div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">للحصول على الـ API Key: سجل دخول على <a href="https://business.bosta.co" target="_blank" style="color:var(--accent)">business.bosta.co</a> ← الإعدادات ← API</div>
+        <button class="btn btn-primary btn-sm" onclick="saveBostaSettings()">💾 حفظ وتجربة الاتصال</button>
+        <span id="bosta-conn-status" style="font-size:12px;margin-right:10px"></span>
+      </div>
+    </div>
+
+    <!-- إحصائيات -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+      <div class="sc blue"><div class="sc-icon">📦</div><div class="sc-label">طلبات متاحة للرفع</div><div class="sc-val" id="bosta-total">0</div></div>
+      <div class="sc orange"><div class="sc-icon">⏳</div><div class="sc-label">لم ترفع بعد</div><div class="sc-val" id="bosta-pending">0</div></div>
+      <div class="sc green"><div class="sc-icon">✅</div><div class="sc-label">مرفوعة على بوسطة</div><div class="sc-val" id="bosta-sent">0</div></div>
+      <div class="sc purple"><div class="sc-icon">🔄</div><div class="sc-label">قيد التوصيل</div><div class="sc-val" id="bosta-inprogress">0</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">
+        <h3>🚚 طلبات المحافظات — بوسطة</h3>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span id="bosta-count" style="font-size:12px;color:var(--muted)"></span>
+          <button class="btn btn-ghost btn-sm" onclick="bostaSelAll()">☐ تحديد الكل</button>
+          <span id="bosta-sel-info" style="font-size:12px;color:var(--muted)"></span>
+          <button class="btn btn-primary btn-sm" id="bosta-bulk-btn" style="display:none" onclick="bostaCreateBulk()">🚀 رفع المحدد على بوسطة</button>
+        </div>
+      </div>
+      <!-- شريط الفلترة -->
+      <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--bg)">
+        <span style="font-size:12px;color:var(--muted)">عرض:</span>
+        <button class="chip on" id="bosta-filter-sent" onclick="bostaSetFilter('sent',this)">✅ مرفوعة على بوسطة</button>
+        <button class="chip" id="bosta-filter-pending" onclick="bostaSetFilter('pending',this)">📋 كل الطلبات المتاحة للرفع</button>
+      </div>
+      <div class="tw">
+        <table>
+          <thead><tr>
+            <th style="width:30px"><input type="checkbox" id="bosta-check-all" onchange="bostaToggleAll(this.checked)"></th>
+            <th>رقم الطلب</th>
+            <th>العميل</th>
+            <th>الهاتف</th>
+            <th>المحافظة / المدينة</th>
+            <th>العنوان</th>
+            <th>COD</th>
+            <th>حالة بوسطة</th>
+            <th>إجراءات</th>
+          </tr></thead>
+          <tbody id="bosta-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- COURIER ORDERS PAGE -->
+  <div class="page" id="page-courier-orders">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px" id="courier-tabs"></div>
+    <div id="courier-orders-content"></div>
+  </div>
+
+  <!-- ACCOUNTING -->
+  <div class="page" id="page-accounting">
+    <div class="acc-tabs"><div class="acc-tab on" onclick="accTab(this,'acc-sum')">ملخص المناديب</div><div class="acc-tab" onclick="accTab(this,'acc-det')">تفاصيل الطلبات</div><div class="acc-tab" onclick="accTab(this,'acc-set')">تسوية الحسابات</div></div>
+    <div class="acc-sec on" id="acc-sum"><div class="card"><div class="card-hd"><h3>💰 ملخص محاسبة المناديب</h3></div><div class="tw"><table><thead><tr><th>المندوب</th><th>مكتملة</th><th>إجمالي COD</th><th>تمن الشحن</th><th>صافي المحل</th><th>مستحق للمندوب</th><th>التسوية</th><th>إجراء</th></tr></thead><tbody id="acc-tbody"></tbody><tfoot><tr class="acc-hl" id="acc-total"></tr></tfoot></table></div></div></div>
+    <div class="acc-sec" id="acc-det"><div class="card"><div class="card-hd"><h3>📋 تفاصيل الطلبات</h3><select id="acc-cf" onchange="renderAccDet()" style="font-family:'Cairo',sans-serif;font-size:12px;padding:5px 10px;border:1px solid var(--border);border-radius:7px;outline:none"><option value="all">كل المناديب</option></select></div><div class="tw"><table><thead><tr><th>رقم الطلب</th><th>المندوب</th><th>العميل</th><th>المنطقة</th><th>نوع التوصيل</th><th>COD</th><th>الشحن</th><th>صافي المحل</th><th>الحالة</th></tr></thead><tbody id="acc-det-tbody"></tbody></table></div></div></div>
+    <div class="acc-sec" id="acc-set"><div class="card"><div class="card-hd"><h3>✅ تسوية الحسابات</h3></div><div class="card-body" id="settle-list"></div></div></div>
+  </div>
+
+  <!-- REPORTS -->
+  <div class="page" id="page-reports">
+    <div class="stats-row" style="grid-template-columns:repeat(4,1fr)">
+      <div class="sc green"><div class="sc-icon">💵</div><div class="sc-label">إجمالي الإيرادات</div><div class="sc-val" id="r-rev">0 ج</div></div>
+      <div class="sc blue"><div class="sc-icon">📦</div><div class="sc-label">طلبات مكتملة</div><div class="sc-val" id="r-done">0</div></div>
+      <div class="sc red"><div class="sc-icon">❌</div><div class="sc-label">طلبات ملغية</div><div class="sc-val" id="r-cancel">0</div></div>
+      <div class="sc purple"><div class="sc-icon">📈</div><div class="sc-label">نسبة الإتمام</div><div class="sc-val" id="r-rate">0%</div></div>
+    </div>
+    <div class="card"><div class="card-hd"><h3>🏆 أداء المناديب</h3></div><div class="tw"><table><thead><tr><th>المندوب</th><th>إجمالي</th><th>مكتملة</th><th>ملغية</th><th>COD محصّل</th><th>تمن الشحن</th><th>صافي المحل</th><th>نسبة نجاح</th></tr></thead><tbody id="report-tbody"></tbody></table></div></div>
+  </div>
+
+  <!-- DELIVERY SHEET -->
+  <div class="page" id="page-delivery-sheet">
+    <div class="ds-wrap">
+      <div class="ds-ctrl">
+        <select id="ds-courier-sel" style="font-family:'Cairo',sans-serif;font-size:12px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-weight:600" onchange="dsRender()"></select>
+        <span style="font-size:11px;color:var(--muted);padding:0 4px">طباعة:</span>
+        <button class="ds-btn active" id="ds-btn-full" onclick="dsSetMode('full')">📋 مجمع</button>
+        <button class="ds-btn exp-btn" id="ds-btn-exp" onclick="dsSetMode('express')">⚡ مستعجل فقط</button>
+        <button class="ds-btn zone-btn" id="ds-btn-zone" onclick="dsSetMode('zone')">📍 منطقة محددة</button>
+        <button class="ds-btn print-btn" onclick="window.print()">🖨️ طباعة / PDF</button>
+      </div>
+      <div class="zone-picker" id="ds-zone-picker">
+        <span style="font-size:11px;color:var(--muted);margin-left:8px;white-space:nowrap">اختر منطقة:</span>
+        <div id="ds-zone-pills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+      <div class="ds" id="ds-sheet"></div>
+    </div>
+  </div>
+
+  <!-- NOTIFS -->
+  <div class="page" id="page-notifs">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn btn-ghost btn-sm" onclick="markAllRead()">تحديد الكل كمقروء</button></div>
+    <div class="card"><div class="card-hd"><h3>🔔 الإشعارات</h3></div><div id="notifs-list"></div></div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="page" id="page-settings">
+    <!-- Setup Card -->
+    <div class="card" style="margin-bottom:16px">
+      <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:16px 20px;color:#fff"><h3 style="font-size:15px;font-weight:800;margin-bottom:3px">🚀 خطوات ربط Shopify</h3><p style="font-size:12px;opacity:.85">اتبع الخطوات دي بالترتيب</p></div>
+      <div class="wstep"><div class="wnum done">✓</div><div class="wbody"><h4>✅ رفع البرنامج على Netlify</h4><p>تم بنجاح</p></div></div>
+      <div class="wstep">
+        <div class="wnum" id="wn2">2</div>
+        <div class="wbody">
+          <h4>رفع الـ Backend على Railway</h4>
+          <p>اضغط الزرار هنا وحمّل الملفين، بعدين ارفعهم على railway.app</p>
+          <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="downloadBackend()">⬇️ تحميل ملفات الـ Backend (server.js + package.json)</button>
+          <div class="wnote" style="margin-top:8px">بعد ما ترفعهم على Railway هيديك رابط — انسخه وحطه في الخطوة الجاية</div>
+        </div>
+      </div>
+      <div class="wstep">
+        <div class="wnum" id="wn3">3</div>
+        <div class="wbody">
+          <h4>حط رابط الـ Backend هنا</h4>
+          <div class="fg" style="margin-top:8px"><input type="text" id="cfg-api" placeholder="https://orderpro-xxx.railway.app" oninput="onApiInput()"></div>
+          <button class="btn btn-primary btn-sm" onclick="testBackend()">🔗 اختبار الاتصال</button>
+        </div>
+      </div>
+      <div class="wstep">
+        <div class="wnum" id="wn4">4</div>
+        <div class="wbody">
+          <h4>إعداد Shopify Webhook</h4>
+          <p>Shopify Admin ← Settings ← Notifications ← Webhooks ← Create webhook</p>
+          <p style="margin-top:6px">اختار Event: <strong>Order creation</strong> · Format: <strong>JSON</strong></p>
+          <p style="margin-top:4px">URL (اضغط لنسخه):</p>
+          <div class="wcode" id="webhook-display" onclick="copyWebhook()">أدخل رابط الـ Backend في الخطوة 3 أولاً</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sg">
+      <div>
+        <div class="card"><div class="card-hd"><h3>⚙️ إعدادات</h3></div><div class="card-body">
+          <div class="fg"><label>رابط الـ Backend</label><input type="text" id="cfg-api2" placeholder="https://orderpro-xxx.railway.app" oninput="syncApi()"></div>
+          <div class="fg"><label>سعر الشحن الافتراضي (جنيه)</label><input type="number" id="cfg-ship" value="50" min="0"></div>
+          <button class="btn btn-success btn-sm" onclick="saveSettings()">💾 حفظ الإعدادات</button>
+        </div></div>
+        <div class="card"><div class="card-hd"><h3>🔔 الإشعارات</h3></div><div class="card-body">
+          <div class="srow"><div class="sinfo"><h4>طلب جديد من Shopify</h4><p>تنبيه فوري</p></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="srow"><div class="sinfo"><h4>تذكير التوزيع</h4><p>طلب بدون مندوب أكثر من 30 دقيقة</p></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="srow"><div class="sinfo"><h4>إتمام التوصيل</h4><p>تأكيد إنهاء المندوب</p></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+        </div></div>
+      </div>
+      <div>
+        <div class="card"><div class="card-hd"><h3>👥 إدارة الفريق</h3></div><div class="card-body">
+          <div class="fg"><label>البريد الإلكتروني</label><input type="email" id="u-email" placeholder="user@example.com"></div>
+          <div class="fg"><label>الصلاحية</label><select id="u-role"><option value="admin">مشرف كامل</option><option value="staff">موظف</option><option value="courier-mgr">مدير مناديب</option><option value="view">عرض فقط</option></select></div>
+          <button class="btn btn-primary btn-sm" onclick="inviteUser()">📨 إرسال دعوة</button>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)"><div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:10px">المستخدمون</div><div id="users-list"></div></div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+
+  </div>
+</div>
+</div>
+
+<!-- MODALS -->
+<div class="overlay" id="m-import"><div class="modal">
+  <div class="mhd"><h3>📥 استيراد طلبات من Shopify</h3><button class="xbtn" onclick="closeM('m-import')">✕</button></div>
+  <div class="mbd">
+    <div style="background:var(--accent-light);border:1px solid #a5b4fc;border-radius:9px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:#3730a3;line-height:1.8">
+      💡 هيجيب كل طلبات Shopify من آخر عدد الأيام اللي تحدده — الطلبات الجديدة بتتضاف، والطلبات الموجودة بتتحدث تلقائياً
+    </div>
+    <div class="fg"><label>رابط المتجر</label><input type="text" id="imp-url" placeholder="your-store.myshopify.com"></div>
+    <div class="fg"><label>Admin API Access Token</label><input type="password" id="imp-token" placeholder="shpat_xxxxxxxxxxxx"></div>
+    <div class="fg">
+      <label>استيراد طلبات آخر كم يوم؟</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px" id="days-btns">
+        <button class="chip" onclick="selDays(this,1)">يوم 1</button>
+        <button class="chip on" onclick="selDays(this,2)">2 أيام</button>
+        <button class="chip" onclick="selDays(this,7)">7 أيام</button>
+        <button class="chip" onclick="selDays(this,15)">15 يوم</button>
+        <button class="chip" onclick="selDays(this,30)">30 يوم</button>
+      </div>
+      <input type="hidden" id="imp-days" value="2">
+    </div>
+    <div id="imp-progress" style="display:none;margin-top:10px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px">
+        <span id="imp-progress-text">جاري الاستيراد...</span>
+        <span id="imp-progress-pct">0%</span>
+      </div>
+      <div style="background:var(--border);border-radius:10px;height:8px;overflow:hidden">
+        <div id="imp-progress-bar" style="height:100%;background:var(--accent);border-radius:10px;width:0%;transition:width .3s"></div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:5px;text-align:center" id="imp-fetched">0 طلب حتى الآن...</div>
+    </div>
+    <div id="imp-result" style="display:none;background:var(--success-light);border:1px solid #86efac;border-radius:8px;padding:12px;font-size:12px;color:#065f46;margin-top:8px"></div>
+    <div id="imp-error" style="display:none;background:var(--danger-light);border:1px solid #fca5a5;border-radius:8px;padding:12px;font-size:12px;color:#7f1d1d;margin-top:8px"></div>
+  </div>
+  <div class="mft">
+    <button class="btn btn-ghost" onclick="closeM('m-import')">إلغاء</button>
+    <button class="btn btn-primary" id="imp-btn" onclick="doImport()">📥 استيراد الآن</button>
+  </div>
+</div></div>
+
+<div class="overlay" id="m-order"><div class="modal">
+  <div class="mhd"><h3>📦 إضافة طلب جديد</h3><button class="xbtn" onclick="closeM('m-order')">✕</button></div>
+  <div class="mbd">
+    <div class="row2"><div class="fg"><label>اسم العميل *</label><input type="text" id="o-name" placeholder="محمد أحمد"></div><div class="fg"><label>رقم الهاتف</label><input type="text" id="o-phone" placeholder="01xxxxxxxxx"></div></div>
+    <div class="fg"><label>العنوان / المنطقة *</label><input type="text" id="o-area" placeholder="القاهرة، المعادي..."></div>
+    <div class="fg"><label>تفاصيل الطلب</label><textarea id="o-details" placeholder="المنتجات..."></textarea></div>
+    <div class="row2"><div class="fg"><label>إجمالي COD (جنيه) *</label><input type="number" id="o-total" placeholder="0" min="0"></div><div class="fg"><label>تمن الشحن (جنيه)</label><input type="number" id="o-ship" value="50" min="0"></div></div>
+    <div class="fg"><label>تعيين مندوب (اختياري)</label><select id="o-courier"><option value="">— بدون تعيين الآن —</option></select></div>
+  </div>
+  <div class="mft"><button class="btn btn-ghost" onclick="closeM('m-order')">إلغاء</button><button class="btn btn-primary" onclick="addOrder()">✅ إضافة الطلب</button></div>
+</div></div>
+
+<div class="overlay" id="m-courier"><div class="modal">
+  <div class="mhd"><h3>🚴 إضافة مندوب جديد</h3><button class="xbtn" onclick="closeM('m-courier')">✕</button></div>
+  <div class="mbd">
+    <div class="row2"><div class="fg"><label>اسم المندوب *</label><input type="text" id="c-name" placeholder="أحمد محمود"></div><div class="fg"><label>رقم الهاتف *</label><input type="text" id="c-phone" placeholder="01xxxxxxxxx"></div></div>
+    <div class="fg"><label>المنطقة المسؤول عنها</label><input type="text" id="c-zone" placeholder="المعادي، حلوان..."></div>
+    <div class="fg"><label>وسيلة التنقل</label><select id="c-vehicle"><option>دراجة بخارية</option><option>سيارة</option><option>دراجة هوائية</option><option>مشي</option></select></div>
+    <div class="row2">
+      <div class="fg"><label>💰 تكلفة التوصيل العادي (جنيه)</label><input type="number" id="c-ship" value="50" min="0" placeholder="50"></div>
+      <div class="fg"><label>⚡ تكلفة Same Day Delivery (جنيه)</label><input type="number" id="c-ship-express" value="80" min="0" placeholder="80"></div>
+    </div>
+  </div>
+  <div class="mft"><button class="btn btn-ghost" onclick="closeM('m-courier')">إلغاء</button><button class="btn btn-primary" onclick="addCourier()">✅ إضافة المندوب</button></div>
+</div></div>
+
+<div class="overlay" id="m-assign"><div class="modal">
+  <div class="mhd"><h3 id="assign-title">تعيين مندوب</h3><button class="xbtn" onclick="closeM('m-assign')">✕</button></div>
+  <div class="mbd">
+    <div id="assign-info" style="background:var(--bg);border-radius:9px;padding:12px;margin-bottom:14px;font-size:12px;line-height:1.8"></div>
+    <div class="fg"><label>اختر المندوب</label><div class="cgrid" id="assign-cgrid" style="padding:0;grid-template-columns:repeat(2,1fr)"></div></div>
+    <div class="row2" style="margin-top:12px"><div class="fg"><label>تمن الشحن</label><input type="number" id="assign-ship" value="50" min="0"></div><div class="fg"><label>ملاحظات</label><input type="text" id="assign-note" placeholder="تعليمات..."></div></div>
+  </div>
+  <div class="mft"><button class="btn btn-ghost" onclick="closeM('m-assign')">إلغاء</button><button class="btn btn-success" onclick="confirmAssign()">✅ تعيين المندوب</button></div>
+</div></div>
+
+<div class="overlay" id="m-edit-courier"><div class="modal">
+  <div class="mhd"><h3 id="edit-courier-title">تعديل بيانات المندوب</h3><button class="xbtn" onclick="closeM('m-edit-courier')">✕</button></div>
+  <div class="mbd">
+    <div class="row2">
+      <div class="fg"><label>اسم المندوب *</label><input type="text" id="ec-name" placeholder="أحمد محمود"></div>
+      <div class="fg"><label>رقم الهاتف *</label><input type="text" id="ec-phone" placeholder="01xxxxxxxxx"></div>
+    </div>
+    <div class="fg"><label>المنطقة المسؤول عنها</label><input type="text" id="ec-zone" placeholder="المعادي، حلوان..."></div>
+    <div class="fg"><label>وسيلة التنقل</label>
+      <select id="ec-vehicle"><option>دراجة بخارية</option><option>سيارة</option><option>دراجة هوائية</option><option>مشي</option></select>
+    </div>
+    <div class="row2">
+      <div class="fg"><label>💰 تكلفة التوصيل العادي (جنيه)</label><input type="number" id="ec-ship" min="0" placeholder="50"></div>
+      <div class="fg"><label>⚡ تكلفة Same Day Delivery (جنيه)</label><input type="number" id="ec-ship-express" min="0" placeholder="80"></div>
+    </div>
+  </div>
+  <div class="mft">
+    <button class="btn btn-ghost" onclick="closeM('m-edit-courier')">إلغاء</button>
+    <button class="btn btn-danger btn-sm" onclick="delCourierFromEdit()">🗑 حذف</button>
+    <button class="btn btn-primary" onclick="saveEditCourier()">💾 حفظ التعديلات</button>
+  </div>
+</div></div>
+
+<div class="overlay" id="m-settle"><div class="modal">
+  <div class="mhd"><h3 id="settle-title">تسوية حساب</h3><button class="xbtn" onclick="closeM('m-settle')">✕</button></div>
+  <div class="mbd" id="settle-body"></div>
+  <div class="mft"><button class="btn btn-ghost" onclick="closeM('m-settle')">إلغاء</button><button class="btn btn-success" onclick="doSettle()">✅ تأكيد التسوية</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
+const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
+const PAGE_T={'courier-orders':'طلبات المناديب',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات',accounting:'محاسبة المناديب',reports:'التقارير','delivery-sheet':'ورقة التوصيل',notifs:'الإشعارات',settings:'الإعدادات'};
+
+let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
+let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
+let orderFilter='all',searchQ='',defaultShip=50;
+let pollingInterval=null,prevOrderCount=0;
+let orders=[],notifications=[],nextLocalId=2000;
+let couriers=JSON.parse(localStorage.getItem('op_couriers')||'[]');
+// ===== إصلاح deliveryType للطلبات القديمة في localStorage =====
+orders=orders.map(o=>{
+  if(!o.deliveryType||o.deliveryType==='normal'){
+    const sm=(o.shippingMethod||'').toLowerCase();
+    if(sm.includes('same day')||sm.includes('sameday')) o.deliveryType='express';
+    else if(sm.includes('trivium')||sm.includes('pick up')||sm.includes('pickup')) o.deliveryType='pickup';
+    else if(sm.includes('transit')) o.deliveryType='transit';
+  }
+  return o;
+});
+if(!couriers.length)couriers=[{id:1,name:'أحمد سامي',phone:'01001112222',zone:'الزمالك',vehicle:'دراجة بخارية',ship:60,shipExpress:90,status:'متاح',settled:false},{id:2,name:'محمد كريم',phone:'01112223333',zone:'المهندسين',vehicle:'سيارة',ship:70,shipExpress:110,status:'متاح',settled:false}];
+let users=[{email:'admin@store.com',role:'admin',name:'المدير'}];
+
+const $=id=>document.getElementById(id);
+const cName=id=>{if(!id)return'<span style="color:var(--muted)">—</span>';const c=couriers.find(x=>x.id==id);return c?c.name:'—'};
+const oByC=(cId,st=null)=>orders.filter(o=>o.courierId==cId&&(st?o.status===st:true));
+const isSameDay=o=>{
+  const dt=(o.deliveryType||'').toLowerCase();
+  if(dt==='express') return true;
+  const m=(o.shippingMethod||'').toLowerCase();
+  return m.includes('same day')||m.includes('sameday');
+};
+const isPickup=o=>{
+  const m=(o.shippingMethod||'').toLowerCase();
+  const dt=(o.deliveryType||'').toLowerCase();
+  if(dt==='pickup') return true;
+  if(m.includes('trivium')) return true;
+  if(m.includes('pick up from')||m.includes('pickup from')) return true;
+  if((m.includes('pick up')||m.includes('pickup'))&&!m.includes('transit')) return true;
+  return false;
+};
+const isTransit=o=>{
+  if(isPickup(o)) return false;
+  const dt=(o.deliveryType||'').toLowerCase();
+  if(dt==='transit') return true;
+  const m=(o.shippingMethod||'').toLowerCase();
+  return m.includes('transit warehouse')||m.includes('مخزن العبور')||
+         m.includes('transit store')||
+         (m.includes('transit')&&!m.includes('trivium'));
+};
+function deliveryType(o){
+  if(isPickup(o)) return 'pickup';
+  if(isTransit(o)) return 'transit';
+  if(isSameDay(o)) return 'express';
+  return 'normal';
+}
+function deliveryBadge(o){
+  const t=deliveryType(o);
+  if(t==='pickup')  return '<span class="badge" style="background:#ede9fe;color:#5b21b6;white-space:nowrap;font-size:10px">🏪 استلام</span>';
+  if(t==='transit') return '<span class="badge" style="background:#fef3c7;color:#92400e;white-space:nowrap;font-size:10px">🏭 عبور</span>';
+  if(t==='express') return '<span class="badge" style="background:#fee2e2;color:#991b1b;white-space:nowrap;font-size:10px">⚡ مستعجل</span>';
+  return '<span class="badge" style="background:#dbeafe;color:#1e40af;white-space:nowrap;font-size:10px">🚚 عادي</span>';
+}
+
+// اقتراح المندوب الأنسب حسب المنطقة
+// ===== نظام اقتراح ذكي مبني على المناطق فقط =====
+
+// تقسيم نص المنطقة لكلمات قابلة للمقارنة
+function parseZones(zoneStr){
+  return (zoneStr||'').toLowerCase()
+    .replace(/[،,\/\-–]/g,' ')
+    .split(/\s+/)
+    .filter(z=>z.length>=2);
+}
+
+// استخراج المنطقة المختصرة من العنوان بناءً على مناطق المناديب
+function shortArea(orderArea){
+  if(!orderArea) return '—';
+  const area = orderArea.toLowerCase().trim();
+  // جرب كل مناطق المناديب وشوف مين أقصر كلمة تتطابق
+  let best = '';
+  for(const c of couriers){
+    const zones = parseZones(c.zone);
+    for(const z of zones){
+      if(z.length >= 2 && (area.includes(z) || z.includes(area))){
+        // خد أطول match لأنه أدق
+        if(z.length > best.length) best = z;
+      }
+    }
+  }
+  if(best) return best;
+  // لو مفيش match، خد أول كلمتين من العنوان
+  const words = orderArea.trim().split(/[,،\s\-]+/).filter(w=>w.length>=2);
+  return words.slice(0,2).join(' ');
+}
+
+// حساب درجة تطابق منطقة الطلب مع مناطق المندوب
+function zoneMatchScore(orderArea, courierZone){
+  const area = (orderArea||'').toLowerCase().trim();
+  const courierZones = parseZones(courierZone);
+  
+  if(!area||!courierZones.length) return {score:0,reason:'',matched:''};
+  
+  // 1. تطابق تام — المنطقة موجودة كلمة كاملة في مناطق المندوب
+  for(const z of courierZones){
+    if(area===z) return {score:100,reason:'تطابق تام',matched:z};
+  }
+  
+  // 2. منطقة الطلب تحتوي على اسم منطقة المندوب
+  for(const z of courierZones){
+    if(z.length>=3 && area.includes(z)) return {score:80,reason:'منطقة المندوب في العنوان',matched:z};
+  }
+  
+  // 3. اسم منطقة المندوب يحتوي على منطقة الطلب
+  for(const z of courierZones){
+    if(z.length>=3 && z.includes(area)) return {score:70,reason:'العنوان ضمن منطقة المندوب',matched:z};
+  }
+  
+  // 4. تطابق جزئي — أول 3-4 حروف متشابهة (مفيد للأسماء المختلطة)
+  const areaStart = area.substring(0,4);
+  for(const z of courierZones){
+    if(z.length>=4 && z.startsWith(areaStart)) return {score:50,reason:'تشابه في الاسم',matched:z};
+  }
+  
+  // مفيش تطابق
+  return {score:0,reason:'',matched:''};
+}
+
+function suggestCourier(order){
+  if(!order||!couriers.length) return null;
+  if(isPickup(order)||isTransit(order)) return null;
+
+  const area = order.area||'';
+  
+  const scored = couriers.map(c=>{
+    const {score, reason, matched} = zoneMatchScore(area, c.zone);
+    const active = oByC(c.id,'جاري التوصيل').length;
+    const done   = oByC(c.id,'مكتمل').length;
+    return {...c, zoneScore:score, matchReason:reason, matchedZone:matched, active, done};
+  });
+
+  // رتّب حسب: درجة المنطقة أولاً، بعدين أقل ضغط
+  scored.sort((a,b)=>{
+    if(b.zoneScore !== a.zoneScore) return b.zoneScore - a.zoneScore;
+    return a.active - b.active; // بين المتساوين نفضل الأقل ضغطاً
+  });
+
+  const best = scored[0];
+  
+  // لا نقترح إلا لو في تطابق منطقة فعلي
+  if(!best || best.zoneScore === 0) return null;
+  
+  return best;
+}
+const getShipCost=(order,courier)=>{
+  if(!courier)return order.ship||50;
+  if(isPickup(order)||isTransit(order)) return 0;
+  if(isSameDay(order)) return+(courier.shipExpress||courier.ship||80);
+  return+(courier.ship||50);
+};
+const nowTime=()=>new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+
+function sBadge(s){const m={جديد:'b-new','في الانتظار':'b-wait','جاري التوصيل':'b-go',مكتمل:'b-done',ملغي:'b-cancel'};return`<span class="badge ${m[s]||'b-wait'}">${s}</span>`}
+function paidBadge(o){return o.paid?'<span class="badge" style="background:#dcfce7;color:#166534;margin-right:4px">💳 مدفوع</span>':'<span class="badge" style="background:#fef9c3;color:#854d0e;margin-right:4px">💵 COD</span>'}
+function srcBadge(s){return s==='shopify'?'<span class="badge b-shopify">🛍 Shopify</span>':'<span class="badge b-manual">✍️ يدوي</span>'}
+function toast(msg){const t=$('toast');t.innerHTML=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500)}
+function openM(id){refreshSelects();if(id==='m-assign')renderAssignGrid();$(id).classList.add('open')}
+function closeM(id){$(id).classList.remove('open');selectedCourierId=null}
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open')}));
+
+// ===== API =====
+async function apiFetch(path,method='GET',body=null){
+  if(!API_URL)return null;
+  try{
+    const opts={method,headers:{'Content-Type':'application/json'}};
+    if(body)opts.body=JSON.stringify(body);
+    const r=await fetch(API_URL.replace(/\/$/,'')+path,opts);
+    if(!r.ok)throw new Error(r.status);
+    return await r.json();
+  }catch(e){console.warn('API:',e);return null}
+}
+
+async function loadOrders(){
+  const data=await apiFetch('/api/orders');
+  if(!data)return;
+  const prev=orders.length;
+  orders=data.orders.map(o=>{
+    const base={ship:50,...o};
+    // لو deliveryType مش موجود، احسبه من shippingMethod
+    if(!base.deliveryType||base.deliveryType==='normal'){
+      const sm=(base.shippingMethod||'').toLowerCase();
+      if(sm.includes('same day')||sm.includes('sameday')) base.deliveryType='express';
+      else if(sm.includes('trivium')||sm.includes('pick up')||sm.includes('pickup')) base.deliveryType='pickup';
+      else if(sm.includes('transit')) base.deliveryType='transit';
+    }
+    return base;
+  });
+  if(orders.length>prev&&prev>0){
+    const newO=orders[0];
+    pushNotif('📦','طلب جديد من Shopify!',`${newO.id} — ${newO.name} — ${newO.total} ج`);
+    toast('🛍 طلب جديد: '+newO.name+' ('+newO.total+' ج)');
+  }
+  // جلب المناديب من DB
+  try{
+    const rc=await apiFetch('/api/couriers');
+    if(rc&&rc.couriers&&rc.couriers.length>0){couriers=rc.couriers;saveCouriers();}
+  }catch(e){}
+  // جلب الإشعارات من DB
+  try{
+    const rn=await apiFetch('/api/notifications');
+    if(rn&&rn.notifications){
+      notifications=rn.notifications.map(n=>({
+        id:n.id,icon:n.icon,title:n.title,sub:n.sub,
+        read:n.read,time:new Date(n.created_at||Date.now()).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})
+      }));
+    }
+  }catch(e){}
+  refreshAll();
+}
+
+async function testBackend(){
+  const url=($('cfg-api').value||$('cfg-api2').value).trim();
+  if(!url){toast('❗ أدخل رابط الـ Backend');return}
+  toast('🔄 جاري اختبار الاتصال...');
+  try{
+    const r=await fetch(url.replace(/\/$/,'/')+'/');
+    if(!r.ok)throw new Error();
+    const d=await r.json();
+    API_URL=url.replace(/\/$/, '');
+    localStorage.setItem('orderpro_api',API_URL);
+    $('cfg-api').value=API_URL;$('cfg-api2').value=API_URL;
+    updateWebhook();setConnected(true);
+    await loadOrders();startPolling();
+    $('wn2').className='wnum done';$('wn2').textContent='✓';
+    $('wn3').className='wnum done';$('wn3').textContent='✓';
+    $('wn4').className='wnum done';$('wn4').textContent='✓';
+    const dbOk=d.db&&d.db.includes('✅');
+    const statusTxt='✅ Backend متصل'+(dbOk?' + 🗄️ DB':'')+'  — '+d.orders+' طلب';
+    toast(statusTxt);
+    // تحديث status bar
+    const stxt=$('stxt');
+    if(stxt)stxt.textContent=dbOk?'متصل + DB':'متصل';
+  }catch{setConnected(false);toast('❌ فشل الاتصال — تأكد من الرابط وإن الـ Backend شغال')}
+}
+
+function setConnected(ok){
+  $('sdot').className='sdot'+(ok?' on':'');
+  $('stxt').textContent=ok?'متصل بـ Backend':'غير متصل';
+  const b=$('api-badge');
+  b.className='api-badge '+(ok?'ok':'fail');
+  b.textContent=ok?'✅ متصل':'❌ غير متصل';
+  const bn=$('main-banner');
+  if(ok){bn.className='banner conn';bn.innerHTML='<div><h4>✅ Backend + Shopify متصلين</h4><p>الطلبات بتتحدث تلقائياً كل 30 ثانية</p></div><div><button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="syncNow()">🔄 مزامنة الآن</button></div>'}
+  else{bn.className='banner disc';bn.innerHTML='<div><h4>🔌 Backend غير متصل</h4><p>اضبط رابط الـ API من الإعدادات</p></div><div><button class="btn btn-sm" style="background:#fff;color:#6366f1;font-weight:700" onclick="goPage(document.querySelector(\'[data-p=settings]\'),\'settings\')">الإعدادات</button></div>'}
+}
+
+function startPolling(){
+  if(pollingInterval)clearInterval(pollingInterval);
+  pollingInterval=setInterval(loadOrders,30000);
+}
+
+async function syncNow(){
+  if(API_URL){toast('🔄 جاري المزامنة...');await loadOrders();toast('✅ تم التحديث')}
+  else{
+    const names=['طارق مصطفى','ياسمين رضا','سامي الجوهري','منى فرج'];
+    const areas=['الشروق','الرحاب','التجمع','مدينة نصر'];
+    const id='SH-'+Math.floor(2000+Math.random()*8000);
+    const name=names[Math.floor(Math.random()*names.length)];
+    const total=Math.floor(400+Math.random()*1800);
+    orders.unshift({id,src:'shopify',name,phone:'0100-xxx-xxxx',area:areas[Math.floor(Math.random()*areas.length)],total,ship:defaultShip,courierId:null,status:'جديد',time:nowTime(),note:''});
+    pushNotif('📦','[تجريبي] طلب جديد',`${id} — ${name} — ${total} ج`);
+    refreshAll();toast('✅ (وضع تجريبي) طلب جديد أُضيف');
+  }
+}
+
+function onApiInput(){const v=$('cfg-api').value.trim();$('cfg-api2').value=v;if(v){localStorage.setItem('orderpro_api',v);API_URL=v;}updateWebhook()}
+function syncApi(){const v=$('cfg-api2').value.trim();$('cfg-api').value=v;if(v){localStorage.setItem('orderpro_api',v);API_URL=v;}updateWebhook()}
+function updateWebhook(){const u=API_URL;$('webhook-display').textContent=u?u+'/webhook/shopify':'أدخل رابط الـ Backend في الخطوة 3 أولاً'}
+function copyWebhook(){if(!API_URL){toast('❗ أدخل الرابط أولاً');return}navigator.clipboard.writeText(API_URL+'/webhook/shopify');toast('📋 تم نسخ الـ Webhook URL — الصقه في Shopify')}
+
+// ===== STATS =====
+function updateStats(){
+  const total=orders.length,wait=orders.filter(o=>!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي').length;
+  const go=orders.filter(o=>o.status==='جاري التوصيل').length,done=orders.filter(o=>o.status==='مكتمل').length;
+  const rev=orders.filter(o=>o.status==='مكتمل').reduce((a,o)=>a+o.total,0);
+  const cancel=orders.filter(o=>o.status==='ملغي').length;
+  $('st-total').textContent=total;$('st-wait').textContent=wait;$('st-go').textContent=go;$('st-done').textContent=done;
+  $('st-rev').textContent=rev.toLocaleString()+' ج';
+  $('nb-orders').textContent=orders.filter(o=>o.status==='جديد').length;
+  $('nb-assign').textContent=wait;
+  $('nb-notifs').textContent=notifications.filter(n=>!n.read).length||'';
+  const pickupCount=orders.filter(o=>isPickup(o)&&o.status!=='مكتمل'&&o.status!=='ملغي').length;
+  const transitCount=orders.filter(o=>isTransit(o)&&o.status!=='مكتمل'&&o.status!=='ملغي').length;
+  const bostaCount=orders.filter(o=>o.bostaId).length;
+  $('nb-pickup').textContent=pickupCount||'';
+  $('nb-transit').textContent=transitCount||'';
+  if($('nb-bosta'))$('nb-bosta').textContent=bostaCount||'';
+  $('r-rev').textContent=rev.toLocaleString()+' ج';$('r-done').textContent=done;$('r-cancel').textContent=cancel;
+  $('r-rate').textContent=total?Math.round(done/total*100)+'%':'0%';
+}
+
+// ===== RENDER =====
+function renderDash(){
+  $('dash-orders').innerHTML=orders.slice(0,6).map(o=>`<tr><td><strong>${o.id}</strong></td><td>${o.name}</td><td>📍 ${o.area}</td><td><strong>${o.total.toLocaleString()} ج</strong></td><td>${sBadge(o.status)}</td></tr>`).join('');
+  $('dash-couriers').innerHTML=couriers.map(c=>`<tr><td><strong>${c.name}</strong></td><td><span class="badge b-go">${oByC(c.id,'جاري التوصيل').length}</span></td><td><span class="badge b-done">${oByC(c.id,'مكتمل').length}</span></td></tr>`).join('');
+}
+
+function renderOrders(){
+  let list=orders;
+  if(orderFilter!=='all')list=list.filter(o=>o.status===orderFilter);
+  if(orderTypeFilter)list=list.filter(o=>deliveryType(o)===orderTypeFilter);
+  // طلبات الاستلام والعبور مش بتظهر في التوزيع
+  
+  if(searchQ)list=list.filter(o=>(o.id+o.name+o.area+o.phone).includes(searchQ));
+  $('orders-tbody').innerHTML=list.map(o=>`<tr><td><strong>${o.id}</strong></td><td>${srcBadge(o.src)}</td><td>${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px">${o.phone}</td><td>📍 ${o.area}</td><td>${deliveryBadge(o)}</td><td><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td>${cName(o.courierId)}</td><td>${sBadge(o.status)}</td><td><div style="display:flex;gap:4px;flex-wrap:wrap">${(!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-primary btn-xs" onclick="openAssign('${o.id}')">📍 تعيين</button>`:''}${o.status!=='ملغي'?`<button class="btn btn-xs" style="background:${o.paid?'var(--warn-light)':'var(--success-light)'};color:${o.paid?'#92400e':'#065f46'};border:1px solid ${o.paid?'#fcd34d':'#86efac'}" onclick="togglePaid('${o.id}')">${o.paid?'↩️ COD':'💳 مدفوع'}</button>`:''}${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✓ تم</button>`:''}${(o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}</div></td></tr>`).join('');
+}
+
+function filterSt(btn,f){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter=f;orderTypeFilter=null;renderOrders()}
+let orderTypeFilter=null;
+function filterType(btn,t){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter='all';orderTypeFilter=t;renderOrders()}
+function onSearch(q){searchQ=q;renderOrders()}
+
+function renderCouriers(){
+  $('courier-count').textContent=couriers.length+' مندوب';
+  $('couriers-grid').innerHTML=couriers.map((c,i)=>{
+    const active=oByC(c.id,'جاري التوصيل').length,done=oByC(c.id,'مكتمل').length,tot=active+done,rate=tot?Math.round(done/tot*100):0;
+    return`<div class="cc"><div class="cc-av" style="background:${COLORS[i%COLORS.length]}">${c.name[0]}</div><div class="cc-name">${c.name}</div><div class="cc-info">📱 ${c.phone}</div><div class="cc-info">📍 ${c.zone}</div><div class="cc-info">🚗 ${c.vehicle}</div><div class="cc-info">💰 شحن: <strong>${c.ship} ج</strong></div><div class="cc-info" style="margin-top:5px">📦 نشط: <strong>${active}</strong> | مكتمل: <strong>${done}</strong></div><div class="pbar"><div class="pbar-f" style="width:${rate}%"></div></div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+        <span class="cc-status s-active">${c.status}</span>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-ghost btn-xs" onclick="openEditCourier(${c.id})" style="color:var(--accent);border-color:var(--accent)">✏️ تعديل</button>
+          <button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="delCourier(${c.id})">✕</button>
+        </div>
+      </div></div>`}).join('');
+  saveCouriers();refreshSelects();
+}
+
+function renderAssignPage(){
+  // لا نعرض الـ pickup و transit في التوزيع
+  const u=orders.filter(o=>!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي'&&!isPickup(o)&&!isTransit(o));
+  $('assign-count').textContent=u.length+' طلب';
+  $('assign-tbody').innerHTML=u.map(o=>{
+    const rankedCouriers=couriers.map(c=>{
+      const zm=zoneMatchScore(o.area,c.zone);
+      const active=oByC(c.id,'جاري التوصيل').length;
+      return{...c,zs:zm.score,zm:zm.matched,zr:zm.reason,active};
+    }).sort((a,b)=>b.zs-a.zs||(a.active-b.active));
+    const areaShort=shortArea(o.area);
+    return`<tr>
+      <td style="text-align:center"><input type="checkbox" class="assign-chk" value="${o.id}" onchange="updateAssignBulkBtns()"></td>
+      <td>
+        <div style="font-weight:700;font-size:12px">${o.id}</div>
+        <div style="margin-top:3px;font-size:10px;color:var(--muted)">${o.time||''}</div>
+      </td>
+      <td>${deliveryBadge(o)}</td>
+      <td style="font-size:12px;font-weight:500">${o.name}</td>
+      <td><span style="background:var(--warn-light);color:#92400e;padding:2px 7px;border-radius:20px;font-size:11px;font-weight:700">${areaShort}</span></td>
+      <td style="font-size:11px;color:var(--muted);max-width:150px;line-height:1.6">${o.addr||o.area}</td>
+      <td>
+        <div style="font-weight:700">${o.total.toLocaleString()} ج</div>
+        ${o.paid
+          ? '<span style="background:var(--success-light);color:#065f46;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;margin-top:3px;display:inline-block">💳 مدفوع</span>'
+          : `<button class="btn btn-xs" style="margin-top:3px;background:var(--success-light);color:#065f46;border:1px solid #86efac;padding:2px 7px" onclick="event.stopPropagation();togglePaid('${o.id}')">💳 مدفوع</button>`
+        }
+      </td>
+      <td style="min-width:220px">
+        ${rankedCouriers.map((c,i)=>{
+          const color=c.zs>=100?'#10b981':c.zs>=70?'#f59e0b':c.zs>=50?'#3b82f6':'#94a3b8';
+          const rank=i===0&&c.zs>0?'🥇 ':i===1&&c.zs>0?'🥈 ':i===2&&c.zs>0?'🥉 ':'';
+          return`<button class="btn btn-xs" style="background:${color};color:#fff;border:none;margin:1px;padding:3px 8px;font-size:10px;font-weight:700;opacity:${c.zs===0?0.35:1}" onclick="assignOrderId='${o.id}';selCAndConfirm(${c.id})" title="${c.zone}">
+            ${rank}${c.name}
+          </button>`;
+        }).join('')}
+        <button class="btn btn-xs" style="background:#6366f1;color:#fff;border:none;margin:1px;padding:3px 8px;font-size:10px;font-weight:700" onclick="assignToBosta('${o.id}')" title="توصيل عبر شركة بوسطة">🚚 بوسطة</button>
+        <button class="btn btn-ghost btn-xs" style="font-size:10px;margin:1px" onclick="openAssign('${o.id}')">⋯</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ===== ASSIGN =====
+function openAssign(id){
+  assignOrderId=id;selectedCourierId=null;
+  const o=orders.find(x=>x.id===id);
+  $('assign-title').textContent=`تعيين مندوب للطلب ${id}`;
+  const isExpress=isSameDay(o);
+  const suggested=suggestCourier(o);
+  $('assign-info').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+      <div>
+        <strong style="font-size:13px">${o.name}</strong> · 📱 ${o.phone}<br>
+        📍 <strong>${o.area}</strong><br>
+        💰 ${o.total.toLocaleString()} ج &nbsp;·&nbsp;
+        <span style="font-weight:700;color:${isExpress?'var(--danger)':'var(--info)'}">${isExpress?'⚡ Same Day Delivery':'🚚 توصيل عادي'}</span>
+        ${o.paid?'&nbsp;<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">💳 مدفوع - لا تحصيل</span>':''}
+      </div>
+      ${suggested?`<div style="background:#eef2ff;border:1.5px solid #a5b4fc;border-radius:9px;padding:10px 14px;font-size:12px;min-width:190px">
+        <div style="font-size:10px;color:#6366f1;font-weight:700;margin-bottom:4px">🤖 مقترح بناءً على المنطقة</div>
+        <div style="font-weight:800;font-size:14px;color:#3730a3">${suggested.name}</div>
+        <div style="color:#6366f1;font-size:11px">📍 ${suggested.zone}</div>
+        <div style="color:var(--muted);font-size:11px">📦 نشط: ${suggested.active} · مكتمل: ${suggested.done}</div>
+        ${suggested.matchReason?`<div style="margin-top:5px;background:#dcfce7;border-radius:5px;padding:3px 8px;font-size:10px;color:#166534;font-weight:700;display:inline-block">📍 ${suggested.matchReason}${suggested.matchedZone?' — '+suggested.matchedZone:''}</div>`:''}
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button onclick="selCAndConfirm(${suggested.id})" style="flex:1;background:var(--success);color:#fff;border:none;border-radius:6px;padding:5px 8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Cairo',sans-serif">✅ تعيين</button>
+          <button onclick="selC(${suggested.id});$('m-assign').classList.add('open')" style="flex:1;background:transparent;color:#6366f1;border:1px solid #6366f1;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Cairo',sans-serif">✎ تعديل</button>
+        </div>
+      </div>`:'<div style="font-size:11px;color:var(--muted);background:var(--bg);border-radius:8px;padding:10px 14px;text-align:center">لا يوجد مندوب مقترح<br>اختر يدوياً من القائمة</div>'}
+    </div>`;
+  $('assign-ship').value=o.ship||defaultShip;$('assign-note').value=o.note||'';
+  renderAssignGrid();$('m-assign').classList.add('open');
+}
+
+function renderAssignGrid(){
+  const g=$('assign-cgrid');if(!g)return;
+  const o=orders.find(x=>x.id===assignOrderId);
+  if(isPickup(o)){
+    g.innerHTML='<div style="padding:16px;text-align:center;color:var(--purple);font-weight:600;font-size:13px">🏪 هذا الطلب للاستلام من المحل — لا يحتاج تعيين مندوب</div>';
+    return;
+  }
+  const suggested=suggestCourier(o);
+  g.innerHTML=couriers.map((c,i)=>{
+    const active=oByC(c.id,'جاري التوصيل').length;
+    const isSugg=suggested&&suggested.id===c.id;
+    const isSelected=selectedCourierId==c.id;
+    // درجة تطابق المنطقة
+    const zm=o?zoneMatchScore(o.area,c.zone):{score:0,reason:'',matched:''};
+    const zs=zm.score;
+    const matchLabel=zs>=100?'🟢 تطابق تام':zs>=70?'🟡 تطابق جزئي':zs>=50?'🟠 تشابه':zs>0?'🔵 ممكن':'⚫ خارج منطقته';
+    const borderStyle=zs>=100?'border-color:#10b981;box-shadow:0 0 0 2px rgba(16,185,129,.2)':zs>=70?'border-color:#f59e0b;box-shadow:0 0 0 2px rgba(245,158,11,.15)':'';
+    return`<div class="cc ${isSelected?'selected':''}" id="agc-${c.id}" onclick="selC(${c.id})" style="cursor:pointer;position:relative;${borderStyle}">
+      ${isSugg?`<div style="position:absolute;top:-1px;left:-1px;background:#10b981;color:#fff;font-size:9px;font-weight:700;padding:2px 7px;border-radius:8px 0 8px 0">🤖 مقترح</div>`:''}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;margin-top:${isSugg?'10px':'0'}">
+        <div class="cc-av" style="background:${COLORS[i%COLORS.length]};width:32px;height:32px;font-size:13px">${c.name[0]}</div>
+        <div><div class="cc-name" style="font-size:12px">${c.name}</div><div class="cc-info" style="font-size:10px">${c.zone}</div></div>
+      </div>
+      <div class="cc-info">📦 نشط: <strong>${active}</strong></div>
+      <div class="cc-info">💰 عادي: <strong>${c.ship} ج</strong> | ⚡ <strong>${c.shipExpress||c.ship} ج</strong></div>
+      <div style="margin-top:6px;font-size:10px;font-weight:700">${matchLabel}${zm.matched?' · '+zm.matched:''}</div>
+    </div>`}).join('');
+}
+
+function selC(id){
+  selectedCourierId=id;
+  document.querySelectorAll('#assign-cgrid .cc').forEach(el=>el.classList.remove('selected'));
+  $('agc-'+id)&&$('agc-'+id).classList.add('selected');
+  const c=couriers.find(x=>x.id==id);
+  const o=orders.find(x=>x.id===assignOrderId);
+  if(c&&o) $('assign-ship').value=getShipCost(o,c);
+}
+
+async function selCAndConfirm(id){
+  // تعيين مباشر بضغطة واحدة بدون فتح modal
+  const o=orders.find(x=>x.id===assignOrderId);
+  const c=couriers.find(x=>x.id==id);
+  if(!o||!c) return;
+  const ship=getShipCost(o,c);
+  const upd={courierId:id,ship,note:'',status:'جاري التوصيل'};
+  if(API_URL){const r=await apiFetch('/api/orders/'+assignOrderId,'PATCH',upd);if(r)Object.assign(o,r.order);else Object.assign(o,upd)}
+  else Object.assign(o,upd);
+  c.status='نشط';
+  pushNotif('🤖',`تعيين تلقائي — ${c.name}`,`الطلب ${assignOrderId} · ${o.name} · ${o.area}`);
+  refreshAll();
+  toast(`✅ تم تعيين ${c.name} للطلب ${assignOrderId} مباشرةً`);
+}
+
+async function confirmAssign(){
+  if(!selectedCourierId){toast('❗ اختر مندوب أولاً');return}
+  const o=orders.find(x=>x.id===assignOrderId);
+  const c=couriers.find(x=>x.id==selectedCourierId);
+  const ship=+$('assign-ship').value||getShipCost(o,c),note=$('assign-note').value;
+  const upd={courierId:selectedCourierId,ship,note,status:'جاري التوصيل'};
+  if(API_URL){const r=await apiFetch('/api/orders/'+assignOrderId,'PATCH',upd);if(r)Object.assign(o,r.order);else Object.assign(o,upd)}
+  else Object.assign(o,upd);
+  c.status='نشط';
+  closeM('m-assign');
+  pushNotif('🚴',`تم تعيين ${c.name}`,`الطلب ${assignOrderId} — ${o.name}`);
+  refreshAll();toast(`✅ تم تعيين ${c.name} للطلب ${assignOrderId}`);
+}
+
+// ===== ORDER ACTIONS =====
+function updateAssignBulkBtns(){
+  const checked=document.querySelectorAll('.assign-chk:checked');
+  const n=checked.length;
+  $('assign-sel-count').textContent=n?n+' طلب محدد':'';
+  const bulk=$('assign-bulk-actions');
+  bulk.style.display=n?'flex':'none';
+}
+
+function assignToggleAll(val){
+  document.querySelectorAll('.assign-chk').forEach(c=>c.checked=val);
+  updateAssignBulkBtns();
+}
+
+function assignSelAll(){
+  const all=document.querySelectorAll('.assign-chk');
+  const anyUnchecked=[...all].some(c=>!c.checked);
+  all.forEach(c=>c.checked=anyUnchecked);
+  $('assign-check-all').checked=anyUnchecked;
+  updateAssignBulkBtns();
+}
+
+async function assignBulkBosta(){
+  const ids=[...document.querySelectorAll('.assign-chk:checked')].map(c=>c.value);
+  if(!ids.length)return;
+  if(!bostaApiKey){toast('❗ أدخل Bosta API Key في صفحة بوسطة أولاً');return;}
+  let success=0,fail=0;
+  toast('⏳ جاري رفع '+ids.length+' طلب على بوسطة...');
+  for(const id of ids){
+    const o=orders.find(x=>x.id===id);
+    if(!o||o.bostaId)continue;
+    try{
+      const result=await createBostaDelivery(o);
+      if(result.success){
+        o.bostaId=result.deliveryId;
+        o.bostaTrackingNo=result.trackingNumber;
+        o.bostaStatus='created';
+        o.status='جاري التوصيل';
+        if(API_URL) await apiFetch('/api/orders/'+id,'PATCH',{bostaId:result.deliveryId,bostaTrackingNo:result.trackingNumber,bostaStatus:'created',status:'جاري التوصيل'});
+        success++;
+      }else fail++;
+    }catch{fail++;}
+  }
+  pushNotif('🚚',`تم رفع ${success} طلب على بوسطة`,`${success} ناجح${fail?' · '+fail+' فاشل':''}`);
+  refreshAll();
+  toast(`✅ بوسطة: ${success} ناجح${fail?' · ❌ '+fail+' فاشل':''}`);
+}
+
+async function assignBulkCourier(){
+  const cId=+$('assign-bulk-courier').value;
+  if(!cId){toast('❗ اختر مندوب أولاً');return;}
+  const ids=[...document.querySelectorAll('.assign-chk:checked')].map(c=>c.value);
+  if(!ids.length)return;
+  const c=couriers.find(x=>x.id===cId);
+  for(const id of ids){
+    const o=orders.find(x=>x.id===id);
+    if(!o)continue;
+    const ship=getShipCost(o,c);
+    const upd={courierId:cId,ship,status:'جاري التوصيل'};
+    if(API_URL) await apiFetch('/api/orders/'+id,'PATCH',upd);
+    Object.assign(o,upd);
+  }
+  c.status='نشط';
+  pushNotif('🚴',`تم توزيع ${ids.length} طلب على ${c.name}`,ids.join('، '));
+  refreshAll();
+  toast(`✅ تم توزيع ${ids.length} طلب على ${c.name}`);
+}
+
+async function assignToBosta(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o)return;
+  if(!bostaApiKey){
+    toast('❗ أدخل Bosta API Key في صفحة بوسطة أولاً');
+    goPage(document.querySelector('[data-p="bosta"]'),'bosta');
+    return;
+  }
+  toast('⏳ جاري الرفع على بوسطة...');
+  try{
+    const result=await createBostaDelivery(o);
+    if(result.success){
+      o.bostaId=result.deliveryId;
+      o.bostaTrackingNo=result.trackingNumber;
+      o.bostaStatus='created';
+      o.courierId='bosta'; // علامة إن الطلب اتوزع على بوسطة
+      o.status='جاري التوصيل';
+      if(API_URL){
+        await apiFetch('/api/orders/'+id,'PATCH',{
+          bostaId:result.deliveryId,
+          bostaTrackingNo:result.trackingNumber,
+          bostaStatus:'created',
+          status:'جاري التوصيل',
+          courierId:null
+        });
+      }
+      pushNotif('🚚','تم توزيع طلب على بوسطة',`${id} — ${o.name} — تتبع: ${result.trackingNumber}`);
+      refreshAll();
+      if(result.hasAwb) toast(`✅ تم الرفع على بوسطة وحفظ البوليصة — ${result.trackingNumber}`);
+      else toast(`✅ تم الرفع على بوسطة — تتبع: ${result.trackingNumber}`);
+    }else{
+      toast('❌ فشل الرفع على بوسطة: '+(result.error||'خطأ'));
+    }
+  }catch(e){
+    toast('❌ خطأ: '+e.message);
+  }
+}
+
+async function assignBulkCancel(){
+  const ids=[...document.querySelectorAll('.assign-chk:checked')].map(c=>c.value);
+  if(!ids.length)return;
+  for(const id of ids){
+    const o=orders.find(x=>x.id===id);
+    if(!o)continue;
+    o.status='ملغي';
+    if(API_URL) await apiFetch('/api/orders/'+id,'PATCH',{status:'ملغي'});
+  }
+  refreshAll();
+  toast(`❌ تم إلغاء ${ids.length} طلب`);
+}
+
+async function markPaid(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o)return;
+  o.paid=true;
+  if(API_URL)await apiFetch('/api/orders/'+id,'PATCH',{paid:true});
+  refreshAll();
+  toast('💳 تم تحديد الطلب كمدفوع — المندوب مش هيحصّل');
+}
+
+async function togglePaid(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o)return;
+  // لو الطلب مدفوع من Shopify، لا نحوّله لـ COD تلقائياً
+  if(o.paid && o.src==='shopify'){
+    if(!confirm('هذا الطلب مدفوع من Shopify — هل أنت متأكد إنك عايز تحوّله لـ COD؟')) return;
+  }
+  o.paid=!o.paid;
+  if(API_URL)await apiFetch('/api/orders/'+id,'PATCH',{paid:o.paid});
+  refreshAll();
+  toast(o.paid?'💳 تم تحديد الطلب كمدفوع':'💵 تم تحويل الطلب لـ COD');
+}
+
+async function markDone(id){
+  const o=orders.find(x=>x.id===id);
+  if(API_URL)await apiFetch('/api/orders/'+id,'PATCH',{status:'مكتمل'});
+  o.status='مكتمل';
+  pushNotif('✅','تم إتمام التوصيل',`الطلب ${id} — ${o.name}`);
+  refreshAll();toast('✅ تم إتمام الطلب');
+}
+
+async function cancelOrder(id){
+  const o=orders.find(x=>x.id===id);
+  if(API_URL)await apiFetch('/api/orders/'+id,'PATCH',{status:'ملغي',courierId:null});
+  o.status='ملغي';o.courierId=null;refreshAll();toast('❌ تم إلغاء الطلب');
+}
+
+async function addOrder(){
+  const name=$('o-name').value.trim(),area=$('o-area').value.trim(),total=+$('o-total').value;
+  if(!name||!area||!total){toast('❗ يرجى ملء الحقول المطلوبة');return}
+  const phone=$('o-phone').value.trim(),ship=+$('o-ship').value||defaultShip,courierId=+$('o-courier').value||null;
+  const data={name,phone:phone||'—',area,total,ship,courierId,status:courierId?'جاري التوصيل':'في الانتظار',note:''};
+  let order;
+  if(API_URL){const r=await apiFetch('/api/orders','POST',data);order=r?r.order:{id:'MN-'+(nextLocalId++),src:'manual',time:nowTime(),...data};if(r)orders.unshift(order)}
+  else{order={id:'MN-'+(nextLocalId++),src:'manual',time:nowTime(),...data};orders.unshift(order)}
+  closeM('m-order');['o-name','o-phone','o-area','o-details','o-total'].forEach(x=>$(x).value='');$('o-ship').value=50;
+  pushNotif('📦','طلب يدوي جديد',`${order.id} — ${name} — ${total.toLocaleString()} ج`);
+  refreshAll();toast(`✅ تم إضافة الطلب ${order.id}`);
+}
+
+function addCourier(){
+  const name=$('c-name').value.trim(),phone=$('c-phone').value.trim();
+  if(!name||!phone){toast('❗ الاسم والهاتف مطلوبان');return}
+  const id=Math.max(0,...couriers.map(c=>c.id))+1;
+  couriers.push({id,name,phone,zone:$('c-zone').value||'غير محدد',vehicle:$('c-vehicle').value,ship:+$('c-ship').value||50,shipExpress:+$('c-ship-express').value||80,status:'متاح',settled:false});
+  closeM('m-courier');['c-name','c-phone','c-zone'].forEach(x=>$(x).value='');$('c-ship').value=50;$('c-ship-express').value=80;
+  saveCouriers();refreshAll();toast(`✅ تم إضافة المندوب ${name}`);
+}
+
+async function delCourier(id){
+  if(orders.some(o=>o.courierId==id&&o.status==='جاري التوصيل')){toast('❗ المندوب لديه طلبات نشطة');return}
+  if(API_URL) await apiFetch('/api/couriers/'+id,'DELETE');
+  couriers=couriers.filter(c=>c.id!==id);saveCouriers();refreshAll();toast('تم حذف المندوب');
+}
+
+let editingCourierId=null;
+
+function openEditCourier(id){
+  editingCourierId=id;
+  const c=couriers.find(x=>x.id==id);
+  if(!c)return;
+  document.getElementById('edit-courier-title').textContent=`تعديل بيانات — ${c.name}`;
+  document.getElementById('ec-name').value=c.name||'';
+  document.getElementById('ec-phone').value=c.phone||'';
+  document.getElementById('ec-zone').value=c.zone||'';
+  document.getElementById('ec-ship').value=c.ship||50;
+  document.getElementById('ec-ship-express').value=c.shipExpress||80;
+  // تحديد وسيلة التنقل
+  const vSel=document.getElementById('ec-vehicle');
+  for(let i=0;i<vSel.options.length;i++){
+    if(vSel.options[i].value===c.vehicle){vSel.selectedIndex=i;break;}
+  }
+  openM('m-edit-courier');
+}
+
+async function saveEditCourier(){
+  const name=document.getElementById('ec-name').value.trim();
+  const phone=document.getElementById('ec-phone').value.trim();
+  if(!name||!phone){toast('❗ الاسم والهاتف مطلوبان');return}
+  const c=couriers.find(x=>x.id==editingCourierId);
+  if(!c)return;
+  c.name=name; c.phone=phone;
+  c.zone=document.getElementById('ec-zone').value.trim()||'غير محدد';
+  c.vehicle=document.getElementById('ec-vehicle').value;
+  c.ship=+document.getElementById('ec-ship').value||50;
+  c.shipExpress=+document.getElementById('ec-ship-express').value||80;
+  if(API_URL) await apiFetch('/api/couriers/'+editingCourierId,'PATCH',{name:c.name,phone:c.phone,zone:c.zone,vehicle:c.vehicle,ship:c.ship,shipExpress:c.shipExpress});
+  saveCouriers();
+  closeM('m-edit-courier');
+  refreshAll();
+  toast(`✅ تم تحديث بيانات ${name}`);
+}
+
+async function delCourierFromEdit(){
+  if(orders.some(o=>o.courierId==editingCourierId&&o.status==='جاري التوصيل')){
+    toast('❗ المندوب لديه طلبات نشطة — لا يمكن الحذف');return;
+  }
+  const c=couriers.find(x=>x.id==editingCourierId);
+  const name=c?c.name:'';
+  if(API_URL) await apiFetch('/api/couriers/'+editingCourierId,'DELETE');
+  couriers=couriers.filter(c=>c.id!==editingCourierId);
+  saveCouriers();closeM('m-edit-courier');refreshAll();
+  toast(`🗑 تم حذف المندوب ${name}`);
+}
+
+function saveCouriers(){localStorage.setItem('op_couriers',JSON.stringify(couriers))}
+
+// ===== ACCOUNTING =====
+function renderAcc(){
+  let totCod=0,totShip=0,rows='';
+  couriers.forEach(c=>{
+        const done=oByC(c.id,'مكتمل');
+    const codOrders=done.filter(o=>!o.paid); // الطلبات اللي المندوب بيحصّلها
+    const paidOrders=done.filter(o=>o.paid);  // الطلبات المدفوعة مسبقاً
+    const cod=codOrders.reduce((a,o)=>a+o.total,0);
+    const ship=done.reduce((a,o)=>a+(o.ship||50),0); // تمن الشحن على كل الطلبات
+    const doneNorm=done.filter(o=>deliveryType(o)==='normal'),doneExp=done.filter(o=>isSameDay(o)),donePick=done.filter(o=>isPickup(o));
+    const shipNorm=doneNorm.reduce((a,o)=>a+(o.ship||c.ship||50),0);
+    const shipExp=doneExp.reduce((a,o)=>a+(o.ship||c.shipExpress||80),0);
+    totCod+=cod;totShip+=ship;
+    rows+=`<tr>
+      <td><strong>${c.name}</strong><br><span style="font-size:10px;color:var(--muted)">${c.phone}</span></td>
+      <td style="text-align:center">
+        ${done.length} طلب<br>
+        <span style="font-size:10px;color:var(--muted)">عادي: ${doneNorm.length} | سريع: ${doneExp.length}</span><br>
+        ${paidOrders.length?`<span style="font-size:10px;color:var(--success)">💳 مدفوع: ${paidOrders.length}</span>`:''}
+      </td>
+      <td class="mpos">
+        ${cod.toLocaleString()} ج<br>
+        ${paidOrders.length?`<span style="font-size:10px;color:var(--success)">+${paidOrders.reduce((a,o)=>a+o.total,0).toLocaleString()} ج مدفوع</span>`:''}
+      </td>
+      <td class="mwarn">
+        ${shipNorm.toLocaleString()} ج عادي<br>
+        <span style="font-size:10px;color:var(--danger)">+${shipExp.toLocaleString()} ج سريع</span>
+      </td>
+      <td class="mpos">${(cod-ship).toLocaleString()} ج</td>
+      <td class="mpurp">${ship.toLocaleString()} ج</td>
+      <td>${c.settled?'<span class="badge b-done">✅ مسوّى</span>':'<span class="badge b-wait">⏳ لم يُسوَّ</span>'}</td>
+      <td><div style="display:flex;gap:4px">
+      ${(!c.settled&&done.length>0)?`<button class="btn btn-primary btn-xs" onclick="openSettle(${c.id})">تسوية</button>`:''}
+      ${done.length>0?`<button class="btn btn-ghost btn-xs" onclick="printSettleSlip(${c.id})">🖨️ طباعة</button>`:''}
+    </div></td>
+    </tr>`;
+  });
+  $('acc-tbody').innerHTML=rows;
+  $('acc-total').innerHTML=`<td colspan="2"><strong>الإجمالي</strong></td><td class="mpos">${totCod.toLocaleString()} ج</td><td class="mwarn">${totShip.toLocaleString()} ج</td><td class="mpos">${(totCod-totShip).toLocaleString()} ج</td><td class="mpurp">${totShip.toLocaleString()} ج</td><td colspan="2"></td>`;
+  $('acc-cf').innerHTML='<option value="all">كل المناديب</option>'+couriers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  renderSettle();
+}
+
+function renderAccDet(){
+  const f=$('acc-cf').value,list=orders.filter(o=>o.status==='مكتمل'&&o.courierId&&(f==='all'||o.courierId==f));
+  $('acc-det-tbody').innerHTML=list.map(o=>{const c=couriers.find(x=>x.id==o.courierId),ship=o.ship||50,express=isSameDay(o);return`<tr><td><strong>${o.id}</strong></td><td>${c?c.name:'—'}</td><td>${o.name}</td><td>📍 ${o.area}</td><td><span class="badge ${express?'b-cancel':'b-go'}">${express?'⚡ سريع':'🚚 عادي'}</span></td><td class="mpos">${o.total.toLocaleString()} ج</td><td class="mwarn">${ship} ج</td><td class="mpos">${(o.total-ship).toLocaleString()} ج</td><td>${sBadge(o.status)}</td></tr>`}).join('');
+}
+
+function renderSettle(){
+  $('settle-list').innerHTML=couriers.map(c=>{
+    const done=oByC(c.id,'مكتمل'),cod=done.reduce((a,o)=>a+o.total,0),ship=done.reduce((a,o)=>a+(o.ship||50),0);
+    if(!done.length)return'';
+    return`<div style="border:1px solid var(--border);border-radius:9px;padding:13px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between"><div><div style="font-weight:700;font-size:13px;margin-bottom:5px">${c.name}</div><div style="font-size:12px;color:var(--muted)">${done.length} طلب · COD: <strong style="color:var(--success)">${cod.toLocaleString()} ج</strong> · يستلم: <strong style="color:var(--purple)">${ship.toLocaleString()} ج</strong></div></div>${c.settled?'<span class="badge b-done">✅ مسوّى</span>':`<button class="btn btn-primary btn-sm" onclick="openSettle(${c.id})">تسوية الحساب</button>`}</div>`}).join('');
+}
+
+function accTab(tab,sec){document.querySelectorAll('.acc-tab').forEach(t=>t.classList.remove('on'));tab.classList.add('on');document.querySelectorAll('.acc-sec').forEach(s=>s.classList.remove('on'));$(sec).classList.add('on');if(sec==='acc-det')renderAccDet();if(sec==='acc-set')renderSettle()}
+
+function openSettle(cId){
+  settlingCourierId=cId;const c=couriers.find(x=>x.id==cId);
+  const done=oByC(cId,'مكتمل');
+  const codOrders=done.filter(o=>!o.paid),paidOrders=done.filter(o=>o.paid);
+  const cod=codOrders.reduce((a,o)=>a+o.total,0); // اللي المندوب يجيبه
+  const ship=done.reduce((a,o)=>a+(o.ship||50),0); // تمن الشحن الكلي
+  $('settle-title').textContent=`تسوية حساب — ${c.name}`;
+  $('settle-body').innerHTML=`
+    <div class="settle-sum">
+      <div><div class="settle-n" style="color:var(--success)">${cod.toLocaleString()} ج</div><div class="settle-l">COD يحصّله المندوب</div></div>
+      <div><div class="settle-n" style="color:var(--warn)">${ship.toLocaleString()} ج</div><div class="settle-l">مستحق للمندوب</div></div>
+      <div><div class="settle-n" style="color:var(--info)">${(cod-ship).toLocaleString()} ج</div><div class="settle-l">صافي المحل</div></div>
+    </div>
+    ${paidOrders.length?`<div style="background:var(--success-light);border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px">
+      💳 <strong>${paidOrders.length} طلب مدفوع مسبقاً</strong> بإجمالي <strong>${paidOrders.reduce((a,o)=>a+o.total,0).toLocaleString()} ج</strong> — المندوب مش بيحصّلها
+    </div>`:''}
+    <p style="font-size:13px;margin-bottom:8px">سيدفع <strong>${c.name}</strong> مبلغ <strong style="color:var(--success);font-size:15px">${cod.toLocaleString()} ج</strong> (COD)</p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">ويستلم <strong style="color:var(--purple)">${ship.toLocaleString()} ج</strong> أجر توصيل (${done.length} طلب)</p>
+    <div class="fg"><label>ملاحظات</label><textarea placeholder="ملاحظات..."></textarea></div>`;
+  $('m-settle').classList.add('open');
+}
+
+function doSettle(){
+  const c=couriers.find(x=>x.id==settlingCourierId);
+  c.settled=true;
+  if(API_URL)apiFetch('/api/couriers/'+c.id,'PATCH',{settled:true}).catch(()=>{});
+  saveCouriers();
+  closeM('m-settle');
+  pushNotif('💰',`تمت تسوية حساب ${c.name}`,'');
+  renderAcc();
+  toast(`✅ تمت تسوية حساب ${c.name}`);
+  // سؤال للطباعة
+  setTimeout(()=>{
+    if(confirm(`هل تريد طباعة ورقة تسوية ${c.name}؟`)) printSettleSlip(settlingCourierId);
+  },300);
+}
+
+function printSettleSlip(cId){
+  const c=couriers.find(x=>x.id==cId);
+  if(!c)return;
+  const done=oByC(cId,'مكتمل');
+  const codOrders=done.filter(o=>!o.paid);
+  const paidOrders=done.filter(o=>o.paid);
+  const totalCod=codOrders.reduce((a,o)=>a+o.total,0);
+  const totalShip=done.reduce((a,o)=>a+(o.ship||50),0);
+  const netShop=totalCod-totalShip;
+  const today=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const nowt=new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,sans-serif;padding:20px;font-size:12px;direction:rtl}
+    h2{font-size:16px;margin-bottom:3px}
+    .sub{font-size:11px;color:#666;margin-bottom:14px}
+    .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;padding:10px;background:#f8faff;border-radius:6px;border:1px solid #e2e8f0}
+    .sum-box{text-align:center}
+    .sum-num{font-size:18px;font-weight:700}
+    .sum-lbl{font-size:10px;color:#666;margin-top:2px}
+    table{width:100%;border-collapse:collapse;font-size:11px}
+    th{background:#0f172a;color:#fff;padding:7px 9px;text-align:right;font-weight:600}
+    td{padding:7px 9px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+    tr:nth-child(even) td{background:#f8faff}
+    .total-row td{font-weight:700;background:#eef2ff!important;font-size:12px}
+    .paid-badge{background:#dcfce7;color:#166534;padding:1px 6px;border-radius:10px;font-size:9px}
+    .sig{display:flex;gap:50px;margin-top:24px}
+    .sig-line{width:130px;border-bottom:1px solid #000;height:34px;margin-bottom:4px}
+    .sig-lbl{font-size:10px;color:#666;text-align:center}
+    @media print{body{padding:10px}}
+  </style></head><body>
+  <h2>💰 ورقة تسوية حساب — ${c.name}</h2>
+  <div class="sub">${today} · ${nowt} · 📱 ${c.phone} · ${done.length} طلب</div>
+  <div class="summary">
+    <div class="sum-box"><div class="sum-num" style="color:#10b981">${done.length}</div><div class="sum-lbl">إجمالي الطلبات</div></div>
+    <div class="sum-box"><div class="sum-num" style="color:#3b82f6">${totalCod.toLocaleString()} ج</div><div class="sum-lbl">إجمالي COD</div></div>
+    <div class="sum-box"><div class="sum-num" style="color:#f59e0b">${totalShip.toLocaleString()} ج</div><div class="sum-lbl">تمن الشحن</div></div>
+    <div class="sum-box"><div class="sum-num" style="color:#6366f1">${netShop.toLocaleString()} ج</div><div class="sum-lbl">صافي للمحل</div></div>
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>رقم الطلب</th><th>العميل</th><th>المنطقة</th><th>إجمالي الطلب</th><th>الدفع</th><th>تمن الشحن</th><th>صافي المحل</th></tr></thead>
+    <tbody>
+      ${done.map((o,i)=>`<tr>
+        <td>${i+1}</td>
+        <td><strong>${o.id}</strong></td>
+        <td>${o.name}</td>
+        <td>${o.area}</td>
+        <td><strong>${o.total.toLocaleString()} ج</strong></td>
+        <td>${o.paid?'<span class="paid-badge">مدفوع</span>':'💵 COD'}</td>
+        <td>${(o.ship||50).toLocaleString()} ج</td>
+        <td>${(o.total-(o.ship||50)).toLocaleString()} ج</td>
+      </tr>`).join('')}
+      <tr class="total-row">
+        <td colspan="4" style="text-align:left">الإجمالي</td>
+        <td>${totalCod.toLocaleString()} ج</td>
+        <td>${paidOrders.length?paidOrders.length+' مدفوع':''}</td>
+        <td>${totalShip.toLocaleString()} ج</td>
+        <td>${netShop.toLocaleString()} ج</td>
+      </tr>
+    </tbody>
+  </table>
+  <div style="margin-top:14px;padding:10px;background:#eef2ff;border-radius:6px;font-size:12px">
+    <strong>المندوب ${c.name} يُسلّم:</strong>
+    ${totalCod.toLocaleString()} ج (COD) ← ويستلم: ${totalShip.toLocaleString()} ج (شحن)
+    ← <strong style="color:#6366f1">صافي للمحل: ${netShop.toLocaleString()} ج</strong>
+  </div>
+  <div class="sig">
+    <div><div class="sig-line"></div><div class="sig-lbl">توقيع المندوب</div></div>
+    <div><div class="sig-line"></div><div class="sig-lbl">توقيع المشرف</div></div>
+  </div>
+  <div style="margin-top:16px;font-size:10px;color:#94a3b8;text-align:center">
+    OrderPro · تسوية حساب ${c.name} · ${today}
+  </div>
+  <script>window.onload=()=>window.print()<\/script></body></html>`);
+  w.document.close();
+}
+
+// ===== PICKUP PAGE =====
+function renderPickupPage(){
+  updateLastPrintDisplay();
+  const list=orders.filter(o=>isPickup(o));
+  $('pickup-count').textContent=list.length+' طلب';
+  updatePickupBulkBtns();
+  $('pickup-tbody').innerHTML=list.length?list.map(o=>`
+    <tr id="pickup-row-${o.id}">
+      <td style="text-align:center"><input type="checkbox" class="pickup-chk" value="${o.id}" onchange="updatePickupBulkBtns()"></td>
+      <td>
+        <strong>${o.id}</strong><br>
+        <span style="font-size:10px;color:var(--muted)">${o.time||''}</span>
+      </td>
+      <td>
+        <strong>${o.name}</strong><br>
+        <span style="font-size:10px;color:var(--muted)">${srcBadge(o.src)}</span>
+      </td>
+      <td style="font-size:11px;color:var(--muted);max-width:220px;line-height:1.6">${o.items||'—'}</td>
+      <td><strong>${o.total.toLocaleString()} ج</strong></td>
+      <td>${o.paid?'<span class="badge b-done">💳 مدفوع</span>':'<span class="badge b-wait">💵 COD</span>'}</td>
+      <td>${sBadge(o.status)}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          ${o.status==='جديد'||o.status==='في الانتظار'?`<button class="btn btn-success btn-xs" onclick="markPickedUp('${o.id}')">✅ استلم</button>`:''}
+          ${o.status==='مكتمل'?'<span style="color:var(--success);font-size:11px;font-weight:700">✓ تم</span>':''}
+          ${o.status!=='مكتمل'&&o.status!=='ملغي'?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}
+        </div>
+      </td>
+    </tr>`).join('')
+    :'<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--muted)">لا توجد طلبات للاستلام من المحل</td></tr>';
+}
+
+function updatePickupBulkBtns(){
+  const checked=document.querySelectorAll('.pickup-chk:checked');
+  const n=checked.length;
+  $('pickup-sel-count').textContent=n?n+' محدد':'';
+  $('pickup-bulk-done').style.display=n?'':'none';
+  $('pickup-bulk-cancel').style.display=n?'':'none';
+}
+
+function pickupToggleAll(val){
+  document.querySelectorAll('.pickup-chk').forEach(c=>{c.checked=val});
+  updatePickupBulkBtns();
+}
+
+function pickupSelAll(){
+  const all=document.querySelectorAll('.pickup-chk');
+  const anyUnchecked=[...all].some(c=>!c.checked);
+  all.forEach(c=>c.checked=anyUnchecked);
+  $('pickup-check-all').checked=anyUnchecked;
+  updatePickupBulkBtns();
+}
+
+function pickupBulkDone(){
+  const ids=[...document.querySelectorAll('.pickup-chk:checked')].map(c=>c.value);
+  if(!ids.length)return;
+  ids.forEach(id=>{ const o=orders.find(x=>x.id===id); if(o){o.status='مكتمل';} });
+  pushNotif('🏪',`تم استلام ${ids.length} طلب من المحل`,ids.join('، '));
+  refreshAll();
+  toast(`✅ تم تسجيل استلام ${ids.length} طلب`);
+}
+
+function pickupBulkCancel(){
+  const ids=[...document.querySelectorAll('.pickup-chk:checked')].map(c=>c.value);
+  if(!ids.length)return;
+  ids.forEach(id=>{ const o=orders.find(x=>x.id===id); if(o){o.status='ملغي';} });
+  refreshAll();
+  toast(`❌ تم إلغاء ${ids.length} طلب`);
+}
+
+let lastPickupPrint = localStorage.getItem('lastPickupPrint')||null;
+
+function printPickupSlip(mode='all'){
+  let list;
+  let title;
+  const today=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+  if(mode==='new'){
+    // فقط الطلبات الجديدة بعد آخر طباعة
+    const lastTime = lastPickupPrint ? new Date(lastPickupPrint) : null;
+    list = orders.filter(o=>isPickup(o)&&o.status!=='ملغي'&&(!lastTime||new Date(o.createdAt||0)>lastTime));
+    title = `قائمة استلام جديدة — منذ آخر طباعة`;
+    if(!list.length){
+      toast('لا توجد طلبات جديدة منذ آخر طباعة ('+(lastTime?lastTime.toLocaleString('ar-EG'):'لم تتم طباعة من قبل')+')');
+      return;
+    }
+  } else {
+    // كل الطلبات اللي لسا متسلمتش
+    list = orders.filter(o=>isPickup(o)&&o.status!=='ملغي'&&o.status!=='مكتمل');
+    title = `قائمة الطلبات المعلقة — غير المستلمة`;
+    if(!list.length){toast('لا توجد طلبات معلقة للاستلام');return;}
+  }
+
+  // حفظ وقت الطباعة
+  const printTime = new Date().toISOString();
+  lastPickupPrint = printTime;
+  localStorage.setItem('lastPickupPrint', printTime);
+
+  const printTimeStr = new Date().toLocaleString('ar-EG');
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,sans-serif;padding:16px;direction:rtl;font-size:12px}
+    h2{font-size:16px;margin-bottom:3px}
+    .sub{font-size:11px;color:#666;margin-bottom:12px}
+    table{width:100%;border-collapse:collapse}
+    th{background:#0f172a;color:#fff;padding:7px 9px;text-align:right;font-weight:600;font-size:11px}
+    td{padding:8px 9px;border-bottom:1px solid #e2e8f0;vertical-align:top;font-size:11px}
+    tr:nth-child(even) td{background:#f8faff}
+    .total-row{font-weight:700;background:#eef2ff!important}
+    .chk{width:18px;height:18px;border:1.5px solid #999;border-radius:3px;display:inline-block}
+    @media print{body{padding:8px}}
+  </style></head><body>
+  <h2>🏪 ${title}</h2>
+  <div class="sub">${today} · طُبع: ${printTimeStr} · ${list.length} طلب · إجمالي COD: ${list.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0).toLocaleString()} ج</div>
+  <table>
+    <thead><tr><th style="width:20px">#</th><th style="width:80px">رقم الطلب</th><th style="width:100px">العميل</th><th>العنوان</th><th style="width:80px">الإجمالي</th><th style="width:60px">الدفع</th><th style="width:30px;text-align:center">✓</th></tr></thead>
+    <tbody>
+      ${list.map((o,i)=>`<tr>
+        <td>${i+1}</td>
+        <td><strong>${o.id}</strong></td>
+        <td>${o.name}</td>
+        <td style="color:#444">${o.addr||o.area||'—'}</td>
+        <td><strong>${o.total.toLocaleString()} ج</strong></td>
+        <td>${o.paid?'💳':'💵 COD'}</td>
+        <td style="text-align:center"><div class="chk"></div></td>
+      </tr>`).join('')}
+      <tr class="total-row">
+        <td colspan="4" style="text-align:left">الإجمالي COD المطلوب تحصيله</td>
+        <td>${list.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0).toLocaleString()} ج</td>
+        <td colspan="2"></td>
+      </tr>
+    </tbody>
+  </table>
+  <div style="margin-top:20px;display:flex;gap:50px">
+    <div style="text-align:center"><div style="width:130px;border-bottom:1px solid #000;height:32px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">توقيع المسؤول</div></div>
+    <div style="text-align:center"><div style="width:130px;border-bottom:1px solid #000;height:32px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">توقيع العميل</div></div>
+  </div>
+  <script>window.onload=()=>window.print()<\/script></body></html>`);
+  w.document.close();
+  updateLastPrintDisplay();
+}
+
+function updateLastPrintDisplay(){
+  const el=document.getElementById('pickup-last-print');
+  if(!el)return;
+  const t=localStorage.getItem('lastPickupPrint');
+  el.textContent=t?'آخر طباعة: '+new Date(t).toLocaleString('ar-EG'):'لم تتم طباعة بعد';
+}
+
+function markPickedUp(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o)return;
+  o.status='مكتمل';
+  pushNotif('🏪','تم استلام طلب من المحل',`${id} — ${o.name}`);
+  refreshAll();toast('✅ تم تسجيل الاستلام');
+}
+
+// ===== TRANSIT PAGE =====
+function renderTransitPage(){
+  const list=orders.filter(o=>isTransit(o));
+  $('transit-count').textContent=list.length+' طلب';
+  updateTransitBulkBtns();
+  $('transit-tbody').innerHTML=list.length?list.map(o=>`
+    <tr>
+      <td style="text-align:center"><input type="checkbox" class="transit-chk" value="${o.id}" onchange="updateTransitBulkBtns()"></td>
+      <td><strong>${o.id}</strong><br><span style="font-size:10px;color:var(--muted)">${o.time||''}</span></td>
+      <td>${srcBadge(o.src)}</td>
+      <td><strong>${o.name}</strong></td>
+      <td style="direction:ltr;text-align:right;font-size:11px">${o.phone||'—'}</td>
+      <td style="font-size:11px;color:var(--muted);max-width:200px">${o.items||'—'}</td>
+      <td><strong>${o.total.toLocaleString()} ج</strong></td>
+      <td>${o.paid?'<span class="badge b-done">💳 مدفوع</span>':'<span class="badge b-wait">💵 COD</span>'}</td>
+      <td>${sBadge(o.status)}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          ${o.status==='جديد'||o.status==='في الانتظار'?`<button class="btn btn-primary btn-xs" onclick="markTransitReady('${o.id}')">📦 جاهز</button>`:''}
+          ${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✅ تم</button>`:''}
+          ${o.status!=='مكتمل'&&o.status!=='ملغي'?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}
+        </div>
+      </td>
+    </tr>`).join('')
+    :'<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--muted)">لا توجد طلبات لمخزن العبور</td></tr>';
+}
+
+function updateTransitBulkBtns(){
+  const checked=document.querySelectorAll('.transit-chk:checked');
+  const n=checked.length;
+  $('transit-sel-count').textContent=n?n+' محدد':'';
+  $('transit-bulk-done').style.display=n?'':'none';
+  $('transit-bulk-cancel').style.display=n?'':'none';
+}
+
+function transitToggleAll(val){
+  document.querySelectorAll('.transit-chk').forEach(c=>c.checked=val);
+  updateTransitBulkBtns();
+}
+
+function transitSelAll(){
+  const all=document.querySelectorAll('.transit-chk');
+  const anyUnchecked=[...all].some(c=>!c.checked);
+  all.forEach(c=>c.checked=anyUnchecked);
+  $('transit-check-all').checked=anyUnchecked;
+  updateTransitBulkBtns();
+}
+
+function transitBulkDone(){
+  const ids=[...document.querySelectorAll('.transit-chk:checked')].map(c=>c.value);
+  if(!ids.length)return;
+  ids.forEach(id=>{ const o=orders.find(x=>x.id===id); if(o) o.status='مكتمل'; });
+  pushNotif('🏭',`تم تسليم ${ids.length} طلب من مخزن العبور`,ids.join('، '));
+  refreshAll();
+  toast(`✅ تم تسليم ${ids.length} طلب`);
+}
+
+function transitBulkCancel(){
+  const ids=[...document.querySelectorAll('.transit-chk:checked')].map(c=>c.value);
+  if(!ids.length)return;
+  ids.forEach(id=>{ const o=orders.find(x=>x.id===id); if(o) o.status='ملغي'; });
+  refreshAll();
+  toast(`❌ تم إلغاء ${ids.length} طلب`);
+}
+
+function markTransitReady(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o)return;
+  o.status='جاري التوصيل';
+  pushNotif('🏭','طلب مخزن العبور جاهز',`${id} — ${o.name} — جاهز للاستلام`);
+  refreshAll();toast('📦 تم تحديث الطلب — جاهز للاستلام');
+}
+
+// ===== BOSTA =====
+let bostaApiKey = localStorage.getItem('bosta_api_key')||'';
+let bostaEnv = localStorage.getItem('bosta_env')||'production';
+let bostaLocationId = localStorage.getItem('bosta_location_id')||'';
+let bostaBusinessName = localStorage.getItem('bosta_business_name')||'';
+
+const BOSTA_BASE = ()=>bostaEnv==='staging'?'https://staging.bostaapp.com/api/v0':'https://app.bosta.co/api/v0';
+
+// طلب بوسطة = أي طلب مش من القاهرة/الجيزة (محافظات)
+const CAIRO_AREAS = ['القاهرة','الجيزة','الإسكندرية','مدينة نصر','المعادي','الزمالك','6 أكتوبر','المهندسين','الدقي','حلوان','العباسية','المقطم','شبرا','إمبابة','الهرم','فيصل','الشروق','الرحاب','التجمع','مدينة بدر','العبور','بدر'];
+function isGovernorate(o){
+  // بس للكشف عن المنطقة — مش للعرض في الصفحة
+  const area=(o.area||'').toLowerCase();
+  const isCairo=CAIRO_AREAS.some(a=>area.includes(a.toLowerCase()));
+  return !isCairo && !isPickup(o) && !isTransit(o);
+}
+function isBostaOrder(o){
+  // طلبات بوسطة = اللي اتوزعت على بوسطة يدوياً فقط
+  return !!o.bostaId;
+}
+
+function toggleBostaSetup(){
+  const f=$('bosta-setup-form');
+  f.style.display=f.style.display==='none'?'block':'none';
+  if(f.style.display==='block'){
+    $('bosta-api-key').value=bostaApiKey;
+    $('bosta-env').value=bostaEnv;
+    $('bosta-location-id').value=bostaLocationId;
+    $('bosta-business-name').value=bostaBusinessName;
+    if($('bosta-pickup-address'))$('bosta-pickup-address').value=bostaPickupAddress;
+    if($('bosta-pickup-city'))$('bosta-pickup-city').value=bostaPickupCity;
+  }
+}
+
+let bostaPickupAddress = localStorage.getItem('bosta_pickup_address')||'';
+let bostaPickupCity = localStorage.getItem('bosta_pickup_city')||'القاهرة';
+
+function saveBostaSettings(){
+  bostaApiKey=$('bosta-api-key').value.trim();
+  bostaEnv=$('bosta-env').value;
+  bostaLocationId=$('bosta-location-id').value.trim();
+  bostaBusinessName=$('bosta-business-name').value.trim();
+  bostaPickupAddress=$('bosta-pickup-address').value.trim();
+  bostaPickupCity=$('bosta-pickup-city').value.trim()||'القاهرة';
+  localStorage.setItem('bosta_api_key',bostaApiKey);
+  localStorage.setItem('bosta_env',bostaEnv);
+  localStorage.setItem('bosta_location_id',bostaLocationId);
+  localStorage.setItem('bosta_business_name',bostaBusinessName);
+  localStorage.setItem('bosta_pickup_address',bostaPickupAddress);
+  localStorage.setItem('bosta_pickup_city',bostaPickupCity);
+  $('bosta-conn-status').textContent='⏳ جاري الاتصال...';
+  testBostaConnection();
+}
+
+async function testBostaConnection(){
+  if(!bostaApiKey){$('bosta-conn-status').textContent='❗ أدخل الـ API Key';return;}
+  if(!API_URL){$('bosta-conn-status').textContent='❗ الـ Backend مش متصل';return;}
+  try{
+    $('bosta-conn-status').textContent='⏳ جاري الاتصال...';
+    const r=await fetch(API_URL+'/api/bosta/test',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({apiKey:bostaApiKey,env:bostaEnv})
+    });
+    const data=await r.json();
+    if(data.success){
+      $('bosta-conn-status').textContent='✅ '+data.message;
+      $('bosta-conn-status').style.color='var(--success)';
+      $('bosta-setup-banner').style.background='linear-gradient(135deg,#10b981,#059669)';
+      $('bosta-setup-banner').querySelector('div').innerHTML='<div style="font-size:15px;font-weight:700;margin-bottom:3px">✅ بوسطة متصلة</div><div style="font-size:12px;opacity:.85">عدد الـ pickup locations: '+( data.locations||0)+'</div>';
+    }else{
+      throw new Error(data.error||'HTTP error');
+    }
+  }catch(e){
+    $('bosta-conn-status').textContent='❌ '+e.message;
+    $('bosta-conn-status').style.color='var(--danger)';
+  }
+}
+
+function renderBostaPage(){
+  // الصفحة دي بتعرض بس الطلبات اللي رُفعت على بوسطة يدوياً
+  const bostaOrders=orders.filter(o=>o.bostaId); // مرفوعة على بوسطة
+  const allOrders=orders.filter(o=>o.status!=='ملغي'&&!o.bostaId&&!isPickup(o)&&!isTransit(o));
+  const sent=bostaOrders;
+  const inProgress=bostaOrders.filter(o=>o.bostaStatus==='in-progress'||o.bostaStatus==='picked-up');
+
+  $('bosta-total').textContent=allOrders.length;
+  $('bosta-pending').textContent=allOrders.length;
+  $('bosta-sent').textContent=sent.length;
+  $('bosta-inprogress').textContent=inProgress.length;
+  $('bosta-count').textContent=bostaOrders.length+' طلب مرفوع';
+  if($('nb-bosta'))$('nb-bosta').textContent=bostaOrders.length||'';
+
+  // فلتر العرض
+  const bFilter = window.bostaFilter||'sent';
+  const displayOrders = bFilter==='pending' ? allOrders
+    : bostaOrders;
+
+  $('bosta-tbody').innerHTML=displayOrders.length?displayOrders.map(o=>{
+    const statusBadge=o.bostaId
+      ?`<div style="font-size:11px"><span style="background:var(--success-light);color:#065f46;padding:2px 7px;border-radius:10px;font-weight:700">✅ مرفوعة</span><br><span style="font-size:10px;color:var(--muted);font-family:monospace">${o.bostaTrackingNo||o.bostaId}</span></div>`
+      :'<span style="background:var(--warn-light);color:#92400e;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:700">⏳ لم ترفع</span>';
+    return`<tr>
+      <td style="text-align:center"><input type="checkbox" class="bosta-chk" value="${o.id}" onchange="updateBostaBulkBtn()"></td>
+      <td><strong>${o.id}</strong><br>${deliveryBadge(o)}</td>
+      <td><strong>${o.name}</strong></td>
+      <td style="direction:ltr;text-align:right;font-size:11px">${o.phone||'—'}</td>
+      <td><span style="background:var(--info-light);color:#1e3a5f;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">${o.area}</span></td>
+      <td style="font-size:11px;color:var(--muted)">${o.addr||o.area}</td>
+      <td><strong>${o.total.toLocaleString()} ج</strong><br>${o.paid?'<span style="font-size:10px;color:var(--success)">مدفوع</span>':'<span style="font-size:10px;color:var(--warn)">COD</span>'}</td>
+      <td>${statusBadge}</td>
+      <td>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          ${!o.bostaId?`<button class="btn btn-primary btn-xs" onclick="bostaCreateOne('${o.id}')">🚀 رفع</button>`:''}
+          ${o.bostaId?`<button class="btn btn-ghost btn-xs" onclick="openBostaAWB('${o.id}')">🖨️ بوليصة</button>`:''}
+          ${o.bostaId?`<button class="btn btn-ghost btn-xs" onclick="bostaTrackOne('${o.id}')">📍 تتبع</button>`:''}
+        </div>
+      </td>
+    </tr>`;
+  }).join(''):`<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--muted)">${bFilter==='pending'?'كل الطلبات مرفوعة ✅':bFilter==='sent'?'لا توجد طلبات مرفوعة بعد':'لا توجد طلبات محافظات'}</td></tr>`;
+}
+
+function updateBostaBulkBtn(){
+  const checked=[...document.querySelectorAll('.bosta-chk:checked')];
+  const n=checked.length;
+  const info=$('bosta-sel-info');
+  if(info) info.textContent=n?n+' طلب محدد':'';
+  $('bosta-bulk-btn').style.display=n?'':'none';
+  if(n) $('bosta-bulk-btn').textContent=`🚀 رفع ${n} طلب على بوسطة`;
+}
+
+function bostaSetFilter(f, btn){
+  window.bostaFilter=f;
+  document.querySelectorAll('#bosta-filter-sent,#bosta-filter-pending').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  renderBostaPage();
+}
+
+function bostaSelAll(){
+  const all=document.querySelectorAll('.bosta-chk');
+  const any=[...all].some(c=>!c.checked);
+  all.forEach(c=>c.checked=any);
+  $('bosta-check-all').checked=any;
+  updateBostaBulkBtn();
+}
+
+function bostaToggleAll(val){
+  document.querySelectorAll('.bosta-chk').forEach(c=>c.checked=val);
+  updateBostaBulkBtn();
+}
+
+async function bostaCreateOne(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o)return;
+  if(!bostaApiKey){toast('❗ أدخل Bosta API Key في الإعدادات');return;}
+  toast('⏳ جاري الرفع على بوسطة...');
+  try{
+    const result=await createBostaDelivery(o);
+    if(result.success){
+      o.bostaId=result.deliveryId;
+      o.bostaTrackingNo=result.trackingNumber;
+      o.bostaStatus='created';
+      if(result.hasAwb) toast('✅ تم رفع الطلب وحفظ البوليصة — تتبع: '+result.trackingNumber);
+      else toast('✅ تم رفع الطلب على بوسطة — تتبع: '+result.trackingNumber);
+      // تحديث الطلب من قاعدة البيانات
+      if(API_URL){
+        const updated=await apiFetch('/api/orders/'+id,'PATCH',{bostaId:result.deliveryId,bostaTrackingNo:result.trackingNumber,bostaStatus:'created'});
+        if(updated&&updated.order) Object.assign(o,updated.order);
+      }
+      refreshAll();
+    }else{
+      toast('❌ فشل الرفع: '+(result.error||'خطأ غير معروف'));
+    }
+  }catch(e){
+    toast('❌ فشل الاتصال ببوسطة: '+e.message);
+  }
+}
+
+async function bostaCreateBulk(){
+  const ids=[...document.querySelectorAll('.bosta-chk:checked')].map(c=>c.value);
+  if(!ids.length)return;
+  if(!bostaApiKey){toast('❗ أدخل Bosta API Key في الإعدادات');return;}
+  let success=0,fail=0;
+  toast('⏳ جاري رفع '+ids.length+' طلب على بوسطة...');
+  for(const id of ids){
+    const o=orders.find(x=>x.id===id);
+    if(!o||o.bostaId) continue;
+    try{
+      const result=await createBostaDelivery(o);
+      if(result.success){o.bostaId=result.deliveryId;o.bostaTrackingNo=result.trackingNumber;o.bostaStatus='created';success++;}
+      else fail++;
+    }catch{fail++;}
+  }
+  refreshAll();
+  toast(`✅ تم رفع ${success} طلب${fail?' · ❌ فشل '+fail:''}  على بوسطة`);
+  pushNotif('🚚',`تم رفع ${success} طلب على بوسطة`,`${success} ناجح${fail?' · '+fail+' فاشل':''}`);
+}
+
+async function createBostaDelivery(o){
+  if(!API_URL){
+    toast('❗ الـ Backend مش متصل — محتاج تربط الـ Backend عشان تستخدم بوسطة');
+    return{success:false,error:'Backend not connected'};
+  }
+  // نبعت الطلب للـ Backend بتاعنا اللي يتواصل مع بوسطة (تفادياً لـ CORS)
+  const r=await fetch(API_URL+'/api/bosta/create',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      apiKey:bostaApiKey,
+      env:bostaEnv,
+      locationId:bostaLocationId,
+      order:{...o, pickupAddress:bostaPickupAddress, pickupCity:bostaPickupCity, businessName:bostaBusinessName}
+    })
+  });
+  const data=await r.json();
+  if(data.success){
+    return{success:true,deliveryId:data.deliveryId,trackingNumber:data.trackingNumber};
+  }
+  return{success:false,error:data.error||'خطأ غير معروف'};
+}
+
+async function openBostaAWB(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o){toast('❗ الطلب مش موجود');return;}
+
+  // لو في AWB محفوظ في الـ order مباشرةً
+  if(o.bostaAwbBase64){
+    const w=window.open('','_blank');
+    w.document.write('<html><body style="margin:0"><embed width="100%" height="100%" src="data:application/pdf;base64,'+o.bostaAwbBase64+'" type="application/pdf"></body></html>');
+    return;
+  }
+
+  // جرب تجيبه من الـ Backend
+  if(API_URL&&o.bostaId){
+    toast('⏳ جاري جلب البوليصة من قاعدة البيانات...');
+    try{
+      const r=await apiFetch('/api/bosta/awb/'+id);
+      if(r&&r.success&&r.awbBase64){
+        o.bostaAwbBase64=r.awbBase64;
+        const w=window.open('','_blank');
+        w.document.write('<html><body style="margin:0"><embed width="100%" height="100%" src="data:application/pdf;base64,'+r.awbBase64+'" type="application/pdf"></body></html>');
+        toast('✅ تم فتح البوليصة');
+        return;
+      }
+    }catch(e){console.log('AWB fetch error:',e);}
+  }
+
+  // fallback لصفحة بوسطة
+  if(o.bostaId){
+    window.open('https://business.bosta.co/deliveries/'+o.bostaId,'_blank');
+    toast('⚠️ البوليصة مش محفوظة — افتح بوسطة يدوياً');
+  }else{
+    toast('❗ الطلب مش مرفوع على بوسطة بعد');
+  }
+}
+
+async function openBostaAWB(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o){toast('❗ الطلب مش موجود');return;}
+  // لو في AWB محفوظ في الـ order
+  if(o.bostaAwbBase64){
+    const w=window.open('','_blank');
+    w.document.write('<html><body style="margin:0"><embed width="100%" height="100%" src="data:application/pdf;base64,'+o.bostaAwbBase64+'" type="application/pdf"></body></html>');
+    return;
+  }
+  // جلبه من Backend
+  if(API_URL&&o.bostaId){
+    toast('⏳ جاري جلب البوليصة...');
+    try{
+      const r=await apiFetch('/api/bosta/awb/'+id);
+      if(r&&r.success&&r.awbBase64){
+        o.bostaAwbBase64=r.awbBase64;
+        const w=window.open('','_blank');
+        w.document.write('<html><body style="margin:0"><embed width="100%" height="100%" src="data:application/pdf;base64,'+r.awbBase64+'" type="application/pdf"></body></html>');
+        toast('✅ تم فتح البوليصة');
+        return;
+      }
+    }catch(e){}
+  }
+  // fallback
+  if(o.bostaId) window.open('https://business.bosta.co/deliveries/'+o.bostaId,'_blank');
+  else toast('❗ الطلب مش مرفوع على بوسطة بعد');
+}
+
+async function bostaTrackOne(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o||!o.bostaTrackingNo)return;
+  window.open('https://app.bosta.co/tracking/'+o.bostaTrackingNo,'_blank');
+}
+
+// ===== COURIER ORDERS PAGE =====
+let activeCourierTab = null;
+
+function renderCourierOrdersPage(){
+  const tabs = $('courier-tabs');
+  const content = $('courier-orders-content');
+  if(!couriers.length){
+    content.innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">لا يوجد مناديب مضافين</div>';
+    return;
+  }
+
+  // أول مرة — اختار أول مندوب
+  if(!activeCourierTab || !couriers.find(c=>c.id==activeCourierTab)){
+    activeCourierTab = couriers[0].id;
+  }
+
+  // tabs
+  tabs.innerHTML = couriers.map((c,i)=>{
+    const active = oByC(c.id,'جاري التوصيل').length;
+    const isActive = c.id == activeCourierTab;
+    return `<button onclick="activeCourierTab=${c.id};renderCourierOrdersPage()"
+      style="padding:8px 16px;border-radius:8px;border:1.5px solid ${isActive?'var(--accent)':'var(--border)'};
+      background:${isActive?'var(--accent)':'var(--card)'};color:${isActive?'#fff':'var(--text)'};
+      font-family:'Cairo',sans-serif;font-size:12px;font-weight:700;cursor:pointer">
+      ${c.name}
+      ${active?`<span style="background:${isActive?'rgba(255,255,255,.3)':'var(--warn-light)'};color:${isActive?'#fff':'var(--warn)'};padding:1px 7px;border-radius:10px;margin-right:4px;font-size:11px">${active}</span>`:''}
+    </button>`;
+  }).join('');
+
+  // الطلبات للمندوب المختار
+  const c = couriers.find(x=>x.id==activeCourierTab);
+  if(!c){ content.innerHTML=''; return; }
+
+  const cOrders = orders.filter(o=>o.courierId==c.id&&o.status!=='ملغي');
+  const active = cOrders.filter(o=>o.status==='جاري التوصيل');
+  const done = cOrders.filter(o=>o.status==='مكتمل');
+
+  content.innerHTML = `
+    <div class="card">
+      <div class="card-hd">
+        <h3>🚴 ${c.name} — طلباته</h3>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="chip on" id="co-tab-all-${c.id}" onclick="coFilter('all',${c.id})">الكل (${cOrders.length})</button>
+          <button class="chip" id="co-tab-active-${c.id}" onclick="coFilter('active',${c.id})">📦 نشط (${active.length})</button>
+          <button class="chip" id="co-tab-done-${c.id}" onclick="coFilter('done',${c.id})">✅ مكتمل (${done.length})</button>
+          <span style="font-size:11px;color:var(--muted);margin-right:auto">📱 ${c.phone}</span>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>رقم الطلب</th>
+            <th>نوع التوصيل</th>
+            <th>العميل</th>
+            <th>المنطقة</th>
+            <th>العنوان</th>
+            <th>COD</th>
+            <th>الحالة</th>
+            <th>إجراءات</th>
+          </tr></thead>
+          <tbody id="co-tbody-${c.id}">
+            ${cOrders.length ? cOrders.map(o=>`
+              <tr>
+                <td><strong>${o.id}</strong><br><span style="font-size:10px;color:var(--muted)">${o.time||''}</span></td>
+                <td>${deliveryBadge(o)}</td>
+                <td><strong>${o.name}</strong><br><span style="font-size:10px;color:var(--muted);direction:ltr">${o.phone||''}</span></td>
+                <td><span style="background:var(--warn-light);color:#92400e;padding:2px 7px;border-radius:20px;font-size:11px;font-weight:700">${shortArea(o.area)}</span></td>
+                <td style="font-size:11px;color:var(--muted);max-width:150px;line-height:1.6">${o.addr||o.area}</td>
+                <td>
+                  <strong>${o.paid?'<span style="color:var(--success)">مدفوع</span>':(o.total.toLocaleString()+' ج')}</strong>
+                </td>
+                <td>${sBadge(o.status)}</td>
+                <td>
+                  <div style="display:flex;gap:4px;flex-wrap:wrap">
+                    <button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="unassignOrder('${o.id}')">↩️ إلغاء التعيين</button>
+                    <button class="btn btn-ghost btn-xs" onclick="reassignOrder('${o.id}')">🔄 إعادة تعيين</button>
+                    ${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✅ تم</button>`:''}
+                  </div>
+                </td>
+              </tr>`).join('')
+            : '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">لا توجد طلبات لهذا المندوب</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function coFilter(f, cId){
+  const c = couriers.find(x=>x.id==cId);
+  if(!c) return;
+  const allOrders = orders.filter(o=>o.courierId==c.id&&o.status!=='ملغي');
+  const filtered = f==='active' ? allOrders.filter(o=>o.status==='جاري التوصيل')
+    : f==='done' ? allOrders.filter(o=>o.status==='مكتمل')
+    : allOrders;
+  // تحديث tabs
+  ['all','active','done'].forEach(t=>{
+    const btn=document.getElementById('co-tab-'+t+'-'+cId);
+    if(btn) btn.classList.toggle('on', t===f);
+  });
+  // تحديث الجدول
+  const tbody=document.getElementById('co-tbody-'+cId);
+  if(!tbody) return;
+  tbody.innerHTML = filtered.length ? filtered.map(o=>`
+    <tr>
+      <td><strong>${o.id}</strong><br><span style="font-size:10px;color:var(--muted)">${o.time||''}</span></td>
+      <td>${deliveryBadge(o)}</td>
+      <td><strong>${o.name}</strong><br><span style="font-size:10px;color:var(--muted);direction:ltr">${o.phone||''}</span></td>
+      <td><span style="background:var(--warn-light);color:#92400e;padding:2px 7px;border-radius:20px;font-size:11px;font-weight:700">${shortArea(o.area)}</span></td>
+      <td style="font-size:11px;color:var(--muted);max-width:150px;line-height:1.6">${o.addr||o.area}</td>
+      <td><strong>${o.paid?'<span style="color:var(--success)">مدفوع</span>':(o.total.toLocaleString()+' ج')}</strong></td>
+      <td>${sBadge(o.status)}</td>
+      <td>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="unassignOrder('${o.id}')">↩️ إلغاء</button>`:''}
+          ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" onclick="reassignOrder('${o.id}')">🔄 تعيين</button>`:''}
+          ${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✅ تم</button>`:''}
+        </div>
+      </td>
+    </tr>`).join('')
+    : '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">لا توجد طلبات</td></tr>';
+}
+
+async function unassignOrder(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o)return;
+  const cName = couriers.find(c=>c.id==o.courierId)?.name||'';
+  o.courierId=null;
+  o.status='جديد';
+  o.ship=50;
+  if(API_URL)await apiFetch('/api/orders/'+id,'PATCH',{courierId:null,status:'جديد',ship:50});
+  refreshAll();
+  toast(`↩️ تم إلغاء تعيين الطلب ${id} من ${cName}`);
+}
+
+function reassignOrder(id){
+  // فتح نافذة التعيين مع اختيار مندوب جديد
+  openAssign(id);
+}
+
+// ===== REPORTS =====
+function renderReports(){
+  $('report-tbody').innerHTML=couriers.map(c=>{
+    const all=oByC(c.id),done=oByC(c.id,'مكتمل'),cancel=oByC(c.id,'ملغي');
+    const cod=done.reduce((a,o)=>a+o.total,0),ship=done.reduce((a,o)=>a+(o.ship||50),0),rate=all.length?Math.round(done.length/all.length*100):0;
+    return`<tr><td><strong>${c.name}</strong></td><td>${all.length}</td><td>${done.length}</td><td>${cancel.length}</td><td class="mpos">${cod.toLocaleString()} ج</td><td class="mwarn">${ship.toLocaleString()} ج</td><td class="mpos">${(cod-ship).toLocaleString()} ج</td><td><span style="color:${rate>70?'var(--success)':'var(--warn)'};font-weight:700">${rate}%</span></td></tr>`}).join('');
+}
+
+// ===== NOTIFS =====
+function pushNotif(icon,title,sub){notifications.unshift({id:Date.now(),icon,title,sub,time:'الآن',read:false});updateStats()}
+function renderNotifs(){$('notifs-list').innerHTML=notifications.map(n=>`<div class="nitem ${n.read?'':'unread'}" onclick="markRead(${n.id})"><div class="nicon">${n.icon}</div><div class="nbody"><div class="ntitle">${n.title}</div><div class="nsub">${n.sub}</div></div><div class="ntime">${n.time}</div>${!n.read?'<div class="ndot"></div>':''}</div>`).join('')}
+function markRead(id){notifications=notifications.map(n=>n.id===id?{...n,read:true}:n);updateStats();renderNotifs()}
+function markAllRead(){notifications=notifications.map(n=>({...n,read:true}));updateStats();renderNotifs();toast('✅ تم تحديد الكل كمقروء')}
+
+// ===== SETTINGS =====
+function saveSettings(){defaultShip=+$('cfg-ship').value||50;toast('✅ تم حفظ الإعدادات')}
+
+function selDays(btn, days) {
+  document.querySelectorAll('#days-btns .chip').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('imp-days').value = days;
+}
+
+async function doImport() {
+  const url = $('imp-url').value.trim();
+  const token = $('imp-token').value.trim();
+  const days = +$('imp-days').value || 15;
+  if (!url || !token) { toast('❗ أدخل رابط المتجر والـ Token'); return; }
+  if (!API_URL) { toast('❗ الـ Backend مش متصل — اضبط الإعدادات أولاً'); return; }
+
+  const btn = $('imp-btn');
+  btn.innerHTML = '⏳ جاري الاستيراد...';
+  btn.disabled = true;
+  $('imp-result').style.display = 'none';
+  $('imp-error').style.display = 'none';
+  $('imp-progress').style.display = 'block';
+  $('imp-progress-bar').style.width = '0%';
+  $('imp-progress-pct').textContent = '0%';
+  $('imp-fetched').textContent = 'جاري الاتصال بـ Shopify...';
+
+  // simulate progress (الـ backend بياخد وقت)
+  let fakeProgress = 0;
+  const progressInterval = setInterval(() => {
+    if(fakeProgress < 85) {
+      fakeProgress += Math.random() * 8;
+      $('imp-progress-bar').style.width = Math.min(fakeProgress,85) + '%';
+      $('imp-progress-pct').textContent = Math.round(Math.min(fakeProgress,85)) + '%';
+    }
+  }, 600);
+
+  // تحديث رسائل التقدم
+  const daysLabel = days===1?'يوم واحد':days+' أيام';
+  const msgs = [
+    `جاري جلب طلبات آخر ${daysLabel}...`,
+    'جاري معالجة الطلبات...',
+    'جاري حفظ البيانات...',
+    'تقريباً خلص...'
+  ];
+  let msgIdx = 0;
+  const msgInterval = setInterval(() => {
+    if(msgIdx < msgs.length) $('imp-fetched').textContent = msgs[msgIdx++];
+  }, 3000);
+
+  try {
+    const res = await fetch(API_URL + '/api/import-shopify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shopUrl: url, accessToken: token, days })
+    });
+    const data = await res.json();
+
+    clearInterval(progressInterval);
+    clearInterval(msgInterval);
+    $('imp-progress-bar').style.width = '100%';
+    $('imp-progress-pct').textContent = '100%';
+
+    if (data.success) {
+      $('imp-fetched').textContent = `✅ اكتمل! ${data.total} طلب في ${data.pages||1} صفحة`;
+      $('imp-result').style.display = 'block';
+      $('imp-result').innerHTML = `
+        <strong>✅ ${data.message}</strong><br>
+        <div style="margin-top:8px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center">
+          <div style="background:var(--card);border-radius:6px;padding:8px">
+            <div style="font-size:20px;font-weight:800;color:var(--success)">${data.total}</div>
+            <div style="font-size:10px;color:var(--muted)">إجمالي من Shopify</div>
+          </div>
+          <div style="background:var(--card);border-radius:6px;padding:8px">
+            <div style="font-size:20px;font-weight:800;color:var(--accent)">${data.imported}</div>
+            <div style="font-size:10px;color:var(--muted)">طلبات جديدة أُضيفت</div>
+          </div>
+          <div style="background:var(--card);border-radius:6px;padding:8px">
+            <div style="font-size:20px;font-weight:800;color:var(--warn)">${data.updated}</div>
+            <div style="font-size:10px;color:var(--muted)">طلبات موجودة</div>
+          </div>
+        </div>
+        ${data.pages>1?`<div style="margin-top:6px;font-size:11px;color:var(--muted)">📄 ${data.pages} صفحة × 250 طلب</div>`:''}`;
+      localStorage.setItem('orderpro_shop_url', url);
+      localStorage.setItem('orderpro_shop_token', token);
+      if($('cfg-shop')) $('cfg-shop').value = url;
+      if($('cfg-token')) $('cfg-token').value = token;
+      await loadOrders();
+      pushNotif('📥', `تم استيراد ${data.imported} طلب من Shopify`, `آخر ${days} ${days===1?'يوم':'أيام'} · ${data.total} طلب إجمالي`);
+    } else {
+      $('imp-progress').style.display = 'none';
+      $('imp-error').style.display = 'block';
+      $('imp-error').innerHTML = '❌ ' + (data.error || 'حدث خطأ غير متوقع');
+    }
+  } catch (err) {
+    clearInterval(progressInterval);
+    clearInterval(msgInterval);
+    $('imp-progress').style.display = 'none';
+    $('imp-error').style.display = 'block';
+    $('imp-error').innerHTML = '❌ فشل الاتصال: ' + err.message;
+  } finally {
+    btn.innerHTML = '📥 استيراد الآن';
+    btn.disabled = false;
+  }
+}
+function inviteUser(){const email=$('u-email').value.trim();if(!email){toast('❗ أدخل البريد');return}users.push({email,role:$('u-role').value,name:email.split('@')[0]});$('u-email').value='';renderUsers();toast(`📨 تم إرسال دعوة لـ ${email}`)}
+function renderUsers(){$('users-list').innerHTML=users.map((u,i)=>`<div class="uitem"><div class="uav" style="background:${COLORS[i%COLORS.length]}">${u.name[0].toUpperCase()}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${u.name}</div><div style="font-size:10px;color:var(--muted)">${u.email}</div></div><span class="badge b-new">${ROLE_L[u.role]||u.role}</span></div>`).join('')}
+
+// ===== DOWNLOAD BACKEND =====
+function downloadBackend(){
+  const srv=`const express=require('express');const crypto=require('crypto');const cors=require('cors');const app=express();const PORT=process.env.PORT||3000;let orders=[];let nextId=1;app.use(cors({origin:'*'}));app.use('/webhook/shopify',express.raw({type:'application/json'}));app.use(express.json());app.post('/webhook/shopify',(req,res)=>{const secret=process.env.SHOPIFY_WEBHOOK_SECRET||'';if(secret){const hmac=req.headers['x-shopify-hmac-sha256'];const hash=crypto.createHmac('sha256',secret).update(req.body).digest('base64');if(hash!==hmac)return res.status(401).json({error:'Unauthorized'});}const sh=JSON.parse(req.body);const order={id:'SH-'+sh.order_number,shopifyId:sh.id,src:'shopify',name:sh.shipping_address?(sh.shipping_address.first_name+' '+sh.shipping_address.last_name):(sh.customer?(sh.customer.first_name+' '+sh.customer.last_name):'عميل'),phone:(sh.shipping_address&&sh.shipping_address.phone)||( sh.customer&&sh.customer.phone)||'—',area:sh.shipping_address?[sh.shipping_address.city,sh.shipping_address.address1].filter(Boolean).join(' - '):'—',total:parseFloat(sh.total_price)||0,ship:50,courierId:null,status:'جديد',time:new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}),note:sh.note||'',items:(sh.line_items||[]).map(i=>i.name+' x'+i.quantity).join(', '),shippingMethod:(sh.shipping_lines&&sh.shipping_lines[0]?sh.shipping_lines[0].title:''),deliveryType:(sh.shipping_lines&&sh.shipping_lines[0]&&sh.shipping_lines[0].title.toLowerCase().includes('same day')?'express':'normal'),createdAt:new Date().toISOString()};orders.unshift(order);console.log('New order:',order.id,order.name);res.status(200).json({received:true});});app.get('/api/orders',(req,res)=>res.json({orders,total:orders.length}));app.post('/api/orders',(req,res)=>{const order={id:'MN-'+(1000+nextId++),src:'manual',createdAt:new Date().toISOString(),time:new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}),status:'في الانتظار',courierId:null,ship:50,...req.body};orders.unshift(order);res.json({order});});app.patch('/api/orders/:id',(req,res)=>{const order=orders.find(o=>o.id===req.params.id);if(!order)return res.status(404).json({error:'not found'});Object.assign(order,req.body);res.json({order});});app.delete('/api/orders/:id',(req,res)=>{orders=orders.filter(o=>o.id!==req.params.id);res.json({ok:true});});app.get('/',(req,res)=>res.json({status:'✅ OrderPro Backend شغال',orders:orders.length,uptime:Math.floor(process.uptime())+' ثانية'}));app.listen(PORT,()=>console.log('OrderPro Backend on port',PORT));`;
+  const pkg=JSON.stringify({name:"orderpro-backend",version:"1.0.0",main:"server.js",scripts:{start:"node server.js"},dependencies:{cors:"^2.8.5",express:"^4.18.2"},engines:{node:">=18.0.0"}},null,2);
+  const dl=(content,name,type)=>{const a=document.createElement('a');a.href='data:'+type+';charset=utf-8,'+encodeURIComponent(content);a.download=name;a.click()};
+  dl(srv,'server.js','text/javascript');
+  setTimeout(()=>dl(pkg,'package.json','application/json'),600);
+  toast('✅ تم تحميل server.js و package.json — ارفعهم على Railway');
+}
+
+// ===== NAV =====
+function goPage(el,page){
+  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));el.classList.add('active');
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));$('page-'+page).classList.add('active');
+  currentPage=page;$('ptitle').textContent=PAGE_T[page]||'';
+  if(page==='couriers')renderCouriers();if(page==='assign')renderAssignPage();
+  if(page==='pickup')renderPickupPage();if(page==='transit')renderTransitPage();
+  if(page==='bosta')renderBostaPage();
+  if(page==='courier-orders')renderCourierOrdersPage();
+  if(page==='accounting'){renderAcc();renderAccDet();}if(page==='reports')renderReports();
+  if(page==='notifs')renderNotifs();
+  if(page==='delivery-sheet')dsInit();
+}
+
+function refreshSelects(){const opts='<option value="">— بدون تعيين الآن —</option>'+couriers.map(c=>`<option value="${c.id}">${c.name} (${c.zone})</option>`).join('');$('o-courier').innerHTML=opts}
+function refreshAll(){updateStats();renderDash();renderOrders();if(currentPage==='assign')renderAssignPage();if(currentPage==='pickup')renderPickupPage();if(currentPage==='transit')renderTransitPage();if(currentPage==='bosta')renderBostaPage();if(currentPage==='courier-orders')renderCourierOrdersPage();if(currentPage==='couriers')renderCouriers();if(currentPage==='accounting'){renderAcc();renderAccDet();}if(currentPage==='reports')renderReports();if(currentPage==='notifs')renderNotifs()}
+
+// ===== DELIVERY SHEET =====
+let dsMode='full', dsZone='all';
+
+const DS_HEADERS=`<thead><tr>
+  <th style="width:50px">الطلب</th>
+  <th style="width:55px">النوع</th>
+  <th style="width:80px">العميل</th>
+  <th style="width:60px">المنطقة</th>
+  <th style="width:80px">الهاتف</th>
+  <th>العنوان</th>
+  <th style="width:68px;text-align:center">التحصيل</th>
+  <th style="width:22px;text-align:center">✓</th>
+</tr></thead>`;
+
+function dsOrderRow(o,cls){
+  const dt=deliveryType(o);
+  const dtLabel=dt==='express'?'⚡ سريع':dt==='normal'?'🚚 عادي':'';
+  const dtColor=dt==='express'?'color:#7f1d1d;background:var(--danger-light)':'color:#065f46;background:var(--success-light)';
+  const areaShort=shortArea(o.area);
+  return`<tr class="${cls}" style="font-size:10px;line-height:1.3">
+    <td style="font-weight:700;white-space:nowrap">${o.id.replace('SH-','#').replace('MN-','#')}</td>
+    <td><span style="padding:1px 5px;border-radius:8px;font-size:9px;font-weight:700;${dtColor}">${dtLabel}</span></td>
+    <td style="font-weight:600">${o.name}</td>
+    <td><span class="ds-area" style="font-size:10px">${areaShort}</span></td>
+    <td style="direction:ltr;text-align:right;font-size:10px">${o.phone||'—'}</td>
+    <td style="font-size:10px;line-height:1.5">${o.addr||o.area}</td>
+    <td><div class="ds-addr">${o.addr||o.area}</div></td>
+    <td style="text-align:center">${o.paid?'<span class="ds-paid">مدفوع</span>':`<div class="ds-cod">${o.total.toLocaleString()} ج</div>`}</td>
+    <td style="text-align:center"><div class="ds-chk"></div></td>
+  </tr>`;
+}
+
+function dsInit(){
+  const sel=$('ds-courier-sel');
+  sel.innerHTML=couriers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  dsRender();
+}
+
+function dsSetMode(m){
+  dsMode=m;dsZone='all';
+  ['full','exp','zone'].forEach(x=>$('ds-btn-'+x).classList.remove('active'));
+  const map={full:'full',express:'exp',zone:'zone'};
+  $('ds-btn-'+map[m]).classList.add('active');
+  const picker=$('ds-zone-picker');
+  if(m==='zone'){picker.classList.add('visible');dsBuildZones();}
+  else picker.classList.remove('visible');
+  dsRender();
+}
+
+function dsBuildZones(){
+  const cId=+$('ds-courier-sel').value;
+  const normalOrders=orders.filter(o=>o.courierId==cId&&!isSameDay(o)&&o.status==='جاري التوصيل');
+  const zones=[...new Set(normalOrders.map(o=>o.area))].sort((a,b)=>a.localeCompare(b,'ar'));
+  $('ds-zone-pills').innerHTML=
+    `<button class="zpill on" onclick="dsSelZone('all',this)">كل المناطق</button>`+
+    zones.map(z=>`<button class="zpill" onclick="dsSelZone('${z}',this)">${z}</button>`).join('');
+}
+
+function dsSelZone(z,el){
+  dsZone=z;
+  document.querySelectorAll('.zpill').forEach(p=>p.classList.remove('on'));
+  el.classList.add('on');
+  dsRender();
+}
+
+function dsRender(){
+  const cId=+$('ds-courier-sel').value;
+  const c=couriers.find(x=>x.id==cId);
+  if(!c){$('ds-sheet').innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">لا يوجد مناديب</div>';return;}
+
+  const courierOrders=orders.filter(o=>o.courierId==cId&&o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o));
+  const express=courierOrders.filter(o=>isSameDay(o));
+  let normal=courierOrders.filter(o=>!isSameDay(o));
+  normal.sort((a,b)=>a.area.localeCompare(b.area,'ar'));
+
+  let showExp=[],showNorm=[],modeBadge='',modeTitle='';
+  if(dsMode==='full'){
+    showExp=express;showNorm=normal;
+    modeBadge='<span class="ds-mode-badge ds-mb-full">طباعة مجمعة</span>';
+    modeTitle='ورقة توصيل يومية — كاملة';
+  } else if(dsMode==='express'){
+    showExp=express;showNorm=[];
+    modeBadge='<span class="ds-mode-badge ds-mb-exp">⚡ مستعجل فقط</span>';
+    modeTitle='ورقة توصيل — مستعجل فقط';
+  } else {
+    showExp=[];
+    showNorm=dsZone==='all'?normal:normal.filter(o=>o.area===dsZone);
+    const zl=dsZone==='all'?'كل المناطق':dsZone;
+    modeBadge=`<span class="ds-mode-badge ds-mb-zone">📍 ${zl}</span>`;
+    modeTitle=`ورقة توصيل — ${zl}`;
+  }
+
+  const all=[...showExp,...showNorm];
+  if(!all.length){$('ds-sheet').innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">لا توجد طلبات في هذا الاختيار</div>';return;}
+
+  const totalCod=all.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
+  const shipFee=showExp.reduce((s,o)=>s+(o.ship||c.shipExpress||80),0)+showNorm.reduce((s,o)=>s+(o.ship||c.ship||50),0);
+
+  // Express section
+  let expHtml='';
+  if(showExp.length){
+    expHtml=`
+      <div class="ds-sec"><div class="ds-sec-line"></div>
+        <span class="ds-sec-lbl dsl-exp">⚡ مستعجل — ${showExp.length} طلب</span>
+        <div class="ds-sec-line"></div></div>
+      <table class="ds-table">${DS_HEADERS}<tbody>
+        ${showExp.map(o=>dsOrderRow(o,'ds-er')).join('')}
+      </tbody></table>`;
+  }
+
+  // Normal section grouped by zone
+  let normHtml='';
+  if(showNorm.length){
+    const zones={};
+    showNorm.forEach(o=>{if(!zones[o.area])zones[o.area]=[];zones[o.area].push(o)});
+    let rows='';
+    Object.entries(zones).forEach(([z,zo])=>{
+      rows+=`<tr class="ds-zone-hdr"><td colspan="6">
+        <span style="font-size:10px;font-weight:700;color:var(--muted)">📍 ${z} · ${zo.length} طلب</span>
+      </td></tr>`;
+      rows+=zo.map(o=>dsOrderRow(o,'ds-nr')).join('');
+    });
+    normHtml=`
+      <div class="ds-sec" style="margin-top:6px"><div class="ds-sec-line"></div>
+        <span class="ds-sec-lbl dsl-norm">🚚 عادي — ${showNorm.length} طلب</span>
+        <div class="ds-sec-line"></div></div>
+      <table class="ds-table">${DS_HEADERS}<tbody>${rows}</tbody></table>`;
+  }
+
+  const today=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const nowt=new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+
+  $('ds-sheet').innerHTML=`
+    <div class="ds-hd">
+      <div>
+        <div class="ds-title">${modeTitle}</div>
+        <div class="ds-sub">OrderPro · نظام إدارة التوصيل</div>
+        <div style="margin-top:4px">${modeBadge}</div>
+      </div>
+      <div>
+        <div class="ds-courier-name">${c.name}</div>
+        <div class="ds-date">${today}</div>
+        <div style="font-size:11px;color:var(--muted);text-align:right;margin-top:2px">📱 ${c.phone}</div>
+        <div style="font-size:11px;color:var(--muted);text-align:right">📍 ${c.zone}</div>
+      </div>
+    </div>
+
+    <div class="ds-sum">
+      <div class="ds-sbox"><div class="ds-snum" style="color:var(--accent)">${all.length}</div><div class="ds-slbl">إجمالي الطلبات</div></div>
+      <div class="ds-sbox"><div class="ds-snum" style="color:var(--danger)">${showExp.length}</div><div class="ds-slbl">⚡ مستعجل</div></div>
+      <div class="ds-sbox"><div class="ds-snum" style="color:var(--info)">${showNorm.length}</div><div class="ds-slbl">🚚 عادي</div></div>
+      <div class="ds-sbox"><div class="ds-snum" style="color:var(--success)">${totalCod.toLocaleString()} ج</div><div class="ds-slbl">إجمالي التحصيل</div></div>
+    </div>
+
+    ${expHtml}
+    ${normHtml}
+
+    <div class="ds-foot">
+      <div>
+        <div class="ds-trow"><span>إجمالي COD</span><span>${totalCod.toLocaleString()} ج</span></div>
+        <div class="ds-trow"><span>تمن الشحن المستحق</span><span style="color:var(--warn)">${shipFee.toLocaleString()} ج</span></div>
+        <div class="ds-trow big"><span>صافي للمحل</span><span>${(totalCod-shipFee).toLocaleString()} ج</span></div>
+      </div>
+      <div><div class="ds-sig-line"></div><div class="ds-sig-lbl">توقيع المندوب — استلام الطلبات</div></div>
+      <div><div class="ds-sig-line"></div><div class="ds-sig-lbl">توقيع المشرف — استلام الكاش</div></div>
+    </div>
+
+    <div class="ds-meta">
+      <span>OrderPro · ${today} · ${nowt}</span>
+      <span>${all.length} طلبات · ${c.name}</span>
+    </div>`;
+}
+
+// ===== INIT =====
+if(API_URL){$('cfg-api').value=API_URL;$('cfg-api2').value=API_URL;updateWebhook();testBackend()}
+// تحميل بيانات Shopify المحفوظة
+const savedShopUrl=localStorage.getItem('orderpro_shop_url');
+const savedShopToken=localStorage.getItem('orderpro_shop_token');
+if(savedShopUrl){$('imp-url').value=savedShopUrl;if($('cfg-shop'))$('cfg-shop').value=savedShopUrl;}
+if(savedShopToken){$('imp-token').value=savedShopToken;if($('cfg-token'))$('cfg-token').value=savedShopToken;}
+// تحميل بيانات بوسطة
+bostaPickupAddress=localStorage.getItem('bosta_pickup_address')||'';
+bostaPickupCity=localStorage.getItem('bosta_pickup_city')||'القاهرة';
+refreshSelects();renderUsers();refreshAll();
+</script>
+</body>
+</html>
