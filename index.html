@@ -1438,8 +1438,9 @@ async function selCAndConfirm(id){
   // تحديد المنطقة من مناطق المندوب
   const assignedZone = getOrderZoneForCourier(o, c);
   const upd={courierId:id,ship,note:'',status:'جاري التوصيل',assignedZone};
-  if(API_URL){const r=await apiFetch('/api/orders/'+assignOrderId,'PATCH',upd);if(r)Object.assign(o,r.order);else Object.assign(o,upd)}
-  else Object.assign(o,upd);
+  Object.assign(o, upd);
+  if(API_URL){apiFetch('/api/orders/'+assignOrderId,'PATCH',upd).catch(()=>{});}
+  try{localStorage.setItem('orderpro_orders',JSON.stringify(orders));}catch(e){}
   c.status='نشط';
 
   // Shopify Fulfill: يدوي من صفحة بوسطة فقط
@@ -1911,7 +1912,7 @@ function renderPickupPage(){
         </div>
       </td>
     </tr>`).join('')
-    :'<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--muted)">لا توجد طلبات للاستلام من المحل</td></tr>';
+    :'<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--muted)">لا توجد طلبات للاستلام من المحل</td></tr>';
 }
 
 function updatePickupBulkBtns(){
@@ -2459,10 +2460,12 @@ function renderCourierOrdersPage(){
       <div class="tbl-wrap">
         <table>
           <thead><tr>
+            <th style="width:30px"></th>
             <th>رقم الطلب</th>
-            <th>نوع التوصيل</th>
+            <th>نوع</th>
             <th>العميل</th>
             <th>المنطقة</th>
+            <th>منطقة المندوب</th>
             <th>العنوان</th>
             <th>COD</th>
             <th>الحالة</th>
@@ -2488,7 +2491,7 @@ function renderCourierOrdersPage(){
                   </div>
                 </td>
               </tr>`).join('')
-            : '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--muted)">لا توجد طلبات لهذا المندوب</td></tr>'}
+            : '<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--muted)">لا توجد طلبات لهذا المندوب</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -2521,7 +2524,7 @@ function coFilter(f, cId){
       </td>
       <td>
         <div style="display:flex;align-items:center;gap:4px">
-          <span id="zone-label-${o.id}" style="background:var(--accent-light);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">${o.assignedZone||'أخري'}</span>
+          <span id="zone-label-${o.id}" style="background:var(--accent-light);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">${o.assignedZone||getOrderZoneForCourier(o,c)||'أخري'}</span>
           <button class="btn btn-ghost btn-xs" style="font-size:10px;padding:2px 6px" onclick="openZoneEdit('${o.id}',${cId})">✏️</button>
         </div>
       </td>
@@ -2534,14 +2537,13 @@ function coFilter(f, cId){
           ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" onclick="reassignOrder('${o.id}')">🔄 تعيين</button>`:''}
           ${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✅ تم</button>`:''}
           ${o.status==='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="undoComplete('${o.id}')">↩️ رجّع</button>`:''}
-          ${(!o.paid&&o.status==='مكتمل')?`<button class="btn btn-xs" style="background:var(--success-light);color:#065f46;border:1px solid #86efac" onclick="markPaidFromCourier('${o.id}')">💳 مدفوع</button>`:''}
           ${(!o.paid&&o.status==='مكتمل')?`<button class="btn btn-xs" style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;font-size:10px" onclick="markPaidFromCourier('${o.id}')">💰 تحويل لمدفوع</button>`:''}
           ${(!o.paid&&o.status!=='مكتمل')?`<button class="btn btn-xs" style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;font-size:10px" onclick="markPaidFromCourier('${o.id}')">💰 بدون تحصيل</button>`:''}
           ${(o.paid)?`<span style="background:var(--success-light);color:#065f46;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700">💳 مدفوع</span>`:''}
         </div>
       </td>
     </tr>`).join('')
-    : '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">لا توجد طلبات</td></tr>';
+    : '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted)">لا توجد طلبات</td></tr>';
 }
 
 // ===== BULK في صفحة المناديب =====
@@ -3552,6 +3554,8 @@ function openZoneEdit(orderId, cId){
   if(info)info.innerHTML='<strong>'+orderId+'</strong> — '+o.name+'<br><span style="color:var(--muted);font-size:11px">المنطقة الحالية: <strong>'+(o.assignedZone||'أخري')+'</strong> | منطقة الطلب: '+o.area+'</span>';
 
   const input=document.getElementById('zone-edit-input');
+  // لو مش موجودة احسبها تلقائياً
+  if(!o.assignedZone && c) o.assignedZone = getOrderZoneForCourier(o, c);
   if(input){
     input.value=''; // فاضي — الاختيار بيتم من الـ chips
     input.placeholder='اكتب منطقة يدوياً أو اختر من الأزرار...';
