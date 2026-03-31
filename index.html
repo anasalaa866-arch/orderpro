@@ -1007,22 +1007,27 @@ function shortArea(orderArea){
 
 // حساب درجة تطابق منطقة الطلب مع مناطق المندوب
 function getOrderZoneForCourier(o, c){
-  // يحاول يلاقي المنطقة المناسبة من مناطق المندوب
-  const orderArea=(o.area||'').trim();
-  if(!c||!c.zone) return orderArea||'أخري';
+  // يرجع منطقة من مناطق المندوب فقط — أو "أخري"
+  const orderArea=(o.area||'').trim().toLowerCase();
+  if(!c||!c.zone) return 'أخري';
   const courierZones=(c.zone||'').split(/[،,\/\-–\n]+/).map(z=>z.trim()).filter(z=>z.length>1);
-  if(!courierZones.length) return orderArea||'أخري';
-  // ابحث عن أفضل تطابق
-  const areaLower=orderArea.toLowerCase();
+  if(!courierZones.length) return 'أخري';
+
+  // تطابق تام
   for(const z of courierZones){
-    if(areaLower.includes(z.toLowerCase())||z.toLowerCase().includes(areaLower)) return z;
+    if(orderArea===z.toLowerCase()) return z;
   }
-  // مطابقة جزئية
+  // تطابق جزئي: المنطقة تحتوي على اسم المنطقة في المندوب
   for(const z of courierZones){
-    const zWords=z.toLowerCase().split(/\s+/);
-    const aWords=areaLower.split(/\s+/);
-    if(zWords.some(w=>w.length>2&&aWords.some(aw=>aw.includes(w)||w.includes(aw)))) return z;
+    if(orderArea.includes(z.toLowerCase())||z.toLowerCase().includes(orderArea)) return z;
   }
+  // تطابق بالكلمات
+  const aWords=orderArea.split(/\s+/).filter(w=>w.length>2);
+  for(const z of courierZones){
+    const zWords=z.toLowerCase().split(/\s+/).filter(w=>w.length>2);
+    if(zWords.some(w=>aWords.some(aw=>aw.includes(w)||w.includes(aw)))) return z;
+  }
+  // مش لاقي تطابق → أخري
   return 'أخري';
 }
 
@@ -2530,7 +2535,8 @@ function coFilter(f, cId){
           ${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✅ تم</button>`:''}
           ${o.status==='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="undoComplete('${o.id}')">↩️ رجّع</button>`:''}
           ${(!o.paid&&o.status==='مكتمل')?`<button class="btn btn-xs" style="background:var(--success-light);color:#065f46;border:1px solid #86efac" onclick="markPaidFromCourier('${o.id}')">💳 مدفوع</button>`:''}
-          ${(!o.paid)?`<button class="btn btn-xs" style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;font-size:10px" onclick="markPaidFromCourier('${o.id}')">🔄 بدون تحصيل</button>`:''}
+          ${(!o.paid&&o.status==='مكتمل')?`<button class="btn btn-xs" style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;font-size:10px" onclick="markPaidFromCourier('${o.id}')">💰 تحويل لمدفوع</button>`:''}
+          ${(!o.paid&&o.status!=='مكتمل')?`<button class="btn btn-xs" style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;font-size:10px" onclick="markPaidFromCourier('${o.id}')">💰 بدون تحصيل</button>`:''}
           ${(o.paid)?`<span style="background:var(--success-light);color:#065f46;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700">💳 مدفوع</span>`:''}
         </div>
       </td>
@@ -3541,37 +3547,59 @@ function openZoneEdit(orderId, cId){
   const c=couriers.find(x=>x.id==cId);
   if(!o)return;
   editingZoneOrderId=orderId; editingZoneCId=cId;
+
   const info=document.getElementById('zone-edit-order-info');
-  if(info)info.innerHTML='<strong>'+orderId+'</strong> — '+o.name+'<br><span style="color:var(--muted);font-size:11px">منطقة الطلب: '+o.area+'</span>';
+  if(info)info.innerHTML='<strong>'+orderId+'</strong> — '+o.name+'<br><span style="color:var(--muted);font-size:11px">المنطقة الحالية: <strong>'+(o.assignedZone||'أخري')+'</strong> | منطقة الطلب: '+o.area+'</span>';
+
   const input=document.getElementById('zone-edit-input');
-  if(input)input.value=o.assignedZone||o.area||'';
+  if(input){
+    input.value=''; // فاضي — الاختيار بيتم من الـ chips
+    input.placeholder='اكتب منطقة يدوياً أو اختر من الأزرار...';
+    input.oninput=function(){
+      // لو كتب يدوي، أشيل highlight عن الـ chips
+      const chips=document.getElementById('zone-edit-chips');
+      if(chips)chips.querySelectorAll('.chip').forEach(b=>b.classList.remove('on'));
+    };
+  }
+
   // مناطق المندوب كـ chips
   const chips=document.getElementById('zone-edit-chips');
-  if(chips&&c){
-    const zones=(c.zone||'').split(/[،,\/\-–\n]+/).map(z=>z.trim()).filter(z=>z.length>1);
-    chips.innerHTML=['أخري',...zones].map(z=>`
-      <button class="chip" onclick="document.getElementById('zone-edit-input').value='${z}';this.parentElement.querySelectorAll('.chip').forEach(b=>b.classList.remove('on'));this.classList.add('on')" style="font-size:12px">${z}</button>
-    `).join('');
-    // highlight الحالية
-    chips.querySelectorAll('.chip').forEach(b=>{
-      if(b.textContent.trim()===(o.assignedZone||'')) b.classList.add('on');
-    });
+  if(chips){
+    const zones=c?(c.zone||'').split(/[،,\/\-–\n]+/).map(z=>z.trim()).filter(z=>z.length>1):[];
+    const allZones=['أخري',...zones];
+    const current=o.assignedZone||'أخري';
+
+    chips.innerHTML=allZones.map(z=>{
+      const isActive=z===current;
+      const cls=isActive?'chip on':'chip';
+      return '<button class="'+cls+'" onclick="selectZoneChip(this,this.textContent.trim())" style="font-size:12px;padding:5px 12px">'+z+'</button>';
+    }).join('');
   }
   openM('m-zone-edit');
+}
+
+function selectZoneChip(btn, zone){
+  const chips=document.getElementById('zone-edit-chips');
+  if(chips)chips.querySelectorAll('.chip').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  const input=document.getElementById('zone-edit-input');
+  if(input)input.value=zone;
 }
 
 async function saveZoneEdit(){
   const o=orders.find(x=>x.id===editingZoneOrderId);
   if(!o)return;
-  const newZone=document.getElementById('zone-edit-input')?.value.trim()||'أخري';
+  // اختيار من الـ chips أو من الـ input
+  const inputVal=document.getElementById('zone-edit-input')?.value.trim();
+  const activeChip=document.querySelector('#zone-edit-chips .chip.on');
+  const newZone=inputVal||( activeChip?activeChip.textContent.trim():'')||'أخري';
   o.assignedZone=newZone;
   if(API_URL)apiFetch('/api/orders/'+o.id,'PATCH',{assignedZone:newZone}).catch(()=>{});
   try{localStorage.setItem('orderpro_orders',JSON.stringify(orders));}catch(e){}
   closeM('m-zone-edit');
-  // تحديث الـ label في الجدول
   const lbl=document.getElementById('zone-label-'+o.id);
   if(lbl)lbl.textContent=newZone;
-  toast('✅ تم تحديث المنطقة: '+newZone);
+  toast('✅ تم تحديث المنطقة إلى: '+newZone);
 }
 
 // ===== REPORTS =====
@@ -4028,12 +4056,12 @@ refreshSelects();renderUsers();refreshAll();
     <div class="mbody">
       <div id="zone-edit-order-info" style="background:var(--bg);border-radius:8px;padding:10px;margin-bottom:12px;font-size:13px"></div>
       <div class="fg">
-        <label>المنطقة</label>
-        <input id="zone-edit-input" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:14px" placeholder="اكتب المنطقة يدوياً...">
+        <label>اختر منطقة من مناطق المندوب</label>
+        <div id="zone-edit-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;padding:10px;background:var(--bg);border-radius:8px;border:1px solid var(--border)"></div>
       </div>
-      <div class="fg">
-        <label>اختر من مناطق المندوب</label>
-        <div id="zone-edit-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"></div>
+      <div class="fg" style="margin-top:8px">
+        <label>أو اكتب يدوياً</label>
+        <input id="zone-edit-input" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:14px" placeholder="اكتب اسم المنطقة...">
       </div>
     </div>
     <div class="mft">
