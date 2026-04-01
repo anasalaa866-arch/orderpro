@@ -1659,17 +1659,19 @@ async function bostaCreateOne(id){
       o.bostaId=result.deliveryId;
       o.bostaTrackingNo=result.trackingNumber;
       o.bostaStatus='created';
-      if(API_URL){
-        await apiFetch('/api/orders/'+id,'PATCH',{
-          bostaId:result.deliveryId,
-          bostaTrackingNo:result.trackingNumber,
-          bostaStatus:'created',
-        });
+      // حفظ البوليصة PDF
+      if(result.awbBase64){
+        o.bostaAwbBase64=result.awbBase64;
+        // حفظ PDF تلقائياً
+        downloadBostaPDF(result.awbBase64, id+'_bosta_'+result.trackingNumber+'.pdf');
       }
+      const patch={bostaId:result.deliveryId,bostaTrackingNo:result.trackingNumber,bostaStatus:'created'};
+      if(result.awbBase64) patch.bostaAwbBase64=result.awbBase64;
+      if(API_URL) await apiFetch('/api/orders/'+id,'PATCH',patch).catch(()=>{});
       try{localStorage.setItem('orderpro_orders',JSON.stringify(orders));}catch(e){}
       pushNotif('🚚','تم رفع بوليصة بوسطة',id+' — '+o.name+' — '+result.trackingNumber);
       refreshAll();
-      if(result.hasAwb) toast('✅ تم الرفع وحفظ البوليصة — '+result.trackingNumber);
+      if(result.awbBase64) toast('✅ تم الرفع وتحميل البوليصة PDF — '+result.trackingNumber);
       else toast('✅ تم الرفع — تتبع: '+result.trackingNumber);
     }else{
       toast('❌ فشل الرفع: '+(result.error||'خطأ'));
@@ -1677,6 +1679,17 @@ async function bostaCreateOne(id){
   }catch(e){
     toast('❌ خطأ: '+e.message);
   }
+}
+
+function downloadBostaPDF(base64, filename){
+  try{
+    const link=document.createElement('a');
+    link.href='data:application/pdf;base64,'+base64;
+    link.download=filename||'bosta_awb.pdf';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }catch(e){ console.error('PDF download error:',e); }
 }
 
 async function assignBulkCancel(){
@@ -2408,7 +2421,20 @@ async function createBostaDelivery(o){
   });
   const data=await r.json();
   if(data.success){
-    return{success:true,deliveryId:data.deliveryId,trackingNumber:data.trackingNumber};
+    // جيب البوليصة PDF بعد النجاح
+    let awbBase64 = data.awbBase64 || null;
+    if(!awbBase64 && data.deliveryId){
+      try{
+        const awbR = await fetch(API_URL+'/api/bosta/awb',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({apiKey:bostaApiKey,env:bostaEnv,deliveryId:data.deliveryId})
+        });
+        const awbData = await awbR.json();
+        if(awbData.success) awbBase64 = awbData.base64;
+      }catch(e){}
+    }
+    return{success:true,deliveryId:data.deliveryId,trackingNumber:data.trackingNumber,hasAwb:!!awbBase64,awbBase64};
   }
   return{success:false,error:data.error||'خطأ غير معروف'};
 }
@@ -4727,7 +4753,16 @@ function dsOrderRow(o,cls){
 
 function dsInit(){
   const sel=$('ds-courier-sel');
-  sel.innerHTML=couriers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  // فلتر المناديب الفعليين (الذين عندهم طلبات نشطة أولاً)
+  const activeCids=new Set(orders.filter(o=>o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o)).map(o=>String(o.courierId)));
+  const sorted=[
+    ...couriers.filter(c=>activeCids.has(String(c.id))),
+    ...couriers.filter(c=>!activeCids.has(String(c.id)))
+  ];
+  sel.innerHTML=sorted.map(c=>{
+    const cnt=orders.filter(o=>String(o.courierId)===String(c.id)&&o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o)).length;
+    return `<option value="${c.id}">${c.name}${cnt?' ('+cnt+')':''}</option>`;
+  }).join('');
   dsRender();
 }
 
@@ -4744,7 +4779,7 @@ function dsSetMode(m){
 
 function dsBuildZones(){
   const cId=+$('ds-courier-sel').value;
-  const normalOrders=orders.filter(o=>o.courierId==cId&&!isSameDay(o)&&o.status==='جاري التوصيل');
+  const normalOrders=orders.filter(o=>String(o.courierId)===String(cId)&&!isSameDay(o)&&o.status==='جاري التوصيل');
   // استخدم مناطق المندوب من تعريفه مباشرةً (مش العناوين)
   const cForPills=couriers.find(x=>x.id==cId);
   const courierDefinedZones = cForPills
@@ -4795,15 +4830,15 @@ function doPrint(){
 }
 
 function dsRender(){
-  const cId=+$('ds-courier-sel').value;
-  const c=couriers.find(x=>x.id==cId);
+  const cId=$('ds-courier-sel').value;
+  const c=couriers.find(x=>String(x.id)===String(cId));
   window._dsCourierId = cId; // للاستخدام في dsOrderRow
   if(!c){$('ds-sheet').innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">لا يوجد مناديب</div>';return;}
 
-  const courierOrders=orders.filter(o=>o.courierId==cId&&o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o));
+  const courierOrders=orders.filter(o=>String(o.courierId)===String(cId)&&o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o));
   const express=courierOrders.filter(o=>isSameDay(o));
   let normal=courierOrders.filter(o=>!isSameDay(o));
-  normal.sort((a,b)=>a.area.localeCompare(b.area,'ar'));
+  normal.sort((a,b)=>(a.area||'').localeCompare(b.area||'','ar'));
 
   let showExp=[],showNorm=[],modeBadge='',modeTitle='';
   if(dsMode==='full'){
