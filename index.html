@@ -155,6 +155,7 @@ tr:hover td{background:#fafbff}
 .zone-picker{display:none;gap:6px;flex-wrap:wrap;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:12px}
 .zone-picker.visible{display:flex;align-items:center}
 .zpill{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border);color:var(--muted);background:transparent;font-family:Cairo,sans-serif;transition:all .15s}
+.zpill.zone-other{background:#fef3c7;color:#92400e;border-color:#f59e0b}
 .zpill:hover{border-color:var(--warn);color:var(--warn)}
 .zpill.on{background:var(--warn-light);color:#92400e;border-color:#fcd34d}
 .ds{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px}
@@ -4744,10 +4745,36 @@ function dsSetMode(m){
 function dsBuildZones(){
   const cId=+$('ds-courier-sel').value;
   const normalOrders=orders.filter(o=>o.courierId==cId&&!isSameDay(o)&&o.status==='جاري التوصيل');
-  const zones=[...new Set(normalOrders.map(o=>o.area))].sort((a,b)=>a.localeCompare(b,'ar'));
-  $('ds-zone-pills').innerHTML=
-    `<button class="zpill on" onclick="dsSelZone('all',this)">كل المناطق</button>`+
-    zones.map(z=>`<button class="zpill" onclick="dsSelZone('${z}',this)">${z}</button>`).join('');
+  // استخدم مناطق المندوب من تعريفه مباشرةً (مش العناوين)
+  const cForPills=couriers.find(x=>x.id==cId);
+  const courierDefinedZones = cForPills
+    ? (cForPills.zone||'').split(/[،,\/\-–\n]+/).map(z=>z.trim()).filter(z=>z.length>1)
+    : [];
+  // اجمع المناطق الفعلية المستخدمة في الطلبات
+  const usedZones = [...new Set(normalOrders.map(o=>o.assignedZone||getOrderZoneForCourier(o,cForPills)||'أخري'))];
+  // الترتيب: مناطق المندوب المستخدمة أولاً بترتيب تعريفه ثم أخري
+  const sortedPills = [
+    ...courierDefinedZones.filter(z=>usedZones.includes(z)),
+    ...usedZones.filter(z=>z==='أخري'),
+    ...usedZones.filter(z=>!courierDefinedZones.includes(z)&&z!=='أخري'),
+  ];
+  const zones = sortedPills; // للاستخدام في الـ filter أدناه
+  const pillsEl=$('ds-zone-pills');
+  if(pillsEl){
+    const allBtn=document.createElement('button');
+    allBtn.className='zpill on';allBtn.textContent='كل المناطق';
+    allBtn.onclick=function(){dsSelZone('all',this);};
+    pillsEl.innerHTML='';pillsEl.appendChild(allBtn);
+    sortedPills.forEach(function(z){
+      const count=normalOrders.filter(o=>(o.assignedZone||getOrderZoneForCourier(o,cForPills)||'أخري')===z).length;
+      const isOther=z==='أخري';
+      const btn=document.createElement('button');
+      btn.className='zpill'+(isOther?' zone-other':'');
+      btn.innerHTML=z+' <span style="opacity:.7;font-size:10px">('+count+')</span>';
+      btn.onclick=function(){dsSelZone(z,this);};
+      pillsEl.appendChild(btn);
+    });
+  }
 }
 
 function dsSelZone(z,el){
@@ -4789,7 +4816,10 @@ function dsRender(){
     modeTitle='ورقة توصيل — مستعجل فقط';
   } else {
     showExp=[];
-    showNorm=dsZone==='all'?normal:normal.filter(o=>o.area===dsZone);
+    showNorm=dsZone==='all'?normal:normal.filter(o=>{
+      const oz=o.assignedZone||getOrderZoneForCourier(o,c)||'أخري';
+      return oz===dsZone;
+    });
     const zl=dsZone==='all'?'كل المناطق':dsZone;
     modeBadge=`<span class="ds-mode-badge ds-mb-zone">📍 ${zl}</span>`;
     modeTitle=`ورقة توصيل — ${zl}`;
