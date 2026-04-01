@@ -764,7 +764,7 @@ tr:hover td{background:#fafbff}
         <button class="ds-btn active" id="ds-btn-full" onclick="dsSetMode('full')">📋 مجمع</button>
         <button class="ds-btn exp-btn" id="ds-btn-exp" onclick="dsSetMode('express')">⚡ مستعجل فقط</button>
         <button class="ds-btn zone-btn" id="ds-btn-zone" onclick="dsSetMode('zone')">📍 منطقة محددة</button>
-        <button class="ds-btn print-btn" onclick="window.print()">🖨️ طباعة / PDF</button>
+        <button class="ds-btn print-btn" onclick="doPrint()">🖨️ طباعة / PDF</button>
       </div>
       <div class="zone-picker" id="ds-zone-picker">
         <span style="font-size:11px;color:var(--muted);margin-left:8px;white-space:nowrap">اختر منطقة:</span>
@@ -4421,8 +4421,15 @@ function dsOrderRow(o,cls){
   const dtColor=dt==='express'?'color:#7f1d1d;background:#fee2e2':'color:#065f46;background:#dcfce7';
   const areaShort=shortArea(o.area);
   const addr=(o.addr||'').replace(/\n/g,' ').slice(0,45);
-  return`<tr class="${cls}" style="font-size:10px;line-height:1.2">
-    <td style="font-weight:700;white-space:nowrap;font-size:11px">${o.id.replace('SH-','#').replace('MN-','#')}</td>
+  // تحقق إذا كان الطلب جديد بعد آخر طباعة
+  const cId=$('ds-courier-sel')?.value;
+  const lastPrint=cId&&dsLastPrintTimes[cId]?dsLastPrintTimes[cId]:0;
+  const orderTime=o.createdAt?new Date(o.createdAt).getTime():0;
+  const isNew=lastPrint>0&&orderTime>lastPrint;
+  const newBadge=isNew?'<span style="background:#3ab877;color:#fff;font-size:8px;font-weight:700;padding:1px 5px;border-radius:10px;margin-right:3px">جديد</span>':'';
+  const rowStyle=isNew?'font-size:10px;line-height:1.2;border-right:3px solid #3ab877;background:#f0fdf4':'font-size:10px;line-height:1.2';
+  return`<tr class="${cls}" style="${rowStyle}">
+    <td style="font-weight:700;white-space:nowrap;font-size:11px">${newBadge}${o.id.replace('SH-','#').replace('MN-','#')}</td>
     <td style="text-align:center"><span style="padding:1px 4px;border-radius:6px;font-size:9px;font-weight:700;${dtColor}">${dtLabel}</span></td>
     <td style="font-weight:600;font-size:10px">${o.name}</td>
     <td style="font-size:10px">${areaShort}</td>
@@ -4465,6 +4472,16 @@ function dsSelZone(z,el){
   document.querySelectorAll('.zpill').forEach(p=>p.classList.remove('on'));
   el.classList.add('on');
   dsRender();
+}
+
+function doPrint(){
+  // حفظ وقت الطباعة للمندوب الحالي
+  const cId = $('ds-courier-sel')?.value;
+  if(cId){
+    dsLastPrintTimes[cId] = Date.now();
+    try{localStorage.setItem('ds_last_print',JSON.stringify(dsLastPrintTimes));}catch(e){}
+  }
+  window.print();
 }
 
 function dsRender(){
@@ -4516,12 +4533,27 @@ function dsRender(){
   let normHtml='';
   if(showNorm.length){
     const zones={};
-    showNorm.forEach(o=>{if(!zones[o.area])zones[o.area]=[];zones[o.area].push(o)});
+    showNorm.forEach(o=>{
+      // استخدم منطقة المندوب المحددة أو احسبها أو "أخري"
+      const oz = o.assignedZone || getOrderZoneForCourier(o,c) || 'أخري';
+      if(!zones[oz])zones[oz]=[];
+      zones[oz].push(o);
+    });
     let rows='';
     let rowCount=showExp.length;
-    Object.entries(zones).forEach(([z,zo])=>{
+    // ترتيب: مناطق المندوب أولاً بالترتيب، ثم "أخري" في النهاية
+    const courierZones = (c.zone||'').split(/[،,\/\-–\n]+/).map(z=>z.trim()).filter(z=>z.length>1);
+    const zoneKeys = Object.keys(zones);
+    const sortedZones = [
+      ...courierZones.filter(z=>zoneKeys.includes(z)),
+      ...zoneKeys.filter(z=>z==='أخري'),
+      ...zoneKeys.filter(z=>!courierZones.includes(z)&&z!=='أخري'),
+    ];
+    sortedZones.forEach((z)=>{
+      const zo=zones[z];if(!zo)return;
+      const isOther=z==='أخري';
       rows+=`<tr class="ds-zone-hdr"><td colspan="8">
-        <span style="font-size:10px;font-weight:700;color:var(--muted)">📍 ${z} · ${zo.length} طلب</span>
+        <span style="font-size:10px;font-weight:700;color:${isOther?'#92400e':'var(--muted)'};background:${isOther?'#fef3c7':''}; padding:${isOther?'2px 8px':'0'};border-radius:4px">📍 ${z} · ${zo.length} طلب${isOther?' ⚠️':''}</span>
       </td></tr>`;
       zo.forEach(o=>{
         if(rowCount>0&&rowCount%20===0){
