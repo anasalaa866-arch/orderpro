@@ -4422,7 +4422,7 @@ function dsOrderRow(o,cls){
   const areaShort=shortArea(o.area);
   const addr=(o.addr||'').replace(/\n/g,' ').slice(0,45);
   // تحقق إذا كان الطلب جديد بعد آخر طباعة
-  const cId=$('ds-courier-sel')?.value;
+  const cId=window._dsCourierId||0;
   const lastPrint=cId&&dsLastPrintTimes[cId]?dsLastPrintTimes[cId]:0;
   const orderTime=o.createdAt?new Date(o.createdAt).getTime():0;
   const isNew=lastPrint>0&&orderTime>lastPrint;
@@ -4487,6 +4487,7 @@ function doPrint(){
 function dsRender(){
   const cId=+$('ds-courier-sel').value;
   const c=couriers.find(x=>x.id==cId);
+  window._dsCourierId = cId; // للاستخدام في dsOrderRow
   if(!c){$('ds-sheet').innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">لا يوجد مناديب</div>';return;}
 
   const courierOrders=orders.filter(o=>o.courierId==cId&&o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o));
@@ -4541,7 +4542,7 @@ function dsRender(){
     });
     let rows='';
     let rowCount=showExp.length;
-    // ترتيب: مناطق المندوب أولاً بالترتيب، ثم "أخري" في النهاية
+    // ترتيب: مناطق المندوب أولاً ثم أخري
     const courierZones = (c.zone||'').split(/[،,\/\-–\n]+/).map(z=>z.trim()).filter(z=>z.length>1);
     const zoneKeys = Object.keys(zones);
     const sortedZones = [
@@ -4549,12 +4550,12 @@ function dsRender(){
       ...zoneKeys.filter(z=>z==='أخري'),
       ...zoneKeys.filter(z=>!courierZones.includes(z)&&z!=='أخري'),
     ];
-    sortedZones.forEach((z)=>{
-      const zo=zones[z];if(!zo)return;
-      const isOther=z==='أخري';
-      rows+=`<tr class="ds-zone-hdr"><td colspan="8">
-        <span style="font-size:10px;font-weight:700;color:${isOther?'#92400e':'var(--muted)'};background:${isOther?'#fef3c7':''}; padding:${isOther?'2px 8px':'0'};border-radius:4px">📍 ${z} · ${zo.length} طلب${isOther?' ⚠️':''}</span>
-      </td></tr>`;
+    sortedZones.forEach(function(z){
+      const zo=zones[z]; if(!zo) return;
+      const isOther = z==='أخري';
+      const hdrColor = isOther ? 'color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:4px' : 'color:var(--muted)';
+      const hdrLabel = '📍 '+z+' · '+zo.length+' طلب'+(isOther?' ⚠️':'');
+      rows += '<tr class="ds-zone-hdr"><td colspan="8"><span style="font-size:10px;font-weight:700;'+hdrColor+'">'+hdrLabel+'</span></td></tr>';
       zo.forEach(o=>{
         if(rowCount>0&&rowCount%20===0){
           rows+='</tbody></table><div style="page-break-after:always"></div><table class="ds-table">'+DS_HEADERS+'<tbody>';
