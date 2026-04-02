@@ -1242,8 +1242,15 @@ async function loadOrders(){
   const data=await apiFetch('/api/orders');
   if(!data)return;
   const prev=orders.length;
-  orders=data.orders.map(o=>{
+  // restore isBosta from localStorage if server doesn't have it
+let _bostaIds={};
+try{_bostaIds=JSON.parse(localStorage.getItem('bosta_ids')||'{}');}catch(e){}
+
+orders=data.orders.map(o=>{
     const base={ship:50,...o};
+    // لو الـ server ما رجعش isBosta، جيبها من localStorage
+    if(!base.isBosta && _bostaIds[base.id]) base.isBosta=true;
+    if(base.isBosta) base.courierId='bosta';
     // لو deliveryType مش موجود، احسبه من shippingMethod
     if(!base.deliveryType||base.deliveryType==='normal'){
       const sm=(base.shippingMethod||'').toLowerCase();
@@ -1635,10 +1642,17 @@ async function assignToBosta(id){
   const o=orders.find(x=>x.id===id);
   if(!o)return;
   o.courierId='bosta';
+  o.isBosta=true;
   o.status='جاري التوصيل';
   const upd={courierId:null,isBosta:true,status:'جاري التوصيل'};
   if(API_URL)apiFetch('/api/orders/'+id,'PATCH',upd).catch(()=>{});
-  try{localStorage.setItem('orderpro_orders',JSON.stringify(orders));}catch(e){}
+  // احفظ isBosta في localStorage كـ backup
+  try{
+    const bIds=JSON.parse(localStorage.getItem('bosta_ids')||'{}');
+    bIds[id]=true;
+    localStorage.setItem('bosta_ids',JSON.stringify(bIds));
+    localStorage.setItem('orderpro_orders',JSON.stringify(orders));
+  }catch(e){}
   refreshAll();
   pushNotif('🚚','تم تعيين طلب لبوسطة',id+' — '+o.name);
   toast('✅ تم تعيين الطلب لبوسطة — ارفع البوليصة يدوياً من صفحة بوسطة');
@@ -4506,86 +4520,131 @@ function checkExpiryAlerts(){
 function exportBostaExcel(){
   const checked=[...document.querySelectorAll('.bosta-chk:checked')].map(c=>c.value);
   if(!checked.length){toast('❗ اختر طلبات أولاً');return;}
-
   const selectedOrders=orders.filter(o=>checked.includes(o.id));
 
-  // بناء الـ workbook بتمبلت بوسطة
-  const wb=XLSX.utils.book_new();
+  // ===== Mapping المحافظات =====
+  const GOV_MAP={
+    // القاهرة وضواحيها
+    'cairo':'القاهرة','c':'القاهرة','hu':'القاهرة','egypt':'القاهرة',
+    'nasr city':'القاهرة','nasr':'القاهرة','مدينة نصر':'القاهرة','مدينه نصر':'القاهرة',
+    'new cairo':'القاهرة','التجمع':'القاهرة','5th settlement':'القاهرة','madinaty':'القاهرة',
+    'rehab':'القاهرة','heliopolis':'القاهرة','هليوبوليس':'القاهرة',
+    'garden city':'القاهرة','zamalek':'القاهرة','maadi':'القاهرة','المعادي':'القاهرة',
+    'القاهرة':'القاهرة','القاهره':'القاهرة','shorouk':'القاهرة','الشروق':'القاهرة',
+    'obour':'القاهرة','العبور':'القاهرة','badr':'القاهرة','بدر':'القاهرة',
+    // الجيزة
+    'giza':'الجيزة','gz':'الجيزة','su':'الجيزة','الجيزة':'الجيزة','الجيزه':'الجيزة',
+    '6th of october':'الجيزة','6 october':'الجيزة','sheikh zayed':'الجيزة',
+    'الشيخ زايد':'الجيزة','6th october':'الجيزة','october':'الجيزة',
+    'haram':'الجيزة','الهرم':'الجيزة','dokki':'الجيزة','الدقي':'الجيزة','الدقى':'الجيزة',
+    'agouza':'الجيزة','العجوزة':'الجيزة','mohandessin':'الجيزة','المهندسين':'الجيزة',
+    'giza-haram':'الجيزة','westown':'الجيزة','new giza':'الجيزة',
+    // الإسكندرية
+    'alexandria':'الإسكندرية','alx':'الإسكندرية','alex':'الإسكندرية','alxandria':'الإسكندرية',
+    'alexanderia':'الإسكندرية','الإسكندرية':'الإسكندرية','الاسكندرية':'الإسكندرية',
+    'smouha':'الإسكندرية','semoha':'الإسكندرية','محرم بك':'الإسكندرية',
+    // القليوبية
+    'قليوبية':'القليوبية','kb':'القليوبية','القليوبية':'القليوبية',
+    'shubra':'القليوبية','شبرا':'القليوبية',
+    // المنوفية
+    'mnf':'المنوفية','المنوفية':'المنوفية','منوفية':'المنوفية',
+    // الغربية
+    'gh':'الغربية','الغربية':'الغربية','gharbia':'الغربية','tanta':'الغربية','طنطا':'الغربية',
+    // البحيرة
+    'bh':'البحيرة','البحيرة':'البحيرة','damanhour':'البحيرة','دمنهور':'البحيرة',
+    'wadi elnatrun':'البحيرة','وادي النطرون':'البحيرة',
+    // الدقهلية
+    'dk':'الدقهلية','الدقهلية':'الدقهلية','mansoura':'الدقهلية','المنصورة':'الدقهلية',
+    'el mansoura':'الدقهلية','talkha':'الدقهلية','طلخا':'الدقهلية',
+    // الشرقية
+    'shr':'الشرقية','الشرقية':'الشرقية','zagazig':'الشرقية','الزقازيق':'الشرقية',
+    // أسيوط
+    'ast':'أسيوط','أسيوط':'أسيوط','اسيوط':'أسيوط','asyut':'أسيوط',
+    // سوهاج
+    'shg':'سوهاج','سوهاج':'سوهاج','sohag':'سوهاج',
+    // قنا
+    'qna':'قنا','قنا':'قنا','qena':'قنا','kn':'قنا','naga hammady':'قنا',
+    // الأقصر
+    'lx':'الأقصر','الأقصر':'الأقضر','luxor':'الأقصر',
+    // أسوان
+    'asn':'أسوان','أسوان':'أسوان','aswan':'أسوان',
+    // الفيوم
+    'fym':'الفيوم','الفيوم':'الفيوم','fayoum':'الفيوم',
+    // بني سويف
+    'bns':'بني سويف','بني سويف':'بني سويف','beni suef':'بني سويف',
+    // المنيا
+    'mn':'المنيا','المنيا':'المنيا','minya':'المنيا',
+    // السويس
+    'suz':'السويس','السويس':'السويس','suez':'السويس',
+    // الإسماعيلية
+    'is':'الإسماعيلية','الاسماعيليه':'الإسماعيلية','ismailia':'الإسماعيلية',
+    // بور سعيد
+    'pts':'بور سعيد','بور سعيد':'بور سعيد','port said':'بور سعيد',
+    // دمياط
+    'dt':'دمياط','دمياط':'دمياط','damietta':'دمياط',
+    // كفر الشيخ
+    'kfs':'كفر الشيخ','كفر الشيخ':'كفر الشيخ','kafr elshikh':'كفر الشيخ','kafr el sheikh':'كفر الشيخ',
+    // البحر الأحمر
+    'ba':'البحر الأحمر','البحر الأحمر':'البحر الأحمر','hurghada':'البحر الأحمر','الغردقة':'البحر الأحمر','الغردقه':'البحر الأحمر',
+    // جنوب سيناء
+    'js':'جنوب سيناء','جنوب سيناء':'جنوب سيناء',
+    // مرسى مطروح
+    'mt':'مرسى مطروح','مرسي مطروح':'مرسى مطروح','marsa matrouh':'مرسى مطروح',
+  };
 
-  // ===== Sheet "Add orders here" =====
-  // Row 0: group headers
-  // Row 1: column headers
-  // Row 2+: data
-
-  const headerRow1 = [
-    'معلومات العميل','','','','','','','','','','',
-    'معلومات الاوردر','','','','','','','','',
-    'معلومات الشحنة المرتجة في حالة التبديل فقط','','',
-    'نوع الشحنة'
-  ];
-
-  const headerRow2 = [
-    '* اسم العميل',
-    '* تليفون',
-    'تليفون ثاني',
-    '* المدينة',
-    'المنطقة',
-    '* العنوان',
-    'علامة مميزة',
-    'عنوان عمل؟',
-    'رابط المكان',
-    'ملاحظات',
-    '',
-    'قيمة التحصيل النقدي',
-    'عدد القطع',
-    'وصف الشحنة',
-    'مرجع الطلب',
-    'قيمة الشحنة',
-    'الدفع بواسطة نقاط بوسطة؟',
-    'تطبيق رسوم Flexship',
-    'هل تسمح بفتح الشحنة؟',
-    '',
-    'عدد قطع المرتجع',
-    'وصف الشحنة المرتجعة',
-    '',
-    'نوع الشحنة'
-  ];
-
-  const dataRows = selectedOrders.map(o=>{
-    // استخراج المدينة من العنوان أو المنطقة
-    const area = o.area||'';
-    // قيمة التحصيل: 0 لو مدفوع أونلاين
-    const cod = o.paid ? 0 : (o.total||0);
-    // تجهيز العنوان
-    const addr = (o.addr||area).replace(/\n/g,' ').slice(0,200);
-
-    // عدد القطع من items
-    let itemCount=1;
-    let itemDesc='طلب من Shopify';
-    if(o.items){
-      try{
-        const items=typeof o.items==='string'?JSON.parse(o.items):o.items;
-        if(Array.isArray(items)&&items.length){
-          itemCount=items.reduce((s,it)=>s+(it.quantity||1),0);
-          // وصف: "EX: date" product xQty, ...
-          itemDesc=items.map(it=>{
-            const expDate=it.expiry_date||it.expiry||'';
-            const prefix=expDate?'EX: "'+expDate+'" ':'';
-            return prefix+(it.title||it.name||'منتج')+' x'+(it.quantity||1);
-          }).join(', ');
-        }
-      }catch(e){}
+  function extractGov(area){
+    if(!area||area==='—') return 'القاهرة';
+    // الـ area بتكون "المحافظة - العنوان" أو "المدينة - العنوان"
+    const parts=area.split(/\s*-\s*/);
+    const govRaw=(parts[0]||'').trim().toLowerCase();
+    // تحقق مباشر
+    if(GOV_MAP[govRaw]) return GOV_MAP[govRaw];
+    // تحقق جزئي
+    for(const [key,val] of Object.entries(GOV_MAP)){
+      if(govRaw.includes(key)||key.includes(govRaw)) return val;
     }
-    // مرجع الطلب بدون SH-
-    const orderRef=(o.id||'').replace(/^SH-/,'').replace(/^MN-/,'');
-    // قيمة الشحنة = التحصيل دايماً (حتى لو مدفوع)
+    // لو ما لقيناش، حاول من الـ addr
+    return 'القاهرة'; // default
+  }
+
+  function extractArea(area){
+    if(!area||area==='—') return '';
+    const parts=area.split(/\s*-\s*/);
+    return (parts[0]||'').trim().slice(0,50);
+  }
+
+  const headerRow1=['معلومات العميل','','','','','','','','','','','معلومات الاوردر','','','','','','','','','معلومات الشحنة المرتجة في حالة التبديل فقط','','','نوع الشحنة'];
+  const headerRow2=['* اسم العميل','* تليفون','تليفون ثاني','* المدينة','المنطقة','* العنوان','علامة مميزة','عنوان عمل؟','رابط المكان','ملاحظات','','قيمة التحصيل النقدي','عدد القطع','وصف الشحنة','مرجع الطلب','قيمة الشحنة','الدفع بواسطة نقاط بوسطة؟','تطبيق رسوم Flexship','هل تسمح بفتح الشحنة؟','','عدد قطع المرتجع','وصف الشحنة المرتجعة','','نوع الشحنة'];
+
+  const dataRows=selectedOrders.map(o=>{
+    const area=o.area||'';
+    const addr=(o.addr||area).replace(/\n/g,' ').slice(0,200);
+    const cod=o.paid?0:(o.total||0);
     const shipVal=o.total||0;
+    const orderRef=(o.id||'').replace(/^SH-/,'').replace(/^MN-/,'');
+    const gov=extractGov(area);
+    const areaName=extractArea(area);
+
+    // عدد القطع ووصف المنتجات
+    let itemCount=1, itemDesc='طلب من Cafelax';
+    if(o.items && o.items.trim && o.items.trim()){
+      // الصيغة من Shopify: "Product Name xN, Product Name xN"
+      itemDesc = o.items.trim();
+      // احسب عدد القطع الكلي من xN
+      const qtyM = o.items.match(/x(\d+)/gi);
+      if(qtyM && qtyM.length){
+        itemCount = qtyM.reduce(function(s,m){return s+parseInt(m.slice(1));},0);
+      } else {
+        itemCount = o.items.split(',').length;
+      }
+    }
+
     return [
       o.name||'',
       o.phone||'',
       '',
-      'القاهرة',
-      area.slice(0,50),
+      gov,
+      areaName,
       addr,
       '',
       '',
@@ -4597,44 +4656,28 @@ function exportBostaExcel(){
       itemDesc,
       orderRef,
       shipVal,
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
+      '','','','','','','',
       'Parcel',
     ];
   });
 
-  const wsData=[headerRow1, headerRow2, ...dataRows];
+  const wsData=[headerRow1,headerRow2,...dataRows];
   const ws=XLSX.utils.aoa_to_sheet(wsData);
-
-  // تنسيق عرض الأعمدة
-  ws['!cols']=[
-    {wch:25},{wch:15},{wch:15},{wch:15},{wch:20},{wch:40},{wch:15},{wch:10},{wch:15},{wch:20},{wch:5},
-    {wch:18},{wch:10},{wch:20},{wch:15},{wch:12},{wch:15},{wch:12},{wch:12},{wch:5},
-    {wch:12},{wch:20},{wch:5},{wch:15}
-  ];
-
-  // merge headers
+  ws['!cols']=[{wch:25},{wch:15},{wch:15},{wch:20},{wch:20},{wch:40},{wch:15},{wch:10},{wch:15},{wch:40},{wch:5},{wch:18},{wch:10},{wch:60},{wch:15},{wch:12},{wch:12},{wch:12},{wch:12},{wch:5},{wch:12},{wch:20},{wch:5},{wch:15}];
   ws['!merges']=[
-    {s:{r:0,c:0},e:{r:0,c:10}},   // معلومات العميل
-    {s:{r:0,c:11},e:{r:0,c:19}},  // معلومات الاوردر
-    {s:{r:0,c:20},e:{r:0,c:22}},  // معلومات المرتجع
-    {s:{r:0,c:23},e:{r:0,c:23}},  // نوع الشحنة
+    {s:{r:0,c:0},e:{r:0,c:10}},
+    {s:{r:0,c:11},e:{r:0,c:19}},
+    {s:{r:0,c:20},e:{r:0,c:22}},
+    {s:{r:0,c:23},e:{r:0,c:23}},
   ];
-
-  XLSX.utils.book_append_sheet(wb, ws, 'Add orders here');
-
-  // اسم الملف بتاريخ
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Add orders here');
   const now=new Date();
   const fname='Bosta_'+now.toLocaleDateString('en-GB').replace(/[/]/g,'-')+'_'+checked.length+'_orders.xlsx';
-
-  XLSX.writeFile(wb, fname);
+  XLSX.writeFile(wb,fname);
   toast('✅ تم تصدير '+checked.length+' طلب — '+fname);
 }
+
 
 // ===== REPORTS =====
 function renderReports(){
