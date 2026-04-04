@@ -2329,12 +2329,16 @@ function renderBostaPage(){
   // الصفحة دي بتعرض بس الطلبات اللي رُفعت على بوسطة يدوياً
   const bostaOrders=orders.filter(o=>o.bostaId); // مرفوعة أو معينة
   // الطلبات المعينة لبوسطة فقط (courierId='bosta') واللي لم ترفع بعد
-  const allOrders=orders.filter(o=>(o.isBosta||String(o.courierId)==='bosta')&&!o.bostaId&&o.status!=='ملغي');
+  const allOrders=orders.filter(o=>(o.isBosta||String(o.courierId)==='bosta')&&!o.bostaId&&!o.bostaExported&&o.status!=='ملغي');
+  const exportedOrders=orders.filter(o=>(o.isBosta||String(o.courierId)==='bosta')&&!o.bostaId&&o.bostaExported&&o.status!=='ملغي');
   const sent=bostaOrders;
   const inProgress=bostaOrders.filter(o=>o.bostaStatus==='in-progress'||o.bostaStatus==='picked-up');
 
   $('bosta-total').textContent=allOrders.length;
   $('bosta-pending').textContent=allOrders.length;
+  // badge في الـ tab
+  const exportedTab=$('bosta-filter-exported');
+  if(exportedTab) exportedTab.textContent='📤 تم التصدير ('+exportedOrders.length+')';
   $('bosta-sent').textContent=sent.length;
   $('bosta-inprogress').textContent=inProgress.length;
   $('bosta-count').textContent=bostaOrders.length+' طلب مرفوع';
@@ -2343,6 +2347,7 @@ function renderBostaPage(){
   // فلتر العرض
   const bFilter = window.bostaFilter||'sent';
   const displayOrders = bFilter==='pending' ? allOrders
+    : bFilter==='exported' ? exportedOrders
     : bostaOrders;
 
   $('bosta-tbody').innerHTML=displayOrders.length?displayOrders.map(o=>{
@@ -2360,7 +2365,7 @@ function renderBostaPage(){
       <td>${statusBadge}</td>
       <td>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
-          ${!o.bostaId?`<button class="btn btn-primary btn-xs" onclick="bostaCreateOne('${o.id}')">🚀 رفع</button>`:''}
+          ${!o.bostaId?`<button class="btn btn-primary btn-xs" onclick="bostaCreateOne('${o.id}')">🚀 رفع</button>`:o.bostaExported?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="undoBostaExport('${o.id}')">↩ إلغاء التصدير</button>`:''}
           ${o.bostaId?`<button class="btn btn-ghost btn-xs" onclick="openBostaAWB('${o.id}')">🖨️ بوليصة</button>`:''}
           ${o.bostaId?`<button class="btn btn-ghost btn-xs" onclick="bostaTrackOne('${o.id}')">📍 تتبع</button>`:''}
           <button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="unassignBosta('${o.id}')">↩️ إلغاء</button>
@@ -2382,7 +2387,7 @@ function updateBostaBulkBtn(){
 
 function bostaSetFilter(f, btn){
   window.bostaFilter=f;
-  document.querySelectorAll('#bosta-filter-sent,#bosta-filter-pending').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('#bosta-filter-sent,#bosta-filter-pending,#bosta-filter-exported').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   renderBostaPage();
 }
@@ -3493,7 +3498,16 @@ try{ sysUsers = JSON.parse(localStorage.getItem('sys_users') || '[]'); }catch(e)
 
 // المستخدم الحالي
 let currentUser = null;
-try{ currentUser = JSON.parse(sessionStorage.getItem('current_user') || 'null'); }catch(e){}
+try{
+  const _sess = JSON.parse(localStorage.getItem('current_user_session')||'null');
+  // تحقق إن الجلسة لسه صالحة
+  if(_sess && _sess._expires && Date.now() < _sess._expires){
+    const {_expires, ..._u} = _sess;
+    currentUser = _u;
+  } else if(_sess) {
+    localStorage.removeItem('current_user_session'); // مسح منتهية
+  }
+}catch(e){}
 
 function sha256(str){
   // Simple hash using SubtleCrypto async — نستخدم btoa للتبسيط
@@ -3539,7 +3553,9 @@ async function doLogin(){
   
   // حفظ الجلسة
   currentUser = user;
-  sessionStorage.setItem('current_user', JSON.stringify(user));
+  // حفظ الجلسة في localStorage مع وقت انتهاء (8 ساعات)
+  const sessionData = {...user, _expires: Date.now() + 8*60*60*1000};
+  localStorage.setItem('current_user_session', JSON.stringify(sessionData));
   
   // إظهار البرنامج
   document.getElementById('login-screen').classList.add('hidden');
@@ -3554,11 +3570,11 @@ async function doLogin(){
   
   loadOrders();
   checkExpiryAlerts();
-  toast('✅ مرحباً '+user.name);
+  toast('✅ أهلاً '+user.name+' 👋');
 }
 
 function doLogout(){
-  sessionStorage.removeItem('current_user');
+  localStorage.removeItem('current_user_session');
   currentUser = null;
   document.getElementById('main-app').style.display = 'none';
   document.getElementById('login-screen').classList.remove('hidden');
@@ -3715,13 +3731,25 @@ function deleteUser(username){
 
 // تشغيل الـ login check
 window.addEventListener('load', function(){
-  // لو في جلسة محفوظة، ادخل مباشرةً
   if(currentUser){
+    // جلسة محفوظة - ادخل مباشرةً وحمّل البيانات
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('main-app').style.display = '';
     applyPermissions(currentUser.role, currentUser.pages||null);
     const userBadge = document.getElementById('user-badge');
     if(userBadge) userBadge.textContent = '👤 '+currentUser.name;
+    // تحديث وقت انتهاء الجلسة (8 ساعات من دلوقتي)
+    try{
+      const s=JSON.parse(localStorage.getItem('current_user_session')||'null');
+      if(s){s._expires=Date.now()+8*60*60*1000;localStorage.setItem('current_user_session',JSON.stringify(s));}
+    }catch(e){}
+    // تحميل البيانات
+    loadOrders();
+    checkExpiryAlerts();
+  } else {
+    // مفيش جلسة - اعرض شاشة الـ login
+    document.getElementById('login-screen').classList.remove('hidden');
+    document.getElementById('main-app').style.display = 'none';
   }
 }, {once:true});
 
@@ -4686,9 +4714,39 @@ function exportBostaExcel(){
   const now=new Date();
   const fname='Bosta_'+now.toLocaleDateString('en-GB').replace(/[/]/g,'-')+'_'+checked.length+'_orders.xlsx';
   XLSX.writeFile(wb,fname);
-  toast('✅ تم تصدير '+checked.length+' طلب — '+fname);
+
+  // تعليم الطلبات المصدّرة + حفظ
+  selectedOrders.forEach(o=>{
+    o.bostaExported=true;
+    if(API_URL) apiFetch('/api/orders/'+o.id,'PATCH',{bostaExported:true}).catch(()=>{});
+  });
+  // حفظ في localStorage backup
+  try{
+    const expIds=JSON.parse(localStorage.getItem('bosta_exported_ids')||'{}');
+    selectedOrders.forEach(o=>expIds[o.id]=true);
+    localStorage.setItem('bosta_exported_ids',JSON.stringify(expIds));
+    localStorage.setItem('orderpro_orders',JSON.stringify(orders));
+  }catch(e){}
+
+  refreshAll();
+  toast('✅ تم تصدير '+checked.length+' طلب — انتقلوا لـ "تم التصدير"');
 }
 
+
+function undoBostaExport(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o) return;
+  o.bostaExported=false;
+  if(API_URL) apiFetch('/api/orders/'+id,'PATCH',{bostaExported:false}).catch(()=>{});
+  try{
+    const expIds=JSON.parse(localStorage.getItem('bosta_exported_ids')||'{}');
+    delete expIds[id];
+    localStorage.setItem('bosta_exported_ids',JSON.stringify(expIds));
+    localStorage.setItem('orderpro_orders',JSON.stringify(orders));
+  }catch(e){}
+  refreshAll();
+  toast('↩ تم إرجاع الطلب لـ "لم ترفع بعد"');
+}
 
 // ===== REPORTS =====
 function renderReports(){
