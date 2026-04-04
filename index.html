@@ -875,12 +875,13 @@ tr:hover td{background:#fafbff}
         </div></div>
       </div>
       <div>
-        <div class="card"><div class="card-hd"><h3>👥 إدارة الفريق</h3></div><div class="card-body">
-          <div class="fg"><label>البريد الإلكتروني</label><input type="email" id="u-email" placeholder="user@example.com"></div>
-          <div class="fg"><label>الصلاحية</label><select id="u-role"><option value="admin">مشرف كامل</option><option value="staff">موظف</option><option value="courier-mgr">مدير مناديب</option><option value="view">عرض فقط</option></select></div>
-          <button class="btn btn-primary btn-sm" onclick="inviteUser()">📨 إرسال دعوة</button>
-          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)"><div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:10px">المستخدمون</div><div id="users-list"></div></div>
-        </div></div>
+        <div class="card">
+          <div class="card-hd">
+            <h3>👥 إدارة المستخدمين</h3>
+            <button class="btn btn-primary btn-sm" onclick="openAddUser()">+ إضافة مستخدم</button>
+          </div>
+          <div id="users-list-admin" style="padding:8px"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -3545,7 +3546,7 @@ async function doLogin(){
   document.getElementById('main-app').style.display = '';
   
   // تطبيق الصلاحيات
-  applyPermissions(user.role);
+  applyPermissions(user.role, user.pages||null);
   
   // تحديث اسم المستخدم في الـ topbar
   const userBadge = document.getElementById('user-badge');
@@ -3566,85 +3567,93 @@ function doLogout(){
   document.getElementById('login-err').textContent = '';
 }
 
-function applyPermissions(role){
-  // الصلاحيات حسب الدور
-  const perms = {
-    admin:       {accounting:1,checks:1,settings:1,reports:1,couriers:1,assign:1,orders:1,expiry:1},
-    manager:     {accounting:1,checks:1,settings:0,reports:1,couriers:1,assign:1,orders:1,expiry:1},
-    accountant:  {accounting:1,checks:1,settings:0,reports:1,couriers:0,assign:0,orders:1,expiry:0},
-    dispatcher:  {accounting:0,checks:0,settings:0,reports:0,couriers:1,assign:1,orders:1,expiry:0},
-    viewer:      {accounting:0,checks:0,settings:0,reports:1,couriers:0,assign:0,orders:1,expiry:0},
-  };
-  
-  const p = perms[role] || perms.viewer;
-  
-  // إخفاء/إظهار nav items
+function applyPermissions(role, pages){
+  // pages = array of allowed page ids, or null for admin (all)
+  // الأدمن دايما عنده كل الصفحات
+  if(role==='admin' || !pages){
+    document.querySelectorAll('.ni').forEach(ni=>ni.style.display='');
+    return;
+  }
+  // إظهار/إخفاء حسب الصفحات المسموحة
   document.querySelectorAll('.ni').forEach(ni=>{
-    const page = ni.dataset.p;
-    if(page && p[page]===0){
-      ni.style.display='none';
-    } else {
-      ni.style.display='';
-    }
+    const page=ni.dataset.p;
+    if(!page) return;
+    ni.style.display=pages.includes(page)?'':'none';
   });
 }
 
 // ===== إدارة المستخدمين (للأدمن فقط) =====
 function renderUsersAdmin(){
-  const list = document.getElementById('users-list-admin');
+  const list=document.getElementById('users-list-admin');
   if(!list) return;
-  
-  const allUsers = [
-    {...ADMIN_USER, editable: false},
-    ...sysUsers
-  ];
-  
-  if(allUsers.length===0){
-    list.innerHTML='<div style="color:var(--muted);font-size:13px">لا يوجد مستخدمون</div>';
-    return;
-  }
-  
-  const roleLabels = {admin:'مشرف كامل',manager:'مدير',accountant:'محاسب',dispatcher:'موزع',viewer:'عرض فقط'};
-  const roleColors = {admin:'#3ab877',manager:'#3b82f6',accountant:'#8b5cf6',dispatcher:'#f59e0b',viewer:'#64748b'};
-  
-  list.innerHTML = allUsers.map(u=>{
-    const roleColor = roleColors[u.role]||'#64748b';
-    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
-      <div style="width:36px;height:36px;border-radius:50%;background:${roleColor};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">${u.name?.charAt(0)||'?'}</div>
-      <div style="flex:1">
-        <div style="font-weight:700;font-size:13px">${u.name} <span style="font-size:11px;color:var(--muted)">@${u.username}</span></div>
-        <span style="background:${roleColor}22;color:${roleColor};padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600">${roleLabels[u.role]||u.role}</span>
-        ${u.active===false?'<span style="color:var(--danger);font-size:11px;margin-right:6px">● معطّل</span>':''}
+  const allUsers=[{...ADMIN_USER,editable:false},...sysUsers];
+  const pageLabels={
+    'dashboard':'لوحة التحكم','orders':'الطلبات','couriers':'المناديب',
+    'assign':'توزيع الطلبات','pickup':'استلام المحل','transit':'العبور',
+    'bosta':'بوسطة','delivery-sheet':'ورقة التوصيل','courier-orders':'طلبات المناديب',
+    'import-excel':'استيراد Excel','problems':'مشاكل','accounting':'محاسبة المناديب',
+    'shop-accounting':'محاسبة المحل','checks':'الشيكات','reports':'التقارير',
+    'expiry':'الصلاحيات','notifs':'الإشعارات','settings':'الإعدادات'
+  };
+  if(!allUsers.length){list.innerHTML='<div style="color:var(--muted);padding:12px">لا يوجد مستخدمون</div>';return;}
+  list.innerHTML=allUsers.map(u=>{
+    const isAdmin=u.role==='admin';
+    const initials=(u.name||'?').split(' ').map(w=>w[0]).slice(0,2).join('');
+    const pagesHtml=isAdmin
+      ?'<span style="background:#e8f8f0;color:#3ab877;padding:1px 8px;border-radius:10px;font-size:11px">كل الصفحات</span>'
+      :(u.pages||[]).map(p=>`<span style="background:var(--bg);color:var(--muted);padding:1px 7px;border-radius:10px;font-size:10px;border:1px solid var(--border)">${pageLabels[p]||p}</span>`).join(' ');
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:${u.editable!==false?'8px':'0'}">
+        <div style="width:38px;height:38px;border-radius:50%;background:#3ab877;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">${initials}</div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:13px">${u.name} <span style="font-size:11px;color:var(--muted);font-weight:400">@${u.username}</span>
+            ${u.active===false?'<span style="color:var(--danger);font-size:11px"> ● معطّل</span>':''}
+          </div>
+          <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${pagesHtml}</div>
+        </div>
+        ${u.editable!==false?`<div style="display:flex;gap:4px;flex-shrink:0">
+          <button class="btn btn-ghost btn-xs" onclick="openEditUser('${u.username}')">✏️ تعديل</button>
+          <button class="btn btn-ghost btn-xs" style="color:${u.active===false?'var(--success)':'var(--danger)'}" onclick="toggleUserActive('${u.username}')">${u.active===false?'✅':'⛔'}</button>
+          <button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="deleteUser('${u.username}')">🗑️</button>
+        </div>`:'<span style="font-size:11px;color:var(--muted)">رئيسي</span>'}
       </div>
-      ${u.editable!==false?`
-        <button class="btn btn-ghost btn-xs" onclick="openEditUser('${u.username}')">✏️</button>
-        <button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="toggleUserActive('${u.username}')">
-          ${u.active===false?'✅ تفعيل':'⛔ تعطيل'}
-        </button>
-        <button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="deleteUser('${u.username}')">🗑️</button>
-      `:'<span style="font-size:11px;color:var(--muted)">الحساب الرئيسي</span>'}
     </div>`;
   }).join('');
 }
 
+function auSelectAll(checked){
+  document.querySelectorAll('[name="au-page"]').forEach(cb=>cb.checked=checked);
+}
+
 function openAddUser(){
-  editingUsername = null;
-  ['au-name','au-username','au-pass'].forEach(id=>document.getElementById(id)&&(document.getElementById(id).value=''));
-  document.getElementById('au-role').value='dispatcher';
+  editingUsername=null;
+  ['au-name','au-username','au-pass'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('add-user-modal-title').textContent='+ مستخدم جديد';
+  const hint=document.getElementById('au-pass-hint');
+  if(hint)hint.style.display='none';
+  // تحديد كل الصفحات بالأساس ما عدا settings
+  document.querySelectorAll('[name="au-page"]').forEach(cb=>{
+    cb.checked = cb.value !== 'settings';
+  });
   openM('m-add-user');
 }
 
 let editingUsername = null;
 function openEditUser(username){
-  const u = sysUsers.find(x=>x.username===username);
+  const u=sysUsers.find(x=>x.username===username);
   if(!u) return;
-  editingUsername = username;
-  document.getElementById('au-name').value = u.name||'';
-  document.getElementById('au-username').value = u.username||'';
-  document.getElementById('au-pass').value = '';
-  document.getElementById('au-role').value = u.role||'viewer';
+  editingUsername=username;
+  document.getElementById('au-name').value=u.name||'';
+  document.getElementById('au-username').value=u.username||'';
+  document.getElementById('au-pass').value='';
   document.getElementById('add-user-modal-title').textContent='✏️ تعديل المستخدم';
+  const hint=document.getElementById('au-pass-hint');
+  if(hint)hint.style.display='';
+  // تحديد الصفحات المسموحة
+  const userPages=u.pages||[];
+  document.querySelectorAll('[name="au-page"]').forEach(cb=>{
+    cb.checked=userPages.includes(cb.value);
+  });
   openM('m-add-user');
 }
 
@@ -3708,7 +3717,7 @@ window.addEventListener('load', function(){
   if(currentUser){
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('main-app').style.display = '';
-    applyPermissions(currentUser.role);
+    applyPermissions(currentUser.role, currentUser.pages||null);
     const userBadge = document.getElementById('user-badge');
     if(userBadge) userBadge.textContent = '👤 '+currentUser.name;
   }
@@ -5336,28 +5345,43 @@ refreshSelects();renderUsers();refreshAll();
 
 <!-- MODAL: إضافة/تعديل مستخدم -->
 <div class="overlay" id="m-add-user">
-  <div class="modal" style="width:420px">
+  <div class="modal" style="width:520px;max-height:90vh;overflow-y:auto">
     <div class="mhd"><h3 id="add-user-modal-title">+ مستخدم جديد</h3><button class="xbtn" onclick="closeM('m-add-user')">✕</button></div>
     <div class="mbody">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px">
         <div class="fg"><label>الاسم الكامل *</label><input id="au-name" placeholder="مثال: أحمد محمد"></div>
-        <div class="fg"><label>اسم المستخدم *</label><input id="au-username" placeholder="مثال: ahmed" dir="ltr"></div>
+        <div class="fg"><label>اسم المستخدم *</label><input id="au-username" placeholder="مثال: ahmed" style="direction:ltr"></div>
       </div>
-      <div class="fg"><label>كلمة المرور *</label><input type="password" id="au-pass" placeholder="اتركها فارغة للإبقاء على القديمة عند التعديل"></div>
       <div class="fg">
-        <label>الصلاحية *</label>
-        <select id="au-role" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">
-          <option value="admin">🔑 مشرف كامل — كل الصلاحيات</option>
-          <option value="manager">👔 مدير — بدون الإعدادات</option>
-          <option value="accountant">💰 محاسب — المحاسبة والشيكات فقط</option>
-          <option value="dispatcher" selected>🚴 موزع — التوزيع والطلبات</option>
-          <option value="viewer">👁️ عرض فقط — لا يعدل</option>
-        </select>
+        <label>كلمة المرور * <span id="au-pass-hint" style="font-size:11px;color:var(--muted);font-weight:400">(اتركها فارغة للإبقاء على القديمة)</span></label>
+        <input type="password" id="au-pass" placeholder="كلمة المرور">
       </div>
-      <div style="background:var(--bg);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--muted);margin-top:4px">
-        <strong>الصلاحيات:</strong><br>
-        🔑 مشرف: كل شيء | 👔 مدير: بدون الإعدادات | 💰 محاسب: محاسبة + شيكات + تقارير<br>
-        🚴 موزع: طلبات + توزيع + مناديب | 👁️ عرض: قراءة فقط
+      <div class="fg">
+        <label style="margin-bottom:8px;display:block">الصفحات المتاحة *</label>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
+          <button type="button" class="btn btn-ghost btn-xs" onclick="auSelectAll(true)">تحديد الكل</button>
+          <button type="button" class="btn btn-ghost btn-xs" onclick="auSelectAll(false)">إلغاء الكل</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--bg);border-radius:8px;padding:8px;border:1px solid var(--border)">
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="dashboard" style="width:15px;height:15px;accent-color:var(--accent)"> 🏠 لوحة التحكم</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="orders" style="width:15px;height:15px;accent-color:var(--accent)"> 📋 الطلبات</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="couriers" style="width:15px;height:15px;accent-color:var(--accent)"> 🚴 المناديب</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="assign" style="width:15px;height:15px;accent-color:var(--accent)"> 📍 توزيع الطلبات</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="pickup" style="width:15px;height:15px;accent-color:var(--accent)"> 🏪 استلام من المحل</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="transit" style="width:15px;height:15px;accent-color:var(--accent)"> 🏭 مخزن العبور</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="bosta" style="width:15px;height:15px;accent-color:var(--accent)"> 🚚 بوسطة</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="delivery-sheet" style="width:15px;height:15px;accent-color:var(--accent)"> 🖨️ ورقة التوصيل</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="courier-orders" style="width:15px;height:15px;accent-color:var(--accent)"> 🧑 طلبات المناديب</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="import-excel" style="width:15px;height:15px;accent-color:var(--accent)"> 📥 استيراد Excel</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="problems" style="width:15px;height:15px;accent-color:var(--accent)"> ⚠️ طلبات مشكلة</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="accounting" style="width:15px;height:15px;accent-color:var(--accent)"> 💰 محاسبة المناديب</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="shop-accounting" style="width:15px;height:15px;accent-color:var(--accent)"> 🏪 محاسبة المحل</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="checks" style="width:15px;height:15px;accent-color:var(--accent)"> 📋 الشيكات</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="reports" style="width:15px;height:15px;accent-color:var(--accent)"> 📊 التقارير</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="expiry" style="width:15px;height:15px;accent-color:var(--accent)"> ⏳ تواريخ الصلاحية</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="notifs" style="width:15px;height:15px;accent-color:var(--accent)"> 🔔 الإشعارات</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="settings" style="width:15px;height:15px;accent-color:var(--accent)"> ⚙️ الإعدادات</label>
+        </div>
       </div>
     </div>
     <div class="mft">
