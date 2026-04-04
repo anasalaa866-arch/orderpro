@@ -3658,37 +3658,39 @@ function openEditUser(username){
 }
 
 async function saveUser(){
-  const name = document.getElementById('au-name')?.value.trim();
-  const username = document.getElementById('au-username')?.value.trim().toLowerCase();
-  const pass = document.getElementById('au-pass')?.value;
-  const role = document.getElementById('au-role')?.value;
-  
-  if(!name||!username){ toast('❗ أدخل الاسم واسم المستخدم'); return; }
-  
-  // تحقق من عدم التكرار
-  if(!editingUsername && (username==='admin' || sysUsers.find(u=>u.username===username))){
-    toast('❗ اسم المستخدم موجود مسبقاً'); return;
+  const name=document.getElementById('au-name')?.value.trim();
+  const username=document.getElementById('au-username')?.value.trim().toLowerCase();
+  const pass=document.getElementById('au-pass')?.value;
+
+  if(!name||!username){toast('❗ أدخل الاسم واسم المستخدم');return;}
+  if(!editingUsername&&(username==='admin'||sysUsers.find(u=>u.username===username))){
+    toast('❗ اسم المستخدم موجود مسبقاً');return;
   }
-  
+
+  // الصفحات المحددة من checkboxes
+  const pages=[...document.querySelectorAll('[name="au-page"]:checked')].map(cb=>cb.value);
+  if(!pages.length){toast('❗ اختر صفحة واحدة على الأقل');return;}
+
   let passHash;
   if(pass){
-    passHash = await hashPass(pass);
+    passHash=await hashPass(pass);
   } else if(editingUsername){
-    passHash = sysUsers.find(u=>u.username===editingUsername)?.passHash;
+    passHash=sysUsers.find(u=>u.username===editingUsername)?.passHash;
+    if(!passHash){toast('❗ أدخل كلمة المرور');return;}
   } else {
-    toast('❗ أدخل كلمة المرور'); return;
+    toast('❗ أدخل كلمة المرور');return;
   }
-  
-  const userData = {username, name, passHash, role, active: true};
-  
+
+  const userData={username,name,passHash,role:'custom',pages,active:true};
+
   if(editingUsername){
-    const idx = sysUsers.findIndex(u=>u.username===editingUsername);
-    if(idx>=0) sysUsers[idx] = userData;
+    const idx=sysUsers.findIndex(u=>u.username===editingUsername);
+    if(idx>=0) sysUsers[idx]=userData;
   } else {
     sysUsers.push(userData);
   }
-  
-  localStorage.setItem('sys_users', JSON.stringify(sysUsers));
+
+  localStorage.setItem('sys_users',JSON.stringify(sysUsers));
   closeM('m-add-user');
   renderUsersAdmin();
   toast('✅ تم حفظ المستخدم: '+name);
