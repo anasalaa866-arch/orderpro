@@ -278,7 +278,6 @@ tr:hover td{background:#fafbff}
     <div class="ni" data-p="pickup" onclick="goPage(this,'pickup')"><span class="ni-icon">🏪</span><span class="ni-label">استلام من المحل</span><span class="nbadge" id="nb-pickup" style="background:var(--purple)">0</span></div>
     <div class="ni" data-p="transit" onclick="goPage(this,'transit')"><span class="ni-icon">🏭</span><span class="ni-label">مخزن العبور</span><span class="nbadge" id="nb-transit" style="background:var(--warn)">0</span></div>
     <div class="ni" data-p="bosta" onclick="goPage(this,'bosta')"><span class="ni-icon">🚚</span><span class="ni-label">بوسطة</span><span class="nbadge" id="nb-bosta" style="background:#6366f1">0</span></div>
-    <div class="ni" data-p="delivery-sheet" onclick="goPage(this,'delivery-sheet')"><span class="ni-icon">🖨️</span><span class="ni-label">ورقة التوصيل</span></div>
     <div class="ni" data-p="courier-orders" onclick="goPage(this,'courier-orders')"><span class="ni-icon">🧑</span><span class="ni-label">طلبات المناديب</span></div>
     <div class="ni" data-p="import-excel" onclick="goPage(this,'import-excel')"><span class="ni-icon">📥</span><span class="ni-label">استيراد Excel</span></div>
     <div class="ni" data-p="problems" onclick="goPage(this,'problems')"><span class="ni-icon">⚠️</span><span class="ni-label">طلبات مشكلة</span><span class="nbadge" id="nb-problems" style="background:var(--danger)"></span></div>
@@ -523,10 +522,28 @@ tr:hover td{background:#fafbff}
   </div>
 
   <!-- COURIER ORDERS PAGE -->
-  <div class="page" id="page-courier-orders">
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px" id="courier-tabs"></div>
+    <div class="page" id="page-courier-orders">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center" id="courier-tabs"></div>
     <div id="courier-orders-content"></div>
+    <!-- ورقة التوصيل المدمجة -->
+    <div id="co-ds-wrap" style="display:none;margin-top:12px">
+      <div class="ds-ctrl" style="margin-bottom:8px">
+        <span id="co-ds-name" style="font-weight:700;font-size:13px;color:var(--accent)"></span>
+        <span style="font-size:11px;color:var(--muted);padding:0 8px">طباعة:</span>
+        <button class="ds-btn active" id="co-ds-btn-full" onclick="coDsMode('full')">📋 مجمع</button>
+        <button class="ds-btn" id="co-ds-btn-exp" onclick="coDsMode('express')">⚡ مستعجل</button>
+        <button class="ds-btn" id="co-ds-btn-zone" onclick="coDsMode('zone')">📍 منطقة</button>
+        <button class="ds-btn print-btn" onclick="coDsPrint()">🖨️ طباعة / PDF</button>
+        <button class="btn btn-ghost btn-xs" onclick="$('co-ds-wrap').style.display='none'" style="margin-right:auto">✕ إغلاق</button>
+      </div>
+      <div class="zone-picker" id="co-ds-zone-picker">
+        <span style="font-size:11px;color:var(--muted);margin-left:8px">اختر منطقة:</span>
+        <div id="co-ds-zone-pills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      </div>
+      <div class="ds" id="co-ds-sheet"></div>
+    </div>
   </div>
+
 
   <!-- IMPORT EXCEL PAGE -->
   <div class="page" id="page-import-excel">
@@ -802,24 +819,7 @@ tr:hover td{background:#fafbff}
   </div>
 
   <!-- DELIVERY SHEET -->
-  <div class="page" id="page-delivery-sheet">
-    <div class="ds-wrap">
-      <div class="ds-ctrl">
-        <select id="ds-courier-sel" style="font-family:Cairo,sans-serif;font-size:12px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-weight:600" onchange="dsRender()"></select>
-        <span style="font-size:11px;color:var(--muted);padding:0 4px">طباعة:</span>
-        <button class="ds-btn active" id="ds-btn-full" onclick="dsSetMode('full')">📋 مجمع</button>
-        <button class="ds-btn exp-btn" id="ds-btn-exp" onclick="dsSetMode('express')">⚡ مستعجل فقط</button>
-        <button class="ds-btn zone-btn" id="ds-btn-zone" onclick="dsSetMode('zone')">📍 منطقة محددة</button>
-        <button class="ds-btn print-btn" onclick="doPrint()">🖨️ طباعة / PDF</button>
-      </div>
-      <div class="zone-picker" id="ds-zone-picker">
-        <span style="font-size:11px;color:var(--muted);margin-left:8px;white-space:nowrap">اختر منطقة:</span>
-        <div id="ds-zone-pills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-      </div>
-      <div class="ds" id="ds-sheet"></div>
-    </div>
-  </div>
-
+  
   <!-- NOTIFS -->
   <div class="page" id="page-notifs">
     <div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn btn-ghost btn-sm" onclick="markAllRead()">تحديد الكل كمقروء</button></div>
@@ -1000,7 +1000,7 @@ tr:hover td{background:#fafbff}
 <script>
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات',accounting:'محاسبة المناديب',reports:'التقارير','delivery-sheet':'ورقة التوصيل',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية'};
+const PAGE_T={'courier-orders':'طلبات المناديب والطباعة','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات',accounting:'محاسبة المناديب',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -3664,7 +3664,7 @@ function renderUsersAdmin(){
   const pageLabels={
     'dashboard':'لوحة التحكم','orders':'الطلبات','couriers':'المناديب',
     'assign':'توزيع الطلبات','pickup':'استلام المحل','transit':'العبور',
-    'bosta':'بوسطة','delivery-sheet':'ورقة التوصيل','courier-orders':'طلبات المناديب',
+    'bosta':'بوسطة','courier-orders':'طلبات المناديب والطباعة',
     'import-excel':'استيراد Excel','problems':'مشاكل','accounting':'محاسبة المناديب',
     'shop-accounting':'محاسبة المحل','checks':'الشيكات','reports':'التقارير',
     'expiry':'الصلاحيات','notifs':'الإشعارات','settings':'الإعدادات'
@@ -4819,6 +4819,137 @@ function undoBostaExport(id){
 
 // ===== CLEANUP DUPLICATES =====
 
+// ===== ورقة التوصيل في طلبات المناديب =====
+let copMode = 'full', copZone = 'all';
+
+
+
+
+
+// ===== ورقة التوصيل في طلبات المناديب =====
+let _coDsMode='full', _coDsZone='all';
+
+function coDsOpen(){
+  const wrap=$('co-ds-wrap');
+  if(!wrap) return;
+  wrap.style.display='block';
+  const c=couriers.find(x=>x.id==activeCourierTab);
+  if($('co-ds-name')&&c) $('co-ds-name').textContent=c.name+' — ورقة التوصيل';
+  _coDsMode='full'; _coDsZone='all';
+  ['full','exp','zone'].forEach(x=>{const b=$('co-ds-btn-'+x);if(b)b.classList.toggle('active',x==='full');});
+  const picker=$('co-ds-zone-picker');
+  if(picker) picker.style.display='none';
+  coDsRender();
+  wrap.scrollIntoView({behavior:'smooth'});
+}
+
+function coDsMode(m){
+  _coDsMode=m; _coDsZone='all';
+  ['full','exp','zone'].forEach(x=>{const b=$('co-ds-btn-'+x);if(b)b.classList.toggle('active',x===m);});
+  const picker=$('co-ds-zone-picker');
+  if(picker) picker.style.display=m==='zone'?'flex':'none';
+  coDsRender();
+}
+
+function coDsPrint(){
+  const cId=activeCourierTab;
+  if(cId){dsLastPrintTimes[cId]=Date.now();try{localStorage.setItem('ds_last_print',JSON.stringify(dsLastPrintTimes));}catch(e){}}
+  window.print();
+}
+
+function coDsRender(){
+  // استخدام نفس منطق dsRender مع co-ds-sheet
+  const cId=activeCourierTab;
+  const c=couriers.find(x=>x.id==cId);
+  const sheetEl=$('co-ds-sheet');
+  if(!sheetEl||!c) return;
+
+  // ضع المندوب الحالي في ds-courier-sel مؤقتاً لاستخدام dsRender
+  const sel=$('ds-courier-sel');
+  const prev=sel?sel.value:null;
+  
+  // استخدم نفس دوال dsRender مباشرة
+  window._dsCourierId=String(cId);
+
+  const courierOrders=orders.filter(o=>{
+    const oc=String(o.courierId||'');const cc=String(cId||'');
+    const dm=oc!==''&&oc!=='null'&&oc!=='0'&&(oc===cc||Number(oc)===Number(cc));
+    return dm&&o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o);
+  });
+
+  const express=courierOrders.filter(o=>isSameDay(o));
+  let normal=courierOrders.filter(o=>!isSameDay(o));
+  normal.sort((a,b)=>(a.area||'').localeCompare((b.area||''),'ar'));
+
+  let showExp=[],showNorm=[];
+  if(_coDsMode==='full'){showExp=express;showNorm=normal;}
+  else if(_coDsMode==='express'){showExp=express;}
+  else{
+    showNorm=_coDsZone==='all'?normal:normal.filter(o=>(o.assignedZone||getOrderZoneForCourier(o,c)||'أخري')===_coDsZone);
+  }
+
+  // Zone pills
+  const pillsEl=$('co-ds-zone-pills');
+  if(pillsEl){
+    const cZones=(c.zone||'').split(/[،,\/\-–\n]+/).map(z=>z.trim()).filter(z=>z.length>1);
+    const used=[...new Set(normal.map(o=>o.assignedZone||getOrderZoneForCourier(o,c)||'أخري'))];
+    const sorted=[...cZones.filter(z=>used.includes(z)),...used.filter(z=>z==='أخري'),...used.filter(z=>!cZones.includes(z)&&z!=='أخري')];
+    pillsEl.innerHTML='';
+    const ab=document.createElement('button');ab.className='zpill on';ab.textContent='كل المناطق';
+    ab.onclick=function(){_coDsZone='all';document.querySelectorAll('#co-ds-zone-pills .zpill').forEach(p=>p.classList.remove('on'));this.classList.add('on');coDsRender();};
+    pillsEl.appendChild(ab);
+    sorted.forEach(z=>{
+      const cnt=normal.filter(o=>(o.assignedZone||getOrderZoneForCourier(o,c)||'أخري')===z).length;
+      const btn=document.createElement('button');btn.className='zpill'+(z==='أخري'?' zone-other':'');
+      btn.innerHTML=z+' <span style="opacity:.7;font-size:10px">('+cnt+')</span>';
+      btn.onclick=function(){_coDsZone=z;document.querySelectorAll('#co-ds-zone-pills .zpill').forEach(p=>p.classList.remove('on'));this.classList.add('on');coDsRender();};
+      pillsEl.appendChild(btn);
+    });
+  }
+
+  const all=[...showExp,...showNorm];
+  if(!all.length){sheetEl.innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">لا توجد طلبات</div>';return;}
+
+  const totalCod=all.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
+  const shipFee=showExp.reduce((s,o)=>s+(o.ship||c.shipExpress||80),0)+showNorm.reduce((s,o)=>s+(o.ship||c.ship||50),0);
+  const today=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+  let expHtml='',normHtml='';
+  if(showExp.length){
+    expHtml='<div class="ds-sec"><div class="ds-sec-line"></div><span class="ds-sec-lbl dsl-exp">⚡ مستعجل — '+showExp.length+' طلب</span><div class="ds-sec-line"></div></div>'+
+      '<table class="ds-table">'+DS_HEADERS+'<tbody>'+showExp.map(o=>dsOrderRow(o,'ds-er')).join('')+'</tbody></table>';
+  }
+  if(showNorm.length){
+    const zones={};
+    showNorm.forEach(o=>{const oz=o.assignedZone||getOrderZoneForCourier(o,c)||'أخري';if(!zones[oz])zones[oz]=[];zones[oz].push(o);});
+    const cZ=(c.zone||'').split(/[،,\/\-–\n]+/).map(z=>z.trim()).filter(z=>z.length>1);
+    const zK=Object.keys(zones);
+    const sZ=[...cZ.filter(z=>zK.includes(z)),...zK.filter(z=>z==='أخري'),...zK.filter(z=>!cZ.includes(z)&&z!=='أخري')];
+    let rows='',rc=showExp.length;
+    sZ.forEach(function(z){
+      const zo=zones[z];if(!zo)return;
+      const iO=z==='أخري';
+      const hC=iO?'color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:4px':'color:var(--muted)';
+      rows+='<tr class="ds-zone-hdr"><td colspan="8"><span style="font-size:10px;font-weight:700;'+hC+'">📍 '+z+' · '+zo.length+' طلب'+(iO?' ⚠️':'')+'</span></td></tr>';
+      zo.forEach(o=>{
+        if(rc>0&&rc%20===0)rows+='</tbody></table><div style="page-break-after:always"></div><table class="ds-table">'+DS_HEADERS+'<tbody>';
+        rows+=dsOrderRow(o,'ds-nr');rc++;
+      });
+    });
+    normHtml='<div class="ds-sec" style="margin-top:6px"><div class="ds-sec-line"></div><span class="ds-sec-lbl dsl-norm">🚚 عادي — '+showNorm.length+' طلب</span><div class="ds-sec-line"></div></div>'+
+      '<table class="ds-table">'+DS_HEADERS+'<tbody>'+rows+'</tbody></table>';
+  }
+
+  sheetEl.innerHTML='<div class="ds-hd"><div><div class="ds-title">'+c.name+'</div><div class="ds-sub">OrderPro · '+today+'</div></div>'+
+    '<div style="text-align:left"><div style="font-size:11px;color:var(--muted)">📦 '+all.length+' طلب</div>'+
+    '<div style="font-size:13px;font-weight:700;color:var(--danger)">💰 '+totalCod.toLocaleString()+' ج</div>'+
+    '<div style="font-size:11px;color:var(--muted)">🚚 شحن: '+shipFee.toLocaleString()+' ج</div></div></div>'+
+    expHtml+normHtml+
+    '<div class="ds-foot" style="font-size:10px;color:var(--muted);margin-top:8px">'+
+    '<span style="background:#3ab877;color:#fff;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700">جديد</span> = بعد آخر طباعة &nbsp;|&nbsp; ⚠️ أخري = منطقة غير محددة'+
+    '</div>';
+}
+
 // ===== REPORTS =====
 function renderReports(){
   $('report-tbody').innerHTML=couriers.map(c=>{
@@ -4966,7 +5097,7 @@ function goPage(el,page){
   if(page==='accounting'){renderAcc();renderAccDet();}if(page==='reports')renderReports();
   if(page==='notifs')renderNotifs();
   if(page==='settings')renderUsersAdmin();
-  if(page==='delivery-sheet')dsInit();
+  // delivery-sheet merged into courier-orders
   if(page==='expiry')renderExpiryPage();
 }
 
