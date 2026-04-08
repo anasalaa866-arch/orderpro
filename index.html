@@ -5035,7 +5035,12 @@ function dsSetMode(m){
 
 function dsBuildZones(){
   const cId=+$('ds-courier-sel').value;
-  const normalOrders=orders.filter(o=>String(o.courierId)===String(cId)&&!isSameDay(o)&&o.status==='جاري التوصيل');
+  const normalOrders=orders.filter(o=>{
+    const oc=String(o.courierId||'');const cc=String(cId||'');
+    const dm=oc!==''&&oc!=='null'&&oc!=='0'&&(oc===cc||Number(oc)===Number(cc));
+    const bm=cc==='bosta'&&(o.isBosta||oc==='bosta');
+    return (dm||bm)&&!isSameDay(o)&&o.status==='جاري التوصيل';
+  });
   // استخدم مناطق المندوب من تعريفه مباشرةً (مش العناوين)
   const cForPills=couriers.find(x=>x.id==cId);
   const courierDefinedZones = cForPills
@@ -5088,14 +5093,18 @@ function doPrint(){
 function dsRender(){
   const cId=$('ds-courier-sel').value;
   const c=couriers.find(x=>String(x.id)===String(cId));
-  window._dsCourierId = cId; // للاستخدام في dsOrderRow
+  window._dsCourierId = cId;
   if(!c){$('ds-sheet').innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">لا يوجد مناديب</div>';return;}
 
   // مقارنة شاملة للـ courierId (number أو string أو 'bosta')
   const courierOrders=orders.filter(o=>{
     const oc=String(o.courierId||'');
     const cc=String(cId||'');
-    const match = (oc===cc && oc!=='') || (cc==='bosta' && o.isBosta);
+    // مقارنة مرنة: number أو string
+    const directMatch = oc!=='' && oc!=='null' && oc!=='undefined' && oc!=='0' &&
+                        (oc===cc || Number(oc)===Number(cc));
+    const bostaMatch = cc==='bosta' && (o.isBosta || oc==='bosta');
+    const match = directMatch || bostaMatch;
     return match && o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o);
   });
   const express=courierOrders.filter(o=>isSameDay(o));
