@@ -867,6 +867,7 @@ tr:hover td{background:#fafbff}
           <div class="fg"><label>رابط الـ Backend</label><input type="text" id="cfg-api2" placeholder="https://orderpro-xxx.railway.app" oninput="syncApi()"></div>
           <div class="fg"><label>سعر الشحن الافتراضي (جنيه)</label><input type="number" id="cfg-ship" value="50" min="0"></div>
           <button class="btn btn-success btn-sm" onclick="saveSettings()">💾 حفظ الإعدادات</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--danger);margin-top:8px" onclick="cleanupDuplicateCouriers()">🧹 مسح المناديب المكررة</button>
         </div></div>
         <div class="card"><div class="card-hd"><h3>🔔 الإشعارات</h3></div><div class="card-body">
           <div class="srow"><div class="sinfo"><h4>طلب جديد من Shopify</h4><p>تنبيه فوري</p></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
@@ -1206,36 +1207,16 @@ async function apiFetch(path,method='GET',body=null){
 }
 
 async function syncCouriersToDB(){
-  // رفع المناديب المحفوظة في localStorage للـ DB
-  if(!API_URL||!couriers.length) return;
+  // جلب المناديب من DB فقط — لا ترفع من localStorage أبداً
+  if(!API_URL) return;
   try{
-    const existing = await apiFetch('/api/couriers');
-    if(existing&&existing.couriers&&existing.couriers.length>0){
-      // المناديب موجودة في DB خليهم
-      couriers = existing.couriers;
+    const data=await apiFetch('/api/couriers');
+    if(data&&data.couriers){
+      couriers=data.couriers;
       saveCouriers();
-      return;
     }
-    // DB فارغة - ارفع المناديب من localStorage
-    console.log('Uploading couriers to DB...');
-    for(const c of couriers){
-      await apiFetch('/api/couriers','POST',{
-        name:c.name, phone:c.phone, zone:c.zone||'غير محدد',
-        vehicle:c.vehicle||'دراجة بخارية',
-        ship:c.ship||50, shipExpress:c.shipExpress||80,
-        status:c.status||'متاح', settled:c.settled||false,
-      });
-    }
-    // جيب المناديب من DB عشان تاخد الـ IDs الجديدة
-    const updated = await apiFetch('/api/couriers');
-    if(updated&&updated.couriers){
-      couriers = updated.couriers;
-      saveCouriers();
-      toast('✅ تم رفع '+couriers.length+' مندوب للـ Database');
-    }
-  }catch(e){ console.error('syncCouriersToDB error:', e); }
+  }catch(e){ console.error('syncCouriersToDB:',e); }
 }
-
 async function loadOrders(){
   // أول حاجة: تزامن المناديب مع DB
   await syncCouriersToDB();
@@ -4822,6 +4803,82 @@ function undoBostaExport(id){
   }catch(e){}
   refreshAll();
   toast('↩ تم إرجاع الطلب لـ "لم ترفع بعد"');
+}
+
+// ===== CLEANUP DUPLICATES =====
+async function cleanupDuplicateCouriers(){
+  if(!API_URL){ toast('❗ محتاج Backend متصل'); return; }
+  if(!confirm('هيمسح المناديب المكررة ويسيب الأحدث من كل اسم — متابع؟')) return;
+
+  toast('⏳ جاري الفحص...');
+  try{
+    const data = await apiFetch('/api/couriers');
+    if(!data||!data.couriers){ toast('❌ فشل جلب المناديب'); return; }
+
+    const all = data.couriers;
+    console.log('Total couriers before cleanup:', all.length);
+
+    // جمّع بالاسم — احتفظ بالأعلى ID (الأحدث)
+    const byName = {};
+    all.forEach(c=>{
+      const key = (c.name||'').trim().toLowerCase();
+      if(!byName[key] || c.id > byName[key].id){
+        byName[key] = c;
+      }
+    });
+
+    const toKeep = Object.values(byName);
+    const toDelete = all.filter(c=>{
+      const key=(c.name||'').trim().toLowerCase();
+      return byName[key].id !== c.id;
+    });
+
+    console.log('Keep:', toKeep.length, 'Delete:', toDelete.length);
+
+    if(!toDelete.length){
+      toast('✅ مفيش مناديب مكررة!');
+      return;
+    }
+
+    // احذف المكررين
+    let deleted = 0;
+    for(const c of toDelete){
+      try{
+        await apiFetch('/api/couriers/'+c.id,'DELETE');
+        deleted++;
+      }catch(e){ console.error('Delete failed:', c.id, e); }
+    }
+
+    // حدّث الطلبات المرتبطة بالـ IDs المحذوفة
+    // أي طلب كان على مندوب محذوف، انقله للنسخة المحتفظ بها
+    const idMap = {}; // old ID → new ID
+    toDelete.forEach(c=>{
+      const key=(c.name||'').trim().toLowerCase();
+      idMap[c.id] = byName[key].id;
+    });
+
+    let fixedOrders = 0;
+    for(const o of orders){
+      const newId = idMap[o.courierId];
+      if(newId !== undefined){
+        o.courierId = newId;
+        await apiFetch('/api/orders/'+o.id,'PATCH',{courierId:newId}).catch(()=>{});
+        fixedOrders++;
+      }
+    }
+
+    // تحديث المناديب المحلية
+    couriers = toKeep;
+    saveCouriers();
+    refreshAll();
+
+    toast('✅ تم حذف '+deleted+' مندوب مكرر وتصحيح '+fixedOrders+' طلب');
+    console.log('Cleanup done. Deleted:', deleted, 'Fixed orders:', fixedOrders);
+
+  }catch(e){
+    toast('❌ خطأ: '+e.message);
+    console.error(e);
+  }
 }
 
 // ===== REPORTS =====
