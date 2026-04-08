@@ -867,7 +867,7 @@ tr:hover td{background:#fafbff}
           <div class="fg"><label>رابط الـ Backend</label><input type="text" id="cfg-api2" placeholder="https://orderpro-xxx.railway.app" oninput="syncApi()"></div>
           <div class="fg"><label>سعر الشحن الافتراضي (جنيه)</label><input type="number" id="cfg-ship" value="50" min="0"></div>
           <button class="btn btn-success btn-sm" onclick="saveSettings()">💾 حفظ الإعدادات</button>
-          <button class="btn btn-ghost btn-sm" style="color:var(--danger);margin-top:8px;border-color:var(--danger)" onclick="cleanupDuplicateCouriers()">🗑️ مسح كل المناديب</button>
+
         </div></div>
         <div class="card"><div class="card-hd"><h3>🔔 الإشعارات</h3></div><div class="card-body">
           <div class="srow"><div class="sinfo"><h4>طلب جديد من Shopify</h4><p>تنبيه فوري</p></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
@@ -1207,13 +1207,25 @@ async function apiFetch(path,method='GET',body=null){
 }
 
 async function syncCouriersToDB(){
-  // جلب المناديب من DB فقط — لا ترفع من localStorage أبداً
+  // جلب المناديب من DB فقط
   if(!API_URL) return;
   try{
     const data=await apiFetch('/api/couriers');
-    if(data&&data.couriers){
+    // خذ من DB فقط لو فيه مناديب فعلاً — متمسحش لو DB فاضي
+    if(data&&data.couriers&&data.couriers.length>0){
       couriers=data.couriers;
       saveCouriers();
+    }
+    // لو DB فاضي وعندنا مناديب محلية - ارفعهم
+    else if(data&&data.couriers&&data.couriers.length===0&&couriers.length>0){
+      for(const c of couriers){
+        await apiFetch('/api/couriers','POST',{name:c.name,phone:c.phone,zone:c.zone||'غير محدد',vehicle:c.vehicle||'دراجة بخارية',ship:c.ship||50,shipExpress:c.shipExpress||80,status:'متاح',settled:false});
+      }
+      // جيب بـ IDs الرسمية
+      const updated=await apiFetch('/api/couriers');
+      if(updated&&updated.couriers&&updated.couriers.length>0){
+        couriers=updated.couriers;saveCouriers();
+      }
     }
   }catch(e){ console.error('syncCouriersToDB:',e); }
 }
@@ -1813,7 +1825,7 @@ async function saveEditCourier(){
   saveCouriers();
   closeM('m-edit-courier');
   refreshAll();
-  toast(`✅ تم تحديث بيانات ${name}`);
+  toast('✅ تم تحديث بيانات '+name);
 }
 
 async function delCourierFromEdit(){
@@ -3613,6 +3625,7 @@ async function doLogin(){
   const userBadge = document.getElementById('user-badge');
   if(userBadge) userBadge.textContent = '👤 '+user.name;
   
+  await syncCouriersToDB(); // جلب المناديب أولاً
   loadOrders();
   checkExpiryAlerts();
   toast('✅ أهلاً '+user.name+' 👋');
@@ -3777,22 +3790,21 @@ function deleteUser(username){
 // تشغيل الـ login check
 window.addEventListener('load', function(){
   if(currentUser){
-    // جلسة محفوظة - ادخل مباشرةً وحمّل البيانات
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('main-app').style.display = '';
     applyPermissions(currentUser.role, currentUser.pages||null);
     const userBadge = document.getElementById('user-badge');
     if(userBadge) userBadge.textContent = '👤 '+currentUser.name;
-    // تحديث وقت انتهاء الجلسة (8 ساعات من دلوقتي)
     try{
       const s=JSON.parse(localStorage.getItem('current_user_session')||'null');
       if(s){s._expires=Date.now()+8*60*60*1000;localStorage.setItem('current_user_session',JSON.stringify(s));}
     }catch(e){}
-    // تحميل البيانات
-    loadOrders();
-    checkExpiryAlerts();
+    // جلب المناديب أولاً ثم الطلبات
+    syncCouriersToDB().then(()=>{
+      loadOrders();
+      checkExpiryAlerts();
+    });
   } else {
-    // مفيش جلسة - اعرض شاشة الـ login
     document.getElementById('login-screen').classList.remove('hidden');
     document.getElementById('main-app').style.display = 'none';
   }
@@ -4806,22 +4818,6 @@ function undoBostaExport(id){
 }
 
 // ===== CLEANUP DUPLICATES =====
-async function cleanupDuplicateCouriers(){
-  if(!API_URL){toast('❗ محتاج Backend');return;}
-  if(!confirm('هيمسح كل المناديب من الـ Database — هتضيفهم من الأول. متابع؟')) return;
-  toast('⏳ جاري المسح...');
-  try{
-    const r = await apiFetch('/api/couriers','DELETE');
-    if(r && r.success){
-      couriers = [];
-      saveCouriers();
-      refreshAll();
-      toast('✅ تم مسح كل المناديب ('+r.deleted+') — أضف من الأول من صفحة المناديب');
-    } else {
-      toast('❌ فشل: '+(r?.error||'خطأ'));
-    }
-  }catch(e){toast('❌ '+e.message);}
-}
 
 // ===== REPORTS =====
 function renderReports(){
@@ -5073,19 +5069,38 @@ function refreshAll(){
 
 function dsInit(){
   const sel=$('ds-courier-sel');
-  // فلتر المناديب الفعليين (الذين عندهم طلبات نشطة أولاً)
-  const activeCids=new Set(orders.filter(o=>o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o)).map(o=>String(o.courierId)));
+  if(!sel) return;
+  
+  // لو مناديب مش محملة، حاول تجيبهم
+  if(!couriers.length && API_URL){
+    sel.innerHTML='<option>⏳ جاري التحميل...</option>';
+    syncCouriersToDB().then(()=>{ dsInit(); });
+    return;
+  }
+
+  const activeCids=new Set(
+    orders.filter(o=>o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o))
+          .map(o=>String(o.courierId))
+  );
+  
+  // المناديب اللي عندهم طلبات نشطة أولاً
   const sorted=[
     ...couriers.filter(c=>activeCids.has(String(c.id))),
     ...couriers.filter(c=>!activeCids.has(String(c.id)))
   ];
+  
   let opts=sorted.map(c=>{
-    const cnt=orders.filter(o=>String(o.courierId)===String(c.id)&&o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o)).length;
-    return '<option value="'+c.id+'">'+c.name+(cnt?' ('+cnt+')':'')+'</option>';
+    const cnt=orders.filter(o=>
+      (String(o.courierId)===String(c.id)||Number(o.courierId)===Number(c.id))
+      &&o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o)
+    ).length;
+    return '<option value="'+c.id+'">'+c.name+(cnt?' — '+cnt+' طلب':'')+'</option>';
   }).join('');
-  // إضافة بوسطة لو في طلبات مرفوعة
+  
   const bostaCnt=orders.filter(o=>o.bostaId&&o.status==='جاري التوصيل').length;
   if(bostaCnt>0) opts+='<option value="bosta">🚚 بوسطة ('+bostaCnt+')</option>';
+  
+  if(!opts){ sel.innerHTML='<option>لا يوجد مناديب</option>'; return; }
   sel.innerHTML=opts;
   dsRender();
 }
@@ -5159,18 +5174,27 @@ function doPrint(){
 }
 
 function dsRender(){
-  const cId=$('ds-courier-sel').value;
-  const c=couriers.find(x=>String(x.id)===String(cId));
+  const sel=$('ds-courier-sel');
+  if(!sel||!sel.options.length){
+    if($('ds-sheet'))$('ds-sheet').innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">لا يوجد مناديب — أضف مناديب أولاً</div>';
+    return;
+  }
+  const cId=sel.value;
+  // بحث مرن: string أو number
+  const c=couriers.find(x=>x.id==cId||String(x.id)===String(cId));
   window._dsCourierId = cId;
-  if(!c){$('ds-sheet').innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">لا يوجد مناديب</div>';return;}
+  if(!c && cId!=='bosta'){
+    if($('ds-sheet'))$('ds-sheet').innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">اختر مندوب</div>';
+    return;
+  }
 
   // مقارنة شاملة للـ courierId (number أو string أو 'bosta')
   const courierOrders=orders.filter(o=>{
     const oc=String(o.courierId||'');
     const cc=String(cId||'');
     // مقارنة مرنة: number أو string
-    const directMatch = oc!=='' && oc!=='null' && oc!=='undefined' && oc!=='0' &&
-                        (oc===cc || Number(oc)===Number(cc));
+    const directMatch = oc!=='' && oc!=='null' && oc!=='undefined' &&
+                        (oc===cc || (Number(oc)===Number(cc) && cc!==''));
     const bostaMatch = cc==='bosta' && (o.isBosta || oc==='bosta');
     const match = directMatch || bostaMatch;
     return match && o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o);
