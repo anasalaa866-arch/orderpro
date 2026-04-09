@@ -5205,38 +5205,47 @@ function dsInit(){
   const sel=$('ds-courier-sel');
   if(!sel) return;
 
-  // لو مناديب مش محملة
-  if(!couriers.length){
-    sel.innerHTML='<option>لا يوجد مناديب</option>';
-    if($('ds-sheet'))$('ds-sheet').innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا يوجد مناديب مضافين</div>';
+  const activeOrders=orders.filter(o=>o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o));
+
+  if(!activeOrders.length && !couriers.length){
+    sel.innerHTML='<option>لا توجد طلبات نشطة</option>';
+    if($('ds-sheet'))$('ds-sheet').innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا توجد طلبات جاري التوصيل</div>';
     return;
   }
 
-  // المناديب اللي عندهم طلبات نشطة أولاً
-  const activeCids=new Set(
-    orders.filter(o=>o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o))
-          .map(o=>String(o.courierId))
-  );
+  // اجمع كل الـ courierIds الموجودة في الطلبات النشطة
+  const activeCidSet = new Set(activeOrders.map(o=>String(o.courierId||'')).filter(x=>x&&x!=='null'&&x!=='bosta'));
 
-  const sorted=[
-    ...couriers.filter(c=>activeCids.has(String(c.id))),
-    ...couriers.filter(c=>!activeCids.has(String(c.id)))
-  ];
+  // ابني select من couriers اللي عندهم طلبات + couriers بدون طلبات
+  const withOrders = couriers.filter(c=>activeCidSet.has(String(c.id)));
+  const withoutOrders = couriers.filter(c=>!activeCidSet.has(String(c.id)));
 
-  let opts=sorted.map(c=>{
-    const cnt=orders.filter(o=>{
-      const oc=String(o.courierId||'');
-      const cc=String(c.id||'');
-      return oc!==''&&oc!=='null'&&(oc===cc||Number(oc)===Number(cc))
-             &&o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o);
-    }).length;
-    return '<option value="'+c.id+'">'+c.name+(cnt?' — '+cnt+' طلب':'')+'</option>';
+  // IDs موجودة في طلبات لكن مش في couriers (مناديب قديمة)
+  const knownCourierIds = new Set(couriers.map(c=>String(c.id)));
+  const orphanIds = [...activeCidSet].filter(id=>!knownCourierIds.has(id));
+
+  let opts = '';
+
+  // مناديب عندهم طلبات أولاً
+  opts += withOrders.map(c=>{
+    const cnt = activeOrders.filter(o=>String(o.courierId)===String(c.id)||Number(o.courierId)===Number(c.id)).length;
+    return `<option value="${c.id}">${c.name} — ${cnt} طلب</option>`;
   }).join('');
 
-  const bostaCnt=orders.filter(o=>(o.isBosta||String(o.courierId)==='bosta')&&o.status==='جاري التوصيل').length;
-  if(bostaCnt>0) opts+='<option value="bosta">🚚 بوسطة ('+bostaCnt+')</option>';
+  // مناديب بدون طلبات
+  opts += withoutOrders.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
 
-  sel.innerHTML=opts||'<option>لا يوجد مناديب</option>';
+  // IDs يتيمة (مناديب محذوفة لكن الطلبات لسه عندهم)
+  opts += orphanIds.map(id=>{
+    const cnt = activeOrders.filter(o=>String(o.courierId)===id).length;
+    return `<option value="${id}">مندوب #${id} — ${cnt} طلب</option>`;
+  }).join('');
+
+  // بوسطة
+  const bostaCnt = activeOrders.filter(o=>o.isBosta||String(o.courierId)==='bosta').length;
+  if(bostaCnt>0) opts += `<option value="bosta">🚚 بوسطة (${bostaCnt})</option>`;
+
+  sel.innerHTML = opts || '<option>لا توجد طلبات</option>';
   dsRender();
 }
 
@@ -5324,13 +5333,12 @@ function dsRender(){
     return;
   }
 
-  // مقارنة شاملة للـ courierId (number أو string أو 'bosta')
+  // مقارنة شاملة: string أو number
   const courierOrders=orders.filter(o=>{
     if(o.status!=='جاري التوصيل'||isPickup(o)||isTransit(o)) return false;
     if(cId==='bosta') return o.isBosta||String(o.courierId)==='bosta';
-    const oc=Number(o.courierId||0);
-    const cc=Number(cId||0);
-    return oc>0 && cc>0 && oc===cc;
+    if(!o.courierId||o.courierId==='null'||o.courierId==='undefined') return false;
+    return String(o.courierId)===String(cId)||Number(o.courierId)===Number(cId);
   });
   const express=courierOrders.filter(o=>isSameDay(o));
   let normal=courierOrders.filter(o=>!isSameDay(o));
