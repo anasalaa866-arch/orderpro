@@ -1014,6 +1014,12 @@ let couriers=JSON.parse(localStorage.getItem('op_couriers')||'[]');
 // ===== إصلاح deliveryType للطلبات القديمة في localStorage =====
 orders=orders.map(o=>{
   if(!o.deliveryType||o.deliveryType==='normal'){
+    // طلب بدون عنوان = transit
+    const addr=(o.addr||'').trim();
+    const area=(o.area||'').trim();
+    if((!addr||addr==='—'||addr==='-')&&(!area||area==='—'||area==='-')){
+      o.deliveryType='transit';
+    }
     const sm=(o.shippingMethod||'').toLowerCase();
     if(sm.includes('same day')||sm.includes('sameday')) o.deliveryType='express';
     else if(sm.includes('trivium')||sm.includes('pick up')||sm.includes('pickup')) o.deliveryType='pickup';
@@ -1047,9 +1053,16 @@ const isTransit=o=>{
   const dt=(o.deliveryType||'').toLowerCase();
   if(dt==='transit') return true;
   const m=(o.shippingMethod||'').toLowerCase();
-  return m.includes('transit warehouse')||m.includes('مخزن العبور')||
-         m.includes('transit store')||
-         (m.includes('transit')&&!m.includes('trivium'));
+  if(m.includes('transit warehouse')||m.includes('مخزن العبور')||
+     m.includes('transit store')||
+     (m.includes('transit')&&!m.includes('trivium'))) return true;
+  // طلبات بدون عنوان شحن = مخزن العبور
+  const addr=(o.addr||'').trim();
+  const area=(o.area||'').trim();
+  if(!addr||addr==='—'||addr==='-'){
+    if(!area||area==='—'||area==='-') return true;
+  }
+  return false;
 };
 function deliveryType(o){
   if(isPickup(o)) return 'pickup';
@@ -2608,10 +2621,18 @@ function renderCourierOrdersPage(){
           <span style="font-size:11px;color:var(--muted);margin-right:auto">📱 ${c.phone}</span>
         </div>
       </div>
+      <!-- Bulk Actions Bar -->
+      <div id="co-bulk-bar-${c.id}" style="display:none;padding:10px 16px;background:var(--accent-light);border-bottom:1px solid var(--accent);align-items:center;gap:8px;flex-wrap:wrap">
+        <span id="co-bulk-count-${c.id}" style="font-weight:700;font-size:13px;color:var(--accent)">0 طلب محدد</span>
+        <button class="btn btn-success btn-sm" onclick="coBulkDone(${c.id})">✅ اكتمل</button>
+        <button class="btn btn-xs" style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:6px;padding:5px 10px;font-family:Cairo,sans-serif;font-size:12px;cursor:pointer" onclick="coBulkPaid(${c.id})">💰 مدفوع</button>
+        <button class="btn btn-ghost btn-sm" onclick="coBulkReassign(${c.id})">🔄 تعيين لـ</button>
+        <button class="btn btn-ghost btn-xs" style="margin-right:auto;color:var(--muted)" onclick="coDeselectAll(${c.id})">✕ إلغاء التحديد</button>
+      </div>
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th style="width:30px"></th>
+            <th style="width:30px"><input type="checkbox" onchange="coToggleAll(this.checked,${c.id})"></th>
             <th>رقم الطلب</th>
             <th>نوع</th>
             <th>العميل</th>
@@ -2725,6 +2746,60 @@ function coDeselectAll(cId){
   document.querySelectorAll(`.co-chk[data-cid="${cId}"]`).forEach(c=>c.checked=false);
   updateCoBulk(cId);
 }
+async function coBulkPaid(cId){
+  const ids=[...document.querySelectorAll(`.co-chk[data-cid="${cId}"]:checked`)].map(c=>c.value);
+  if(!ids.length) return;
+  for(const id of ids){
+    const o=orders.find(x=>x.id===id);
+    if(o&&!o.paid){o.paid=true;if(API_URL)apiFetch('/api/orders/'+id,'PATCH',{paid:true}).catch(()=>{});}
+  }
+  try{const _s=orders.map(o=>{const{bostaAwbBase64,...r}=o;return r;});localStorage.setItem('orderpro_orders',JSON.stringify(_s));}catch(e){}
+  refreshAll();toast('✅ تم تحديد '+ids.length+' طلب كمدفوع');
+}
+
+async function coBulkReassign(cId){
+  const ids=[...document.querySelectorAll(`.co-chk[data-cid="${cId}"]:checked`)].map(c=>c.value);
+  if(!ids.length){toast('❗ اختر طلبات أولاً');return;}
+  // اعرض modal تعيين مع multi-select
+  const html=`<div style="padding:12px">
+    <div style="font-weight:700;margin-bottom:12px">تعيين ${ids.length} طلب لـ:</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      ${couriers.filter(c=>c.id!=cId).map(c=>`
+        <button class="btn btn-ghost btn-sm" style="justify-content:flex-start" onclick="doCoBulkReassign('${ids.join(',')}',${c.id});closeM('m-co-reassign')">
+          ${c.name}
+        </button>`).join('')}
+      <button class="btn btn-ghost btn-sm" style="justify-content:flex-start" onclick="doCoBulkReassign('${ids.join(',')}','bosta');closeM('m-co-reassign')">
+        🚚 بوسطة
+      </button>
+    </div>
+  </div>`;
+  // عرض في modal مؤقت
+  let modal=document.getElementById('m-co-reassign');
+  if(!modal){
+    modal=document.createElement('div');
+    modal.id='m-co-reassign';
+    modal.className='overlay';
+    modal.innerHTML=`<div class="modal" style="width:400px"><div class="mhd"><h3>🔄 إعادة تعيين</h3><button class="xbtn" onclick="closeM('m-co-reassign')">✕</button></div><div class="mbody" id="m-co-reassign-body"></div></div>`;
+    document.body.appendChild(modal);
+  }
+  document.getElementById('m-co-reassign-body').innerHTML=html;
+  openM('m-co-reassign');
+}
+
+async function doCoBulkReassign(idsStr, newCourierId){
+  const ids=idsStr.split(',');
+  const isBosta=newCourierId==='bosta';
+  for(const id of ids){
+    const o=orders.find(x=>x.id===id);
+    if(!o) continue;
+    if(isBosta){o.courierId='bosta';o.isBosta=true;o.status='جاري التوصيل';}
+    else{o.courierId=newCourierId;o.isBosta=false;o.status='جاري التوصيل';}
+    if(API_URL) apiFetch('/api/orders/'+id,'PATCH',{courierId:isBosta?null:newCourierId,isBosta,status:'جاري التوصيل'}).catch(()=>{});
+  }
+  try{const _s=orders.map(o=>{const{bostaAwbBase64,...r}=o;return r;});localStorage.setItem('orderpro_orders',JSON.stringify(_s));}catch(e){}
+  refreshAll();toast('✅ تم تعيين '+ids.length+' طلب');
+}
+
 async function coBulkDone(cId){
   const ids=[...document.querySelectorAll(`.co-chk[data-cid="${cId}"]:checked`)].map(c=>c.value);
   for(const id of ids){
