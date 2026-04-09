@@ -1014,11 +1014,10 @@ let couriers=JSON.parse(localStorage.getItem('op_couriers')||'[]');
 // ===== إصلاح deliveryType للطلبات القديمة في localStorage =====
 orders=orders.map(o=>{
   if(!o.deliveryType||o.deliveryType==='normal'){
-    // طلب بدون عنوان = transit
-    const addr=(o.addr||'').trim();
-    const area=(o.area||'').trim();
-    if((!addr||addr==='—'||addr==='-')&&(!area||area==='—'||area==='-')){
-      o.deliveryType='transit';
+    // طلب بدون عنوان شحن فعلي = transit (مش POS)
+    if(o.src!=='pos'){
+      const addrClean=(o.addr||'').replace(/[—\-،,. ]/g,'').trim();
+      if(!addrClean) o.deliveryType='transit';
     }
     const sm=(o.shippingMethod||'').toLowerCase();
     if(sm.includes('same day')||sm.includes('sameday')) o.deliveryType='express';
@@ -1050,19 +1049,19 @@ const isPickup=o=>{
 };
 const isTransit=o=>{
   if(isPickup(o)) return false;
+  // 1. deliveryType محدد
   const dt=(o.deliveryType||'').toLowerCase();
   if(dt==='transit') return true;
+  // 2. shippingMethod بيقول transit
   const m=(o.shippingMethod||'').toLowerCase();
   if(m.includes('transit warehouse')||m.includes('مخزن العبور')||
      m.includes('transit store')||
      (m.includes('transit')&&!m.includes('trivium'))) return true;
-  // طلب بدون عنوان = مخزن العبور (لكن مش POS)
-  const addr=(o.addr||'').trim();
-  const area=(o.area||'').trim();
-  const noAddr=(!addr||addr==='—'||addr==='-'||addr==='،');
-  const noArea=(!area||area==='—'||area==='-');
-  const isPos=(o.src==='pos');
-  if(noAddr&&noArea&&!isPos) return true;
+  // 3. بدون عنوان شحن فعلي + مش POS
+  if(o.src==='pos') return false;
+  const addr=(o.addr||'').replace(/[—\-،,. ]/g,'').trim();
+  // لو addr فاضي تماماً بعد شيل الرموز = بدون عنوان
+  if(!addr) return true;
   return false;
 };
 function deliveryType(o){
@@ -1228,6 +1227,33 @@ async function apiFetch(path,method='GET',body=null){
     if(!r.ok)throw new Error(r.status);
     return await r.json();
   }catch(e){console.warn('API:',e);return null}
+}
+
+async function syncUsersFromDB(){
+  if(!API_URL) return;
+  try{
+    const data = await apiFetch('/api/users');
+    if(data && data.users && data.users.length > 0){
+      // دمج مع localStorage - DB له الأولوية
+      const dbUsernames = new Set(data.users.map(u=>u.username));
+      // أضف المستخدمين من localStorage اللي مش في DB
+      const localOnly = sysUsers.filter(u=>!dbUsernames.has(u.username));
+      // ارفع localOnly للـ DB
+      for(const u of localOnly){
+        await apiFetch('/api/users','POST',{username:u.username,name:u.name,passHash:u.passHash,pages:u.pages||[],active:u.active!==false}).catch(()=>{});
+      }
+      // إعادة جلب بعد الرفع
+      const updated = localOnly.length > 0 ? await apiFetch('/api/users') : data;
+      if(updated && updated.users){
+        // حافظ على passHash من localStorage لأن DB ما بيرجعهوش
+        sysUsers = updated.users.map(u=>{
+          const local = sysUsers.find(l=>l.username===u.username);
+          return {...u, passHash: local?.passHash || ''};
+        });
+        localStorage.setItem('sys_users', JSON.stringify(sysUsers));
+      }
+    }
+  }catch(e){ console.error('syncUsersFromDB:',e); }
 }
 
 async function syncCouriersToDB(){
@@ -2131,76 +2157,95 @@ function pickupBulkCancel(){
 let lastPickupPrint = localStorage.getItem('lastPickupPrint')||null;
 
 function printPickupSlip(mode='all'){
-  let list;
-  let title;
+  let list, title;
   const today=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 
   if(mode==='new'){
-    // فقط الطلبات الجديدة بعد آخر طباعة
-    const lastTime = lastPickupPrint ? new Date(lastPickupPrint) : null;
-    list = orders.filter(o=>isPickup(o)&&o.status!=='ملغي'&&(!lastTime||new Date(o.createdAt||0)>lastTime));
-    title = `قائمة استلام جديدة — منذ آخر طباعة`;
-    if(!list.length){
-      toast('لا توجد طلبات جديدة منذ آخر طباعة ('+(lastTime?lastTime.toLocaleString('ar-EG'):'لم تتم طباعة من قبل')+')');
-      return;
-    }
+    const lastTime=lastPickupPrint?new Date(lastPickupPrint):null;
+    list=orders.filter(o=>isPickup(o)&&o.status!=='ملغي'&&(!lastTime||new Date(o.createdAt||0)>lastTime));
+    title='قائمة استلام جديدة — منذ آخر طباعة';
+    if(!list.length){toast('لا توجد طلبات جديدة');return;}
   } else {
-    // كل الطلبات اللي لسا متسلمتش
-    list = orders.filter(o=>isPickup(o)&&o.status!=='ملغي'&&o.status!=='مكتمل');
-    title = `قائمة الطلبات المعلقة — غير المستلمة`;
-    if(!list.length){toast('لا توجد طلبات معلقة للاستلام');return;}
+    list=orders.filter(o=>isPickup(o)&&o.status!=='ملغي'&&o.status!=='مكتمل');
+    title='قائمة الطلبات المعلقة — غير المستلمة';
+    if(!list.length){toast('لا توجد طلبات معلقة');return;}
   }
 
-  // حفظ وقت الطباعة
-  const printTime = new Date().toISOString();
-  lastPickupPrint = printTime;
-  localStorage.setItem('lastPickupPrint', printTime);
+  const printTime=new Date().toISOString();
+  lastPickupPrint=printTime;
+  localStorage.setItem('lastPickupPrint',printTime);
 
-  const printTimeStr = new Date().toLocaleString('ar-EG');
-  const w=window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:Arial,sans-serif;padding:16px;direction:rtl;font-size:12px}
-    h2{font-size:16px;margin-bottom:3px}
-    .sub{font-size:11px;color:#666;margin-bottom:12px}
-    table{width:100%;border-collapse:collapse;table-layout:fixed}
-    th{background:#0f172a;color:#fff;padding:5px 7px;text-align:right;font-weight:600;font-size:10px}
-    td{padding:5px 7px;border-bottom:1px solid #e2e8f0;vertical-align:top;font-size:10px;word-break:break-word;overflow:hidden}
-    tr:nth-child(even) td{background:#f8faff}
-    .total-row{font-weight:700;background:#eef2ff!important}
-    .chk{width:18px;height:18px;border:1.5px solid #999;border-radius:3px;display:inline-block}
-    @media print{body{padding:8px}}
-  </style></head><body>
+  const printTimeStr=new Date().toLocaleString('ar-EG');
+  const totalCOD=list.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
+
+  const rows=list.map((o,i)=>`
+    <tr>
+      <td>${i+1}</td>
+      <td><b>${o.id}</b></td>
+      <td>${o.name||'—'}</td>
+      <td>${o.phone||'—'}</td>
+      <td>${(o.addr||o.area||'—').substring(0,60)}</td>
+      <td><b>${o.total.toLocaleString()} ج</b></td>
+      <td>${o.paid?'مدفوع':'COD'}</td>
+      <td><div class="chk"></div></td>
+    </tr>`).join('');
+
+  const html=`<!DOCTYPE html><html dir="rtl">
+<head><meta charset="UTF-8"><title>طباعة</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:Arial,sans-serif;padding:12px;direction:rtl;font-size:11px}
+  h2{font-size:15px;margin-bottom:4px}
+  .sub{font-size:10px;color:#666;margin-bottom:10px}
+  table{width:100%;border-collapse:collapse;table-layout:fixed}
+  th{background:#0f172a;color:#fff;padding:5px 6px;text-align:right;font-size:10px}
+  td{padding:4px 6px;border-bottom:1px solid #ddd;vertical-align:top;font-size:10px;overflow:hidden;word-break:break-word}
+  tr:nth-child(even) td{background:#f8fafc}
+  .total-row td{font-weight:700;background:#eef2ff;padding:6px}
+  .chk{width:16px;height:16px;border:1.5px solid #999;border-radius:2px;display:inline-block}
+  .sigs{margin-top:24px;display:flex;gap:40px}
+  .sig{text-align:center}
+  .sig-line{width:120px;border-bottom:1px solid #000;height:28px;margin-bottom:3px}
+  .sig-lbl{font-size:10px;color:#666}
+  @media print{body{padding:6px}}
+</style>
+</head>
+<body>
   <h2>🏪 ${title}</h2>
-  <div class="sub">${today} · طُبع: ${printTimeStr} · ${list.length} طلب · إجمالي COD: ${list.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0).toLocaleString()} ج</div>
+  <div class="sub">${today} · طُبع: ${printTimeStr} · ${list.length} طلب · COD: ${totalCOD.toLocaleString()} ج</div>
   <table>
-    <thead><tr><th style="width:20px">#</th><th style="width:80px">رقم الطلب</th><th style="width:100px">العميل</th><th style="width:100px">الهاتف</th><th>العنوان</th><th style="width:80px">الإجمالي</th><th style="width:60px">الدفع</th><th style="width:30px;text-align:center">✓</th></tr></thead>
+    <colgroup>
+      <col style="width:22px"><col style="width:85px"><col style="width:100px">
+      <col style="width:95px"><col><col style="width:75px">
+      <col style="width:55px"><col style="width:24px">
+    </colgroup>
+    <thead><tr>
+      <th>#</th><th>رقم الطلب</th><th>العميل</th><th>الهاتف</th>
+      <th>العنوان</th><th>الإجمالي</th><th>الدفع</th><th>✓</th>
+    </tr></thead>
     <tbody>
-      ${list.map((o,i)=>`<tr>
-        <td>${i+1}</td>
-        <td><strong>${o.id}</strong></td>
-        <td>${o.name}</td>
-        <td style="color:#444">${o.addr||o.area||'—'}${o.addr2?' / '+o.addr2:''}</td>
-        <td><strong>${o.total.toLocaleString()} ج</strong></td>
-        <td>${o.paid?'💳':'💵 COD'}</td>
-        <td style="text-align:center"><div class="chk"></div></td>
-      </tr>`).join('')}
+      ${rows}
       <tr class="total-row">
-        <td colspan="4" style="text-align:left">الإجمالي COD المطلوب تحصيله</td>
-        <td>${list.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0).toLocaleString()} ج</td>
+        <td colspan="5" style="text-align:left">الإجمالي COD المطلوب تحصيله</td>
+        <td>${totalCOD.toLocaleString()} ج</td>
         <td colspan="2"></td>
       </tr>
     </tbody>
   </table>
-  <div style="margin-top:20px;display:flex;gap:50px">
-    <div style="text-align:center"><div style="width:130px;border-bottom:1px solid #000;height:32px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">توقيع المسؤول</div></div>
-    <div style="text-align:center"><div style="width:130px;border-bottom:1px solid #000;height:32px;margin-bottom:4px"></div><div style="font-size:10px;color:#666">توقيع العميل</div></div>
+  <div class="sigs">
+    <div class="sig"><div class="sig-line"></div><div class="sig-lbl">توقيع المسؤول</div></div>
+    <div class="sig"><div class="sig-line"></div><div class="sig-lbl">توقيع العميل</div></div>
   </div>
-  <scr'+'ipt>window.onload=()=>window.print()<\/script><\/body><\/html>`);
+</body></html>`;
+
+  const w=window.open('','_blank');
+  w.document.open();
+  w.document.write(html);
   w.document.close();
+  setTimeout(()=>{w.focus();w.print();},500);
   updateLastPrintDisplay();
 }
+
 
 function updateLastPrintDisplay(){
   const el=document.getElementById('pickup-last-print');
@@ -3700,7 +3745,14 @@ async function doLogin(){
     user = {...ADMIN_USER};
   }
   
-  // تحقق من باقي المستخدمين
+  // تحقق من المستخدمين في DB أولاً
+  if(!user && API_URL){
+    try{
+      const r = await apiFetch('/api/login','POST',{username, passHash});
+      if(r && r.found) user = r.user;
+    }catch(e){}
+  }
+  // fallback: localStorage
   if(!user){
     const found = sysUsers.find(u=>u.username===username && u.passHash===passHash && u.active!==false);
     if(found) user = found;
@@ -3729,7 +3781,8 @@ async function doLogin(){
   const userBadge = document.getElementById('user-badge');
   if(userBadge) userBadge.textContent = '👤 '+user.name;
   
-  await syncCouriersToDB(); // جلب المناديب أولاً
+  await syncCouriersToDB();
+  await syncUsersFromDB(); // جلب المستخدمين من DB
   loadOrders();
   checkExpiryAlerts();
   toast('✅ أهلاً '+user.name+' 👋');
@@ -3869,6 +3922,10 @@ async function saveUser(){
   }
 
   localStorage.setItem('sys_users',JSON.stringify(sysUsers));
+  // رفع للـ DB
+  if(API_URL){
+    apiFetch('/api/users','POST',{username,name,passHash,pages,active:true}).catch(()=>{});
+  }
   closeM('m-add-user');
   renderUsersAdmin();
   toast('✅ تم حفظ المستخدم: '+name);
