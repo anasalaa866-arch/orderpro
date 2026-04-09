@@ -1241,13 +1241,15 @@ async function loadOrders(){
   const prev=orders.length;
   // restore isBosta from localStorage if server doesn't have it
 let _bostaIds={};
+let _bostaExported={};
 try{_bostaIds=JSON.parse(localStorage.getItem('bosta_ids')||'{}');}catch(e){}
+try{_bostaExported=JSON.parse(localStorage.getItem('bosta_exported_ids')||'{}');}catch(e){}
 
 orders=data.orders.map(o=>{
     const base={ship:50,...o};
-    // لو الـ server ما رجعش isBosta، جيبها من localStorage
     if(!base.isBosta && _bostaIds[base.id]) base.isBosta=true;
     if(base.isBosta) base.courierId='bosta';
+    if(!base.bostaExported && _bostaExported[base.id]) base.bostaExported=true;
     // لو deliveryType مش موجود، احسبه من shippingMethod
     if(!base.deliveryType||base.deliveryType==='normal'){
       const sm=(base.shippingMethod||'').toLowerCase();
@@ -1778,13 +1780,28 @@ async function addOrder(){
   refreshAll();toast(`✅ تم إضافة الطلب ${order.id}`);
 }
 
-function addCourier(){
+// addCourier moved below
+
+async function addCourier(){
   const name=$('c-name').value.trim(),phone=$('c-phone').value.trim();
   if(!name||!phone){toast('❗ الاسم والهاتف مطلوبان');return}
-  const id=Math.max(0,...couriers.map(c=>c.id))+1;
-  couriers.push({id,name,phone,zone:$('c-zone').value||'غير محدد',vehicle:$('c-vehicle').value,ship:+$('c-ship').value||50,shipExpress:+$('c-ship-express').value||80,status:'متاح',settled:false});
-  closeM('m-courier');['c-name','c-phone','c-zone'].forEach(x=>$(x).value='');$('c-ship').value=50;$('c-ship-express').value=80;
-  saveCouriers();refreshAll();toast(`✅ تم إضافة المندوب ${name}`);
+  const newC={name,phone,zone:$('c-zone').value||'غير محدد',vehicle:$('c-vehicle').value,
+    ship:+$('c-ship').value||50,shipExpress:+$('c-ship-express').value||80,status:'متاح',settled:false};
+  closeM('m-courier');
+  ['c-name','c-phone','c-zone'].forEach(x=>$(x).value='');
+  $('c-ship').value=50;$('c-ship-express').value=80;
+  if(API_URL){
+    const r=await apiFetch('/api/couriers','POST',newC);
+    if(r&&r.courier){
+      couriers.push(r.courier);
+      saveCouriers();renderCouriers();
+      toast('✅ تم إضافة المندوب '+name);
+      return;
+    }
+  }
+  newC.id=Math.max(0,...couriers.map(c=>+c.id||0))+1;
+  couriers.push(newC);saveCouriers();renderCouriers();
+  toast('✅ تم إضافة المندوب '+name);
 }
 
 async function delCourier(id){
