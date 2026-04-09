@@ -200,18 +200,7 @@ tr:hover td{background:#fafbff}
 .ds-mb-exp{background:var(--danger-light);color:#7f1d1d}
 .ds-mb-zone{background:var(--warn-light);color:#92400e}
 @media print{
-  /* إخفاء كل حاجة ماعدا الورقة */
-  .sidebar,.topbar,.ds-ctrl,.zone-picker,
-  #courier-tabs,#courier-orders-content,
-  .card-hd,.card,.btn,.chip,
-  #co-ds-wrap > div:first-child,
-  #co-ds-wrap > .zone-picker
-  {display:none!important}
-  /* إظهار ورقة التوصيل بس */
-  .page{display:none!important}
-  #page-courier-orders{display:block!important}
-  #co-ds-wrap{display:block!important}
-  #co-ds-sheet{display:block!important}
+  .sidebar,.topbar,.ds-ctrl,.zone-picker{display:none!important}
   .main-area{overflow:visible!important;height:auto!important}
   .content{padding:0!important;overflow:visible!important;height:auto!important}
   .ds{border:none;border-radius:0;box-shadow:none;overflow:visible!important}
@@ -290,6 +279,7 @@ tr:hover td{background:#fafbff}
     <div class="ni" data-p="transit" onclick="goPage(this,'transit')"><span class="ni-icon">🏭</span><span class="ni-label">مخزن العبور</span><span class="nbadge" id="nb-transit" style="background:var(--warn)">0</span></div>
     <div class="ni" data-p="bosta" onclick="goPage(this,'bosta')"><span class="ni-icon">🚚</span><span class="ni-label">بوسطة</span><span class="nbadge" id="nb-bosta" style="background:#6366f1">0</span></div>
     <div class="ni" data-p="courier-orders" onclick="goPage(this,'courier-orders')"><span class="ni-icon">🧑</span><span class="ni-label">طلبات المناديب</span></div>
+    <div class="ni" data-p="delivery-sheet" onclick="goPage(this,'delivery-sheet')"><span class="ni-icon">🖨️</span><span class="ni-label">ورقة التوصيل</span></div>
     <div class="ni" data-p="import-excel" onclick="goPage(this,'import-excel')"><span class="ni-icon">📥</span><span class="ni-label">استيراد Excel</span></div>
     <div class="ni" data-p="problems" onclick="goPage(this,'problems')"><span class="ni-icon">⚠️</span><span class="ni-label">طلبات مشكلة</span><span class="nbadge" id="nb-problems" style="background:var(--danger)"></span></div>
     <div class="nav-label">المالية</div>
@@ -536,22 +526,24 @@ tr:hover td{background:#fafbff}
     <div class="page" id="page-courier-orders">
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center" id="courier-tabs"></div>
     <div id="courier-orders-content"></div>
-    <!-- ورقة التوصيل المدمجة -->
-    <div id="co-ds-wrap" style="display:none;margin-top:12px">
-      <div class="ds-ctrl" style="margin-bottom:8px">
-        <span id="co-ds-name" style="font-weight:700;font-size:13px;color:var(--accent)"></span>
-        <span style="font-size:11px;color:var(--muted);padding:0 8px">طباعة:</span>
-        <button class="ds-btn active" id="co-ds-btn-full" onclick="coDsMode('full')">📋 مجمع</button>
-        <button class="ds-btn" id="co-ds-btn-exp" onclick="coDsMode('express')">⚡ مستعجل</button>
-        <button class="ds-btn" id="co-ds-btn-zone" onclick="coDsMode('zone')">📍 منطقة</button>
-        <button class="ds-btn print-btn" onclick="coDsPrint()">🖨️ طباعة / PDF</button>
-        <button class="btn btn-ghost btn-xs" onclick="$('co-ds-wrap').style.display='none'" style="margin-right:auto">✕ إغلاق</button>
+  </div>
+
+  <!-- DELIVERY SHEET -->
+  <div class="page" id="page-delivery-sheet">
+    <div class="ds-wrap">
+      <div class="ds-ctrl">
+        <select id="ds-courier-sel" style="font-family:Cairo,sans-serif;font-size:12px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-weight:600" onchange="dsRender()"></select>
+        <span style="font-size:11px;color:var(--muted);padding:0 4px">طباعة:</span>
+        <button class="ds-btn active" id="ds-btn-full" onclick="dsSetMode('full')">📋 مجمع</button>
+        <button class="ds-btn exp-btn" id="ds-btn-exp" onclick="dsSetMode('express')">⚡ مستعجل فقط</button>
+        <button class="ds-btn zone-btn" id="ds-btn-zone" onclick="dsSetMode('zone')">📍 منطقة محددة</button>
+        <button class="ds-btn print-btn" onclick="doPrint()">🖨️ طباعة / PDF</button>
       </div>
-      <div class="zone-picker" id="co-ds-zone-picker">
-        <span style="font-size:11px;color:var(--muted);margin-left:8px">اختر منطقة:</span>
-        <div id="co-ds-zone-pills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+      <div class="zone-picker" id="ds-zone-picker">
+        <span style="font-size:11px;color:var(--muted);margin-right:8px;white-space:nowrap">اختر منطقة:</span>
+        <div id="ds-zone-pills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
       </div>
-      <div class="ds" id="co-ds-sheet"></div>
+      <div class="ds" id="ds-sheet"></div>
     </div>
   </div>
 
@@ -1011,7 +1003,7 @@ tr:hover td{background:#fafbff}
 <script>
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب والطباعة','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات',accounting:'محاسبة المناديب',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات',accounting:'محاسبة المناديب',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -3675,7 +3667,7 @@ function renderUsersAdmin(){
   const pageLabels={
     'dashboard':'لوحة التحكم','orders':'الطلبات','couriers':'المناديب',
     'assign':'توزيع الطلبات','pickup':'استلام المحل','transit':'العبور',
-    'bosta':'بوسطة','courier-orders':'طلبات المناديب والطباعة',
+    'bosta':'بوسطة','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل',
     'import-excel':'استيراد Excel','problems':'مشاكل','accounting':'محاسبة المناديب',
     'shop-accounting':'محاسبة المحل','checks':'الشيكات','reports':'التقارير',
     'expiry':'الصلاحيات','notifs':'الإشعارات','settings':'الإعدادات'
@@ -5108,7 +5100,7 @@ function goPage(el,page){
   if(page==='accounting'){renderAcc();renderAccDet();}if(page==='reports')renderReports();
   if(page==='notifs')renderNotifs();
   if(page==='settings')renderUsersAdmin();
-  // delivery-sheet merged into courier-orders
+  if(page==='delivery-sheet')dsInit();
   if(page==='expiry')renderExpiryPage();
 }
 
