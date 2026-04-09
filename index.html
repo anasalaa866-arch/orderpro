@@ -398,7 +398,7 @@ tr:hover td{background:#fafbff}
       </div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th style="width:36px"><input type="checkbox" id="pickup-check-all" onchange="pickupToggleAll(this.checked)"></th><th>رقم الطلب</th><th>العميل</th><th>المنتجات</th><th>إجمالي</th><th>الدفع</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+          <thead><tr><th style="width:36px"><input type="checkbox" id="pickup-check-all" onchange="pickupToggleAll(this.checked)"></th><th>رقم الطلب</th><th>العميل</th><th>الهاتف</th><th>المنتجات</th><th>إجمالي</th><th>الدفع</th><th>الحالة</th><th>إجراءات</th></tr></thead>
           <tbody id="pickup-tbody"></tbody>
         </table>
       </div>
@@ -1056,12 +1056,13 @@ const isTransit=o=>{
   if(m.includes('transit warehouse')||m.includes('مخزن العبور')||
      m.includes('transit store')||
      (m.includes('transit')&&!m.includes('trivium'))) return true;
-  // طلب بدون عنوان = مخزن العبور
+  // طلب بدون عنوان = مخزن العبور (لكن مش POS)
   const addr=(o.addr||'').trim();
   const area=(o.area||'').trim();
   const noAddr=(!addr||addr==='—'||addr==='-'||addr==='،');
   const noArea=(!area||area==='—'||area==='-');
-  if(noAddr&&noArea) return true;
+  const isPos=(o.src==='pos');
+  if(noAddr&&noArea&&!isPos) return true;
   return false;
 };
 function deliveryType(o){
@@ -2072,6 +2073,7 @@ function renderPickupPage(){
         <strong>${o.name}</strong><br>
         <span style="font-size:10px;color:var(--muted)">${srcBadge(o.src)}</span>
       </td>
+      <td style="direction:ltr;font-size:12px;white-space:nowrap;font-weight:600">${o.phone||'—'}</td>
       <td style="font-size:11px;color:var(--muted);max-width:220px;line-height:1.6">${o.items||'—'}</td>
       <td><strong>${o.total.toLocaleString()} ج</strong></td>
       <td>${o.paid?'<span class="badge b-done">💳 مدفوع</span>':'<span class="badge b-wait">💵 COD</span>'}</td>
@@ -2173,7 +2175,7 @@ function printPickupSlip(mode='all'){
   <h2>🏪 ${title}</h2>
   <div class="sub">${today} · طُبع: ${printTimeStr} · ${list.length} طلب · إجمالي COD: ${list.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0).toLocaleString()} ج</div>
   <table>
-    <thead><tr><th style="width:20px">#</th><th style="width:80px">رقم الطلب</th><th style="width:100px">العميل</th><th>العنوان</th><th style="width:80px">الإجمالي</th><th style="width:60px">الدفع</th><th style="width:30px;text-align:center">✓</th></tr></thead>
+    <thead><tr><th style="width:20px">#</th><th style="width:80px">رقم الطلب</th><th style="width:100px">العميل</th><th style="width:100px">الهاتف</th><th>العنوان</th><th style="width:80px">الإجمالي</th><th style="width:60px">الدفع</th><th style="width:30px;text-align:center">✓</th></tr></thead>
     <tbody>
       ${list.map((o,i)=>`<tr>
         <td>${i+1}</td>
