@@ -882,7 +882,10 @@ tr:hover td{background:#fafbff}
         <div class="card">
           <div class="card-hd">
             <h3>👥 إدارة المستخدمين</h3>
-            <button class="btn btn-primary btn-sm" onclick="openAddUser()">+ إضافة مستخدم</button>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" onclick="uploadUserstoDB()" title="رفع المستخدمين للـ Database">☁️ رفع للـ DB</button>
+              <button class="btn btn-primary btn-sm" onclick="openAddUser()">+ إضافة مستخدم</button>
+            </div>
           </div>
           <div id="users-list-admin" style="padding:8px"></div>
         </div>
@@ -1253,26 +1256,53 @@ async function apiFetch(path,method='GET',body=null){
   }catch(e){console.warn('API:',e);return null}
 }
 
+async function uploadUserstoDB(){
+  if(!API_URL){ toast('❗ محتاج Backend متصل'); return; }
+  if(!sysUsers.length){ toast('❗ مفيش مستخدمين في localStorage'); return; }
+  toast('⏳ جاري رفع المستخدمين...');
+  let ok=0, fail=0;
+  for(const u of sysUsers){
+    if(!u.passHash){ fail++; continue; }
+    try{
+      const r = await apiFetch('/api/users','POST',{
+        username:u.username, name:u.name, passHash:u.passHash,
+        pages:u.pages||[], active:u.active!==false
+      });
+      if(r && r.success) ok++;
+      else fail++;
+    }catch(e){ fail++; }
+  }
+  toast(`✅ تم رفع ${ok} مستخدم${fail?' | ❌ فشل '+fail:''}`);
+  renderUsersAdmin();
+}
+
 async function syncUsersFromDB(){
   if(!API_URL) return;
   try{
     const data = await apiFetch('/api/users');
-    if(data && data.users && data.users.length > 0){
-      // دمج مع localStorage - DB له الأولوية
-      const dbUsernames = new Set(data.users.map(u=>u.username));
-      // أضف المستخدمين من localStorage اللي مش في DB
-      const localOnly = sysUsers.filter(u=>!dbUsernames.has(u.username));
-      // ارفع localOnly للـ DB
-      for(const u of localOnly){
-        await apiFetch('/api/users','POST',{username:u.username,name:u.name,passHash:u.passHash,pages:u.pages||[],active:u.active!==false}).catch(()=>{});
-      }
-      // إعادة جلب بعد الرفع
-      const updated = localOnly.length > 0 ? await apiFetch('/api/users') : data;
-      if(updated && updated.users){
-        // DB بيرجع passHash دلوقتي
-        sysUsers = updated.users.map(u=>({...u}));
-        localStorage.setItem('sys_users', JSON.stringify(sysUsers));
-      }
+    if(!data) return;
+
+    const dbUsers = data.users || [];
+    const dbUsernames = new Set(dbUsers.map(u=>u.username));
+
+    // ارفع المستخدمين من localStorage اللي مش في DB
+    const localOnly = sysUsers.filter(u=>u.passHash && !dbUsernames.has(u.username));
+    for(const u of localOnly){
+      await apiFetch('/api/users','POST',{
+        username:u.username, name:u.name, passHash:u.passHash,
+        pages:u.pages||[], active:u.active!==false
+      }).catch(()=>{});
+    }
+
+    // جيب كل المستخدمين من DB (بعد الرفع)
+    const final = localOnly.length > 0 ? await apiFetch('/api/users') : data;
+    if(final && final.users && final.users.length > 0){
+      // دمج passHash من localStorage (DB مش بيرجعه)
+      sysUsers = final.users.map(u=>{
+        const local = sysUsers.find(l=>l.username===u.username);
+        return {...u, passHash: local?.passHash||u.passHash||''};
+      });
+      localStorage.setItem('sys_users', JSON.stringify(sysUsers));
     }
   }catch(e){ console.error('syncUsersFromDB:',e); }
 }
@@ -3948,12 +3978,7 @@ async function doLogin(){
     user = {...ADMIN_USER};
   }
   
-  // تحقق من localStorage أولاً (أسرع)
-  if(!user){
-    const found = sysUsers.find(u=>u.username===username && u.passHash===passHash && u.active!==false);
-    if(found) user = found;
-  }
-  // لو مش في localStorage، جرب DB
+  // تحقق من DB أولاً (عشان يشتغل من أي متصفح)
   if(!user && API_URL){
     try{
       const r = await apiFetch('/api/login','POST',{username, passHash});
@@ -3967,6 +3992,11 @@ async function doLogin(){
         localStorage.setItem('sys_users', JSON.stringify(sysUsers));
       }
     }catch(e){ console.error('DB login error:', e); }
+  }
+  // fallback: localStorage (لو DB مش شغال)
+  if(!user){
+    const found = sysUsers.find(u=>u.username===username && u.passHash===passHash && u.active!==false);
+    if(found) user = found;
   }
   
   if(!user){ 
