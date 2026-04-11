@@ -3967,66 +3967,84 @@ async function doLogin(){
   const username = document.getElementById('login-username')?.value.trim();
   const password = document.getElementById('login-password')?.value;
   const err = document.getElementById('login-err');
-  
+  const loginBtn = document.querySelector('.login-btn');
+
   if(!username||!password){ err.textContent='أدخل اسم المستخدم وكلمة المرور'; return; }
-  
-  const passHash = await hashPass(password);
-  
-  // تحقق من الادمن
-  let user = null;
-  if(username === ADMIN_USER.username && passHash === ADMIN_USER.passHash){
-    user = {...ADMIN_USER};
+
+  if(loginBtn){ loginBtn.textContent='⏳ جاري التحقق...'; loginBtn.disabled=true; }
+  err.textContent = '';
+
+  const reset = ()=>{ if(loginBtn){ loginBtn.textContent='تسجيل الدخول'; loginBtn.disabled=false; } };
+
+  try{
+    const passHash = await hashPass(password);
+    let user = null;
+
+    // 1. Admin
+    if(username === ADMIN_USER.username && passHash === ADMIN_USER.passHash){
+      user = {...ADMIN_USER};
+    }
+
+    // 2. DB مع timeout 5 ثواني
+    if(!user && API_URL){
+      try{
+        const controller = new AbortController();
+        const timer = setTimeout(()=>controller.abort(), 5000);
+        const resp = await fetch(
+          (API_URL||'').replace(/\/$/,'')+'/api/login',
+          {method:'POST', headers:{'Content-Type':'application/json'},
+           body:JSON.stringify({username, passHash}),
+           signal:controller.signal, mode:'cors'}
+        );
+        clearTimeout(timer);
+        if(resp.ok){
+          const r = await resp.json();
+          if(r && r.found){
+            user = r.user;
+            // حفظ في localStorage
+            const idx2 = sysUsers.findIndex(u=>u.username===username);
+            const ud = {...r.user, passHash};
+            if(idx2>=0) sysUsers[idx2]=ud; else sysUsers.push(ud);
+            localStorage.setItem('sys_users', JSON.stringify(sysUsers));
+          }
+        }
+      }catch(e){ console.warn('DB login:', e.name); }
+    }
+
+    // 3. localStorage fallback
+    if(!user){
+      const found = sysUsers.find(u=>u.username===username && u.passHash===passHash && u.active!==false);
+      if(found) user = found;
+    }
+
+    reset();
+
+    if(!user){
+      err.textContent = '❌ اسم المستخدم أو كلمة المرور غير صحيحة';
+      document.getElementById('login-password').value = '';
+      return;
+    }
+
+    // دخول
+    currentUser = user;
+    const sessionData = {...user, _expires: Date.now() + 8*60*60*1000};
+    localStorage.setItem('current_user_session', JSON.stringify(sessionData));
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('main-app').style.display = '';
+    applyPermissions(user.role, user.pages||null);
+    const userBadge = document.getElementById('user-badge');
+    if(userBadge) userBadge.textContent = '👤 '+user.name;
+    await syncCouriersToDB();
+    await syncUsersFromDB();
+    loadOrders();
+    checkExpiryAlerts();
+    toast('✅ أهلاً '+user.name+' 👋');
+
+  }catch(e){
+    console.error('doLogin error:', e);
+    reset();
+    err.textContent = '❌ حدث خطأ، حاول مرة أخرى';
   }
-  
-  // تحقق من DB أولاً (عشان يشتغل من أي متصفح)
-  if(!user && API_URL){
-    try{
-      const r = await apiFetch('/api/login','POST',{username, passHash});
-      if(r && r.found){
-        user = r.user;
-        // حفظه في localStorage للمرة الجاية
-        const existing = sysUsers.findIndex(u=>u.username===username);
-        const userData = {...r.user, passHash};
-        if(existing>=0) sysUsers[existing]=userData;
-        else sysUsers.push(userData);
-        localStorage.setItem('sys_users', JSON.stringify(sysUsers));
-      }
-    }catch(e){ console.error('DB login error:', e); }
-  }
-  // fallback: localStorage (لو DB مش شغال)
-  if(!user){
-    const found = sysUsers.find(u=>u.username===username && u.passHash===passHash && u.active!==false);
-    if(found) user = found;
-  }
-  
-  if(!user){ 
-    err.textContent = '❌ اسم المستخدم أو كلمة المرور غير صحيحة'; 
-    document.getElementById('login-password').value = '';
-    return; 
-  }
-  
-  // حفظ الجلسة
-  currentUser = user;
-  // حفظ الجلسة في localStorage مع وقت انتهاء (8 ساعات)
-  const sessionData = {...user, _expires: Date.now() + 8*60*60*1000};
-  localStorage.setItem('current_user_session', JSON.stringify(sessionData));
-  
-  // إظهار البرنامج
-  document.getElementById('login-screen').classList.add('hidden');
-  document.getElementById('main-app').style.display = '';
-  
-  // تطبيق الصلاحيات
-  applyPermissions(user.role, user.pages||null);
-  
-  // تحديث اسم المستخدم في الـ topbar
-  const userBadge = document.getElementById('user-badge');
-  if(userBadge) userBadge.textContent = '👤 '+user.name;
-  
-  await syncCouriersToDB();
-  await syncUsersFromDB(); // جلب المستخدمين من DB
-  loadOrders();
-  checkExpiryAlerts();
-  toast('✅ أهلاً '+user.name+' 👋');
 }
 
 function doLogout(){
@@ -4209,6 +4227,10 @@ window.addEventListener('load', function(){
   } else {
     document.getElementById('login-screen').classList.remove('hidden');
     document.getElementById('main-app').style.display = 'none';
+    // جيب المستخدمين من DB في الخلفية عشان يكونوا جاهزين للـ login
+    if(API_URL){
+      syncUsersFromDB().catch(()=>{});
+    }
   }
 }, {once:true});
 
