@@ -1058,17 +1058,7 @@ let pollingInterval=null,prevOrderCount=0;
 let orders=[],notifications=[],nextLocalId=2000;
 let couriers=JSON.parse(localStorage.getItem('op_couriers')||'[]');
 // سجل التسويات - مش بيتمسح أبداً
-let settleLog={};
-try{settleLog=JSON.parse(localStorage.getItem('op_settle_log')||'{}');}catch(e){}
-// settledAtMap للتوافق مع الكود القديم
-let settledAtMap={};
-try{settledAtMap=JSON.parse(localStorage.getItem('op_settled_at')||'{}');}catch(e){}
-// دمج settledAt من settleLog
-couriers=couriers.map(c=>{
-  const log=settleLog[String(c.id)]||[];
-  const lastSettle=log.length?log[log.length-1]:null;
-  return {...c, settledAt:lastSettle||settledAtMap[String(c.id)]||c.settledAt||null};
-});
+// settle vars removed - DB only
 // ===== إصلاح deliveryType للطلبات القديمة في localStorage =====
 orders=orders.map(o=>{
   if(!o.deliveryType||o.deliveryType==='normal'){
@@ -1325,14 +1315,7 @@ async function syncCouriersToDB(){
       // تحديث settleLog المتغير
       settleLog=getSettleLog();
       const _log=settleLog;
-      let _sam={};
-      try{_sam=JSON.parse(localStorage.getItem('op_settled_at')||'{}');}catch(e){}
-      couriers=data.couriers.map(dc=>{
-        const cid=String(dc.id);
-        const log=_log[cid]||[];
-        const sat=log.length?log[log.length-1]:(_sam[cid]||null);
-        return {...dc, settledAt:sat, settled:sat?true:(dc.settled||false)};
-      });
+      couriers=data.couriers.map(dc=>({...dc}));
       saveCouriers();
     }
     // لو DB فاضي وعندنا مناديب محلية - ارفعهم
@@ -2921,45 +2904,24 @@ function getOrderDate(o){
 // جيب التسويات من DB وحفظها في memory
 
 async function loadSettlements(){
-  // أولاً: حمّل من localStorage فوراً
-  try{
-    const local = JSON.parse(localStorage.getItem('op_settlements')||'[]');
-    if(local.length){
-      _allSettlements = local.map(s=>({...s, ts:new Date(s.ts)}));
-    }
-  }catch(e){}
-
-  // ثانياً: جيب من DB لو متاح
+  // DB فقط - مفيش localStorage
   if(!API_URL){ _settlementsLoaded=true; return; }
   try{
     const data = await apiFetch('/api/settlements');
-    if(data?.settlements?.length){
-      const fromDB = data.settlements.map(s=>({
+    if(data?.settlements){
+      _allSettlements = data.settlements.map(s=>({
         ...s,
-        orderIds: Array.isArray(s.orderIds)?s.orderIds:(JSON.parse(s.orderIds||'[]')),
+        orderIds: Array.isArray(s.orderIds)?s.orderIds:JSON.parse(s.orderIds||'[]'),
         ts: new Date(s.ts)
       }));
-      // دمج DB مع localStorage
-      fromDB.forEach(s=>{
-        const exists = _allSettlements.some(x=>
-          String(x.courierId)===String(s.courierId) &&
-          Math.abs(new Date(x.ts)-new Date(s.ts))<5000
-        );
-        if(!exists) _allSettlements.push(s);
-      });
-      // احفظ في localStorage
-      _saveSettlementsLocal();
+      console.log('✅ Settlements from DB:',_allSettlements.length);
+      // لو DB فاضي - رحّل من localStorage لو موجود
+      if(_allSettlements.length === 0){
+        await _migrateLocalSettlementsToDB();
+      }
     }
-  }catch(e){ console.log('DB settlements unavailable, using localStorage'); }
+  }catch(e){ console.error('loadSettlements error:',e); }
   _settlementsLoaded = true;
-}
-
-function _saveSettlementsLocal(){
-  try{
-    localStorage.setItem('op_settlements', JSON.stringify(
-      _allSettlements.map(s=>({...s, ts:s.ts instanceof Date?s.ts.toISOString():s.ts}))
-    ));
-  }catch(e){}
 }
 
 // IDs الطلبات المسوّاة لمندوب
@@ -3580,19 +3542,7 @@ function getOrderDate(o){
 // ============================================================
 
 // --- Storage ---
-let _settleLogCache = null;
 
-function getSettleLog(){
-  if(_settleLogCache) return _settleLogCache;
-  try{ _settleLogCache = JSON.parse(localStorage.getItem('op_settle_log')||'{}'); }
-  catch(e){ _settleLogCache = {}; }
-  return _settleLogCache;
-}
-
-function saveSettleLog(log){
-  _settleLogCache = log;
-  localStorage.setItem('op_settle_log', JSON.stringify(log));
-}
 
 // --- Core Logic ---
 
@@ -3622,44 +3572,10 @@ function clearPendingCache(){
 }
 
 // migration من format قديم (strings)
-function migrateSettleLog(){
-  const log = getSettleLog();
-  let changed = false;
-  Object.keys(log).forEach(cid=>{
-    const sessions = log[cid];
-    if(!sessions.some(s=>typeof s==='string')) return;
-    // حوّل strings لـ objects - التسوية الأخيرة تاخد كل الطلبات المكتملة
-    const allDoneIds = oByC(Number(cid)||cid,'مكتمل').map(o=>o.id);
-    log[cid] = sessions.map((s,i)=>({
-      ts: typeof s==='string'?s:s.ts,
-      orderIds: i===sessions.length-1 ? allDoneIds : (s.orderIds||[]),
-      cod: s.cod||0, ship: s.ship||0
-    }));
-    changed = true;
-  });
-  if(changed){ saveSettleLog(log); clearPendingCache(); }
-}
+
 
 // مزامنة من DB
-async function syncSettlementsFromDB(){
-  if(!API_URL) return;
-  try{
-    const data = await apiFetch('/api/settlements');
-    if(!data?.settlements?.length) return;
-    const log = getSettleLog();
-    let updated = false;
-    data.settlements.forEach(s=>{
-      const cid = String(s.courierId);
-      if(!log[cid]) log[cid] = [];
-      const exists = log[cid].some(x=>x.ts && new Date(x.ts).getTime()===new Date(s.ts).getTime());
-      if(!exists){
-        log[cid].push({ts:new Date(s.ts).toISOString(), orderIds:s.orderIds||[], cod:s.cod||0, ship:s.ship||0});
-        updated = true;
-      }
-    });
-    if(updated){ saveSettleLog(log); clearPendingCache(); }
-  }catch(e){ console.error('syncSettlementsFromDB:',e); }
-}
+
 
 // --- UI: تسوية الحسابات ---
 
@@ -4259,12 +4175,7 @@ function getOrderDate(o){
 
 // ========== نظام التسوية ==========
 // settleLog: { "courierId": [{ts:"ISO", orderIds:["SH-1","SH-2"...]}, ...] }
-// محفوظ في localStorage['op_settle_log'] - لا يتمسح أبداً
 
-function getSettleLog(){
-  try{ return JSON.parse(localStorage.getItem('op_settle_log')||'{}'); }
-  catch(e){ return {}; }
-}
 
 // migration تلقائي من format قديم (strings) لجديد (objects with orderIds)
 function migrateSettleLog(){
@@ -4330,24 +4241,15 @@ async function syncSettlementsFromDB(){
           const last = sessions[sessions.length-1];
           settledAtMap[cid] = typeof last==='string' ? last : last.ts;
         }
-      });
-      localStorage.setItem('op_settled_at', JSON.stringify(settledAtMap));
-      console.log('✅ Settlements synced from DB');
+      });      console.log('✅ Settlements synced from DB');
     }
   }catch(e){ console.error('syncSettlementsFromDB:', e); }
 }
 
-function saveSettleLog(log){
-  localStorage.setItem('op_settle_log', JSON.stringify(log));
-}
+function saveSettleLog(log){}
 
 // آخر timestamp تسوية للمندوب
-function getLastSettleTime(cId){
-  const sessions = getSettleLog()[String(cId)] || [];
-  if(!sessions.length) return null;
-  const last = sessions[sessions.length-1];
-  return new Date(typeof last==='string' ? last : last.ts);
-}
+
 
 // الطلبات الجاهزة للتسوية (مكتملة بعد آخر تسوية)
 // Cache للـ pending orders
@@ -4419,9 +4321,7 @@ function doSettle(){
   // 1. حفظ في localStorage (فوري)
   log[cid].push({ ts: now, orderIds });
   saveSettleLog(log);
-  settledAtMap[cid] = now;
-  localStorage.setItem('op_settled_at', JSON.stringify(settledAtMap));
-  c.settled = true;
+  settledAtMap[cid] = now;  c.settled = true;
   c.settledAt = now;
   saveCouriers();
 
@@ -4862,9 +4762,7 @@ function getOrderDate(o){
   return new Date();
 }
 
-function getSettleLog(){
-  try{return JSON.parse(localStorage.getItem('op_settle_log')||'{}');}catch(e){return {};}
-}
+
 function getLastSettle(cId){
   const log=getSettleLog()[String(cId)]||[];
   if(!log.length) return null;
@@ -5105,13 +5003,9 @@ function doSettle(){
   // أضف timestamp جديد لسجل التسويات
   const cid=String(c.id);
   if(!settleLog[cid]) settleLog[cid]=[];
-  settleLog[cid].push(now);
-  localStorage.setItem('op_settle_log',JSON.stringify(settleLog));
-  settleLog=getSettleLog(); // تحديث المتغير
+  settleLog[cid].push(now);  settleLog=getSettleLog(); // تحديث المتغير
   // حدّث settledAtMap كمان للتوافق
-  settledAtMap[cid]=now;
-  localStorage.setItem('op_settled_at',JSON.stringify(settledAtMap));
-  saveCouriers();
+  settledAtMap[cid]=now;  saveCouriers();
   if(API_URL)apiFetch('/api/couriers/'+c.id,'PATCH',{settled:true}).catch(()=>{});
   closeM('m-settle');
   pushNotif('💰',`تمت تسوية حساب ${c.name}`,'');
