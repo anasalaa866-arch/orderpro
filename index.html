@@ -209,11 +209,12 @@ tr:hover td{background:#fafbff}
   .main-area{overflow:visible!important;height:auto!important}
   .content{padding:0!important;overflow:visible!important;height:auto!important}
   .ds{border:none;border-radius:0;box-shadow:none;overflow:visible!important}
-  .ds-table{page-break-inside:auto!important;width:100%!important}
+  .ds-table{page-break-inside:auto!important;width:100%!important;table-layout:auto!important}
   .ds-table tr{page-break-inside:avoid;page-break-after:auto}
-  .ds-table thead{display:table-header-group}
-  .ds-foot{page-break-inside:avoid}
-  .ds-sec{page-break-after:avoid}
+  .ds-table thead{display:table-header-group!important}
+  .ds-sec{page-break-inside:avoid;page-break-after:auto}
+  .ds-foot{page-break-inside:avoid;page-break-before:auto}
+  .ds-hd{page-break-inside:avoid}
   body{background:#fff!important;overflow:visible!important}
   *{overflow:visible!important}
 }
@@ -1338,7 +1339,9 @@ try{_bostaExported=JSON.parse(localStorage.getItem('bosta_exported_ids')||'{}');
 
 orders=data.orders.map(o=>{
     const base={ship:50,...o};
-    if(!base.isBosta && _bostaIds[base.id]) base.isBosta=true;
+    // طبّق zoneMap - المصدر الوحيد للحقيقة
+    let _zm={};try{_zm=JSON.parse(localStorage.getItem('op_zone_map')||'{}');}catch(e){}
+    orders=orders.map(o=>({...o, assignedZone: _zm[o.id]||o.assignedZone||null}));    if(!base.isBosta && _bostaIds[base.id]) base.isBosta=true;
     if(base.isBosta) base.courierId='bosta';
     if(!base.bostaExported && _bostaExported[base.id]) base.bostaExported=true;
     // لو deliveryType مش موجود، احسبه من shippingMethod
@@ -4642,9 +4645,11 @@ async function saveZoneEdit(){
   const activeChip=document.querySelector('#zone-edit-chips .chip.on');
   const newZone=inputVal||( activeChip?activeChip.textContent.trim():'')||'أخري';
   o.assignedZone=newZone;
+  // حفظ منفصل - مش ممكن يتمسح
+  zoneMap[o.id]=newZone;
+  localStorage.setItem('op_zone_map',JSON.stringify(zoneMap));
   if(API_URL)apiFetch('/api/orders/'+o.id,'PATCH',{assignedZone:newZone}).catch(()=>{});
   try{
-    // احفظ بدون الـ AWB base64 (كبيرة جداً)
     const _slim=orders.map(o=>{const {bostaAwbBase64,...rest}=o;return rest;});
     localStorage.setItem('orderpro_orders',JSON.stringify(_slim));
   }catch(e){}
@@ -5490,7 +5495,6 @@ function coDsRender(){
       const hC=iO?'color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:4px':'color:var(--muted)';
       rows+='<tr class="ds-zone-hdr"><td colspan="8"><span style="font-size:10px;font-weight:700;'+hC+'">📍 '+z+' · '+zo.length+' طلب'+(iO?' ⚠️':'')+'</span></td></tr>';
       zo.forEach(o=>{
-        if(rc>0&&rc%20===0)rows+='</tbody></table><div style="page-break-after:always"></div><table class="ds-table">'+DS_HEADERS+'<tbody>';
         rows+=dsOrderRow(o,'ds-nr');rc++;
       });
     });
@@ -5631,7 +5635,10 @@ function renderUsers(){$('users-list').innerHTML=users.map((u,i)=>`<div class="u
 
 // ===== DOWNLOAD BACKEND =====
 function downloadBackend(){
-  const srv=`const express=require('express');const crypto=require('crypto');const cors=require('cors');const app=express();const PORT=process.env.PORT||3000;let orders=[];let nextId=1;app.use(cors({origin:'*'}));app.use('/webhook/shopify',express.raw({type:'application/json'}));app.use(express.json());app.post('/webhook/shopify',(req,res)=>{const secret=process.env.SHOPIFY_WEBHOOK_SECRET||'';if(secret){const hmac=req.headers['x-shopify-hmac-sha256'];const hash=crypto.createHmac('sha256',secret).update(req.body).digest('base64');if(hash!==hmac)return res.status(401).json({error:'Unauthorized'});}const sh=JSON.parse(req.body);const order={id:'SH-'+sh.order_number,shopifyId:sh.id,src:'shopify',name:sh.shipping_address?(sh.shipping_address.first_name+' '+sh.shipping_address.last_name):(sh.customer?(sh.customer.first_name+' '+sh.customer.last_name):'عميل'),phone:(sh.shipping_address&&sh.shipping_address.phone)||( sh.customer&&sh.customer.phone)||'—',area:sh.shipping_address?[sh.shipping_address.city,sh.shipping_address.address1].filter(Boolean).join(' - '):'—',total:parseFloat(sh.total_price)||0,ship:50,courierId:null,status:'جديد',time:new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}),note:sh.note||'',items:(sh.line_items||[]).map(i=>i.name+' x'+i.quantity).join(', '),shippingMethod:(sh.shipping_lines&&sh.shipping_lines[0]?sh.shipping_lines[0].title:''),deliveryType:(sh.shipping_lines&&sh.shipping_lines[0]&&sh.shipping_lines[0].title.toLowerCase().includes('same day')?'express':'normal'),createdAt:new Date().toISOString()};orders.unshift(order);console.log('New order:',order.id,order.name);res.status(200).json({received:true});});app.get('/api/orders',(req,res)=>res.json({orders,total:orders.length}));app.post('/api/orders',(req,res)=>{const order={id:'MN-'+(1000+nextId++),src:'manual',createdAt:new Date().toISOString(),time:new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}),status:'في الانتظار',courierId:null,ship:50,...req.body};orders.unshift(order);res.json({order});});app.patch('/api/orders/:id',(req,res)=>{const order=orders.find(o=>o.id===req.params.id);if(!order)return res.status(404).json({error:'not found'});Object.assign(order,req.body);res.json({order});});app.delete('/api/orders/:id',(req,res)=>{orders=orders.filter(o=>o.id!==req.params.id);res.json({ok:true});});app.get('/',(req,res)=>res.json({status:'✅ OrderPro Backend شغال',orders:orders.length,uptime:Math.floor(process.uptime())+' ثانية'}));app.listen(PORT,()=>console.log('OrderPro Backend on port',PORT));`;
+  const srv=`const express=require('express');const crypto=require('crypto');const cors=require('cors');const app=express();const PORT=process.env.PORT||3000;let orders=[];
+// assignedZone محفوظ منفصل - مش ممكن يتمسح بالـ sync
+let zoneMap={};
+try{zoneMap=JSON.parse(localStorage.getItem('op_zone_map')||'{}');}catch(e){}let nextId=1;app.use(cors({origin:'*'}));app.use('/webhook/shopify',express.raw({type:'application/json'}));app.use(express.json());app.post('/webhook/shopify',(req,res)=>{const secret=process.env.SHOPIFY_WEBHOOK_SECRET||'';if(secret){const hmac=req.headers['x-shopify-hmac-sha256'];const hash=crypto.createHmac('sha256',secret).update(req.body).digest('base64');if(hash!==hmac)return res.status(401).json({error:'Unauthorized'});}const sh=JSON.parse(req.body);const order={id:'SH-'+sh.order_number,shopifyId:sh.id,src:'shopify',name:sh.shipping_address?(sh.shipping_address.first_name+' '+sh.shipping_address.last_name):(sh.customer?(sh.customer.first_name+' '+sh.customer.last_name):'عميل'),phone:(sh.shipping_address&&sh.shipping_address.phone)||( sh.customer&&sh.customer.phone)||'—',area:sh.shipping_address?[sh.shipping_address.city,sh.shipping_address.address1].filter(Boolean).join(' - '):'—',total:parseFloat(sh.total_price)||0,ship:50,courierId:null,status:'جديد',time:new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}),note:sh.note||'',items:(sh.line_items||[]).map(i=>i.name+' x'+i.quantity).join(', '),shippingMethod:(sh.shipping_lines&&sh.shipping_lines[0]?sh.shipping_lines[0].title:''),deliveryType:(sh.shipping_lines&&sh.shipping_lines[0]&&sh.shipping_lines[0].title.toLowerCase().includes('same day')?'express':'normal'),createdAt:new Date().toISOString()};orders.unshift(order);console.log('New order:',order.id,order.name);res.status(200).json({received:true});});app.get('/api/orders',(req,res)=>res.json({orders,total:orders.length}));app.post('/api/orders',(req,res)=>{const order={id:'MN-'+(1000+nextId++),src:'manual',createdAt:new Date().toISOString(),time:new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}),status:'في الانتظار',courierId:null,ship:50,...req.body};orders.unshift(order);res.json({order});});app.patch('/api/orders/:id',(req,res)=>{const order=orders.find(o=>o.id===req.params.id);if(!order)return res.status(404).json({error:'not found'});Object.assign(order,req.body);res.json({order});});app.delete('/api/orders/:id',(req,res)=>{orders=orders.filter(o=>o.id!==req.params.id);res.json({ok:true});});app.get('/',(req,res)=>res.json({status:'✅ OrderPro Backend شغال',orders:orders.length,uptime:Math.floor(process.uptime())+' ثانية'}));app.listen(PORT,()=>console.log('OrderPro Backend on port',PORT));`;
   const pkg=JSON.stringify({name:"orderpro-backend",version:"1.0.0",main:"server.js",scripts:{start:"node server.js"},dependencies:{cors:"^2.8.5",express:"^4.18.2"},engines:{node:">=18.0.0"}},null,2);
   const dl=(content,name,type)=>{const a=document.createElement('a');a.href='data:'+type+';charset=utf-8,'+encodeURIComponent(content);a.download=name;a.click()};
   dl(srv,'server.js','text/javascript');
@@ -5998,9 +6005,6 @@ function dsRender(){
       const hdrLabel = '📍 '+z+' · '+zo.length+' طلب'+(isOther?' ⚠️':'');
       rows += '<tr class="ds-zone-hdr"><td colspan="8"><span style="font-size:10px;font-weight:700;'+hdrColor+'">'+hdrLabel+'</span></td></tr>';
       zo.forEach(o=>{
-        if(rowCount>0&&rowCount%20===0){
-          rows+='</tbody></table><div style="page-break-after:always"></div><table class="ds-table">'+DS_HEADERS+'<tbody>';
-        }
         rows+=dsOrderRow(o,'ds-nr');
         rowCount++;
       });
