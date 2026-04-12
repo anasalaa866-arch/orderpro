@@ -7314,19 +7314,20 @@ function exportBostaExcel(){
     'mt':'مرسى مطروح','مرسي مطروح':'مرسى مطروح','marsa matrouh':'مرسى مطروح',
   };
 
-  function extractGov(area){
+  function extractGov(area, provinceCode){
+    // أولاً: لو عندنا province code من Shopify - استخدمه مباشرةً
+    if(provinceCode && provinceCode!=='—'){
+      const fromCode = getProvinceAr(provinceCode);
+      if(fromCode && fromCode !== provinceCode) return fromCode;
+    }
     if(!area||area==='—') return 'القاهرة';
-    // الـ area بتكون "المحافظة - العنوان" أو "المدينة - العنوان"
     const parts=area.split(/\s*-\s*/);
     const govRaw=(parts[0]||'').trim().toLowerCase();
-    // تحقق مباشر
     if(GOV_MAP[govRaw]) return GOV_MAP[govRaw];
-    // تحقق جزئي
     for(const [key,val] of Object.entries(GOV_MAP)){
       if(govRaw.includes(key)||key.includes(govRaw)) return val;
     }
-    // لو ما لقيناش، حاول من الـ addr
-    return 'القاهرة'; // default
+    return parts[0]||'القاهرة';
   }
 
   function extractArea(area){
@@ -7344,7 +7345,7 @@ function exportBostaExcel(){
     const cod=o.paid?0:(o.total||0);
     const shipVal=o.total||0;
     const orderRef=(o.id||'').replace(/^SH-/,'').replace(/^MN-/,'');
-    const gov=extractGov(area);
+    const gov=extractGov(area, o.province||o.provinceCode||'');
     const areaName=extractArea(area);
 
     // عدد القطع ووصف المنتجات
