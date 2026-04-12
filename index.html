@@ -173,9 +173,11 @@ tr:hover td{background:#fafbff}
 .ds-sec-lbl{font-size:11px;font-weight:700;padding:3px 12px;border-radius:20px}
 .dsl-exp{background:var(--danger-light);color:#7f1d1d}
 .dsl-norm{background:var(--info-light);color:#1e3a5f}
-.ds-table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px;table-layout:fixed;word-wrap:break-word}
-.ds-table th{padding:5px 7px;text-align:right;font-size:10px;color:var(--muted);font-weight:700;border-bottom:1px solid var(--border);background:var(--bg);white-space:nowrap}
-.ds-table td{padding:4px 6px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text);overflow:hidden;word-break:break-word}
+.ds-table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:12px;table-layout:auto}
+.ds-table th{padding:5px 7px;text-align:right;font-size:10px;color:var(--muted);font-weight:700;border-bottom:2px solid var(--text);border-left:1px solid var(--border);background:var(--bg);white-space:nowrap}
+.ds-table th:last-child{border-left:none}
+.ds-table td{padding:4px 6px;border-bottom:1px solid #e5e7eb;border-left:1px solid #e5e7eb;vertical-align:top;color:var(--text);word-break:break-word;white-space:normal}
+.ds-table td:last-child{border-left:none}
 .ds-table tr:last-child td{border-bottom:none}
 .ds-table tr.ds-er td{background:#fff5f5}
 .ds-table tr.ds-nr:nth-child(even) td{background:var(--bg)}
@@ -200,7 +202,10 @@ tr:hover td{background:#fafbff}
 .ds-mb-exp{background:var(--danger-light);color:#7f1d1d}
 .ds-mb-zone{background:var(--warn-light);color:#92400e}
 @media print{
-  .sidebar,.topbar,.ds-ctrl,.zone-picker{display:none!important}
+  .sidebar,.topbar,.ds-ctrl,.zone-picker,
+  .toast,.overlay,.topbar,.btn,
+  #nb-orders,#nb-assign,#nb-pickup,#nb-transit,#nb-bosta,
+  #nb-problems,#nb-checks,#nb-expiry,#nb-notifs,#nb-bosta{display:none!important}
   .main-area{overflow:visible!important;height:auto!important}
   .content{padding:0!important;overflow:visible!important;height:auto!important}
   .ds{border:none;border-radius:0;box-shadow:none;overflow:visible!important}
@@ -493,7 +498,7 @@ tr:hover td{background:#fafbff}
           <span id="bosta-count" style="font-size:12px;color:var(--muted)"></span>
           <button class="btn btn-ghost btn-sm" onclick="bostaSelAll()">☐ تحديد الكل</button>
           <span id="bosta-sel-info" style="font-size:12px;color:var(--muted)"></span>
-          <button class="btn btn-primary btn-sm" id="bosta-bulk-btn" style="display:none" onclick="bostaCreateBulk()">🚀 رفع المحدد على بوسطة</button>
+          
           <button class="btn btn-ghost btn-sm" id="bosta-export-btn" style="display:none;background:#10b981;color:#fff;border-color:#10b981" onclick="exportBostaExcel()">📥 تصدير Excel (تمبلت بوسطة)</button>
         </div>
       </div>
@@ -1263,7 +1268,11 @@ async function syncCouriersToDB(){
     const data=await apiFetch('/api/couriers');
     // خذ من DB فقط لو فيه مناديب فعلاً — متمسحش لو DB فاضي
     if(data&&data.couriers&&data.couriers.length>0){
-      couriers=data.couriers;
+      // حافظ على settledAt المحلي لو DB مش عنده
+      couriers=data.couriers.map(dc=>{
+        const local=couriers.find(lc=>lc.id==dc.id);
+        return {...dc, settledAt: dc.settledAt || local?.settledAt || null};
+      });
       saveCouriers();
     }
     // لو DB فاضي وعندنا مناديب محلية - ارفعهم
@@ -1959,45 +1968,77 @@ function renderAccDet(){
 
 function renderSettle(){
   $('settle-list').innerHTML=couriers.map(c=>{
-    const done=oByC(c.id,'مكتمل'),cod=done.reduce((a,o)=>a+o.total,0),ship=done.reduce((a,o)=>a+(o.ship||50),0);
-    if(!done.length)return'';
-    return`<div style="border:1px solid var(--border);border-radius:9px;padding:13px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between"><div><div style="font-weight:700;font-size:13px;margin-bottom:5px">${c.name}</div><div style="font-size:12px;color:var(--muted)">${done.length} طلب · COD: <strong style="color:var(--success)">${cod.toLocaleString()} ج</strong> · يستلم: <strong style="color:var(--purple)">${ship.toLocaleString()} ج</strong></div></div>${c.settled?'<span class="badge b-done">✅ مسوّى</span>':`<button class="btn btn-primary btn-sm" onclick="openSettle(${c.id})">تسوية الحساب</button>`}</div>`}).join('');
+    // بس الطلبات المكتملة بعد آخر تسوية
+    const lastSettle = c.settledAt ? new Date(c.settledAt) : null;
+    const allDone = oByC(c.id,'مكتمل');
+    const done = lastSettle
+      ? allDone.filter(o=>new Date(o.createdAt||o.time||0) > lastSettle)
+      : allDone;
+    const cod=done.reduce((a,o)=>a+(o.paid?0:o.total),0);
+    const ship=done.reduce((a,o)=>a+(o.ship||50),0);
+    if(!done.length){
+      // لو مفيش طلبات جديدة - بس ظهر المندوب لو مسوّى عشان يعرف
+      if(c.settled && c.settledAt){
+        return`<div style="border:1px solid var(--border);border-radius:9px;padding:13px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;opacity:.6">
+          <div><div style="font-weight:700;font-size:13px">${c.name}</div>
+          <div style="font-size:11px;color:var(--muted)">✅ تمت التسوية — لا توجد طلبات جديدة</div></div>
+        </div>`;
+      }
+      return'';
+    }
+    const lastSettleStr = lastSettle ? ' · منذ: '+lastSettle.toLocaleDateString('ar-EG') : '';
+    const btn = `<button class="btn btn-primary btn-sm" onclick="openSettle(${c.id})">تسوية الحساب</button>`;
+    const settled = c.settled
+      ? `<div style="display:flex;gap:8px;align-items:center"><span class="badge b-done">✅ مسوّى</span>${btn}</div>`
+      : btn;
+    return`<div style="border:1px solid var(--border);border-radius:9px;padding:13px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-weight:700;font-size:13px;margin-bottom:5px">${c.name}</div>
+        <div style="font-size:12px;color:var(--muted)">${done.length} طلب جديد${lastSettleStr} · COD: <strong style="color:var(--success)">${cod.toLocaleString()} ج</strong> · يستلم: <strong style="color:var(--purple)">${ship.toLocaleString()} ج</strong></div>
+      </div>
+      ${settled}
+    </div>`;
+  }).join('');
 }
 
 function accTab(tab,sec){document.querySelectorAll('.acc-tab').forEach(t=>t.classList.remove('on'));tab.classList.add('on');document.querySelectorAll('.acc-sec').forEach(s=>s.classList.remove('on'));$(sec).classList.add('on');if(sec==='acc-det')renderAccDet();if(sec==='acc-set')renderSettle()}
 
 function openSettle(cId){
-  settlingCourierId=cId;const c=couriers.find(x=>x.id==cId);
-  const done=oByC(cId,'مكتمل');
+  settlingCourierId=cId;
+  const c=couriers.find(x=>x.id==cId);
+  // بس الطلبات الجديدة بعد آخر تسوية
+  const lastSettle = c.settledAt ? new Date(c.settledAt) : null;
+  const allDone = oByC(cId,'مكتمل');
+  const done = lastSettle
+    ? allDone.filter(o=>new Date(o.createdAt||o.time||0) > lastSettle)
+    : allDone;
   const codOrders=done.filter(o=>!o.paid),paidOrders=done.filter(o=>o.paid);
-  const cod=codOrders.reduce((a,o)=>a+o.total,0); // اللي المندوب يجيبه
-  const ship=done.reduce((a,o)=>a+(o.ship||50),0); // تمن الشحن الكلي
+  const cod=codOrders.reduce((a,o)=>a+o.total,0);
+  const ship=done.reduce((a,o)=>a+(o.ship||50),0);
   $('settle-title').textContent=`تسوية حساب — ${c.name}`;
+  const lastStr = lastSettle ? `<div style="font-size:11px;color:var(--muted);margin-bottom:8px">آخر تسوية: ${lastSettle.toLocaleDateString('ar-EG')}</div>` : '';
   $('settle-body').innerHTML=`
-    <div class="settle-sum">
-      <div><div class="settle-n" style="color:var(--success)">${cod.toLocaleString()} ج</div><div class="settle-l">COD يحصّله المندوب</div></div>
-      <div><div class="settle-n" style="color:var(--warn)">${ship.toLocaleString()} ج</div><div class="settle-l">مستحق للمندوب</div></div>
-      <div><div class="settle-n" style="color:var(--info)">${(cod-ship).toLocaleString()} ج</div><div class="settle-l">صافي المحل</div></div>
-    </div>
-    ${paidOrders.length?`<div style="background:var(--success-light);border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px">
-      💳 <strong>${paidOrders.length} طلب مدفوع مسبقاً</strong> بإجمالي <strong>${paidOrders.reduce((a,o)=>a+o.total,0).toLocaleString()} ج</strong> — المندوب مش بيحصّلها
-    </div>`:''}
-    <p style="font-size:13px;margin-bottom:8px">سيدفع <strong>${c.name}</strong> مبلغ <strong style="color:var(--success);font-size:15px">${cod.toLocaleString()} ج</strong> (COD)</p>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">ويستلم <strong style="color:var(--purple)">${ship.toLocaleString()} ج</strong> أجر توصيل (${done.length} طلب)</p>
-    <div class="fg"><label>ملاحظات</label><textarea placeholder="ملاحظات..."></textarea></div>`;
-  $('m-settle').classList.add('open');
+    ${lastStr}
+    <div style="background:var(--bg);border-radius:9px;padding:14px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>عدد الطلبات الجديدة</span><strong>${done.length} طلب</strong></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>💰 COD المطلوب تحصيله</span><strong style="color:var(--success)">${cod.toLocaleString()} ج</strong></div>
+      ${paidOrders.length?`<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>💳 مدفوع أونلاين</span><strong style="color:var(--info)">${paidOrders.reduce((a,o)=>a+o.total,0).toLocaleString()} ج</strong></div>`:''}
+      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:8px;margin-top:4px"><span>🚴 يستلم المندوب (شحن)</span><strong style="color:var(--purple)">${ship.toLocaleString()} ج</strong></div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:14px;font-weight:700"><span>صافي المحل</span><strong style="color:var(--accent)">${(cod-ship).toLocaleString()} ج</strong></div>
+    </div>`;
+  openM('m-settle');
 }
 
 function doSettle(){
   const c=couriers.find(x=>x.id==settlingCourierId);
   c.settled=true;
-  if(API_URL)apiFetch('/api/couriers/'+c.id,'PATCH',{settled:true}).catch(()=>{});
+  c.settledAt=new Date().toISOString(); // وقت آخر تسوية
+  if(API_URL)apiFetch('/api/couriers/'+c.id,'PATCH',{settled:true, settledAt:c.settledAt}).catch(()=>{});
   saveCouriers();
   closeM('m-settle');
   pushNotif('💰',`تمت تسوية حساب ${c.name}`,'');
   renderAcc();
   toast(`✅ تمت تسوية حساب ${c.name}`);
-  // سؤال للطباعة
   setTimeout(()=>{
     if(confirm(`هل تريد طباعة ورقة تسوية ${c.name}؟`)) printSettleSlip(settlingCourierId);
   },300);
@@ -2461,7 +2502,7 @@ function renderBostaPage(){
       <td>${statusBadge}</td>
       <td>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
-          ${!o.bostaId?`<button class="btn btn-primary btn-xs" onclick="bostaCreateOne('${o.id}')">🚀 رفع</button>`:o.bostaExported?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="undoBostaExport('${o.id}')">↩ إلغاء التصدير</button>`:''}
+          ${!o.bostaIdo.bostaExported?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="undoBostaExport('${o.id}')">↩ إلغاء التصدير</button>`:''}
           ${o.bostaId?`<button class="btn btn-ghost btn-xs" onclick="openBostaAWB('${o.id}')">🖨️ بوليصة</button>`:''}
           ${o.bostaId?`<button class="btn btn-ghost btn-xs" onclick="bostaTrackOne('${o.id}')">📍 تتبع</button>`:''}
           <button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="unassignBosta('${o.id}')">↩️ إلغاء</button>
@@ -5362,13 +5403,13 @@ function refreshAll(){
 // ===== DELIVERY SHEET HELPERS =====
 const DS_HEADERS = `<thead><tr>
   <th style="width:22px">#</th>
-  <th style="width:88px">رقم الطلب</th>
-  <th style="width:100px">العميل</th>
-  <th style="width:100px">الهاتف</th>
-  <th style="width:70px">المنطقة</th>
-  <th style="min-width:120px">العنوان</th>
-  <th style="width:65px">COD</th>
-  <th style="width:45px">الشحن</th>
+  <th style="width:85px">رقم الطلب</th>
+  <th style="width:95px">العميل</th>
+  <th style="width:95px">الهاتف</th>
+  <th style="width:65px">المنطقة</th>
+  <th>العنوان</th>
+  <th style="width:60px">COD</th>
+  <th style="width:40px">شحن</th>
 </tr></thead>`;
 
 let dsLastPrintTimes = {};
@@ -5388,7 +5429,7 @@ function dsOrderRow(o, cls){
     <td style="font-weight:700;font-size:12px">${o.name||''}</td>
     <td style="direction:ltr;font-size:10px;white-space:nowrap">${o.phone||''}</td>
     <td style="font-size:11px;color:var(--accent)">${zone}</td>
-    <td style="font-size:10px;color:var(--muted)">${((o.addr||o.area||'').substring(0,35))||''}${o.addr2?' / '+o.addr2.substring(0,20):''}</td>
+    <td style="font-size:10px;color:var(--muted);white-space:normal;word-break:break-word">${o.addr||o.area||''}${o.addr2?' — '+o.addr2:''}</td>
     <td style="font-weight:700;color:var(--danger);text-align:center">${cod}</td>
     <td style="text-align:center;font-size:11px;color:var(--muted)">${o.ship||50}</td>
   </tr>`;
