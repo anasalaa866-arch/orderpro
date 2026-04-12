@@ -2263,9 +2263,69 @@ async function loadSettlements(){
         ts: new Date(s.ts)
       }));
       console.log('✅ Loaded',_allSettlements.length,'settlements from DB');
+
+      // لو DB فاضي وعندنا تسويات قديمة في localStorage - ارفعهم للـ DB
+      if(_allSettlements.length === 0){
+        await _migrateLocalSettlementsToDB();
+      }
     }
   }catch(e){ console.error('loadSettlements error:',e); }
   _settlementsLoaded = true;
+}
+
+// ترحيل التسويات القديمة من localStorage لـ DB
+async function _migrateLocalSettlementsToDB(){
+  // شوف كل مصادر التسويات القديمة
+  let oldSettles = [];
+
+  // المصدر 1: op_settlements
+  try{
+    const s1 = JSON.parse(localStorage.getItem('op_settlements')||'[]');
+    if(s1.length) oldSettles = [...oldSettles, ...s1];
+  }catch(e){}
+
+  // المصدر 2: op_settle_log (format قديم)
+  try{
+    const log = JSON.parse(localStorage.getItem('op_settle_log')||'{}');
+    Object.keys(log).forEach(cid=>{
+      (log[cid]||[]).forEach((s,i)=>{
+        const ts = typeof s==='string'?s:s.ts;
+        const orderIds = typeof s==='object'?(s.orderIds||[]):[];
+        oldSettles.push({courierId:cid, ts, orderIds, cod:s.cod||0, ship:s.ship||0});
+      });
+    });
+  }catch(e){}
+
+  if(!oldSettles.length) return;
+
+  console.log('🔄 Migrating',oldSettles.length,'old settlements to DB...');
+  let migrated = 0;
+  for(const s of oldSettles){
+    try{
+      const r = await apiFetch('/api/settlements','POST',{
+        courierId: s.courierId,
+        ts: s.ts,
+        orderIds: s.orderIds||[],
+        cod: s.cod||0,
+        ship: s.ship||0
+      });
+      if(r?.id){
+        _allSettlements.push({
+          id: r.id,
+          courierId: s.courierId,
+          ts: new Date(s.ts),
+          orderIds: s.orderIds||[],
+          cod: s.cod||0,
+          ship: s.ship||0
+        });
+        migrated++;
+      }
+    }catch(e){}
+  }
+  if(migrated > 0){
+    console.log('✅ Migrated',migrated,'settlements to DB');
+    toast('✅ تم ترحيل '+migrated+' تسوية للسيرفر');
+  }
 }
 
 // IDs الطلبات المسوّاة لمندوب
@@ -5724,9 +5784,9 @@ function renderCourierOrdersPage(){
   if(!c){ content.innerHTML=''; return; }
 
   const cOrders = orders.filter(o=>o.courierId==c.id&&o.status!=='ملغي');
+  const cancelled = orders.filter(o=>o.courierId==c.id&&o.status==='ملغي');
   const active = cOrders.filter(o=>o.status==='جاري التوصيل');
   const done = cOrders.filter(o=>o.status==='مكتمل');
-  // مكتمل بدون تسوية = في الطلبات الجاري تسويتها
   const pending = getPendingSettleOrders(c.id).filter(o=>o.courierId==c.id);
 
   content.innerHTML = `
@@ -5738,6 +5798,7 @@ function renderCourierOrdersPage(){
           <button class="chip" id="co-tab-active-${c.id}" onclick="coFilter('active',${c.id})">📦 نشط (${active.length})</button>
           <button class="chip" id="co-tab-pending-${c.id}" onclick="coFilter('pending',${c.id})" style="${pending.length?'background:var(--warn-light);color:#92400e;border-color:#fcd34d':''}" >⏳ تم بدون تسوية (${pending.length})</button>
           <button class="chip" id="co-tab-done-${c.id}" onclick="coFilter('done',${c.id})">✅ مكتمل (${done.length})</button>
+          <button class="chip" id="co-tab-cancelled-${c.id}" onclick="coFilter('cancelled',${c.id})" style="${cancelled.length?'color:var(--danger);border-color:var(--danger)':''}">❌ ملغي (${cancelled.length})</button>
           <span style="font-size:11px;color:var(--muted);margin-right:auto">📱 ${c.phone}</span>
         </div>
       </div>
@@ -5783,7 +5844,8 @@ function renderCourierOrdersPage(){
                 <td>${sBadge(o.status)}</td>
                 <td>
                   <div style="display:flex;gap:4px;flex-wrap:wrap">
-                    ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="unassignOrder('${o.id}')">↩️ إلغاء</button>`:''}
+                    ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="unassignOrder('${o.id}')">↩️ إلغاء توزيع</button>`:''}
+          ${o.status!=='ملغي'?`<button class="btn btn-ghost btn-xs" style="color:var(--danger);border-color:var(--danger)" onclick="cancelOrderByCustomer('${o.id}')">🚫 إلغاء عميل</button>`:''}
                     ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" onclick="reassignOrder('${o.id}')">🔄 تعيين</button>`:''}
                     ${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✅ تم</button>`:''}
                     ${o.status==='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="undoComplete('${o.id}')">↩️ رجّع</button>`:''}
@@ -5805,14 +5867,14 @@ function coFilter(f, cId){
   const c = couriers.find(x=>x.id==cId);
   if(!c) return;
   const allOrders = orders.filter(o=>o.courierId==c.id&&o.status!=='ملغي');
-  // طلبات تم بدون تسوية = مكتملة بعد آخر تسوية
   const pendingSettle = getPendingSettleOrders(c.id).filter(o=>o.courierId==c.id);
+  const cancelledOrders = orders.filter(o=>o.courierId==c.id&&o.status==='ملغي');
   const filtered = f==='active' ? allOrders.filter(o=>o.status==='جاري التوصيل')
     : f==='done' ? allOrders.filter(o=>o.status==='مكتمل')
     : f==='pending' ? pendingSettle
+    : f==='cancelled' ? cancelledOrders
     : allOrders;
-  // تحديث tabs
-  ['all','active','pending','done'].forEach(t=>{
+  ['all','active','pending','done','cancelled'].forEach(t=>{
     const btn=document.getElementById('co-tab-'+t+'-'+cId);
     if(btn) btn.classList.toggle('on', t===f);
   });
@@ -5821,8 +5883,9 @@ function coFilter(f, cId){
   if(!tbody) return;
   tbody.innerHTML = filtered.length ? filtered.map(o=>{
     const displayZone = o.assignedZone || getOrderZoneForCourier(o,c) || 'أخري';
+    const rowBg = o.status==='ملغي' ? 'background:#fff5f5;' : '';
     return `
-    <tr>
+    <tr style="${rowBg}">
       <td style="text-align:center"><input type="checkbox" class="co-chk" value="${o.id}" data-cid="${cId}" onchange="updateCoBulk(${cId})"></td>
       <td><strong>${o.id}</strong><br><span style="font-size:10px;color:var(--muted)">${o.time||''}</span></td>
       <td>${deliveryBadge(o)}</td>
@@ -5839,7 +5902,8 @@ function coFilter(f, cId){
       <td>${sBadge(o.status)}</td>
       <td>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
-          ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="unassignOrder('${o.id}')">↩️ إلغاء</button>`:''}
+          ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="unassignOrder('${o.id}')">↩️ إلغاء توزيع</button>`:''}
+          ${o.status!=='ملغي'?`<button class="btn btn-ghost btn-xs" style="color:var(--danger);border-color:var(--danger)" onclick="cancelOrderByCustomer('${o.id}')">🚫 إلغاء عميل</button>`:''}
           ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" onclick="reassignOrder('${o.id}')">🔄 تعيين</button>`:''}
           ${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✅ تم</button>`:''}
           ${o.status==='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="undoComplete('${o.id}')">↩️ رجّع</button>`:''}
@@ -6005,6 +6069,20 @@ async function markPaidFromCourier(id){
   refreshAll();
   renderCourierOrdersPage();
   toast('💳 تم تحويل الطلب '+id+' لـ "مدفوع" — المندوب مش هيتحاسب عليه كتحصيل');
+}
+
+async function cancelOrderByCustomer(id){
+  if(!confirm('هل تأكد إلغاء هذا الطلب؟ لن يتم حذفه لكن سيصبح ملغي.')) return;
+  const o=orders.find(x=>x.id===id);
+  if(!o) return;
+  o.status='ملغي';
+  if(API_URL) apiFetch('/api/orders/'+id,'PATCH',{status:'ملغي'}).catch(()=>{});
+  try{
+    const _slim=orders.map(o=>{const{bostaAwbBase64,...r}=o;return r;});
+    localStorage.setItem('orderpro_orders',JSON.stringify(_slim));
+  }catch(e){}
+  refreshAll();
+  toast('✅ تم إلغاء الطلب '+id);
 }
 
 async function unassignOrder(id){
