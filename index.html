@@ -2588,19 +2588,24 @@ function renderSettleHistory(){
   couriers.forEach(c=>{
     const sessions = log[String(c.id)] || [];
     sessions.forEach((sess,i)=>{
-      const ts = typeof sess==='string' ? sess : sess.ts;
-      const orderIds = typeof sess==='object' ? (sess.orderIds||[]) : [];
+      const isObj = typeof sess==='object';
+      const ts = isObj ? sess.ts : sess;
+      const orderIds = isObj ? (sess.orderIds||[]) : [];
       const from = i>0 ? new Date(typeof sessions[i-1]==='string'?sessions[i-1]:sessions[i-1].ts) : null;
       const to = new Date(ts);
       const allDone = oByC(c.id,'مكتمل');
-      const done = orderIds.length
-        ? allDone.filter(o=>orderIds.includes(o.id))
-        : from
-          ? allDone.filter(o=>{ const d=new Date(o.createdAt||0); return d>from&&d<=to; })
-          : allDone.filter(o=>new Date(o.createdAt||0)<=to);
+      let done;
+      if(orderIds.length){
+        // format جديد - استخدم IDs المحفوظة
+        done = allDone.filter(o=>orderIds.includes(o.id));
+      } else {
+        // format قديم - جيب كل الطلبات المكتملة لهذا المندوب (مش هنقدر نفلتر بدقة)
+        // عرضها كلها في أول تسوية، والتسويات التالية فاضية
+        done = i===0 ? allDone : [];
+      }
       const cod = done.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
       const ship = done.reduce((s,o)=>s+(o.ship||50),0);
-      allSessions.push({courier:c, sessNum:i+1, from, to, done, cod, ship, ts});
+      allSessions.push({courier:c, sessNum:i+1, from, to, done, cod, ship, ts, isLegacy:!isObj});
     });
   });
   
@@ -2635,7 +2640,8 @@ function renderSettleHistory(){
           <span>💵 صافي: <strong style="color:var(--accent)">${(s.cod-s.ship).toLocaleString()} ج</strong></span>
         </div>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="printHistorySettle('${s.courier.id}','${s.from?s.from.toISOString():''}','${s.ts}')">🖨️ طباعة</button>
+      <button class="btn btn-ghost btn-sm" onclick="printHistorySettle('${s.courier.id}','${s.from?s.from.toISOString():''}','${s.ts}')" ${s.isLegacy?'style="display:none"':''}>🖨️ طباعة</button>
+      ${s.isLegacy?'<span style="font-size:10px;color:var(--muted)">تسوية قديمة</span>':''}
     </div>`;
   });
   el.innerHTML = html;
