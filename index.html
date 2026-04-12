@@ -1363,9 +1363,9 @@ try{_bostaExported=JSON.parse(localStorage.getItem('bosta_exported_ids')||'{}');
 
 orders=data.orders.map(o=>{
     const base={ship:50,...o};
-    // طبّق zoneMap - المصدر الوحيد للحقيقة
-    let _zm={};try{_zm=JSON.parse(localStorage.getItem('op_zone_map')||'{}');}catch(e){}
-    orders=orders.map(o=>({...o, assignedZone: _zm[o.id]||o.assignedZone||null}));    if(!base.isBosta && _bostaIds[base.id]) base.isBosta=true;
+    // طبّق zoneMap من الـ cache
+    orders=orders.map(o=>({...o, assignedZone: zoneMap[o.id]||o.assignedZone||null}));
+    clearPendingCache(); // امسح الـ cache بعد تحديث الطلبات    if(!base.isBosta && _bostaIds[base.id]) base.isBosta=true;
     if(base.isBosta) base.courierId='bosta';
     if(!base.bostaExported && _bostaExported[base.id]) base.bostaExported=true;
     // لو deliveryType مش موجود، احسبه من shippingMethod
@@ -1463,28 +1463,46 @@ function copyWebhook(){if(!API_URL){toast('❗ أدخل الرابط أولاً'
 
 // ===== STATS =====
 function updateStats(){
-  const total=orders.length,wait=orders.filter(o=>!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي').length;
-  const go=orders.filter(o=>o.status==='جاري التوصيل').length,done=orders.filter(o=>o.status==='مكتمل').length;
-  const rev=orders.filter(o=>o.status==='مكتمل').reduce((a,o)=>a+o.total,0);
-  const cancel=orders.filter(o=>o.status==='ملغي').length;
-  $('st-total').textContent=total;$('st-wait').textContent=wait;$('st-go').textContent=go;$('st-done').textContent=done;
-  $('st-rev').textContent=rev.toLocaleString()+' ج';
-  $('nb-orders').textContent=orders.filter(o=>o.status==='جديد').length;
-  $('nb-assign').textContent=wait;
-  $('nb-notifs').textContent=notifications.filter(n=>!n.read).length||'';
-  const pickupCount=orders.filter(o=>isPickup(o)&&o.status!=='مكتمل'&&o.status!=='ملغي').length;
-  const transitCount=orders.filter(o=>isTransit(o)&&o.status!=='مكتمل'&&o.status!=='ملغي').length;
-  const bostaCount=orders.filter(o=>o.bostaId).length;
-  $('nb-pickup').textContent=pickupCount||'';
-  $('nb-transit').textContent=transitCount||'';
-  if($('nb-bosta'))$('nb-bosta').textContent=bostaCount||'';
-  // badge مشاكل
-  const unassignedO=orders.filter(o=>!o.courierId&&o.status!=='ملغي'&&o.status!=='مكتمل');
-  const allPhones=unassignedO.map(o=>o.phone).filter(p=>p&&p!=='—');
+  // pass واحدة على كل الطلبات بدل 10 passes
+  let total=0,wait=0,go=0,done=0,rev=0,cancel=0;
+  let pickup=0,transit=0,bosta=0,unassigned=0,problems=0;
+  const allPhones=[];
+  orders.forEach(o=>{
+    total++;
+    if(o.status==='ملغي'){cancel++;return;}
+    if(o.status==='مكتمل'){done++;rev+=o.total;return;}
+    if(o.status==='جاري التوصيل'){go++;return;}
+    if(o.status==='جديد'||o.status==='في الانتظار'){
+      if(!o.courierId&&!isPickup(o)&&!isTransit(o)){wait++;unassigned++;}
+    }
+  });
+  orders.forEach(o=>{
+    if(isPickup(o)&&o.status!=='مكتمل'&&o.status!=='ملغي') pickup++;
+    if(isTransit(o)&&o.status!=='مكتمل'&&o.status!=='ملغي') transit++;
+    if(o.bostaId) bosta++;
+    if(o.hasProblem) problems++;
+    if(!o.courierId&&o.status!=='ملغي'&&o.status!=='مكتمل'&&o.phone&&o.phone!=='—') allPhones.push(o.phone);
+  });
   const dupPh=allPhones.filter((p,i)=>allPhones.indexOf(p)!==i);
-  if($('nb-problems'))$('nb-problems').textContent=new Set(dupPh).size||'';
-  $('r-rev').textContent=rev.toLocaleString()+' ج';$('r-done').textContent=done;$('r-cancel').textContent=cancel;
-  $('r-rate').textContent=total?Math.round(done/total*100)+'%':'0%';
+  $('st-total').textContent=total;
+  $('st-wait').textContent=wait;
+  $('st-go').textContent=go;
+  $('st-done').textContent=done;
+  $('st-rev').textContent=rev.toLocaleString()+' ج';
+  if($('nb-orders'))$('nb-orders').textContent=orders.filter(o=>o.status==='جديد').length||'';
+  if($('nb-assign'))$('nb-assign').textContent=unassigned||'';
+  if($('nb-pickup'))$('nb-pickup').textContent=pickup||'';
+  if($('nb-transit'))$('nb-transit').textContent=transit||'';
+  if($('nb-bosta'))$('nb-bosta').textContent=bosta||'';
+  if($('nb-problems'))$('nb-problems').textContent=(problems+dupPh.length)||'';
+  if($('nb-notifs'))$('nb-notifs').textContent=notifications.filter(n=>!n.read).length||'';
+  if($('nb-checks')){const oc=checks?checks.filter(c=>c.status!=='done').length:0;$('nb-checks').textContent=oc||'';}
+  // Status dot
+  const ok=!!API_URL;
+  const sdot=$('sdot');if(sdot)sdot.className='sdot'+(ok?' on':'');
+  const stxt=$('stxt');if(stxt)stxt.textContent=ok?'متصل بـ Backend':'غير متصل';
+  const b=$('api-badge');if(b){b.className='api-badge '+(ok?'ok':'fail');b.textContent=ok?'✅ متصل':'❌ غير متصل';}
+  const bn=$('main-banner');if(bn)bn.style.display=ok?'none':'flex';
 }
 
 // ===== RENDER =====
@@ -2326,17 +2344,26 @@ function getLastSettleTime(cId){
 }
 
 // الطلبات الجاهزة للتسوية (مكتملة بعد آخر تسوية)
+// Cache للـ pending orders - بيتبطل لما بتتعمل تسوية جديدة
+const _pendingCache = {};
+
 function getPendingSettleOrders(cId){
+  const key = String(cId);
+  if(_pendingCache[key]) return _pendingCache[key];
   const lastTime = getLastSettleTime(cId);
   const allDone = oByC(cId,'مكتمل');
-  if(!lastTime) return allDone;
-  return allDone.filter(o=>{
-    // لو مفيش تاريخ للطلب = اعتبره جديد
+  const result = !lastTime ? allDone : allDone.filter(o=>{
     if(!o.createdAt || o.createdAt==='null') return true;
     const d = new Date(o.createdAt);
     if(isNaN(d.getTime())) return true;
     return d > lastTime;
   });
+  _pendingCache[key] = result;
+  return result;
+}
+
+function clearPendingCache(){
+  Object.keys(_pendingCache).forEach(k=>delete _pendingCache[k]);
 }
 
 // تسوية جديدة
@@ -2365,6 +2392,7 @@ function doSettle(){
   saveCouriers();
 
   // 2. حفظ في DB (مضمون)
+  clearPendingCache(); // امسح الـ cache بعد التسوية
   if(API_URL){
     apiFetch('/api/settlements','POST',{
       courierId: c.id, ts: now,
