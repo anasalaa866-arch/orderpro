@@ -1972,7 +1972,7 @@ function saveCouriers(){localStorage.setItem('op_couriers',JSON.stringify(courie
 function renderAcc(){
   let totCod=0,totShip=0,rows='';
   couriers.forEach(c=>{
-        const done=oByC(c.id,'مكتمل');
+    const done=getPendingSettleOrders(c.id);
     const codOrders=done.filter(o=>!o.paid); // الطلبات اللي المندوب بيحصّلها
     const paidOrders=done.filter(o=>o.paid);  // الطلبات المدفوعة مسبقاً
     const cod=codOrders.reduce((a,o)=>a+o.total,0);
@@ -2017,8 +2017,536 @@ function renderAccDet(){
 }
 
 
-// حفظ الطلبات الجارية للطباعة قبل التأكيد
-let _currentSettleOrders = [];
+
+function printCurrentSettle(){
+  const c=couriers.find(x=>x.id==settlingCourierId);
+  if(!c||!_currentSettleOrders.length){
+    toast('لا توجد طلبات للطباعة');
+    return;
+  }
+  const done=_currentSettleOrders;
+  const codOrders=done.filter(o=>!o.paid);
+  const paidOrders=done.filter(o=>o.paid);
+  const totalCod=codOrders.reduce((a,o)=>a+o.total,0);
+  const totalShip=done.reduce((a,o)=>a+(o.ship||50),0);
+  const netShop=totalCod-totalShip;
+  const lastSettle=getLastSettle(settlingCourierId);
+  const today=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const nowt=new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+  const fromStr=lastSettle?lastSettle.toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'}):'البداية';
+  const toStr=new Date().toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'});
+  let rows='';
+  done.forEach((o,i)=>{
+    rows+='<tr>'
+      +'<td>'+(i+1)+'</td>'
+      +'<td><strong>'+o.id+'</strong></td>'
+      +'<td>'+(o.name||'—')+'</td>'
+      +'<td>'+(o.area||'—')+'</td>'
+      +'<td><strong>'+o.total.toLocaleString()+' ج</strong></td>'
+      +'<td>'+(o.paid?'<span style="color:#16a34a">💳 مدفوع</span>':'💵 COD')+'</td>'
+      +'<td>'+(o.ship||50)+' ج</td>'
+      +'<td>'+(o.total-(o.paid?0:(o.ship||50))).toLocaleString()+' ج</td>'
+      +'</tr>';
+  });
+  const html='<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تسوية '+c.name+'</title>'
+    +'<style>'
+    +'*{margin:0;padding:0;box-sizing:border-box}'
+    +'body{font-family:Arial,sans-serif;padding:16px;font-size:11px;direction:rtl}'
+    +'.hd{display:flex;justify-content:space-between;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:14px}'
+    +'.draft{background:#fef9c3;border:1px solid #fde047;padding:6px 12px;border-radius:6px;font-size:11px;color:#854d0e;margin-bottom:12px;text-align:center;font-weight:700}'
+    +'table{width:100%;border-collapse:collapse;margin-bottom:12px}'
+    +'th{background:#0f172a;color:#fff;padding:5px 7px;text-align:right;font-size:10px}'
+    +'td{padding:4px 7px;border-bottom:1px solid #eee;font-size:10px}'
+    +'tr:nth-child(even) td{background:#f8fafc}'
+    +'.sum{display:flex;gap:16px;background:#eef2ff;border-radius:8px;padding:10px 14px;margin-bottom:12px;flex-wrap:wrap}'
+    +'.sum-item{text-align:center}'
+    +'.sum-v{font-size:15px;font-weight:700;color:#4f46e5}'
+    +'.total-row td{font-weight:700;background:#e0e7ff}'
+    +'.sigs{display:flex;gap:40px;margin-top:20px;justify-content:center}'
+    +'.sig-line{width:140px;border-bottom:1px solid #000;height:30px;margin-bottom:4px}'
+    +'.sig-l{font-size:10px;color:#666;text-align:center}'
+    +'@media print{body{padding:8px}}'
+    +'</style></head><body>'
+    +'<div class="hd"><div>'
+    +'<div style="font-size:16px;font-weight:700">ورقة تسوية حساب</div>'
+    +'<div style="font-size:11px;color:#666;margin-top:3px">المندوب: <strong>'+c.name+'</strong> · '+c.phone+'</div>'
+    +'<div style="font-size:11px;color:#666">الفترة: '+fromStr+' ← '+toStr+'</div>'
+    +'</div><div style="text-align:left">'
+    +'<div style="font-size:18px;font-weight:700;color:#4f46e5">CAFELAX</div>'
+    +'<div style="font-size:10px;color:#666">'+today+' · '+nowt+'</div>'
+    +'</div></div>'
+    +'<div class="draft">⚠️ مسودة للمراجعة — لم يتم تأكيد التسوية بعد</div>'
+    +'<div class="sum">'
+    +'<div class="sum-item"><div class="sum-v">'+done.length+'</div><div style="font-size:9px;color:#666">عدد الطلبات</div></div>'
+    +'<div class="sum-item"><div class="sum-v" style="color:#16a34a">'+totalCod.toLocaleString()+' ج</div><div style="font-size:9px;color:#666">COD المحصّل</div></div>'
+    +(paidOrders.length?'<div class="sum-item"><div class="sum-v" style="color:#0891b2">'+paidOrders.reduce((a,o)=>a+o.total,0).toLocaleString()+' ج</div><div style="font-size:9px;color:#666">مدفوع أونلاين</div></div>':'')
+    +'<div class="sum-item"><div class="sum-v" style="color:#9333ea">'+totalShip.toLocaleString()+' ج</div><div style="font-size:9px;color:#666">يستلم المندوب</div></div>'
+    +'<div class="sum-item"><div class="sum-v" style="font-size:18px;color:#15803d">'+netShop.toLocaleString()+' ج</div><div style="font-size:9px;color:#666">صافي المحل</div></div>'
+    +'</div>'
+    +'<table><thead><tr>'
+    +'<th style="width:20px">#</th><th style="width:80px">رقم الطلب</th>'
+    +'<th style="width:100px">العميل</th><th>المنطقة</th>'
+    +'<th style="width:75px">الإجمالي</th><th style="width:60px">الدفع</th>'
+    +'<th style="width:45px">الشحن</th><th style="width:75px">صافي المحل</th>'
+    +'</tr></thead><tbody>'
+    +rows
+    +'<tr class="total-row"><td colspan="4" style="text-align:left">الإجمالي</td>'
+    +'<td>'+totalCod.toLocaleString()+' ج</td>'
+    +'<td>'+(paidOrders.length?paidOrders.length+' مدفوع':'')+'</td>'
+    +'<td>'+totalShip.toLocaleString()+' ج</td>'
+    +'<td>'+netShop.toLocaleString()+' ج</td>'
+    +'</tr></tbody></table>'
+    +'<div class="sigs">'
+    +'<div class="sig-item"><div class="sig-line"></div><div class="sig-l">توقيع المندوب — استلام الكاش</div></div>'
+    +'<div class="sig-item"><div class="sig-line"></div><div class="sig-l">توقيع المشرف — تأكيد التسوية</div></div>'
+    +'</div></body></html>';
+  const w=window.open('','_blank');
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  setTimeout(()=>{w.focus();w.print();},500);
+}
+
+function getOrderDate(o){
+  // جرب كل الحقول الممكنة
+  if(o.createdAt && o.createdAt!=='null' && o.createdAt!=='undefined'){
+    const d=new Date(o.createdAt);
+    if(!isNaN(d.getTime())) return d;
+  }
+  if(o.updatedAt && o.updatedAt!=='null'){
+    const d=new Date(o.updatedAt);
+    if(!isNaN(d.getTime())) return d;
+  }
+  // لو مفيش تاريخ = اعتبره جديد دايماً (يظهر في التسوية)
+  return new Date();
+}
+
+// ========== نظام التسوية ==========
+// settleLog: { "courierId": [{ts:"ISO", orderIds:["SH-1","SH-2"...]}, ...] }
+// محفوظ في localStorage['op_settle_log'] - لا يتمسح أبداً
+
+function getSettleLog(){
+  try{ return JSON.parse(localStorage.getItem('op_settle_log')||'{}'); }
+  catch(e){ return {}; }
+}
+
+// مزامنة التسويات من DB
+async function syncSettlementsFromDB(){
+  if(!API_URL) return;
+  try{
+    const data = await apiFetch('/api/settlements');
+    if(!data || !data.settlements || !data.settlements.length) return;
+    
+    const log = getSettleLog();
+    let updated = false;
+    
+    data.settlements.forEach(s=>{
+      const cid = String(s.courierId);
+      if(!log[cid]) log[cid] = [];
+      // تحقق إن التسوية مش موجودة
+      const exists = log[cid].some(x=>{
+        const xts = typeof x==='string' ? x : x.ts;
+        return xts === s.ts || new Date(xts).getTime() === new Date(s.ts).getTime();
+      });
+      if(!exists){
+        log[cid].push({ ts: new Date(s.ts).toISOString(), orderIds: s.orderIds });
+        updated = true;
+      }
+    });
+    
+    if(updated){
+      saveSettleLog(log);
+      // حدّث settledAtMap
+      Object.keys(log).forEach(cid=>{
+        const sessions = log[cid];
+        if(sessions.length){
+          const last = sessions[sessions.length-1];
+          settledAtMap[cid] = typeof last==='string' ? last : last.ts;
+        }
+      });
+      localStorage.setItem('op_settled_at', JSON.stringify(settledAtMap));
+      console.log('✅ Settlements synced from DB');
+    }
+  }catch(e){ console.error('syncSettlementsFromDB:', e); }
+}
+
+function saveSettleLog(log){
+  localStorage.setItem('op_settle_log', JSON.stringify(log));
+}
+
+// آخر timestamp تسوية للمندوب
+function getLastSettleTime(cId){
+  const sessions = getSettleLog()[String(cId)] || [];
+  if(!sessions.length) return null;
+  const last = sessions[sessions.length-1];
+  return new Date(typeof last==='string' ? last : last.ts);
+}
+
+// الطلبات الجاهزة للتسوية (مكتملة بعد آخر تسوية)
+function getPendingSettleOrders(cId){
+  const lastTime = getLastSettleTime(cId);
+  const allDone = oByC(cId,'مكتمل');
+  if(!lastTime) return allDone;
+  return allDone.filter(o=>{
+    // لو مفيش تاريخ للطلب = اعتبره جديد
+    if(!o.createdAt || o.createdAt==='null') return true;
+    const d = new Date(o.createdAt);
+    if(isNaN(d.getTime())) return true;
+    return d > lastTime;
+  });
+}
+
+// تسوية جديدة
+function doSettle(){
+  const c = couriers.find(x=>x.id==settlingCourierId);
+  if(!c) return;
+  const pending = getPendingSettleOrders(c.id);
+  if(!pending.length){ toast('لا توجد طلبات للتسوية'); return; }
+  
+  const now = new Date().toISOString();
+  const log = getSettleLog();
+  const cid = String(c.id);
+  if(!log[cid]) log[cid] = [];
+  
+  const orderIds = pending.map(o=>o.id);
+  const cod = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
+  const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
+
+  // 1. حفظ في localStorage (فوري)
+  log[cid].push({ ts: now, orderIds });
+  saveSettleLog(log);
+  settledAtMap[cid] = now;
+  localStorage.setItem('op_settled_at', JSON.stringify(settledAtMap));
+  c.settled = true;
+  c.settledAt = now;
+  saveCouriers();
+
+  // 2. حفظ في DB (مضمون)
+  if(API_URL){
+    apiFetch('/api/settlements','POST',{
+      courierId: c.id, ts: now,
+      orderIds, cod, ship
+    }).catch(()=>{});
+    apiFetch('/api/couriers/'+c.id,'PATCH',{settled:true}).catch(()=>{});
+  }
+  
+  closeM('m-settle');
+  pushNotif('💰',`تمت تسوية حساب ${c.name}`,'');
+  renderAcc();
+  toast(`✅ تمت تسوية حساب ${c.name} (${pending.length} طلب)`);
+  setTimeout(()=>{
+    if(confirm(`هل تريد طباعة ورقة تسوية ${c.name}؟`)) printCurrentSettle();
+  },300);
+}
+
+// فتح modal التسوية
+function openSettle(cId){
+  settlingCourierId = cId;
+  const c = couriers.find(x=>x.id==cId);
+  if(!c) return;
+  
+  const pending = getPendingSettleOrders(cId);
+  _currentSettleOrders = [...pending];
+  
+  if(!pending.length){
+    toast('لا توجد طلبات جديدة منذ آخر تسوية');
+    return;
+  }
+  
+  const cod = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
+  const paid = pending.filter(o=>o.paid).reduce((s,o)=>s+o.total,0);
+  const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
+  const lastTime = getLastSettleTime(cId);
+  const sessions = getSettleLog()[String(cId)] || [];
+  const sessNum = sessions.length + 1;
+  
+  $('settle-title').textContent = `تسوية حساب — ${c.name}`;
+  
+  const lastStr = lastTime
+    ? `<div style="font-size:11px;color:var(--muted);margin-bottom:8px">📅 آخر تسوية: ${lastTime.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>`
+    : '';
+  
+  $('settle-body').innerHTML = `
+    ${lastStr}
+    <div style="background:var(--accent-light);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--accent);font-weight:700">
+      تسوية رقم ${sessNum} للمندوب ${c.name}
+    </div>
+    <div style="background:var(--bg);border-radius:9px;padding:14px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span>عدد الطلبات الجديدة</span>
+        <strong>${pending.length} طلب</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span>💰 COD المطلوب تحصيله</span>
+        <strong style="color:var(--success)">${cod.toLocaleString()} ج</strong>
+      </div>
+      ${paid>0?`<div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span>💳 مدفوع أونلاين</span>
+        <strong style="color:var(--info)">${paid.toLocaleString()} ج</strong>
+      </div>`:''}
+      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
+        <span>🚴 يستلم المندوب (شحن)</span>
+        <strong style="color:var(--purple)">${ship.toLocaleString()} ج</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:15px;font-weight:700;border-top:2px solid var(--accent);padding-top:8px">
+        <span>💵 صافي المحل</span>
+        <strong style="color:var(--accent)">${(cod-ship).toLocaleString()} ج</strong>
+      </div>
+    </div>`;
+  openM('m-settle');
+}
+
+// عرض قائمة التسوية
+function renderSettle(){
+  $('settle-list').innerHTML = couriers.map(c=>{
+    const pending = getPendingSettleOrders(c.id);
+    const lastTime = getLastSettleTime(c.id);
+    const cod = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
+    const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
+    
+    if(!pending.length){
+      if(lastTime) return `<div style="border:1px solid var(--border);border-radius:9px;padding:12px;margin-bottom:8px;opacity:.6;display:flex;justify-content:space-between;align-items:center">
+        <div><strong>${c.name}</strong><br>
+        <span style="font-size:11px;color:var(--muted)">✅ آخر تسوية: ${lastTime.toLocaleDateString('ar-EG')} — لا توجد طلبات جديدة</span></div>
+      </div>`;
+      return '';
+    }
+    
+    const lastStr = lastTime ? ` · منذ ${lastTime.toLocaleDateString('ar-EG')}` : '';
+    return `<div style="border:1px solid var(--border);border-radius:9px;padding:13px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-weight:700;font-size:13px;margin-bottom:5px">${c.name}</div>
+        <div style="font-size:12px;color:var(--muted)">${pending.length} طلب${lastStr} · COD: <strong style="color:var(--success)">${cod.toLocaleString()} ج</strong> · يستلم: <strong style="color:var(--purple)">${ship.toLocaleString()} ج</strong></div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openSettle(${c.id})">تسوية الحساب</button>
+    </div>`;
+  }).join('');
+}
+
+// طباعة التسوية الحالية (من الـ modal)
+function printCurrentSettle(){
+  const c = couriers.find(x=>x.id==settlingCourierId);
+  if(!c||!_currentSettleOrders.length){ toast('لا توجد طلبات'); return; }
+  _printSettleOrders(c, _currentSettleOrders, true);
+}
+
+// طباعة تسوية محفوظة
+function printSettleSlip(cId){
+  const c = couriers.find(x=>x.id==cId);
+  if(!c) return;
+  const pending = getPendingSettleOrders(cId);
+  if(!pending.length){ toast('لا توجد طلبات في هذه التسوية'); return; }
+  _printSettleOrders(c, pending, false);
+}
+
+function printHistorySettle(cId, fromISO, toISO){
+  const c = couriers.find(x=>x.id==String(cId)||x.id==Number(cId));
+  if(!c) return;
+  const log = getSettleLog()[String(cId)] || [];
+  const sess = log.find(s=>typeof s==='object' && s.ts===toISO);
+  const allDone = oByC(cId,'مكتمل');
+  const done = sess?.orderIds?.length
+    ? allDone.filter(o=>sess.orderIds.includes(o.id))
+    : allDone.filter(o=>{
+        if(!fromISO) return new Date(o.createdAt||0) <= new Date(toISO);
+        return new Date(o.createdAt||0) > new Date(fromISO) && new Date(o.createdAt||0) <= new Date(toISO);
+      });
+  if(!done.length){ toast('لا توجد طلبات'); return; }
+  _printSettleOrders(c, done, false);
+}
+
+// دالة الطباعة المشتركة
+function _printSettleOrders(c, done, isDraft){
+  const codOrders = done.filter(o=>!o.paid);
+  const paidOrders = done.filter(o=>o.paid);
+  const totalCod = codOrders.reduce((s,o)=>s+o.total,0);
+  const totalShip = done.reduce((s,o)=>s+(o.ship||50),0);
+  const netShop = totalCod - totalShip;
+  const lastTime = getLastSettleTime(c.id);
+  const today = new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const nowt = new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+  const fromStr = lastTime ? lastTime.toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'}) : 'البداية';
+  const toStr = new Date().toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'});
+  
+  let rows = '';
+  done.forEach((o,i)=>{
+    rows += '<tr>'
+      + '<td>'+(i+1)+'</td>'
+      + '<td><strong>'+o.id+'</strong></td>'
+      + '<td>'+(o.name||'—')+'</td>'
+      + '<td>'+(o.area||'—')+'</td>'
+      + '<td><strong>'+o.total.toLocaleString()+' ج</strong></td>'
+      + '<td>'+(o.paid?'<span style="color:#16a34a">💳 مدفوع</span>':'💵 COD')+'</td>'
+      + '<td>'+(o.ship||50)+' ج</td>'
+      + '<td>'+(o.total-(o.paid?0:(o.ship||50))).toLocaleString()+' ج</td>'
+      + '</tr>';
+  });
+  
+  const html = '<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تسوية '+c.name+'</title>'
+    +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;padding:16px;font-size:11px;direction:rtl}'
+    +'.hd{display:flex;justify-content:space-between;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:14px}'
+    +'.draft{background:#fef9c3;border:1px solid #fde047;padding:6px 12px;border-radius:6px;font-size:11px;color:#854d0e;margin-bottom:12px;text-align:center;font-weight:700}'
+    +'table{width:100%;border-collapse:collapse;margin-bottom:12px}'
+    +'th{background:#0f172a;color:#fff;padding:5px 7px;text-align:right;font-size:10px}'
+    +'td{padding:4px 7px;border-bottom:1px solid #eee;font-size:10px}'
+    +'tr:nth-child(even) td{background:#f8fafc}'
+    +'.sum{display:flex;gap:16px;background:#eef2ff;border-radius:8px;padding:10px 14px;margin-bottom:12px;flex-wrap:wrap}'
+    +'.sv{font-size:15px;font-weight:700;color:#4f46e5}'
+    +'.sl{font-size:9px;color:#666}'
+    +'.total-row td{font-weight:700;background:#e0e7ff}'
+    +'.sigs{display:flex;gap:40px;margin-top:20px;justify-content:center}'
+    +'.sig-line{width:140px;border-bottom:1px solid #000;height:30px;margin-bottom:4px}'
+    +'.sig-l{font-size:10px;color:#666;text-align:center}'
+    +'@media print{body{padding:8px}}</style></head><body>'
+    +'<div class="hd"><div>'
+    +'<div style="font-size:16px;font-weight:700">ورقة تسوية حساب</div>'
+    +'<div style="font-size:11px;color:#666;margin-top:3px">المندوب: <strong>'+c.name+'</strong> · '+c.phone+'</div>'
+    +'<div style="font-size:11px;color:#666">الفترة: '+fromStr+' ← '+toStr+'</div>'
+    +'</div><div style="text-align:left">'
+    +'<div style="font-size:18px;font-weight:700;color:#4f46e5">CAFELAX</div>'
+    +'<div style="font-size:10px;color:#666">'+today+' · '+nowt+'</div>'
+    +'</div></div>'
+    +(isDraft?'<div class="draft">⚠️ مسودة للمراجعة — لم يتم تأكيد التسوية بعد</div>':'')
+    +'<div class="sum">'
+    +'<div style="text-align:center"><div class="sv">'+done.length+'</div><div class="sl">عدد الطلبات</div></div>'
+    +'<div style="text-align:center"><div class="sv" style="color:#16a34a">'+totalCod.toLocaleString()+' ج</div><div class="sl">COD المحصّل</div></div>'
+    +(paidOrders.length?'<div style="text-align:center"><div class="sv" style="color:#0891b2">'+paidOrders.reduce((s,o)=>s+o.total,0).toLocaleString()+' ج</div><div class="sl">مدفوع أونلاين</div></div>':'')
+    +'<div style="text-align:center"><div class="sv" style="color:#9333ea">'+totalShip.toLocaleString()+' ج</div><div class="sl">يستلم المندوب</div></div>'
+    +'<div style="text-align:center"><div class="sv" style="font-size:18px;color:#15803d">'+netShop.toLocaleString()+' ج</div><div class="sl">صافي المحل</div></div>'
+    +'</div>'
+    +'<table><thead><tr><th>#</th><th>رقم الطلب</th><th>العميل</th><th>المنطقة</th>'
+    +'<th>الإجمالي</th><th>الدفع</th><th>الشحن</th><th>صافي المحل</th></tr></thead>'
+    +'<tbody>'+rows
+    +'<tr class="total-row"><td colspan="4" style="text-align:left">الإجمالي</td>'
+    +'<td>'+totalCod.toLocaleString()+' ج</td>'
+    +'<td>'+(paidOrders.length?paidOrders.length+' مدفوع':'')+'</td>'
+    +'<td>'+totalShip.toLocaleString()+' ج</td>'
+    +'<td>'+netShop.toLocaleString()+' ج</td>'
+    +'</tr></tbody></table>'
+    +'<div class="sigs">'
+    +'<div><div class="sig-line"></div><div class="sig-l">توقيع المندوب — استلام الكاش</div></div>'
+    +'<div><div class="sig-line"></div><div class="sig-l">توقيع المشرف — تأكيد التسوية</div></div>'
+    +'</div></body></html>';
+  
+  const w = window.open('','_blank');
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  setTimeout(()=>{ w.focus(); w.print(); }, 500);
+}
+
+// سجل التسويات
+function renderSettleHistory(){
+  const log = getSettleLog();
+  const el = document.getElementById('settle-history-content');
+  if(!el) return;
+  
+  let allSessions = [];
+  couriers.forEach(c=>{
+    const sessions = log[String(c.id)] || [];
+    sessions.forEach((sess,i)=>{
+      const ts = typeof sess==='string' ? sess : sess.ts;
+      const orderIds = typeof sess==='object' ? (sess.orderIds||[]) : [];
+      const from = i>0 ? new Date(typeof sessions[i-1]==='string'?sessions[i-1]:sessions[i-1].ts) : null;
+      const to = new Date(ts);
+      const allDone = oByC(c.id,'مكتمل');
+      const done = orderIds.length
+        ? allDone.filter(o=>orderIds.includes(o.id))
+        : from
+          ? allDone.filter(o=>{ const d=new Date(o.createdAt||0); return d>from&&d<=to; })
+          : allDone.filter(o=>new Date(o.createdAt||0)<=to);
+      const cod = done.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
+      const ship = done.reduce((s,o)=>s+(o.ship||50),0);
+      allSessions.push({courier:c, sessNum:i+1, from, to, done, cod, ship, ts});
+    });
+  });
+  
+  allSessions.sort((a,b)=>b.to-a.to);
+  
+  if(!allSessions.length){
+    el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا توجد تسويات مسجلة بعد</div>';
+    return;
+  }
+  
+  let html = '';
+  let lastDate = '';
+  allSessions.forEach(s=>{
+    const dateStr = s.to.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    if(dateStr!==lastDate){
+      html += `<div style="font-size:12px;font-weight:700;color:var(--muted);padding:10px 4px 4px;border-bottom:1px solid var(--border);margin-bottom:6px">${dateStr}</div>`;
+      lastDate = dateStr;
+    }
+    const fromStr = s.from ? s.from.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : 'البداية';
+    const toStr = s.to.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+    html += `<div style="border:1px solid var(--border);border-radius:9px;padding:12px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;background:var(--card)">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <strong style="font-size:13px">${s.courier.name}</strong>
+          <span style="background:var(--accent-light);color:var(--accent);padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700">تسوية #${s.sessNum}</span>
+          <span style="font-size:11px;color:var(--muted)">${fromStr} ← ${toStr}</span>
+        </div>
+        <div style="display:flex;gap:16px;font-size:12px">
+          <span>📦 <strong>${s.done.length}</strong> طلب</span>
+          <span>💰 COD: <strong style="color:var(--success)">${s.cod.toLocaleString()} ج</strong></span>
+          <span>🚴 شحن: <strong style="color:var(--purple)">${s.ship.toLocaleString()} ج</strong></span>
+          <span>💵 صافي: <strong style="color:var(--accent)">${(s.cod-s.ship).toLocaleString()} ج</strong></span>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="printHistorySettle('${s.courier.id}','${s.from?s.from.toISOString():''}','${s.ts}')">🖨️ طباعة</button>
+    </div>`;
+  });
+  el.innerHTML = html;
+}
+
+
+function renderAcc(){
+  let totCod=0,totShip=0,rows='';
+  couriers.forEach(c=>{
+    const done=getPendingSettleOrders(c.id);
+    const codOrders=done.filter(o=>!o.paid); // الطلبات اللي المندوب بيحصّلها
+    const paidOrders=done.filter(o=>o.paid);  // الطلبات المدفوعة مسبقاً
+    const cod=codOrders.reduce((a,o)=>a+o.total,0);
+    const ship=done.reduce((a,o)=>a+(o.ship||50),0); // تمن الشحن على كل الطلبات
+    const doneNorm=done.filter(o=>deliveryType(o)==='normal'),doneExp=done.filter(o=>isSameDay(o)),donePick=done.filter(o=>isPickup(o));
+    const shipNorm=doneNorm.reduce((a,o)=>a+(o.ship||c.ship||50),0);
+    const shipExp=doneExp.reduce((a,o)=>a+(o.ship||c.shipExpress||80),0);
+    totCod+=cod;totShip+=ship;
+    rows+=`<tr>
+      <td><strong>${c.name}</strong><br><span style="font-size:10px;color:var(--muted)">${c.phone}</span></td>
+      <td style="text-align:center">
+        ${done.length} طلب<br>
+        <span style="font-size:10px;color:var(--muted)">عادي: ${doneNorm.length} | سريع: ${doneExp.length}</span><br>
+        ${paidOrders.length?`<span style="font-size:10px;color:var(--success)">💳 مدفوع: ${paidOrders.length}</span>`:''}
+      </td>
+      <td class="mpos">
+        ${cod.toLocaleString()} ج<br>
+        ${paidOrders.length?`<span style="font-size:10px;color:var(--success)">+${paidOrders.reduce((a,o)=>a+o.total,0).toLocaleString()} ج مدفوع</span>`:''}
+      </td>
+      <td class="mwarn">
+        ${shipNorm.toLocaleString()} ج عادي<br>
+        <span style="font-size:10px;color:var(--danger)">+${shipExp.toLocaleString()} ج سريع</span>
+      </td>
+      <td class="mpos">${(cod-ship).toLocaleString()} ج</td>
+      <td class="mpurp">${ship.toLocaleString()} ج</td>
+      <td>${getLastSettle(c.id)?'<span class="badge b-done">✅ مسوّى</span>':'<span class="badge b-wait">⏳ لم يُسوَّ</span>'}</td>
+      <td><div style="display:flex;gap:4px">
+      ${done.length>0?`<button class="btn btn-primary btn-xs" onclick="openSettle(${c.id})">تسوية</button>`:''}
+      ${done.length>0?`<button class="btn btn-ghost btn-xs" onclick="printSettleSlip(${c.id})">🖨️ طباعة</button>`:''}
+    </div></td>
+    </tr>`;
+  });
+  $('acc-tbody').innerHTML=rows;
+  $('acc-total').innerHTML=`<td colspan="2"><strong>الإجمالي</strong></td><td class="mpos">${totCod.toLocaleString()} ج</td><td class="mwarn">${totShip.toLocaleString()} ج</td><td class="mpos">${(totCod-totShip).toLocaleString()} ج</td><td class="mpurp">${totShip.toLocaleString()} ج</td><td colspan="2"></td>`;
+  $('acc-cf').innerHTML='<option value="all">كل المناديب</option>'+couriers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  renderSettle();
+}
+
+function renderAccDet(){
+  const f=$('acc-cf').value,list=orders.filter(o=>o.status==='مكتمل'&&o.courierId&&(f==='all'||o.courierId==f));
+  $('acc-det-tbody').innerHTML=list.map(o=>{const c=couriers.find(x=>x.id==o.courierId),ship=o.ship||50,express=isSameDay(o);return`<tr><td><strong>${o.id}</strong></td><td>${c?c.name:'—'}</td><td>${o.name}</td><td>📍 ${o.area}</td><td><span class="badge ${express?'b-cancel':'b-go'}">${express?'⚡ سريع':'🚚 عادي'}</span></td><td class="mpos">${o.total.toLocaleString()} ج</td><td class="mwarn">${ship} ج</td><td class="mpos">${(o.total-ship).toLocaleString()} ج</td><td>${sBadge(o.status)}</td></tr>`}).join('');
+}
+
+
 
 function printCurrentSettle(){
   const c=couriers.find(x=>x.id==settlingCourierId);
