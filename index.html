@@ -1016,6 +1016,11 @@ let orderFilter='all',searchQ='',defaultShip=50;
 let pollingInterval=null,prevOrderCount=0;
 let orders=[],notifications=[],nextLocalId=2000;
 let couriers=JSON.parse(localStorage.getItem('op_couriers')||'[]');
+// settledAt محفوظ منفصل عشان الـ sync متمسحوش
+let settledAtMap={};
+try{settledAtMap=JSON.parse(localStorage.getItem('op_settled_at')||'{}');}catch(e){}
+// ادمج settledAt في couriers عند التحميل
+couriers=couriers.map(c=>({...c, settledAt: c.settledAt||settledAtMap[c.id]||null}));
 // ===== إصلاح deliveryType للطلبات القديمة في localStorage =====
 orders=orders.map(o=>{
   if(!o.deliveryType||o.deliveryType==='normal'){
@@ -1270,8 +1275,8 @@ async function syncCouriersToDB(){
     if(data&&data.couriers&&data.couriers.length>0){
       // حافظ على settledAt المحلي لو DB مش عنده
       couriers=data.couriers.map(dc=>{
-        const local=couriers.find(lc=>lc.id==dc.id);
-        return {...dc, settledAt: dc.settledAt || local?.settledAt || null};
+        // settledAtMap دايماً له الأولوية - مش ممكن يتمسح بالـ sync
+        return {...dc, settledAt: settledAtMap[dc.id] || dc.settledAt || null};
       });
       saveCouriers();
     }
@@ -2032,7 +2037,10 @@ function openSettle(cId){
 function doSettle(){
   const c=couriers.find(x=>x.id==settlingCourierId);
   c.settled=true;
-  c.settledAt=new Date().toISOString(); // وقت آخر تسوية
+  c.settledAt=new Date().toISOString();
+  // احفظ settledAt منفصل عشان sync متمسحوش
+  settledAtMap[c.id]=c.settledAt;
+  localStorage.setItem('op_settled_at',JSON.stringify(settledAtMap));
   if(API_URL)apiFetch('/api/couriers/'+c.id,'PATCH',{settled:true, settledAt:c.settledAt}).catch(()=>{});
   saveCouriers();
   closeM('m-settle');
