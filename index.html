@@ -3734,6 +3734,8 @@ function renderCourierOrdersPage(){
   const cOrders = orders.filter(o=>o.courierId==c.id&&o.status!=='ملغي');
   const active = cOrders.filter(o=>o.status==='جاري التوصيل');
   const done = cOrders.filter(o=>o.status==='مكتمل');
+  // مكتمل بدون تسوية = في الطلبات الجاري تسويتها
+  const pending = getPendingSettleOrders(c.id).filter(o=>o.courierId==c.id);
 
   content.innerHTML = `
     <div class="card">
@@ -3742,6 +3744,7 @@ function renderCourierOrdersPage(){
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <button class="chip on" id="co-tab-all-${c.id}" onclick="coFilter('all',${c.id})">الكل (${cOrders.length})</button>
           <button class="chip" id="co-tab-active-${c.id}" onclick="coFilter('active',${c.id})">📦 نشط (${active.length})</button>
+          <button class="chip" id="co-tab-pending-${c.id}" onclick="coFilter('pending',${c.id})" style="${pending.length?'background:var(--warn-light);color:#92400e;border-color:#fcd34d':''}" >⏳ تم بدون تسوية (${pending.length})</button>
           <button class="chip" id="co-tab-done-${c.id}" onclick="coFilter('done',${c.id})">✅ مكتمل (${done.length})</button>
           <span style="font-size:11px;color:var(--muted);margin-right:auto">📱 ${c.phone}</span>
         </div>
@@ -3810,11 +3813,14 @@ function coFilter(f, cId){
   const c = couriers.find(x=>x.id==cId);
   if(!c) return;
   const allOrders = orders.filter(o=>o.courierId==c.id&&o.status!=='ملغي');
+  // طلبات تم بدون تسوية = مكتملة بعد آخر تسوية
+  const pendingSettle = getPendingSettleOrders(c.id).filter(o=>o.courierId==c.id);
   const filtered = f==='active' ? allOrders.filter(o=>o.status==='جاري التوصيل')
     : f==='done' ? allOrders.filter(o=>o.status==='مكتمل')
+    : f==='pending' ? pendingSettle
     : allOrders;
   // تحديث tabs
-  ['all','active','done'].forEach(t=>{
+  ['all','active','pending','done'].forEach(t=>{
     const btn=document.getElementById('co-tab-'+t+'-'+cId);
     if(btn) btn.classList.toggle('on', t===f);
   });
