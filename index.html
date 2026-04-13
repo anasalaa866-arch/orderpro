@@ -4426,6 +4426,8 @@ async function loadSettlements(){
       _allSettlements = data.settlements.map(s=>({
         ...s,
         orderIds: Array.isArray(s.orderIds)?s.orderIds:JSON.parse(s.orderIds||'[]'),
+        adj: Array.isArray(s.adj)?s.adj:(s.adj?JSON.parse(s.adj):[]),
+        adjTotal: s.adjTotal || (Array.isArray(s.adj)?s.adj:JSON.parse(s.adj||'[]')).reduce((sum,a)=>sum+(a.amount||0),0),
         ts: new Date(s.ts)
       }));
     }
@@ -4799,7 +4801,7 @@ async function doSettle(){
     }
   });
   if(API_URL){
-    apiFetch('/api/settlements','POST',{courierId:c.id,ts:now,orderIds,cod,ship})
+    apiFetch('/api/settlements','POST',{courierId:c.id,ts:now,orderIds,cod,ship,adj})
       .then(r=>{ if(r&&r.id) newS.id=r.id; }).catch(e=>console.error('settle error:',e));
     apiFetch('/api/couriers/'+c.id,'PATCH',{settled:true}).catch(()=>{});
   }
