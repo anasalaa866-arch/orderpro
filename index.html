@@ -1012,7 +1012,11 @@ tr:hover td{background:#fafbff}
 <div class="overlay" id="m-settle"><div class="modal">
   <div class="mhd"><h3 id="settle-title">تسوية حساب</h3><button class="xbtn" onclick="closeM('m-settle')">✕</button></div>
   <div class="mbd" id="settle-body"></div>
-  <div class="mft"><button class="btn btn-ghost" onclick="closeM('m-settle')">إلغاء</button><button class="btn btn-success" onclick="doSettle()">✅ تأكيد التسوية</button></div>
+  <div class="mft">
+    <button class="btn btn-ghost" onclick="closeM('m-settle')">إلغاء</button>
+    <button class="btn btn-ghost" onclick="printCurrentSettle()" style="color:var(--accent);border-color:var(--accent)">🖨️ طباعة للمراجعة</button>
+    <button class="btn btn-success" onclick="doSettle()">✅ تأكيد التسوية</button>
+  </div>
 </div></div>
 
 <div class="toast" id="toast"></div>
@@ -1585,7 +1589,12 @@ function renderAssignGrid(){
       <div class="cc-info">📦 نشط: <strong>${active}</strong></div>
       <div class="cc-info">💰 عادي: <strong>${c.ship} ج</strong> | ⚡ <strong>${c.shipExpress||c.ship} ج</strong></div>
       <div style="margin-top:6px;font-size:10px;font-weight:700">${matchLabel}${zm.matched?' · '+zm.matched:''}</div>
-    </div>`}).join('');
+    </div>`}).join('')
+    +'<div onclick="selC(\'bosta\')" id="assign-c-bosta" style="cursor:pointer;border:2px solid var(--border);border-radius:12px;padding:12px;background:var(--card)">'
+    +'<div style="display:flex;align-items:center;gap:8px">'
+    +'<div style="width:32px;height:32px;border-radius:50%;background:#f97316;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px">📦</div>'
+    +'<div><div style="font-size:13px;font-weight:700">بوسطة</div><div style="font-size:10px;color:var(--muted)">توصيل خارجي</div></div>'
+    +'</div></div>';
 }
 
 function selC(id){
@@ -1824,6 +1833,16 @@ async function togglePaid(id){
   if(API_URL)await apiFetch('/api/orders/'+id,'PATCH',{paid:o.paid});
   refreshAll();
   toast(o.paid?'💳 تم تحديد الطلب كمدفوع':'💵 تم تحويل الطلب لـ COD');
+}
+
+async function cancelOrderByCustomer(id){
+  if(!confirm('هل تأكد إلغاء هذا الطلب؟')) return;
+  const o=orders.find(x=>x.id===id);
+  if(!o) return;
+  o.status='ملغي';
+  if(API_URL) apiFetch('/api/orders/'+id,'PATCH',{status:'ملغي'}).catch(()=>{});
+  refreshAll();
+  toast('✅ تم إلغاء الطلب '+id);
 }
 
 async function undoSettleStatus(id){
@@ -2584,7 +2603,9 @@ function renderCourierOrdersPage(){
   if(!c){ content.innerHTML=''; return; }
 
   const cOrders = orders.filter(o=>o.courierId==c.id&&o.status!=='ملغي');
+  const cancelled = orders.filter(o=>o.courierId==c.id&&o.status==='ملغي');
   const active = cOrders.filter(o=>o.status==='جاري التوصيل');
+  const underSettle = cOrders.filter(o=>o.status==='تحت التسوية');
   const done = cOrders.filter(o=>o.status==='مكتمل');
 
   content.innerHTML = `
@@ -2594,7 +2615,9 @@ function renderCourierOrdersPage(){
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <button class="chip on" id="co-tab-all-${c.id}" onclick="coFilter('all',${c.id})">الكل (${cOrders.length})</button>
           <button class="chip" id="co-tab-active-${c.id}" onclick="coFilter('active',${c.id})">📦 نشط (${active.length})</button>
+          <button class="chip" id="co-tab-settle-${c.id}" onclick="coFilter('settle',${c.id})" style="${underSettle.length?'background:#e0e7ff;color:#3730a3;border-color:#a5b4fc':''}">⏳ تحت التسوية (${underSettle.length})</button>
           <button class="chip" id="co-tab-done-${c.id}" onclick="coFilter('done',${c.id})">✅ مكتمل (${done.length})</button>
+          <button class="chip" id="co-tab-cancelled-${c.id}" onclick="coFilter('cancelled',${c.id})" style="${cancelled.length?'color:var(--danger);border-color:var(--danger)':''}">❌ ملغي (${cancelled.length})</button>
           <span style="font-size:11px;color:var(--muted);margin-right:auto">📱 ${c.phone}</span>
         </div>
       </div>
@@ -2641,6 +2664,7 @@ function renderCourierOrdersPage(){
                 <td>
                   <div style="display:flex;gap:4px;flex-wrap:wrap">
                     ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="unassignOrder('${o.id}')">↩️ إلغاء</button>`:''}
+                    ${o.status!=='ملغي'?`<button class="btn btn-ghost btn-xs" style="color:var(--danger);border-color:var(--danger)" onclick="cancelOrderByCustomer('${o.id}')">🚫 إلغاء</button>`:''}'
                     ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" onclick="reassignOrder('${o.id}')">🔄 تعيين</button>`:''}
                     ${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✅ تم</button>`:''}
           ${o.status==='تحت التسوية'?`<button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="undoSettleStatus('${o.id}')">↩ رجّع نشط</button>`:''}
@@ -2663,7 +2687,10 @@ function coFilter(f, cId){
   const c = couriers.find(x=>x.id==cId);
   if(!c) return;
   const allOrders = orders.filter(o=>o.courierId==c.id&&o.status!=='ملغي');
+  const allWithCancelled = orders.filter(o=>o.courierId==c.id);
   const filtered = f==='active' ? allOrders.filter(o=>o.status==='جاري التوصيل')
+    : f==='settle' ? allOrders.filter(o=>o.status==='تحت التسوية')
+    : f==='cancelled' ? allWithCancelled.filter(o=>o.status==='ملغي')
     : f==='done' ? allOrders.filter(o=>o.status==='مكتمل')
     : allOrders;
   // تحديث tabs
@@ -3747,7 +3774,7 @@ function renderUsersAdmin(){
     'dashboard':'لوحة التحكم','orders':'الطلبات','couriers':'المناديب',
     'assign':'توزيع الطلبات','pickup':'استلام المحل','transit':'العبور',
     'bosta':'بوسطة','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل',
-    'import-excel':'استيراد Excel','problems':'مشاكل','accounting':'محاسبة المناديب','settle-history':'سجل التسويات',
+    'import-excel':'استيراد Excel','problems':'مشاكل','accounting':'محاسبة المناديب','settle-history':'سجل التسويات','settle-history':'سجل التسويات',
     'shop-accounting':'محاسبة المحل','checks':'الشيكات','reports':'التقارير',
     'expiry':'الصلاحيات','notifs':'الإشعارات','settings':'الإعدادات'
   };
@@ -6059,6 +6086,7 @@ refreshSelects();renderUsers();refreshAll();
 <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="import-excel" style="width:15px;height:15px;accent-color:var(--accent)"> 📥 استيراد Excel</label>
 <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="problems" style="width:15px;height:15px;accent-color:var(--accent)"> ⚠️ طلبات مشكلة</label>
 <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="accounting" style="width:15px;height:15px;accent-color:var(--accent)"> 💰 محاسبة المناديب</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="settle-history" style="width:15px;height:15px;accent-color:var(--accent)"> 📚 سجل التسويات</label>
 <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="shop-accounting" style="width:15px;height:15px;accent-color:var(--accent)"> 🏪 محاسبة المحل</label>
 <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="checks" style="width:15px;height:15px;accent-color:var(--accent)"> 📋 الشيكات</label>
 <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="reports" style="width:15px;height:15px;accent-color:var(--accent)"> 📊 التقارير</label>
