@@ -953,7 +953,14 @@ tr:hover td{background:#fafbff}
       💡 هيجيب كل طلبات Shopify من آخر عدد الأيام اللي تحدده — الطلبات الجديدة بتتضاف، والطلبات الموجودة بتتحدث تلقائياً
     </div>
     <div class="fg"><label>رابط المتجر</label><input type="text" id="imp-url" placeholder="your-store.myshopify.com"></div>
-    <div class="fg"><label>Admin API Access Token</label><input type="password" id="imp-token" placeholder="shpat_xxxxxxxxxxxx"></div>
+    <div class="fg">
+      <label>Admin API Access Token</label>
+      <div style="display:flex;gap:8px">
+        <input type="password" id="imp-token" placeholder="shpat_xxxxxxxxxxxx" style="flex:1">
+        <button onclick="saveShopifyCredentials()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-family:Cairo,sans-serif;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap">💾 حفظ</button>
+      </div>
+      <div id="imp-creds-saved" style="display:none;font-size:11px;color:var(--success);margin-top:4px">✅ تم حفظ الإعدادات</div>
+    </div>
     <div class="fg">
       <label>استيراد طلبات آخر كم يوم؟</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px" id="days-btns">
@@ -6490,6 +6497,19 @@ function selDays(btn, days) {
   document.getElementById('imp-days').value = days;
 }
 
+function saveShopifyCredentials(){
+  const url = $('imp-url').value.trim();
+  const token = $('imp-token').value.trim();
+  if(!url || !token){ toast('❗ أدخل الرابط والـ Token'); return; }
+  localStorage.setItem('orderpro_shop_url', url);
+  localStorage.setItem('orderpro_shop_token', token);
+  if($('cfg-shop')) $('cfg-shop').value = url;
+  if($('cfg-token')) $('cfg-token').value = token;
+  const saved = $('imp-creds-saved');
+  if(saved){ saved.style.display = 'block'; setTimeout(()=>saved.style.display='none', 3000); }
+  toast('✅ تم حفظ إعدادات Shopify');
+}
+
 async function shopifyDiagnose(){
   const shopUrl = $('imp-url').value.trim() || localStorage.getItem('orderpro_shop_url');
   const accessToken = $('imp-token').value.trim() || localStorage.getItem('orderpro_shop_token');
@@ -6510,14 +6530,20 @@ async function shopifyDiagnose(){
     const order = r.order || {};
     const fos = Array.isArray(r.fulfillmentOrders) ? r.fulfillmentOrders : [];
     let msg = `📋 تشخيص: ${shopifyOrder.id}\n`;
-    msg += `Shopify ID: ${shopifyOrder.shopifyId}\n`;
+    msg += `Shopify ID: ${r.shopifyOrderId}\n`;
+    msg += `Order HTTP: ${r.orderStatus} | FO HTTP: ${r.foStatus}\n`;
     if(order.error){
-      msg += `❌ HTTP ${order.error}: ${JSON.stringify(order.data).slice(0,200)}\n`;
+      msg += `❌ Order Error: ${order.raw||JSON.stringify(order)}\n`;
     } else {
-      msg += `✅ الطلب: ${order.name} | fulfillment_status: ${order.fulfillment_status||'null'}\n`;
+      msg += `✅ الطلب: ${order.name} (#${order.order_number})\n`;
+      msg += `fulfillment_status: ${order.fulfillment_status||'null'}\n`;
       msg += `tags: "${order.tags||'فاضي'}"\n`;
+    }
+    if(r.fulfillmentOrders && r.fulfillmentOrders.error){
+      msg += `❌ FO Error: ${r.fulfillmentOrders.raw||JSON.stringify(r.fulfillmentOrders)}\n`;
+    } else {
       msg += `Fulfillment Orders (${fos.length}):\n`;
-      fos.forEach(fo => { msg += `  [${fo.status}] ${fo.request_status||''}\n`; });
+      fos.forEach(fo => { msg += `  [${fo.status}] assigned_location: ${fo.assigned_location_id}\n`; });
       if(!fos.length) msg += `  لا يوجد!\n`;
     }
     alert(msg);
