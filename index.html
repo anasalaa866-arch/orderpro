@@ -1871,6 +1871,47 @@ function selC(id){
   if(String(id)==='bosta'&&o) $('assign-ship').value=o.ship||50;
 }
 
+// ===== SHOPIFY REVERSE SYNC: Fulfill on assign =====
+async function shopifyFulfill(order, courierName){
+  const shopUrl = localStorage.getItem('orderpro_shop_url');
+  const accessToken = localStorage.getItem('orderpro_shop_token');
+  if(!shopUrl || !accessToken){
+    console.warn('shopifyFulfill: no credentials');
+    return;
+  }
+  if(order.src !== 'shopify'){
+    console.warn('shopifyFulfill: not a shopify order', order.id);
+    return;
+  }
+  // shopifyId = الـ numeric ID من Shopify (مش SH-XXXXX)
+  const shopifyOrderId = order.shopifyId || order.shopify_id;
+  if(!shopifyOrderId){
+    console.warn('shopifyFulfill: no shopifyId on order', order.id);
+    toast('⚠️ الطلب مش عنده Shopify ID — مش هيتعمل fulfill تلقائي');
+    return;
+  }
+  if(!API_URL) return;
+  try{
+    const r = await apiFetch('/api/shopify/assign','POST',{
+      shopUrl,
+      accessToken,
+      shopifyOrderId: String(shopifyOrderId),
+      courierName: courierName || 'OrderPro',
+      orderId: order.id,
+    });
+    if(r && r.success){
+      toast('🟢 تم تحديث Shopify — الطلب fulfilled');
+    } else if(r){
+      const errMsg = (r.errors||[]).join(' | ') || r.error || 'خطأ غير معروف';
+      console.warn('Shopify fulfill failed:', errMsg);
+      toast('⚠️ Shopify: ' + errMsg);
+    }
+  }catch(e){
+    console.warn('shopifyFulfill error:', e);
+    toast('⚠️ تعذّر الاتصال بـ Shopify');
+  }
+}
+
 async function selCAndConfirm(id){
   const o=orders.find(x=>x.id===assignOrderId);
   const c=couriers.find(x=>x.id==id);
@@ -1887,9 +1928,7 @@ async function selCAndConfirm(id){
     localStorage.setItem('orderpro_orders',JSON.stringify(_slim));
   }catch(e){}
   c.status='نشط';
-
-  // Shopify Fulfill: يدوي من صفحة بوسطة فقط
-
+  shopifyFulfill(o, c.name);
   pushNotif('🤖',`تعيين — ${c.name}`,`${assignOrderId} · ${o.name} · ${o.area}`);
   refreshAll();
   toast(`✅ تم تعيين ${c.name} للطلب ${assignOrderId} مباشرةً`);
@@ -1906,6 +1945,7 @@ async function confirmAssign(){
   if(API_URL){const r=await apiFetch('/api/orders/'+assignOrderId,'PATCH',upd);if(r)Object.assign(o,r.order);else Object.assign(o,upd)}
   else Object.assign(o,upd);
   if(!isBosta && c) c.status='نشط';
+  if(!isBosta && c) shopifyFulfill(o, c.name);
   closeM('m-assign');
   pushNotif('🚴',`تم تعيين ${c.name}`,`الطلب ${assignOrderId} — ${o.name}`);
   refreshAll();toast(`✅ تم تعيين ${c.name} للطلب ${assignOrderId}`);
@@ -5357,6 +5397,7 @@ async function batchAssign(courierId){
     :{courierId,isBosta:false,ship,status:'جاري التوصيل',assignedZone};
   Object.assign(o,upd);
   if(c)c.status='نشط';
+  if(!isBosta && c) shopifyFulfill(o, c.name);
   if(API_URL)apiFetch('/api/orders/'+o.id,'PATCH',upd).catch(()=>{});
   try{
     // احفظ بدون الـ AWB base64 (كبيرة جداً)
