@@ -1600,10 +1600,15 @@ function renderAssignGrid(){
 function selC(id){
   selectedCourierId=id;
   document.querySelectorAll('#assign-cgrid .cc').forEach(el=>el.classList.remove('selected'));
+  // المناديب العاديين
   $('agc-'+id)&&$('agc-'+id).classList.add('selected');
+  // بوسطة
+  const bostaEl=$('assign-c-bosta');
+  if(bostaEl) bostaEl.style.border=String(id)==='bosta'?'2px solid var(--accent)':'2px solid var(--border)';
   const c=couriers.find(x=>x.id==id);
   const o=orders.find(x=>x.id===assignOrderId);
   if(c&&o) $('assign-ship').value=getShipCost(o,c);
+  if(String(id)==='bosta'&&o) $('assign-ship').value=o.ship||50;
 }
 
 async function selCAndConfirm(id){
@@ -1635,10 +1640,12 @@ async function confirmAssign(){
   const o=orders.find(x=>x.id===assignOrderId);
   const c=couriers.find(x=>x.id==selectedCourierId);
   const ship=+$('assign-ship').value||getShipCost(o,c),note=$('assign-note').value;
-  const upd={courierId:selectedCourierId,ship,note,status:'جاري التوصيل'};
+  const isBosta = String(selectedCourierId)==='bosta';
+  const upd={courierId:selectedCourierId,ship,note,status:'جاري التوصيل',isBosta};
+  if(isBosta){ bostaIds[assignOrderId]=true; localStorage.setItem('bosta_ids',JSON.stringify(bostaIds)); }
   if(API_URL){const r=await apiFetch('/api/orders/'+assignOrderId,'PATCH',upd);if(r)Object.assign(o,r.order);else Object.assign(o,upd)}
   else Object.assign(o,upd);
-  c.status='نشط';
+  if(!isBosta && c) c.status='نشط';
   closeM('m-assign');
   pushNotif('🚴',`تم تعيين ${c.name}`,`الطلب ${assignOrderId} — ${o.name}`);
   refreshAll();toast(`✅ تم تعيين ${c.name} للطلب ${assignOrderId}`);
@@ -2367,8 +2374,8 @@ function renderBostaPage(){
   // الصفحة دي بتعرض بس الطلبات اللي رُفعت على بوسطة يدوياً
   const bostaOrders=orders.filter(o=>o.bostaId); // مرفوعة أو معينة
   // الطلبات المعينة لبوسطة فقط (courierId='bosta') واللي لم ترفع بعد
-  const allOrders=orders.filter(o=>(o.isBosta||String(o.courierId)==='bosta')&&!o.bostaId&&!o.bostaExported&&o.status!=='ملغي');
-  const exportedOrders=orders.filter(o=>(o.isBosta||String(o.courierId)==='bosta')&&!o.bostaId&&o.bostaExported&&o.status!=='ملغي');
+  const allOrders=orders.filter(o=>o&&(o.isBosta||String(o.courierId)==='bosta')&&!o.bostaId&&!o.bostaExported&&o.status!=='ملغي'&&o.status!=='مكتمل');
+  const exportedOrders=orders.filter(o=>o&&(o.isBosta||String(o.courierId)==='bosta')&&!o.bostaId&&o.bostaExported&&o.status!=='ملغي');
   const sent=bostaOrders;
   const inProgress=bostaOrders.filter(o=>o.bostaStatus==='in-progress'||o.bostaStatus==='picked-up');
 
@@ -2388,7 +2395,7 @@ function renderBostaPage(){
     : bFilter==='exported' ? exportedOrders
     : bostaOrders;
 
-  $('bosta-tbody').innerHTML=displayOrders.length?displayOrders.map(o=>{
+  $('bosta-tbody').innerHTML=displayOrders.length?displayOrders.filter(o=>o).map(o=>{
     const statusBadge=o.bostaId
       ?`<div style="font-size:11px"><span style="background:var(--success-light);color:#065f46;padding:2px 7px;border-radius:10px;font-weight:700">✅ مرفوعة</span><br><span style="font-size:10px;color:var(--muted);font-family:monospace">${o.bostaTrackingNo||o.bostaId}</span></div>`
       :'<span style="background:var(--warn-light);color:#92400e;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:700">⏳ لم ترفع</span>';
@@ -2403,7 +2410,7 @@ function renderBostaPage(){
       <td>${statusBadge}</td>
       <td>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
-          ${!o.bostaIdo.bostaExported?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="undoBostaExport('${o.id}')">↩ إلغاء التصدير</button>`:''}
+          ${!o.bostaId&&!o.bostaExported?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="undoBostaExport('${o.id}')">↩ إلغاء التصدير</button>`:''}
           ${o.bostaId?`<button class="btn btn-ghost btn-xs" onclick="openBostaAWB('${o.id}')">🖨️ بوليصة</button>`:''}
           ${o.bostaId?`<button class="btn btn-ghost btn-xs" onclick="bostaTrackOne('${o.id}')">📍 تتبع</button>`:''}
           <button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="unassignBosta('${o.id}')">↩️ إلغاء</button>
