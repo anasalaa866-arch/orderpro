@@ -290,6 +290,7 @@ tr:hover td{background:#fafbff}
     <div class="nav-label">المالية</div>
     <div class="ni" data-p="accounting" onclick="goPage(this,'accounting')"><span class="ni-icon">💰</span><span class="ni-label">محاسبة المناديب</span></div>
     <div class="ni" data-p="settle-history" onclick="goPage(this,'settle-history')"><span class="ni-icon">📚</span><span class="ni-label">سجل التسويات</span></div>
+    <div class="ni" data-p="treasury" onclick="goPage(this,'treasury')"><span class="ni-icon">🏦</span><span class="ni-label">الخزنة</span></div>
     <div class="ni" data-p="shop-accounting" onclick="goPage(this,'shop-accounting')"><span class="ni-icon">🏪</span><span class="ni-label">محاسبة المحل</span></div>
     <div class="ni" data-p="checks" onclick="goPage(this,'checks')"><span class="ni-icon">📋</span><span class="ni-label">الشيكات</span><span class="nbadge" id="nb-checks" style="background:var(--danger)"></span></div>
     <div class="ni" data-p="reports" onclick="goPage(this,'reports')"><span class="ni-icon">📊</span><span class="ni-label">التقارير</span></div>
@@ -500,7 +501,7 @@ tr:hover td{background:#fafbff}
           <button class="btn btn-ghost btn-sm" onclick="bostaSelAll()">☐ تحديد الكل</button>
           <span id="bosta-sel-info" style="font-size:12px;color:var(--muted)"></span>
           
-          <button class="btn btn-ghost btn-sm" id="bosta-export-btn" style="display:none;background:#10b981;color:#fff;border-color:#10b981" onclick="exportBostaExcel()">📥 تصدير Excel (تمبلت بوسطة)</button>
+          <button class="btn btn-ghost btn-sm" id="bosta-export-btn" style="background:#10b981;color:#fff;border-color:#10b981" onclick="exportBostaExcel()">📥 تصدير Excel</button>
         </div>
       </div>
       <!-- شريط الفلترة -->
@@ -808,6 +809,38 @@ tr:hover td{background:#fafbff}
     </div>
   </div>
 
+  <!-- TREASURY -->
+  <div class="page" id="page-treasury">
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:16px;height:100%">
+
+      <!-- الخزن -->
+      <div class="card" style="height:fit-content">
+        <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">
+          <h3>🏦 الخزن</h3>
+          <button class="btn btn-primary btn-sm" onclick="openAddTreasury()">+ خزنة جديدة</button>
+        </div>
+        <div id="treasury-list" style="padding:8px"></div>
+      </div>
+
+      <!-- حركات الخزنة المختارة -->
+      <div class="card">
+        <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <div>
+            <h3 id="treasury-name-title">اختر خزنة</h3>
+            <div id="treasury-balance-display" style="font-size:22px;font-weight:800;color:var(--accent);margin-top:4px"></div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-success btn-sm" onclick="openTreasuryTx('in')">+ وارد</button>
+            <button class="btn btn-sm" style="background:var(--danger);color:#fff" onclick="openTreasuryTx('out')">- منصرف</button>
+          </div>
+        </div>
+        <div id="treasury-tx-list" style="padding:8px;max-height:500px;overflow-y:auto">
+          <div style="text-align:center;padding:40px;color:var(--muted)">اختر خزنة من القائمة</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- SETTLE HISTORY -->
   <div class="page" id="page-settle-history">
     <div class="card">
@@ -1017,6 +1050,29 @@ tr:hover td{background:#fafbff}
     <button class="btn btn-ghost" onclick="printCurrentSettle()" style="color:var(--accent);border-color:var(--accent)">🖨️ طباعة للمراجعة</button>
     <button class="btn btn-success" onclick="doSettle()">✅ تأكيد التسوية</button>
   </div>
+</div></div>
+
+
+<!-- Add Treasury Modal -->
+<div class="overlay" id="m-add-treasury"><div class="modal" style="width:380px">
+  <div class="mhd"><h3 id="treasury-modal-title">+ خزنة جديدة</h3><button class="xbtn" onclick="closeM('m-add-treasury')">✕</button></div>
+  <div class="mbody">
+    <div class="fg"><label>اسم الخزنة *</label><input id="tr-name" placeholder="مثال: الخزنة الرئيسية"></div>
+    <div class="fg"><label>رصيد أول المدة</label><input id="tr-opening" type="number" placeholder="0" value="0"></div>
+    <div class="fg"><label>ملاحظة</label><input id="tr-note" placeholder="اختياري"></div>
+  </div>
+  <div class="mft"><button class="btn btn-ghost" onclick="closeM('m-add-treasury')">إلغاء</button><button class="btn btn-success" onclick="saveTreasury()">✅ حفظ</button></div>
+</div></div>
+
+<!-- Add Transaction Modal -->
+<div class="overlay" id="m-treasury-tx"><div class="modal" style="width:400px">
+  <div class="mhd"><h3 id="treasury-tx-title">حركة جديدة</h3><button class="xbtn" onclick="closeM('m-treasury-tx')">✕</button></div>
+  <div class="mbody">
+    <div class="fg"><label>المبلغ *</label><input id="tx-amount" type="number" placeholder="أدخل المبلغ" min="1"></div>
+    <div class="fg"><label>السبب / البيان *</label><input id="tx-reason" placeholder="مثال: مصاريف شحن، استلام من مبيعات..."></div>
+    <div class="fg"><label>التاريخ</label><input id="tx-date" type="date"></div>
+  </div>
+  <div class="mft"><button class="btn btn-ghost" onclick="closeM('m-treasury-tx')">إلغاء</button><button class="btn btn-success" id="tx-confirm-btn" onclick="saveTreasuryTx()">✅ حفظ</button></div>
 </div></div>
 
 <div class="toast" id="toast"></div>
@@ -2400,7 +2456,7 @@ function renderBostaPage(){
       ?`<div style="font-size:11px"><span style="background:var(--success-light);color:#065f46;padding:2px 7px;border-radius:10px;font-weight:700">✅ مرفوعة</span><br><span style="font-size:10px;color:var(--muted);font-family:monospace">${o.bostaTrackingNo||o.bostaId}</span></div>`
       :'<span style="background:var(--warn-light);color:#92400e;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:700">⏳ لم ترفع</span>';
     return`<tr>
-      <td style="text-align:center"><input type="checkbox" class="bosta-chk" value="${o.id}" onchange="updateBostaBulkBtn()"></td>
+      <td style="text-align:center"><input type="checkbox" class="bosta-chk" onchange="updateBostaBulkBtns()" value="${o.id}" onchange="updateBostaBulkBtn()"></td>
       <td><strong>${o.id}</strong><br>${deliveryBadge(o)}</td>
       <td><strong>${o.name}</strong></td>
       <td style="direction:ltr;text-align:right;font-size:11px">${o.phone||'—'}</td>
@@ -2435,6 +2491,14 @@ function bostaSetFilter(f, btn){
   document.querySelectorAll('#bosta-filter-sent,#bosta-filter-pending,#bosta-filter-exported').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   renderBostaPage();
+}
+
+function updateBostaBulkBtns(){
+  const checked=[...document.querySelectorAll('.bosta-chk:checked')].map(c=>c.value);
+  const exportBtn=$('bosta-export-btn');
+  if(exportBtn) exportBtn.style.display=checked.length?'inline-flex':'none';
+  const info=$('bosta-sel-info');
+  if(info) info.textContent=checked.length?checked.length+' محدد':'';
 }
 
 function bostaSelAll(){
@@ -3394,15 +3458,33 @@ function printShopAccounting(){
 // ===== نظام الشيكات =====
 let chkBooks=[];let chkList=[];let chkSuppliers=[];
 let editingChkId=null;let chkStatusFilter='all';let chkImgData='';
-try{chkSuppliers=JSON.parse(localStorage.getItem('chk_suppliers')||'[]');}catch(e){}
-try{chkBooks=JSON.parse(localStorage.getItem('chk_books')||'[]');}catch(e){}
-try{chkList=JSON.parse(localStorage.getItem('chk_list')||'[]');}catch(e){}
+// checks loaded from DB on login
+
+async function loadChks(){
+  if(!API_URL) return;
+  try{
+    const [r1, r2, r3] = await Promise.all([
+      apiFetch('/api/check-books'),
+      apiFetch('/api/checks'),
+      apiFetch('/api/check-suppliers')
+    ]);
+    if(r1?.books) chkBooks = r1.books.map(b=>({
+      id:b.id, name:b.name, bank:b.bank||'', account:b.account||'',
+      pages:b.pages||48, firstNum:b.first_num||b.firstNum||1, note:b.note||''
+    }));
+    if(r2?.checks) chkList = r2.checks.map(c=>({
+      id:c.id, bookId:c.book_id||c.bookId, num:c.num,
+      supplier:c.supplier, amount:parseFloat(c.amount),
+      dueDate:c.due_date||c.dueDate, status:c.status,
+      note:c.note||'', img:c.img||''
+    }));
+    if(r3?.suppliers) chkSuppliers = r3.suppliers.map(s=>s.name||s);
+  }catch(e){ console.error('loadChks:', e); }
+}
 
 function saveChks(syncNow=true){
-  try{localStorage.setItem('chk_books',JSON.stringify(chkBooks));}catch(e){}
-  try{localStorage.setItem('chk_list',JSON.stringify(chkList));}catch(e){}
-  try{localStorage.setItem('chk_suppliers',JSON.stringify(chkSuppliers));}catch(e){}
-  if(syncNow&&API_URL)apiFetch('/api/sync-checks','POST',{books:chkBooks,checks:chkList}).catch(()=>{});
+  // DB only - no localStorage
+  if(syncNow&&API_URL)apiFetch('/api/sync-checks','POST',{books:chkBooks,checks:chkList,suppliers:chkSuppliers}).catch(()=>{});
 }
 function chkFmtAmount(n){return Number(n||0).toLocaleString('ar-EG');}
 function chkFmtDate(d){if(!d)return '—';return new Date(d).toLocaleDateString('ar-EG',{year:'numeric',month:'short',day:'numeric'});}
@@ -3559,7 +3641,8 @@ function viewChkImg(id){const c=chkList.find(x=>x.id===id);if(!c||!c.img)return;
 function openCheckBook(){renderChkBooks();['bk-name','bk-bank','bk-account'].forEach(id=>$(id)&&($(id).value=''));$('bk-pages').value=48;openM('m-chk-books');}
 function saveChkBook(){
   const name=$('bk-name').value.trim();if(!name){toast('❗ أدخل اسم الدفتر');return;}
-  const b={id:Date.now()+'_bk',name,bank:$('bk-bank').value.trim(),account:$('bk-account').value.trim(),pages:parseInt($('bk-pages').value)||48};
+  const firstNum=parseInt($('bk-first-num')?.value)||1;
+  const b={id:Date.now()+'_bk',name,bank:$('bk-bank').value.trim(),account:$('bk-account').value.trim(),pages:parseInt($('bk-pages').value)||48,firstNum};
   chkBooks.push(b);saveChks(false);if(API_URL)apiFetch('/api/check-books','POST',b).catch(()=>{});
   renderChkBooks();toast('✅ تم إضافة الدفتر');['bk-name','bk-bank','bk-account'].forEach(id=>$(id)&&($(id).value=''));
 }
@@ -3781,7 +3864,7 @@ function renderUsersAdmin(){
     'dashboard':'لوحة التحكم','orders':'الطلبات','couriers':'المناديب',
     'assign':'توزيع الطلبات','pickup':'استلام المحل','transit':'العبور',
     'bosta':'بوسطة','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل',
-    'import-excel':'استيراد Excel','problems':'مشاكل','accounting':'محاسبة المناديب','settle-history':'سجل التسويات','settle-history':'سجل التسويات',
+    'import-excel':'استيراد Excel','problems':'مشاكل','accounting':'محاسبة المناديب','settle-history':'سجل التسويات','treasury':'الخزنة','settle-history':'سجل التسويات','treasury':'الخزنة',
     'shop-accounting':'محاسبة المحل','checks':'الشيكات','reports':'التقارير',
     'expiry':'الصلاحيات','notifs':'الإشعارات','settings':'الإعدادات'
   };
@@ -4172,6 +4255,207 @@ function renderSettleHistory(){
   el.innerHTML=html;
 }
 
+
+// ===== نظام الخزنة =====
+var _treasuries = []; // [{id, name, opening, note}]
+var _treasuryTx = []; // [{id, treasuryId, type:'in'/'out', amount, reason, date}]
+var _activeTreasuryId = null;
+var _txType = 'in';
+var _editingTxId = null;
+
+async function loadTreasury(){
+  if(!API_URL){ return; }
+  try{
+    const [r1, r2] = await Promise.all([
+      apiFetch('/api/treasuries'),
+      apiFetch('/api/treasury-tx')
+    ]);
+    if(r1?.treasuries) _treasuries = r1.treasuries;
+    if(r2?.transactions) _treasuryTx = r2.transactions;
+  }catch(e){ console.error('loadTreasury:', e); }
+}
+
+function saveTreasuryData(){
+  // DB only - لا localStorage
+}
+
+function getTreasuryBalance(tId){
+  const t = _treasuries.find(x=>x.id===tId);
+  if(!t) return 0;
+  const txs = _treasuryTx.filter(x=>x.treasuryId===tId);
+  const inAmt = txs.filter(x=>x.type==='in').reduce((s,x)=>s+x.amount,0);
+  const outAmt = txs.filter(x=>x.type==='out').reduce((s,x)=>s+x.amount,0);
+  return (t.opening||0) + inAmt - outAmt;
+}
+
+function renderTreasuryList(){
+  const el=document.getElementById('treasury-list');
+  if(!el) return;
+  if(!_treasuries.length){
+    el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">لا توجد خزن بعد</div>';
+    return;
+  }
+  el.innerHTML = _treasuries.map(t=>{
+    const bal = getTreasuryBalance(t.id);
+    const isActive = t.id === _activeTreasuryId;
+    return '<div onclick="selectTreasury(this.dataset.tid)" data-tid="'+t.id+'"" style="padding:12px 16px;border-radius:9px;margin-bottom:8px;cursor:pointer;border:2px solid '+(isActive?'var(--accent)':'var(--border)')+';background:'+(isActive?'var(--accent-light)':'var(--card)')+'">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center">'
+      +'<strong style="font-size:13px">'+t.name+'</strong>'
+      +'<button onclick="event.stopPropagation();deleteTreasury(this.dataset.tid)" data-tid="'+t.id+'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">🗑</button>'
+      +'</div>'
+      +'<div style="font-size:20px;font-weight:800;color:'+(bal>=0?'var(--success)':'var(--danger)')+'">'+bal.toLocaleString()+' ج</div>'
+      +'<div style="font-size:11px;color:var(--muted)">رصيد أول المدة: '+(t.opening||0).toLocaleString()+' ج</div>'
+      +'</div>';
+  }).join('');
+}
+
+function selectTreasury(tId){
+  _activeTreasuryId = tId;
+  const t = _treasuries.find(x=>x.id===tId);
+  if(!t) return;
+  const bal = getTreasuryBalance(tId);
+  const titleEl = document.getElementById('treasury-name-title');
+  const balEl = document.getElementById('treasury-balance-display');
+  if(titleEl) titleEl.textContent = '🏦 '+t.name;
+  if(balEl) balEl.innerHTML = '<span style="color:'+(bal>=0?'var(--success)':'var(--danger)')+'">'+bal.toLocaleString()+' ج</span> <span style="font-size:13px;color:var(--muted);font-weight:400">الرصيد الحالي</span>';
+  renderTreasuryTx(tId);
+  renderTreasuryList();
+}
+
+function renderTreasuryTx(tId){
+  const el=document.getElementById('treasury-tx-list');
+  if(!el) return;
+  const txs = _treasuryTx.filter(x=>x.treasuryId===tId).sort((a,b)=>new Date(b.date)-new Date(a.date)||b.id.localeCompare(a.id));
+  const t = _treasuries.find(x=>x.id===tId);
+  if(!txs.length && !(t&&t.opening)){
+    el.innerHTML='<div style="text-align:center;padding:30px;color:var(--muted)">لا توجد حركات بعد</div>';
+    return;
+  }
+  let html = '';
+  // رصيد أول المدة
+  if(t&&t.opening){
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:8px;background:#f0fdf4;border:1px solid #86efac;margin-bottom:6px">'
+      +'<div><div style="font-size:12px;font-weight:700">رصيد أول المدة</div></div>'
+      +'<strong style="color:var(--success);font-size:15px">'+t.opening.toLocaleString()+' ج</strong>'
+      +'</div>';
+  }
+  txs.forEach(tx=>{
+    const isIn = tx.type==='in';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:8px;border:1px solid var(--border);margin-bottom:6px;background:var(--card)">'
+      +'<div>'
+      +'<div style="display:flex;align-items:center;gap:6px">'
+      +'<span style="font-size:16px">'+(isIn?'📥':'📤')+'</span>'
+      +'<div>'
+      +'<div style="font-size:13px;font-weight:600">'+tx.reason+'</div>'
+      +'<div style="font-size:11px;color:var(--muted)">'+new Date(tx.date).toLocaleDateString('ar-EG',{year:'numeric',month:'short',day:'numeric'})+'</div>'
+      +'</div>'
+      +'</div>'
+      +'</div>'
+      +'<div style="display:flex;align-items:center;gap:8px">'
+      +'<strong style="font-size:15px;color:'+(isIn?'var(--success)':'var(--danger)')+'">'+(isIn?'+':'-')+tx.amount.toLocaleString()+' ج</strong>'
+      +'<button onclick="editTreasuryTx(this.dataset.txid)" data-txid="'+tx.id+'" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px" title="تعديل">✏️</button>'
+      +'<button onclick="deleteTreasuryTx(this.dataset.txid)" data-txid="'+tx.id+'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px" title="حذف">✕</button>'
+      +'</div>'
+      +'</div>';
+  });
+  el.innerHTML = html;
+}
+
+function openAddTreasury(){
+  $('tr-name')&&($('tr-name').value='');
+  $('tr-opening')&&($('tr-opening').value='0');
+  $('tr-note')&&($('tr-note').value='');
+  openM('m-add-treasury');
+}
+
+function saveTreasury(){
+  const name = $('tr-name')?.value.trim();
+  if(!name){ toast('❗ أدخل اسم الخزنة'); return; }
+  const opening = parseFloat($('tr-opening')?.value)||0;
+  const note = $('tr-note')?.value.trim();
+  const t = {id:Date.now()+'_tr', name, opening, note};
+  _treasuries.push(t);
+  if(API_URL) apiFetch('/api/treasuries','POST',t).catch(e=>console.error(e));
+  closeM('m-add-treasury');
+  renderTreasuryList();
+  selectTreasury(t.id);
+  toast('✅ تم إضافة الخزنة');
+}
+
+function deleteTreasury(tId){
+  if(!confirm('هل تأكد حذف هذه الخزنة وكل حركاتها؟')) return;
+  _treasuries = _treasuries.filter(x=>x.id!==tId);
+  _treasuryTx = _treasuryTx.filter(x=>x.treasuryId!==tId);
+  if(_activeTreasuryId===tId){ _activeTreasuryId=null; }
+  if(API_URL) apiFetch('/api/treasuries/'+tId,'DELETE').catch(()=>{});
+  renderTreasuryList();
+  const el=document.getElementById('treasury-tx-list');
+  if(el) el.innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">اختر خزنة من القائمة</div>';
+  toast('✅ تم حذف الخزنة');
+}
+
+function openTreasuryTx(type){
+  if(!_activeTreasuryId){ toast('❗ اختر خزنة أولاً'); return; }
+  _txType = type;
+  _editingTxId = null;
+  const title = document.getElementById('treasury-tx-title');
+  const btn = document.getElementById('tx-confirm-btn');
+  if(btn) btn.textContent = '✅ حفظ';
+  if(title) title.textContent = type==='in'?'📥 إضافة وارد':'📤 إضافة منصرف';
+  if(btn){ btn.style.background = type==='in'?'var(--success)':'var(--danger)'; }
+  $('tx-amount')&&($('tx-amount').value='');
+  $('tx-reason')&&($('tx-reason').value='');
+  $('tx-date')&&($('tx-date').value=new Date().toISOString().split('T')[0]);
+  openM('m-treasury-tx');
+}
+
+function saveTreasuryTx(){
+  const amount = parseFloat($('tx-amount')?.value);
+  const reason = $('tx-reason')?.value.trim();
+  const date = $('tx-date')?.value || new Date().toISOString().split('T')[0];
+  if(!amount||amount<=0){ toast('❗ أدخل مبلغ صحيح'); return; }
+  if(!reason){ toast('❗ أدخل السبب'); return; }
+  if(_editingTxId){
+    const tx = _treasuryTx.find(x=>x.id===_editingTxId);
+    if(tx){ tx.amount=amount; tx.reason=reason; tx.date=date; tx.type=_txType; }
+    if(API_URL) apiFetch('/api/treasury-tx/'+_editingTxId,'PATCH',{amount,reason,date,type:_txType}).catch(()=>{});
+    _editingTxId = null;
+    toast('✅ تم تعديل الحركة');
+  } else {
+    const tx = {id:Date.now()+'_tx', treasuryId:_activeTreasuryId, type:_txType, amount, reason, date};
+    _treasuryTx.push(tx);
+    if(API_URL) apiFetch('/api/treasury-tx','POST',tx).catch(()=>{});
+    toast('✅ تم تسجيل الحركة');
+  }
+  closeM('m-treasury-tx');
+  // reset btn text
+  const btn = document.getElementById('tx-confirm-btn');
+  if(btn) btn.textContent = '✅ حفظ';
+  selectTreasury(_activeTreasuryId);
+}
+
+function editTreasuryTx(txId){
+  const tx = _treasuryTx.find(x=>x.id===txId);
+  if(!tx) return;
+  _editingTxId = txId;
+  _txType = tx.type;
+  const title = document.getElementById('treasury-tx-title');
+  const btn = document.getElementById('tx-confirm-btn');
+  if(title) title.textContent = tx.type==='in'?'✏️ تعديل وارد':'✏️ تعديل منصرف';
+  if(btn){ btn.style.background = tx.type==='in'?'var(--success)':'var(--danger)'; btn.textContent='✅ حفظ التعديل'; }
+  $('tx-amount')&&($('tx-amount').value = tx.amount);
+  $('tx-reason')&&($('tx-reason').value = tx.reason);
+  $('tx-date')&&($('tx-date').value = tx.date||new Date().toISOString().split('T')[0]);
+  openM('m-treasury-tx');
+}
+
+function deleteTreasuryTx(txId){
+  if(!confirm('حذف هذه الحركة؟')) return;
+  _treasuryTx = _treasuryTx.filter(x=>x.id!==txId);
+  if(API_URL) apiFetch('/api/treasury-tx/'+txId,'DELETE').catch(()=>{});
+  if(_activeTreasuryId) selectTreasury(_activeTreasuryId);
+}
+
 window.addEventListener('load', function(){
   if(currentUser){
     document.getElementById('login-screen').classList.add('hidden');
@@ -4493,6 +4777,18 @@ document.addEventListener('input', function(e){
 });
 
 // لما يتغير الدفتر → حدّث قائمة أرقام الشيكات
+// إصلاح الدفاتر القديمة بدون firstNum
+function fixOldChkBooks(){
+  let changed = false;
+  chkBooks.forEach(b=>{
+    if(!b.firstNum){
+      b.firstNum = 1;
+      changed = true;
+    }
+  });
+  if(changed) saveChks(false);
+}
+
 function onChkBookChange(){
   const sel=$('chk-book-sel');
   const numSel=$('chk-num-sel');
@@ -5011,8 +5307,13 @@ function checkExpiryAlerts(){
 
 // ===== تصدير Excel بوسطة =====
 function exportBostaExcel(){
-  const checked=[...document.querySelectorAll('.bosta-chk:checked')].map(c=>c.value);
-  if(!checked.length){toast('❗ اختر طلبات أولاً');return;}
+  let checked=[...document.querySelectorAll('.bosta-chk:checked')].map(c=>c.value);
+  // لو مفيش محدد - صدّر الكل المتاح
+  if(!checked.length){
+    const all=[...document.querySelectorAll('.bosta-chk')].map(c=>c.value);
+    if(!all.length){toast('❗ لا توجد طلبات متاحة للتصدير');return;}
+    checked=all;
+  }
   const selectedOrders=orders.filter(o=>checked.includes(o.id));
 
   // ===== Mapping المحافظات =====
@@ -5484,6 +5785,7 @@ function goPage(el,page){
   if(page==='settings')renderUsersAdmin();
   if(page==='delivery-sheet')dsInit();
   if(page==='settle-history')renderSettleHistory();
+  if(page==='treasury'){loadTreasury().then(()=>{renderTreasuryList();if(_activeTreasuryId)selectTreasury(_activeTreasuryId);});}
   if(page==='expiry')renderExpiryPage();
 }
 
@@ -6094,6 +6396,7 @@ refreshSelects();renderUsers();refreshAll();
 <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="problems" style="width:15px;height:15px;accent-color:var(--accent)"> ⚠️ طلبات مشكلة</label>
 <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="accounting" style="width:15px;height:15px;accent-color:var(--accent)"> 💰 محاسبة المناديب</label>
 <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="settle-history" style="width:15px;height:15px;accent-color:var(--accent)"> 📚 سجل التسويات</label>
+<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="treasury" style="width:15px;height:15px;accent-color:var(--accent)"> 🏦 الخزنة</label>
 <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="shop-accounting" style="width:15px;height:15px;accent-color:var(--accent)"> 🏪 محاسبة المحل</label>
 <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="checks" style="width:15px;height:15px;accent-color:var(--accent)"> 📋 الشيكات</label>
 <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="reports" style="width:15px;height:15px;accent-color:var(--accent)"> 📊 التقارير</label>
