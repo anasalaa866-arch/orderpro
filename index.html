@@ -832,6 +832,7 @@ tr:hover td{background:#fafbff}
           <div style="display:flex;gap:8px">
             <button class="btn btn-success btn-sm" onclick="openTreasuryTx('in')">+ وارد</button>
             <button class="btn btn-sm" style="background:var(--danger);color:#fff" onclick="openTreasuryTx('out')">- منصرف</button>
+            <button class="btn btn-sm" style="background:#6366f1;color:#fff" onclick="openTreasuryPrint()">🖨️ طباعة</button>
           </div>
         </div>
         <div id="treasury-tx-list" style="padding:8px;max-height:500px;overflow-y:auto">
@@ -995,6 +996,88 @@ tr:hover td{background:#fafbff}
   <div class="mft"><button class="btn btn-ghost" onclick="closeM('m-order')">إلغاء</button><button class="btn btn-primary" onclick="addOrder()">✅ إضافة الطلب</button></div>
 </div></div>
 
+<!-- EDIT ORDER MODAL -->
+<div class="overlay" id="m-edit-order"><div class="modal" style="width:520px;max-width:95vw">
+  <div class="mhd">
+    <div>
+      <h3>✏️ تعديل الطلب</h3>
+      <div id="eo-order-id" style="font-size:11px;color:var(--muted);margin-top:2px"></div>
+    </div>
+    <button class="xbtn" onclick="closeM('m-edit-order')">✕</button>
+  </div>
+  <div class="mbd" style="display:flex;flex-direction:column;gap:12px">
+    <!-- بيانات العميل -->
+    <div style="background:var(--bg);border-radius:9px;padding:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase">بيانات العميل</div>
+      <div class="row2">
+        <div class="fg"><label>اسم العميل</label><input type="text" id="eo-name" placeholder="محمد أحمد"></div>
+        <div class="fg"><label>رقم الهاتف</label><input type="text" id="eo-phone" placeholder="01xxxxxxxxx" dir="ltr"></div>
+      </div>
+    </div>
+    <!-- العنوان -->
+    <div style="background:var(--bg);border-radius:9px;padding:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px">📍 العنوان</div>
+      <div class="fg" style="margin-bottom:8px"><label>المنطقة</label><input type="text" id="eo-area" placeholder="القاهرة، المعادي..."></div>
+      <div class="fg"><label>العنوان التفصيلي</label><textarea id="eo-addr" placeholder="الشارع، الدور، الشقة..." style="min-height:60px"></textarea></div>
+    </div>
+    <!-- الطلب والمبالغ -->
+    <div style="background:var(--bg);border-radius:9px;padding:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px">💰 المبالغ</div>
+      <div class="row2">
+        <div class="fg"><label>إجمالي COD (جنيه)</label><input type="number" id="eo-total" min="0"></div>
+        <div class="fg"><label>تمن الشحن (جنيه)</label><input type="number" id="eo-ship" min="0"></div>
+      </div>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="eo-paid" style="width:15px;height:15px;accent-color:var(--accent)">
+          <span>💳 مدفوع أونلاين (بدون تحصيل)</span>
+        </label>
+      </div>
+    </div>
+    <!-- تفاصيل الطلب -->
+    <div style="background:var(--bg);border-radius:9px;padding:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px">📦 تفاصيل الطلب</div>
+      <div class="fg" style="margin-bottom:8px"><label>المنتجات / البيان</label><textarea id="eo-details" placeholder="المنتجات..." style="min-height:55px"></textarea></div>
+      <div class="fg"><label>ملاحظات للمندوب</label><input type="text" id="eo-note" placeholder="تعليمات التوصيل..."></div>
+    </div>
+    <!-- نوع التوصيل والحالة -->
+    <div style="background:var(--bg);border-radius:9px;padding:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px">🚚 التوصيل</div>
+      <div class="row2">
+        <div class="fg">
+          <label>نوع التوصيل</label>
+          <select id="eo-delivery-type" style="width:100%">
+            <option value="normal">🚚 عادي</option>
+            <option value="express">⚡ مستعجل (Same Day)</option>
+            <option value="pickup">🏪 استلام من المحل</option>
+            <option value="transit">📦 عبور</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>الحالة</label>
+          <select id="eo-status" style="width:100%">
+            <option value="في الانتظار">في الانتظار</option>
+            <option value="جاري التوصيل">جاري التوصيل</option>
+            <option value="مكتمل">مكتمل ✅</option>
+            <option value="ملغي">ملغي ❌</option>
+            <option value="تحت التسوية">تحت التسوية</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg" style="margin-top:8px">
+        <label>المندوب</label>
+        <select id="eo-courier" style="width:100%">
+          <option value="">— بدون تعيين —</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div class="mft">
+    <button class="btn btn-ghost" onclick="closeM('m-edit-order')">إلغاء</button>
+    <button class="btn btn-primary" onclick="saveEditOrder()">💾 حفظ التعديلات</button>
+  </div>
+</div></div>
+
 <div class="overlay" id="m-courier"><div class="modal">
   <div class="mhd"><h3>🚴 إضافة مندوب جديد</h3><button class="xbtn" onclick="closeM('m-courier')">✕</button></div>
   <div class="mbd">
@@ -1075,6 +1158,109 @@ tr:hover td{background:#fafbff}
   <div class="mft"><button class="btn btn-ghost" onclick="closeM('m-treasury-tx')">إلغاء</button><button class="btn btn-success" id="tx-confirm-btn" onclick="saveTreasuryTx()">✅ حفظ</button></div>
 </div></div>
 
+<!-- ACCOUNTING SESSION MODAL -->
+<div class="overlay" id="m-acc-session" style="z-index:1100"><div class="modal" style="width:560px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
+  <!-- هيدر ثابت -->
+  <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--card);flex-shrink:0">
+    <div>
+      <div style="font-size:16px;font-weight:800" id="as-title">محاسبة المندوب</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px" id="as-subtitle"></div>
+    </div>
+    <button class="xbtn" onclick="closeM('m-acc-session')">✕</button>
+  </div>
+  <!-- progress bar -->
+  <div style="height:4px;background:var(--bg);flex-shrink:0">
+    <div id="as-progress" style="height:100%;background:var(--accent);transition:width .3s;width:0%"></div>
+  </div>
+  <!-- كارت الطلب الحالي -->
+  <div style="padding:16px 18px;flex:1;overflow-y:auto">
+    <!-- ملخص أعلى -->
+    <div id="as-summary-bar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:10px 14px;background:var(--bg);border-radius:10px;font-size:12px">
+      <span>📦 <strong id="as-total-count">0</strong> طلب</span>
+      <span style="color:var(--success)">✅ اتسلم: <strong id="as-done-count">0</strong></span>
+      <span style="color:var(--danger)">❌ ملغي: <strong id="as-cancelled-count">0</strong></span>
+      <span style="color:var(--muted)">⏳ لسه: <strong id="as-pending-count">0</strong></span>
+      <span style="color:var(--success);margin-right:auto">💰 محصّل: <strong id="as-collected">0 ج</strong></span>
+    </div>
+    <!-- كارت الطلب -->
+    <div id="as-order-card" style="border:2px solid var(--border);border-radius:14px;padding:18px;background:var(--card);margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div>
+          <div style="font-size:11px;color:var(--muted)">طلب <span id="as-idx-label"></span></div>
+          <div style="font-size:22px;font-weight:800;color:var(--accent)" id="as-order-id"></div>
+        </div>
+        <div id="as-order-status-badge"></div>
+      </div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:6px" id="as-order-name"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px" id="as-order-meta"></div>
+      <div id="as-order-addr" style="font-size:13px;color:var(--muted);margin-bottom:12px"></div>
+      <div id="as-order-amount" style="font-size:22px;font-weight:800;margin-bottom:16px"></div>
+      <!-- أزرار الحالة -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px" id="as-action-btns">
+        <button onclick="asSetStatus('collected')" id="as-btn-collected"
+          style="padding:14px 8px;border-radius:12px;border:2px solid #10b981;background:#ecfdf5;color:#065f46;font-family:Cairo,sans-serif;font-weight:700;font-size:14px;cursor:pointer">
+          ✅ اتسلم
+        </button>
+        <button onclick="asSetStatus('pending')" id="as-btn-pending"
+          style="padding:14px 8px;border-radius:12px;border:2px solid #f59e0b;background:#fffbeb;color:#92400e;font-family:Cairo,sans-serif;font-weight:700;font-size:14px;cursor:pointer">
+          ⏳ لسه
+        </button>
+        <button onclick="asSetStatus('cancelled')" id="as-btn-cancelled"
+          style="padding:14px 8px;border-radius:12px;border:2px solid #ef4444;background:#fef2f2;color:#991b1b;font-family:Cairo,sans-serif;font-weight:700;font-size:14px;cursor:pointer">
+          ❌ ملغي
+        </button>
+      </div>
+      <!-- زر تحويل مدفوع -->
+      <div style="margin-top:10px">
+        <button onclick="asTogglePaid()" id="as-btn-paid"
+          style="width:100%;padding:10px;border-radius:10px;border:2px solid #6366f1;background:#eff6ff;color:#3730a3;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer">
+          💳 تحويل لمدفوع
+        </button>
+      </div>
+    </div>
+    <!-- شاشة الملخص النهائي -->
+    <div id="as-final-summary" style="display:none;text-align:center;padding:20px 10px">
+      <div style="font-size:40px;margin-bottom:10px">🎉</div>
+      <div style="font-size:18px;font-weight:800;margin-bottom:16px">انتهت المحاسبة</div>
+      <div id="as-final-details" style="background:var(--bg);border-radius:12px;padding:16px;text-align:right;font-size:13px;line-height:2.2"></div>
+    </div>
+  </div>
+  <!-- footer تنقل ثابت -->
+  <div id="as-footer" style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;background:var(--card);flex-shrink:0">
+    <button onclick="asPrev()" id="as-prev-btn" style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 16px;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer;display:none">◀ السابق</button>
+    <button onclick="asNext()" id="as-next-btn" style="background:var(--accent);color:#fff;border:none;border-radius:9px;padding:9px 20px;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer">التالي ▶</button>
+    <span id="as-swipe-hint" style="font-size:11px;color:var(--muted);margin-right:auto">اختر حالة الطلب ثم اضغط التالي</span>
+  </div>
+</div></div>
+
+<!-- TREASURY PRINT MODAL -->
+<div class="overlay" id="m-treasury-print"><div class="modal" style="width:440px">
+  <div class="mhd"><h3>🖨️ طباعة حركات الخزنة</h3><button class="xbtn" onclick="closeM('m-treasury-print')">✕</button></div>
+  <div class="mbody" style="display:flex;flex-direction:column;gap:14px">
+    <div style="background:var(--bg);border-radius:9px;padding:12px;font-size:13px">
+      <strong id="tprint-treasury-name" style="color:var(--accent)">—</strong>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="fg"><label>من تاريخ</label><input type="date" id="tprint-from"></div>
+      <div class="fg"><label>إلى تاريخ</label><input type="date" id="tprint-to"></div>
+    </div>
+    <div class="fg">
+      <label>نوع الحركات</label>
+      <select id="tprint-type" style="width:100%">
+        <option value="all">الكل (وارد + منصرف)</option>
+        <option value="in">وارد فقط 📥</option>
+        <option value="out">منصرف فقط 📤</option>
+      </select>
+    </div>
+    <div id="tprint-summary" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:9px;padding:12px;font-size:13px"></div>
+  </div>
+  <div class="mft">
+    <button class="btn btn-ghost" onclick="closeM('m-treasury-print')">إلغاء</button>
+    <button class="btn btn-sm" style="background:#6366f1;color:#fff" onclick="previewTreasuryPrint()">👁️ معاينة</button>
+    <button class="btn btn-success" onclick="executeTreasuryPrint()">🖨️ طباعة</button>
+  </div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1129,6 +1315,7 @@ function isProblematicOrder(o){
   }
   return false;
 }
+const LOGO_B64 = "data:image/png;base64,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";
 const isSameDay=o=>{
   const dt=(o.deliveryType||'').toLowerCase();
   if(dt==='express') return true;
@@ -1533,7 +1720,7 @@ function renderOrders(){
   // طلبات الاستلام والعبور مش بتظهر في التوزيع
   
   if(searchQ)list=list.filter(o=>(o.id+o.name+o.area+o.phone).includes(searchQ));
-  $('orders-tbody').innerHTML=list.map(o=>`<tr><td style="text-align:center"><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"></td><td><strong>${o.id}</strong></td><td>${srcBadge(o.src)}</td><td>${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px">${o.phone}</td><td>📍 ${o.area}</td><td>${deliveryBadge(o)}</td><td><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td>${cName(o.courierId)}</td><td>${sBadge(o.status)}</td><td><div style="display:flex;gap:4px;flex-wrap:wrap">${(!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-primary btn-xs" onclick="openAssign('${o.id}')">📍 تعيين</button>`:''}${o.status!=='ملغي'?`<button class="btn btn-xs" style="background:${o.paid?'var(--warn-light)':'var(--success-light)'};color:${o.paid?'#92400e':'#065f46'};border:1px solid ${o.paid?'#fcd34d':'#86efac'}" onclick="togglePaid('${o.id}')">${o.paid?'↩️ COD':'💳 مدفوع'}</button>`:''}${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✓ تم</button>`:''}${(o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}</div></td></tr>`).join('');
+  $('orders-tbody').innerHTML=list.map(o=>`<tr><td style="text-align:center"><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"></td><td><strong>${o.id}</strong></td><td>${srcBadge(o.src)}</td><td>${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px">${o.phone}</td><td>📍 ${o.area}</td><td>${deliveryBadge(o)}</td><td><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td>${cName(o.courierId)}</td><td>${sBadge(o.status)}</td><td><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="openEditOrder('${o.id}')">✏️</button><button class="btn btn-ghost btn-xs" style="color:#6366f1;border-color:#6366f1" onclick="printPackingSlip('${o.id}')" title="طباعة فاتورة">🧾</button>${(!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-primary btn-xs" onclick="openAssign('${o.id}')">📍 تعيين</button>`:''}${o.status!=='ملغي'?`<button class="btn btn-xs" style="background:${o.paid?'var(--warn-light)':'var(--success-light)'};color:${o.paid?'#92400e':'#065f46'};border:1px solid ${o.paid?'#fcd34d':'#86efac'}" onclick="togglePaid('${o.id}')">${o.paid?'↩️ COD':'💳 مدفوع'}</button>`:''}${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✓ تم</button>`:''}${(o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}</div></td></tr>`).join('');
 }
 
 function filterSt(btn,f){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter=f;orderTypeFilter=null;renderOrders()}
@@ -1596,6 +1783,8 @@ function renderAssignPage(){
         }).join('')}
         <button class="btn btn-xs" style="background:#6366f1;color:#fff;border:none;margin:1px;padding:3px 8px;font-size:10px;font-weight:700" onclick="assignToBosta('${o.id}')" title="توصيل عبر شركة بوسطة">🚚 بوسطة</button>
         <button class="btn btn-ghost btn-xs" style="font-size:10px;margin:1px" onclick="openAssign('${o.id}')">⋯</button>
+        <button class="btn btn-ghost btn-xs" style="font-size:10px;margin:1px;color:#6366f1;border-color:#6366f1" onclick="printPackingSlip('${o.id}')" title="فاتورة">🧾</button>
+        <button class="btn btn-ghost btn-xs" style="font-size:10px;margin:1px;color:var(--accent);border-color:var(--accent)" onclick="openEditOrder('${o.id}')" title="تعديل بيانات الطلب">✏️</button>
         <button class="btn btn-xs" style="background:${o.hasProblem?'var(--warn)':'var(--bg)'};color:${o.hasProblem?'#fff':'var(--muted)'};border:1px solid ${o.hasProblem?'var(--warn)':'var(--border)'};font-size:10px;margin:1px" onclick="toggleProblem('${o.id}')" title="تحديد كمشكلة">⚠️</button>
       </td>
     </tr>`;
@@ -1948,6 +2137,204 @@ async function cancelOrder(id){
   o.status='ملغي';o.courierId=null;refreshAll();toast('❌ تم إلغاء الطلب');
 }
 
+function printPackingSlip(orderId){
+  const o = orders.find(x=>x.id===orderId);
+  if(!o){ toast('❗ الطلب غير موجود'); return; }
+
+  // تحليل المنتجات — أولاً من lineItemsJson (بيانات كاملة)، ثم fallback لـ items string
+  let lineItems = [];
+  if(o.lineItemsJson){
+    try{ lineItems = JSON.parse(o.lineItemsJson); }catch(e){}
+  }
+  if(!lineItems.length && o.items){
+    // parse "Name x2, Name2 x1"
+    lineItems = o.items.split(',').map(s=>{
+      s=s.trim();
+      const m=s.match(/^(.+?)\s+x(\d+)$/i);
+      if(m) return {name:m[1].trim(), quantity:parseInt(m[2]), price:0, totalPrice:0};
+      return {name:s, quantity:1, price:0, totalPrice:0};
+    }).filter(i=>i.name);
+  }
+  if(!lineItems.length) lineItems=[{name:o.details||'—', quantity:1, price:o.total||0, totalPrice:o.total||0}];
+
+  const fmtDate = d => new Date(d).toLocaleDateString('en-GB',{year:'numeric',month:'long',day:'numeric'});
+  const orderDate = o.createdAt ? fmtDate(o.createdAt) : fmtDate(new Date());
+  const orderNum = (o.shopifyId || o.id || '').toString().replace('SH-','');
+
+  // حساب الـ subtotal من lineItems لو موجودة، غيره من o.total
+  const hasDetailedPrices = lineItems.some(i=>i.price>0);
+  const subtotal = hasDetailedPrices
+    ? lineItems.reduce((s,i)=>s+(i.totalPrice||i.price*i.quantity||0),0)
+    : o.total||0;
+
+  const itemsRows = lineItems.map(i=>{
+    const lineTotal = i.totalPrice || (i.price*(i.quantity||1)) || 0;
+    return `
+      <tr>
+        <td class="qty"><strong>${i.quantity||1} ×</strong></td>
+        <td class="item-name">
+          ${i.name||''}
+          ${i.variantTitle?`<br><span style="font-size:11px;color:#666">${i.variantTitle}</span>`:''}
+          ${i.sku?`<br><span style="font-size:10px;color:#999">SKU: ${i.sku}</span>`:''}
+          ${i.price>0?`<br><span style="font-size:11px;color:#555">EGP ${i.price.toLocaleString()}.00</span>`:''}
+        </td>
+        <td class="item-price">${lineTotal>0?'EGP '+lineTotal.toLocaleString()+'.00':''}</td>
+      </tr>`;
+  }).join('');
+
+  const fullAddr = [o.area, o.addr].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join('\n');
+
+  const w = window.open('','_blank','width=800,height=900');
+  w.document.write(`<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <title>Order ${orderNum}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,sans-serif;font-size:12px;color:#1a1a1a;background:#fff;padding:36px;max-width:680px;margin:0 auto}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px}
+    .logo img{width:150px;height:auto}
+    .order-info{text-align:right;font-size:12px;color:#333;line-height:1.8}
+    .order-info strong{font-size:14px;font-weight:700}
+    .addresses{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:28px;padding-top:20px;border-top:2px solid #1a1a1a}
+    .addr-block label{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#555;display:block;margin-bottom:8px}
+    .addr-block p{line-height:1.8;font-size:12px;color:#1a1a1a}
+    table{width:100%;border-collapse:collapse}
+    thead tr{border-top:2px solid #1a1a1a;border-bottom:1px solid #888}
+    thead th{padding:9px 8px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;text-align:left;color:#333}
+    thead th.item-price{text-align:right}
+    tbody tr{border-bottom:1px solid #e8e8e8}
+    tbody tr:last-child{border-bottom:2px solid #1a1a1a}
+    tbody td{padding:11px 8px;font-size:12px;vertical-align:top;line-height:1.5}
+    td.qty{width:55px;font-size:14px;font-weight:700;color:#1a1a1a}
+    td.item-name{color:#1a1a1a}
+    td.item-price{text-align:right;font-weight:700;white-space:nowrap;font-size:12px}
+    .totals{margin-top:0}
+    .total-row{display:flex;justify-content:flex-end;gap:80px;padding:6px 8px;font-size:12px;border-bottom:1px solid #e8e8e8}
+    .total-row.final{border-top:2px solid #1a1a1a;border-bottom:none;padding-top:10px;font-weight:700;font-size:13px}
+    .thank-you{text-align:center;margin-top:48px;padding-top:28px;border-top:1px solid #ddd}
+    .thank-you h2{font-size:17px;font-weight:700;margin-bottom:10px}
+    .thank-you p{font-size:11px;color:#666;line-height:2}
+    .cod-badge{display:inline-block;background:#fff8e1;border:1px solid #f0b429;color:#7c5700;padding:4px 12px;border-radius:4px;font-size:11px;font-weight:700;margin-top:10px}
+    .print-btn{margin-top:20px;background:#6366f1;color:#fff;border:none;border-radius:8px;padding:10px 32px;font-family:Cairo,Arial,sans-serif;font-size:14px;font-weight:700;cursor:pointer}
+    @media print{.print-btn{display:none!important}body{padding:20px}}
+  </style>
+  </head><body>
+  <div class="header">
+    <div class="logo"><img src="${LOGO_B64}" alt="CAFELAX"></div>
+    <div class="order-info">
+      <strong>Order ${orderNum}</strong><br>
+      ${orderDate}
+    </div>
+  </div>
+
+  <div class="addresses">
+    <div class="addr-block">
+      <label>Ship To</label>
+      <p>
+        <strong>${o.name||''}</strong><br>
+        ${(fullAddr||'').split('\n').join('<br>')}<br>
+        Egypt<br>
+        <span style="direction:ltr;unicode-bidi:plaintext">${o.phone||''}</span>
+      </p>
+    </div>
+    <div class="addr-block">
+      <label>Bill To</label>
+      <p>
+        <strong>${o.name||''}</strong><br>
+        ${(o.area||'').split('\n').join('<br>')}<br>
+        Egypt
+      </p>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Quantity</th>
+        <th>Items</th>
+        <th class="item-price">Total</th>
+      </tr>
+    </thead>
+    <tbody>${itemsRows}</tbody>
+  </table>
+
+  <div class="totals">
+    <div class="total-row"><span>Subtotal</span><span>${o.paid?'<span style="color:green">Paid Online</span>':'EGP '+subtotal.toLocaleString()+'.00'}</span></div>
+    <div class="total-row"><span>Shipping</span><span>EGP 0.00</span></div>
+    <div class="total-row final"><span>Total</span><span>${o.paid?'<span style="color:green">Paid Online</span>':'EGP '+subtotal.toLocaleString()+'.00'}</span></div>
+  </div>
+
+  ${!o.paid?`<div style="text-align:right;margin-top:10px"><span class="cod-badge">💵 Cash on Delivery — EGP ${(o.total||0).toLocaleString()}.00</span></div>`:''}
+
+  <div class="thank-you">
+    <h2>Thank you for shopping with us!</h2>
+    <p>CAFELAX<br>info@cafelax.com<br>www.cafelax.com</p>
+    <div><button class="print-btn" onclick="window.print()">🖨️ Print / Save PDF</button></div>
+  </div>
+  </body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>w.print(),700);
+}
+
+
+
+function openEditOrder(id){
+  const o = orders.find(x=>x.id===id);
+  if(!o){ toast('❗ الطلب غير موجود'); return; }
+  _editingOrderId = id;
+  // ملء البيانات
+  const set = (elId, val) => { const el=document.getElementById(elId); if(el) el.value = val||''; };
+  document.getElementById('eo-order-id').textContent = '# '+id + (o.src==='shopify'?' — Shopify':'');
+  set('eo-name', o.name);
+  set('eo-phone', o.phone==='—'?'':o.phone);
+  set('eo-area', o.area);
+  set('eo-addr', o.addr||'');
+  set('eo-total', o.total);
+  set('eo-ship', o.ship||50);
+  document.getElementById('eo-paid').checked = !!o.paid;
+  set('eo-details', o.details||o.items||'');
+  set('eo-note', o.note||'');
+  set('eo-delivery-type', o.deliveryType||'normal');
+  set('eo-status', o.status||'في الانتظار');
+  // ملء قائمة المناديب
+  const sel = document.getElementById('eo-courier');
+  sel.innerHTML = '<option value="">— بدون تعيين —</option>'
+    + couriers.map(c=>`<option value="${c.id}" ${String(o.courierId)===String(c.id)?'selected':''}>${c.name}</option>`).join('');
+  openM('m-edit-order');
+}
+
+async function saveEditOrder(){
+  const o = orders.find(x=>x.id===_editingOrderId);
+  if(!o){ toast('❗ الطلب غير موجود'); return; }
+  const get = id => document.getElementById(id)?.value?.trim()||'';
+  const name = get('eo-name');
+  const area = get('eo-area');
+  if(!name||!area){ toast('❗ اسم العميل والمنطقة مطلوبان'); return; }
+  const total = parseFloat(get('eo-total'))||0;
+  const ship  = parseFloat(get('eo-ship'))||50;
+  const paid  = document.getElementById('eo-paid')?.checked||false;
+  const phone = get('eo-phone')||'—';
+  const addr  = get('eo-addr');
+  const note  = get('eo-note');
+  const details = get('eo-details');
+  const deliveryType = get('eo-delivery-type')||'normal';
+  const status = get('eo-status');
+  const courierRaw = document.getElementById('eo-courier')?.value;
+  const courierId = courierRaw ? (isNaN(+courierRaw)?courierRaw:+courierRaw) : null;
+  const upd = { name, phone, area, addr, total, ship, paid, note, details, deliveryType, status, courierId };
+  Object.assign(o, upd);
+  if(API_URL) apiFetch('/api/orders/'+o.id,'PATCH',upd).catch(()=>{});
+  try{
+    const _slim=orders.map(x=>{const{bostaAwbBase64,...r}=x;return r;});
+    localStorage.setItem('orderpro_orders',JSON.stringify(_slim));
+  }catch(e){}
+  closeM('m-edit-order');
+  refreshAll();
+  toast('✅ تم حفظ تعديلات الطلب '+o.id);
+}
+
 async function addOrder(){
   const name=$('o-name').value.trim(),area=$('o-area').value.trim(),total=+$('o-total').value;
   if(!name||!area||!total){toast('❗ يرجى ملء الحقول المطلوبة');return}
@@ -2074,7 +2461,8 @@ function renderAcc(){
       <td class="mpos">${(cod-ship).toLocaleString()} ج</td>
       <td class="mpurp">${ship.toLocaleString()} ج</td>
       <td>${c.settled?'<span class="badge b-done">✅ مسوّى</span>':'<span class="badge b-wait">⏳ لم يُسوَّ</span>'}</td>
-      <td><div style="display:flex;gap:4px">
+      <td><div style="display:flex;gap:4px;flex-wrap:wrap">
+      <button class="btn btn-xs" style="background:#6366f1;color:#fff;border:none" onclick="openAccSession(${c.id})">🧾 ابدأ محاسبة</button>
       ${(!c.settled&&done.length>0)?`<button class="btn btn-primary btn-xs" onclick="openSettle(${c.id})">تسوية</button>`:''}
       ${done.length>0?`<button class="btn btn-ghost btn-xs" onclick="printSettleSlip(${c.id})">🖨️ طباعة</button>`:''}
     </div></td>
@@ -2757,6 +3145,7 @@ function renderCourierOrdersPage(){
                     ${o.status==='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="undoComplete('${o.id}')">↩️ رجّع</button>`:''}
                     ${(!o.paid&&o.status==='مكتمل')?`<button class="btn btn-xs" style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;font-size:10px" onclick="markPaidFromCourier('${o.id}')">💰 تحويل لمدفوع</button>`:''}
                     ${(!o.paid&&o.status!=='مكتمل')?`<button class="btn btn-xs" style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;font-size:10px" onclick="markPaidFromCourier('${o.id}')">💰 بدون تحصيل</button>`:''}
+                    ${o.paid?`<button class="btn btn-xs" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:10px" onclick="markUnpaidFromCourier('${o.id}')">↩️ رجّع COD</button>`:''}
                     ${o.paid?`<span style="background:var(--success-light);color:#065f46;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700">💳 مدفوع</span>`:''}
                   </div>
                 </td>
@@ -2814,7 +3203,8 @@ function coFilter(f, cId){
           ${o.status==='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="undoComplete('${o.id}')">↩️ رجّع</button>`:''}
           ${(!o.paid&&o.status==='مكتمل')?`<button class="btn btn-xs" style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;font-size:10px" onclick="markPaidFromCourier('${o.id}')">💰 تحويل لمدفوع</button>`:''}
           ${(!o.paid&&o.status!=='مكتمل')?`<button class="btn btn-xs" style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;font-size:10px" onclick="markPaidFromCourier('${o.id}')">💰 بدون تحصيل</button>`:''}
-          ${o.paid?`<span style="background:var(--success-light);color:#065f46;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700">💳 مدفوع</span>`:''}
+                    ${o.paid?`<button class="btn btn-xs" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;font-size:10px" onclick="markUnpaidFromCourier('${o.id}')">↩️ رجّع COD</button>`:""}
+          ${o.paid?`<span style="background:var(--success-light);color:#065f46;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700">💳 مدفوع</span>`:""}
         </div>
       </td>
     </tr>`;
@@ -2967,13 +3357,27 @@ async function markPaidFromCourier(id){
   o.paid=true;
   if(API_URL)await apiFetch('/api/orders/'+id,'PATCH',{paid:true}).catch(()=>{});
   try{
-    // احفظ بدون الـ AWB base64 (كبيرة جداً)
     const _slim=orders.map(o=>{const {bostaAwbBase64,...rest}=o;return rest;});
     localStorage.setItem('orderpro_orders',JSON.stringify(_slim));
   }catch(e){}
   refreshAll();
   renderCourierOrdersPage();
   toast('💳 تم تحويل الطلب '+id+' لـ "مدفوع" — المندوب مش هيتحاسب عليه كتحصيل');
+}
+
+async function markUnpaidFromCourier(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o)return;
+  if(o.src==='shopify' && !confirm('الطلب ده مدفوع من Shopify — متأكد إنك عايز ترجعه لـ COD؟')) return;
+  o.paid=false;
+  if(API_URL)await apiFetch('/api/orders/'+id,'PATCH',{paid:false}).catch(()=>{});
+  try{
+    const _slim=orders.map(o=>{const {bostaAwbBase64,...rest}=o;return rest;});
+    localStorage.setItem('orderpro_orders',JSON.stringify(_slim));
+  }catch(e){}
+  refreshAll();
+  renderCourierOrdersPage();
+  toast('💵 تم تحويل الطلب '+id+' لـ COD — هيتحاسب عليه كتحصيل');
 }
 
 async function unassignOrder(id){
@@ -3187,6 +3591,7 @@ function probFilter(f, btn){
             <td>
               <div style="display:flex;gap:4px;flex-wrap:wrap">
                 <button class="btn btn-ghost btn-xs" onclick="removeProblem('${o.id}')">✅ حُلت</button>
+                <button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="openEditOrder('${o.id}')">✏️ تعديل</button>
                 ${couriers.map(c=>`<button class="btn btn-xs" style="background:#6366f1;color:#fff;border:none;font-size:10px" onclick="assignOrderId='${o.id}';selCAndConfirm(${c.id})">${c.name}</button>`).join('')}
               </div>
             </td>
@@ -3232,6 +3637,7 @@ function probFilter(f, btn){
                 <div style="display:flex;gap:4px;flex-wrap:wrap">
                   ${couriers.map(c=>`<button class="btn btn-xs" style="background:#6366f1;color:#fff;border:none;font-size:10px" onclick="assignOrderId='${o.id}';selCAndConfirm(${c.id})">${c.name}</button>`).join('')}
                   <button class="btn btn-ghost btn-xs" onclick="openAssign('${o.id}')">⋯</button>
+                  <button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="openEditOrder('${o.id}')">✏️</button>
                 </div>
               </td>
             </tr>`).join('')}
@@ -4054,6 +4460,236 @@ function renderSettle(){
   }).join('');
 }
 
+// ===== ACC SESSION (محاسبة حية) =====
+let _asOrders = [];
+let _asIndex = 0;
+let _asStatuses = {};
+let _asCourierId = null;
+
+function openAccSession(cId){
+  const c = couriers.find(x=>x.id==cId);
+  if(!c){ toast('❗ مندوب غير موجود'); return; }
+  _asCourierId = cId;
+  _asStatuses = {};
+  _asIndex = 0;
+
+  const printTime = dsLastPrintTimes[String(cId)] || 0;
+
+  const allCourierOrders = orders.filter(o => {
+    if(isPickup(o) || isTransit(o)) return false;
+    if(o.status !== 'جاري التوصيل') return false;
+    return String(o.courierId) === String(cId) || Number(o.courierId) === Number(cId);
+  });
+
+  let sessionOrders;
+  if(printTime > 0){
+    sessionOrders = allCourierOrders.filter(o => {
+      if(!o.createdAt) return true;
+      return new Date(o.createdAt).getTime() <= printTime;
+    });
+  } else {
+    sessionOrders = allCourierOrders;
+  }
+
+  if(!sessionOrders.length){
+    toast('❗ لا توجد طلبات في آخر ورقة مطبوعة لهذا المندوب');
+    return;
+  }
+
+  // رتّب بنفس ترتيب الورقة
+  const express = sessionOrders.filter(o => isSameDay(o));
+  let normal = sessionOrders.filter(o => !isSameDay(o));
+  normal.sort((a,b) => (a.area||'').localeCompare((b.area||''),'ar'));
+  const courierZones = (c.zone||'').split(/[،,\/\-–\n]+/).map(z=>z.trim()).filter(z=>z.length>1);
+  const zoneMap = {};
+  normal.forEach(o => {
+    const oz = o.assignedZone || getOrderZoneForCourier(o, c) || 'أخري';
+    if(!zoneMap[oz]) zoneMap[oz] = [];
+    zoneMap[oz].push(o);
+  });
+  const zKeys = Object.keys(zoneMap);
+  const sortedZones = [
+    ...courierZones.filter(z => zKeys.includes(z)),
+    ...zKeys.filter(z => z === 'أخري'),
+    ...zKeys.filter(z => !courierZones.includes(z) && z !== 'أخري'),
+  ];
+  const sortedNormal = [];
+  sortedZones.forEach(z => { if(zoneMap[z]) sortedNormal.push(...zoneMap[z]); });
+  _asOrders = [...express, ...sortedNormal];
+  _asOrders.forEach(o => { _asStatuses[o.id] = 'pending'; });
+
+  const titleEl = document.getElementById('as-title');
+  if(titleEl) titleEl.textContent = '🧾 محاسبة ' + c.name;
+  const subEl = document.getElementById('as-subtitle');
+  if(subEl){
+    const pt = printTime ? new Date(printTime).toLocaleDateString('ar-EG',{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : 'كل الطلبات';
+    subEl.textContent = _asOrders.length + ' طلب · آخر طباعة: ' + pt;
+  }
+  asRenderOrder();
+  openM('m-acc-session');
+}
+
+function asRenderOrder(){
+  const total = _asOrders.length;
+  const collected = Object.values(_asStatuses).filter(s=>s==='collected').length;
+  const cancelled = Object.values(_asStatuses).filter(s=>s==='cancelled').length;
+  const pending = Object.values(_asStatuses).filter(s=>s==='pending').length;
+  const collectedAmount = _asOrders.filter(o=>_asStatuses[o.id]==='collected'&&!o.paid).reduce((s,o)=>s+o.total,0);
+
+  document.getElementById('as-total-count').textContent = total;
+  document.getElementById('as-done-count').textContent = collected;
+  document.getElementById('as-cancelled-count').textContent = cancelled;
+  document.getElementById('as-pending-count').textContent = pending;
+  document.getElementById('as-collected').textContent = collectedAmount.toLocaleString() + ' ج';
+  document.getElementById('as-progress').style.width = ((collected+cancelled)/total*100) + '%';
+
+  if(_asIndex >= total){ asShowFinal(); return; }
+
+  const o = _asOrders[_asIndex];
+  const currentStatus = _asStatuses[o.id] || 'pending';
+
+  document.getElementById('as-order-card').style.display = 'block';
+  document.getElementById('as-final-summary').style.display = 'none';
+
+  document.getElementById('as-idx-label').textContent = (_asIndex+1) + ' من ' + total;
+  document.getElementById('as-order-id').textContent = o.id;
+  document.getElementById('as-order-name').textContent = o.name || '';
+
+  const statusColors = {collected:'#10b981',pending:'#f59e0b',cancelled:'#ef4444'};
+  const statusLabels = {collected:'✅ اتسلم',pending:'⏳ لسه',cancelled:'❌ ملغي'};
+  document.getElementById('as-order-status-badge').innerHTML =
+    `<span style="padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;background:${statusColors[currentStatus]}20;color:${statusColors[currentStatus]};border:1px solid ${statusColors[currentStatus]}">${statusLabels[currentStatus]}</span>`;
+
+  const zone = o.assignedZone || getOrderZoneForCourier(o, couriers.find(c=>String(c.id)===String(_asCourierId))) || '';
+  document.getElementById('as-order-meta').innerHTML =
+    `<span style="padding:3px 10px;border-radius:20px;font-size:11px;background:var(--bg);border:1px solid var(--border)">📍 ${o.area}</span>` +
+    (zone && zone !== o.area ? `<span style="padding:3px 10px;border-radius:20px;font-size:11px;background:var(--accent-light);color:var(--accent);border:1px solid var(--accent)">${zone}</span>` : '') +
+    (o.phone ? `<span style="padding:3px 10px;border-radius:20px;font-size:11px;background:var(--bg);border:1px solid var(--border);direction:ltr">${o.phone}</span>` : '') +
+    (isSameDay(o) ? '<span style="padding:3px 10px;border-radius:20px;font-size:11px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5">⚡ مستعجل</span>' : '');
+
+  document.getElementById('as-order-addr').textContent = o.addr || o.area || '';
+  document.getElementById('as-order-amount').innerHTML = o.paid
+    ? '<span style="color:var(--success)">💳 مدفوع أونلاين</span>'
+    : `<span style="color:var(--danger)">💰 تحصيل: </span><span style="color:var(--text)">${o.total.toLocaleString()} ج</span>`;
+
+  // زرار المدفوع
+  const paidBtn = document.getElementById('as-btn-paid');
+  if(paidBtn){
+    if(o.paid){
+      paidBtn.textContent = '↩️ تحويل لـ COD (تحصيل)';
+      paidBtn.style.background = '#fef3c7';
+      paidBtn.style.borderColor = '#f59e0b';
+      paidBtn.style.color = '#92400e';
+    } else {
+      paidBtn.textContent = '💳 تحويل لمدفوع';
+      paidBtn.style.background = '#eff6ff';
+      paidBtn.style.borderColor = '#6366f1';
+      paidBtn.style.color = '#3730a3';
+    }
+  }
+
+  document.getElementById('as-order-card').style.borderColor = statusColors[currentStatus];
+
+  ['collected','pending','cancelled'].forEach(s => {
+    const btn = document.getElementById('as-btn-'+s);
+    if(!btn) return;
+    const isActive = s === currentStatus;
+    btn.style.opacity = isActive ? '1' : '0.55';
+    btn.style.transform = isActive ? 'scale(1.04)' : 'scale(1)';
+  });
+
+  const prevBtn = document.getElementById('as-prev-btn');
+  const nextBtn = document.getElementById('as-next-btn');
+  if(prevBtn) prevBtn.style.display = _asIndex > 0 ? 'inline-block' : 'none';
+  if(nextBtn) nextBtn.textContent = _asIndex < total-1 ? 'التالي ▶' : '🏁 إنهاء';
+}
+
+function asTogglePaid(){
+  if(_asIndex >= _asOrders.length) return;
+  const o = _asOrders[_asIndex];
+  o.paid = !o.paid;
+  if(API_URL) apiFetch('/api/orders/'+o.id,'PATCH',{paid:o.paid}).catch(()=>{});
+  try{
+    const _slim=orders.map(x=>{const{bostaAwbBase64,...r}=x;return r;});
+    localStorage.setItem('orderpro_orders',JSON.stringify(_slim));
+  }catch(e){}
+  asRenderOrder();
+  toast(o.paid ? '💳 تم تحويل الطلب لمدفوع' : '💵 تم تحويل الطلب لـ COD');
+}
+
+function asSetStatus(status){
+  if(_asIndex >= _asOrders.length) return;
+  const o = _asOrders[_asIndex];
+  const prevStatus = _asStatuses[o.id];
+  _asStatuses[o.id] = status;
+
+  // طبّق التغيير الفعلي على الطلب فوراً
+  if(status === 'collected' && prevStatus !== 'collected'){
+    // اتسلم → تحت التسوية
+    o.status = 'تحت التسوية';
+    if(API_URL) apiFetch('/api/orders/'+o.id,'PATCH',{status:'تحت التسوية'}).catch(()=>{});
+  } else if(status === 'cancelled' && prevStatus !== 'cancelled'){
+    // ملغي
+    o.status = 'ملغي';
+    o.courierId = null;
+    if(API_URL) apiFetch('/api/orders/'+o.id,'PATCH',{status:'ملغي',courierId:null}).catch(()=>{});
+  } else if((status === 'pending') && (prevStatus === 'collected' || prevStatus === 'cancelled')){
+    // رجّع لـ جاري التوصيل لو الموزع رجع للطلب وغيّر رأيه
+    o.status = 'جاري التوصيل';
+    if(prevStatus === 'cancelled') o.courierId = _asCourierId;
+    if(API_URL) apiFetch('/api/orders/'+o.id,'PATCH',{status:'جاري التوصيل',courierId:_asCourierId}).catch(()=>{});
+  }
+
+  // احفظ في localStorage
+  try{
+    const _slim=orders.map(x=>{const{bostaAwbBase64,...r}=x;return r;});
+    localStorage.setItem('orderpro_orders',JSON.stringify(_slim));
+  }catch(e){}
+
+  asRenderOrder();
+  // انتقل تلقائياً للتالي بعد 450ms
+  setTimeout(() => { if(_asIndex < _asOrders.length - 1) asNext(); }, 450);
+}
+
+function asNext(){
+  if(_asIndex <= _asOrders.length) _asIndex++;
+  asRenderOrder();
+}
+
+function asPrev(){
+  if(_asIndex > 0) _asIndex--;
+  asRenderOrder();
+}
+
+function asShowFinal(){
+  document.getElementById('as-order-card').style.display = 'none';
+  document.getElementById('as-final-summary').style.display = 'block';
+
+  const collectedOrders = _asOrders.filter(o => _asStatuses[o.id]==='collected');
+  const cancelledOrders = _asOrders.filter(o => _asStatuses[o.id]==='cancelled');
+  const pendingOrders   = _asOrders.filter(o => _asStatuses[o.id]==='pending');
+  const totalCOD = collectedOrders.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
+  const ship = collectedOrders.reduce((s,o)=>s+(o.ship||50),0);
+
+  document.getElementById('as-final-details').innerHTML = `
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span>✅ اتسلم</span><strong style="color:var(--success)">${collectedOrders.length} طلب</strong></div>
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span>❌ ملغي / مش موجود</span><strong style="color:var(--danger)">${cancelledOrders.length} طلب</strong></div>
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span>⏳ لسه / مش محسوم</span><strong style="color:#f59e0b">${pendingOrders.length} طلب</strong></div>
+    <div style="height:8px"></div>
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span>💰 إجمالي المحصّل (COD)</span><strong style="color:var(--success);font-size:16px">${totalCOD.toLocaleString()} ج</strong></div>
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span>🚚 مستحق المندوب (شحن)</span><strong style="color:#6366f1">${ship.toLocaleString()} ج</strong></div>
+    <div style="display:flex;justify-content:space-between;padding:8px 0"><span>🏦 صافي المحل</span><strong style="color:var(--success);font-size:18px">${(totalCOD-ship).toLocaleString()} ج</strong></div>
+    ${pendingOrders.length?`<div style="margin-top:8px;padding:8px;background:#fffbeb;border-radius:8px;font-size:11px;color:#92400e">⚠️ لسه: ${pendingOrders.map(o=>o.id).join(' · ')}</div>`:''}
+    ${cancelledOrders.length?`<div style="margin-top:6px;padding:8px;background:#fef2f2;border-radius:8px;font-size:11px;color:#991b1b">❌ ملغي: ${cancelledOrders.map(o=>o.id).join(' · ')}</div>`:''}
+  `;
+
+  const footer = document.getElementById('as-footer');
+  if(footer) footer.innerHTML = `
+    <button onclick="_asIndex=_asOrders.length-1;asRenderOrder()" style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 16px;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer">◀ راجع</button>
+    <button onclick="refreshAll();closeM('m-acc-session')" style="background:var(--accent);color:#fff;border:none;border-radius:9px;padding:9px 24px;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer;margin-right:auto">✅ تم</button>
+  `;
+}
+
 function openSettle(cId){
   settlingCourierId = cId;
   const c = couriers.find(x=>x.id==cId);
@@ -4374,6 +5010,129 @@ function renderTreasuryTx(tId){
       +'</div>';
   });
   el.innerHTML = html;
+}
+
+function openTreasuryPrint(){
+  if(!_activeTreasuryId){toast('❗ اختر خزنة أولاً');return;}
+  const t=_treasuries.find(x=>x.id===_activeTreasuryId);
+  if(!t) return;
+  const nameEl=document.getElementById('tprint-treasury-name');
+  if(nameEl) nameEl.textContent='🏦 '+t.name;
+  // افتراضي: آخر 30 يوم
+  const today=new Date();
+  const from=new Date(today);from.setDate(from.getDate()-30);
+  const toStr=today.toISOString().split('T')[0];
+  const fromStr=from.toISOString().split('T')[0];
+  const fi=document.getElementById('tprint-from');
+  const ti=document.getElementById('tprint-to');
+  if(fi) fi.value=fromStr;
+  if(ti) ti.value=toStr;
+  const sum=document.getElementById('tprint-summary');
+  if(sum) sum.style.display='none';
+  openM('m-treasury-print');
+}
+
+function getTreasuryPrintTxs(){
+  const fromVal=document.getElementById('tprint-from')?.value;
+  const toVal=document.getElementById('tprint-to')?.value;
+  const typeVal=document.getElementById('tprint-type')?.value||'all';
+  if(!fromVal||!toVal){toast('❗ حدد الفترة الزمنية');return null;}
+  const from=new Date(fromVal+'T00:00:00');
+  const to=new Date(toVal+'T23:59:59');
+  let txs=_treasuryTx.filter(x=>x.treasuryId===_activeTreasuryId);
+  txs=txs.filter(x=>{const d=new Date(x.date);return d>=from&&d<=to;});
+  if(typeVal!=='all') txs=txs.filter(x=>x.type===typeVal);
+  txs.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  return txs;
+}
+
+function previewTreasuryPrint(){
+  const txs=getTreasuryPrintTxs();
+  if(!txs) return;
+  const sum=document.getElementById('tprint-summary');
+  if(!sum) return;
+  const totalIn=txs.filter(x=>x.type==='in').reduce((s,x)=>s+x.amount,0);
+  const totalOut=txs.filter(x=>x.type==='out').reduce((s,x)=>s+x.amount,0);
+  const net=totalIn-totalOut;
+  if(!txs.length){
+    sum.style.display='block';sum.style.background='#fef3c7';sum.style.borderColor='#fcd34d';
+    sum.innerHTML='<div style="text-align:center;color:#92400e">لا توجد حركات في هذه الفترة</div>';
+    return;
+  }
+  sum.style.display='block';sum.style.background='#f0fdf4';sum.style.borderColor='#86efac';
+  sum.innerHTML=`<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <div>📋 عدد الحركات: <strong>${txs.length}</strong></div>
+    <div>📥 إجمالي وارد: <strong style="color:var(--success)">${totalIn.toLocaleString()} ج</strong></div>
+    <div>📤 إجمالي منصرف: <strong style="color:var(--danger)">${totalOut.toLocaleString()} ج</strong></div>
+    <div>💰 صافي: <strong style="color:${net>=0?'var(--success)':'var(--danger)'}">${net>=0?'+':''}${net.toLocaleString()} ج</strong></div>
+  </div>`;
+}
+
+function executeTreasuryPrint(){
+  const txs=getTreasuryPrintTxs();
+  if(!txs) return;
+  if(!txs.length){toast('❗ لا توجد حركات في هذه الفترة');return;}
+  const t=_treasuries.find(x=>x.id===_activeTreasuryId);
+  const fromVal=document.getElementById('tprint-from')?.value;
+  const toVal=document.getElementById('tprint-to')?.value;
+  const fmtDate=d=>new Date(d).toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'});
+  const totalIn=txs.filter(x=>x.type==='in').reduce((s,x)=>s+x.amount,0);
+  const totalOut=txs.filter(x=>x.type==='out').reduce((s,x)=>s+x.amount,0);
+  const net=totalIn-totalOut;
+  const rows=txs.map((tx,i)=>{
+    const isIn=tx.type==='in';
+    return `<tr>
+      <td style="text-align:center">${i+1}</td>
+      <td>${fmtDate(tx.date)}</td>
+      <td>${tx.reason||'—'}</td>
+      <td style="text-align:center">${isIn?'📥 وارد':'📤 منصرف'}</td>
+      <td style="color:green;font-weight:700;text-align:left">${isIn?tx.amount.toLocaleString()+' ج':'—'}</td>
+      <td style="color:red;font-weight:700;text-align:left">${!isIn?tx.amount.toLocaleString()+' ج':'—'}</td>
+    </tr>`;
+  }).join('');
+  const printWin=window.open('','_blank','width=900,height=700');
+  printWin.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+  <meta charset="UTF-8">
+  <title>حركات الخزنة — ${t?.name||''}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Cairo',Arial,sans-serif;padding:24px;color:#1e293b;font-size:13px}
+    h1{font-size:20px;font-weight:800;margin-bottom:4px}
+    .meta{color:#64748b;font-size:12px;margin-bottom:16px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th{background:#6366f1;color:#fff;padding:8px 10px;font-size:12px;font-weight:700}
+    td{padding:7px 10px;border-bottom:1px solid #e2e8f0;font-size:12px}
+    tr:nth-child(even) td{background:#f8fafc}
+    .summary{display:flex;gap:24px;flex-wrap:wrap;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin-top:16px}
+    .s-item{font-size:13px}
+    .s-item strong{font-size:15px}
+    @media print{
+      body{padding:12px}
+      button{display:none}
+      .no-print{display:none}
+    }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  </head><body>
+  <h1>🏦 ${t?.name||'الخزنة'} — حركات الفترة</h1>
+  <div class="meta">من ${fmtDate(fromVal)} إلى ${fmtDate(toVal)} | طُبع بتاريخ ${fmtDate(new Date())}</div>
+  <table>
+    <thead><tr><th>#</th><th>التاريخ</th><th>البيان</th><th>النوع</th><th>وارد</th><th>منصرف</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="summary">
+    <div class="s-item">📋 عدد الحركات: <strong>${txs.length}</strong></div>
+    <div class="s-item">📥 إجمالي وارد: <strong style="color:green">${totalIn.toLocaleString()} ج</strong></div>
+    <div class="s-item">📤 إجمالي منصرف: <strong style="color:red">${totalOut.toLocaleString()} ج</strong></div>
+    <div class="s-item">💰 صافي: <strong style="color:${net>=0?'green':'red'}">${net>=0?'+':''}${net.toLocaleString()} ج</strong></div>
+  </div>
+  <div class="no-print" style="margin-top:20px;text-align:center">
+    <button onclick="window.print()" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-family:Cairo,sans-serif;font-size:14px;font-weight:700;cursor:pointer">🖨️ طباعة</button>
+  </div>
+  </body></html>`);
+  printWin.document.close();
+  printWin.focus();
+  setTimeout(()=>printWin.print(),600);
 }
 
 function openAddTreasury(){
