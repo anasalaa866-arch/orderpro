@@ -2643,6 +2643,7 @@ function renderCourierOrdersPage(){
                     ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="unassignOrder('${o.id}')">↩️ إلغاء</button>`:''}
                     ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" onclick="reassignOrder('${o.id}')">🔄 تعيين</button>`:''}
                     ${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✅ تم</button>`:''}
+          ${o.status==='تحت التسوية'?`<button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="undoSettleStatus('${o.id}')">↩ رجّع نشط</button>`:''}
                     ${o.status==='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="undoComplete('${o.id}')">↩️ رجّع</button>`:''}
                     ${(!o.paid&&o.status==='مكتمل')?`<button class="btn btn-xs" style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;font-size:10px" onclick="markPaidFromCourier('${o.id}')">💰 تحويل لمدفوع</button>`:''}
                     ${(!o.paid&&o.status!=='مكتمل')?`<button class="btn btn-xs" style="background:#f0fdf4;color:#15803d;border:1px solid #86efac;font-size:10px" onclick="markPaidFromCourier('${o.id}')">💰 بدون تحصيل</button>`:''}
@@ -3934,14 +3935,79 @@ function openSettle(cId){
   const sessNum = _allSettlements.filter(s=>String(s.courierId)===String(cId)).length+1;
   $('settle-title').textContent = 'تسوية حساب — '+c.name;
   $('settle-body').innerHTML = '<div style="background:var(--accent-light);border-radius:8px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:var(--accent);font-weight:700">تسوية رقم '+sessNum+'</div>'
-    +'<div style="background:var(--bg);border-radius:9px;padding:14px">'
+    +'<div style="background:var(--bg);border-radius:9px;padding:14px;margin-bottom:12px">'
     +'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>📦 عدد الطلبات</span><strong>'+pending.length+' طلب</strong></div>'
     +'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>💰 COD</span><strong style="color:var(--success)">'+cod.toLocaleString()+' ج</strong></div>'
     +(paid?'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>💳 مدفوع أونلاين</span><strong style="color:var(--info)">'+paid.toLocaleString()+' ج</strong></div>':'')
     +'<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:8px;margin-top:4px"><span>🚴 يستلم المندوب</span><strong style="color:var(--purple)">'+ship.toLocaleString()+' ج</strong></div>'
-    +'<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:15px;font-weight:700;border-top:2px solid var(--accent);padding-top:8px"><span>💵 صافي المحل</span><strong style="color:var(--accent)">'+(cod-ship).toLocaleString()+' ج</strong></div>'
+    +'<div id="settle-net-display" style="display:flex;justify-content:space-between;margin-top:8px;font-size:15px;font-weight:700;border-top:2px solid var(--accent);padding-top:8px"><span>💵 صافي المحل</span><strong style="color:var(--accent)">'+(cod-ship).toLocaleString()+' ج</strong></div>'
+    +'</div>'
+    +'<div style="border:1px solid var(--border);border-radius:9px;padding:12px;margin-bottom:8px">'
+    +'<div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--muted)">➕ تسويات إضافية (اختياري)</div>'
+    +'<div id="settle-adjustments"></div>'
+    +'<div style="display:flex;gap:8px;margin-top:8px">'
+    +'<input type="number" id="settle-adj-amount" placeholder="المبلغ (+ أو -)" style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">'
+    +'<input type="text" id="settle-adj-reason" placeholder="السبب (مثال: فرق انستا)" style="flex:2;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">'
+    +'<button class="btn btn-ghost btn-sm" onclick="addSettleAdj()">+ إضافة</button>'
+    +'</div>'
     +'</div>';
+  window._settleAdj = []; // reset adjustments
   openM('m-settle');
+}
+
+function addSettleAdj(){
+  const amt = parseFloat(document.getElementById('settle-adj-amount')?.value||0);
+  const reason = document.getElementById('settle-adj-reason')?.value.trim();
+  if(!amt){ toast('أدخل المبلغ'); return; }
+  if(!reason){ toast('أدخل السبب'); return; }
+  if(!window._settleAdj) window._settleAdj = [];
+  window._settleAdj.push({amount:amt, reason});
+  // عرض التسويات الإضافية
+  const el = document.getElementById('settle-adjustments');
+  if(el){
+    el.innerHTML = window._settleAdj.map((a,i)=>
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">'
+      +'<span style="font-size:12px">'+a.reason+'</span>'
+      +'<div style="display:flex;gap:8px;align-items:center">'
+      +'<strong style="color:'+(a.amount>=0?'var(--success)':'var(--danger)')+';">'+(a.amount>=0?'+':'')+a.amount.toLocaleString()+' ج</strong>'
+      +'<button onclick="removeSettleAdj('+i+')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">✕</button>'
+      +'</div></div>'
+    ).join('');
+  }
+  // حدّث الصافي
+  _updateSettleNet();
+  // مسح الخانات
+  document.getElementById('settle-adj-amount').value = '';
+  document.getElementById('settle-adj-reason').value = '';
+}
+
+function removeSettleAdj(i){
+  if(window._settleAdj) window._settleAdj.splice(i,1);
+  addSettleAdj.call({_skip:true}); // re-render
+  const el = document.getElementById('settle-adjustments');
+  if(el) el.innerHTML = (window._settleAdj||[]).map((a,i)=>
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">'
+    +'<span style="font-size:12px">'+a.reason+'</span>'
+    +'<div style="display:flex;gap:8px;align-items:center">'
+    +'<strong style="color:'+(a.amount>=0?'var(--success)':'var(--danger)')+';">'+(a.amount>=0?'+':'')+a.amount.toLocaleString()+' ج</strong>'
+    +'<button onclick="removeSettleAdj('+i+')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px">✕</button>'
+    +'</div></div>'
+  ).join('');
+  _updateSettleNet();
+}
+
+function _updateSettleNet(){
+  // إعادة حساب الصافي مع التسويات الإضافية
+  const adj = (window._settleAdj||[]).reduce((s,a)=>s+a.amount,0);
+  const el = document.getElementById('settle-net-display');
+  if(!el) return;
+  // جيب COD وشحن من الـ modal
+  const pending = getPendingSettleOrders(settlingCourierId);
+  const cod = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
+  const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
+  const net = cod - ship + adj;
+  el.innerHTML = '<span>💵 صافي المحل</span><strong style="color:var(--accent)">'+net.toLocaleString()+' ج</strong>'
+    +(adj!==0?'<span style="font-size:11px;color:var(--muted);margin-right:8px">(تعديل: '+(adj>=0?'+':'')+adj.toLocaleString()+' ج)</span>':'');
 }
 
 async function doSettle(){
@@ -3953,7 +4019,9 @@ async function doSettle(){
   const orderIds = pending.map(o=>o.id);
   const cod  = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
   const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
-  const newS = {id:Date.now(), courierId:c.id, ts:new Date(now), orderIds, cod, ship};
+  const adj = window._settleAdj || [];
+  const adjTotal = adj.reduce((s,a)=>s+a.amount,0);
+  const newS = {id:Date.now(), courierId:c.id, ts:new Date(now), orderIds, cod, ship, adj, adjTotal};
   _allSettlements.push(newS);
   // غيّر حالة طلبات "تحت التسوية" لـ "مكتمل"
   pending.forEach(o=>{
@@ -3977,7 +4045,7 @@ async function doSettle(){
 function printCurrentSettle(){
   const c = couriers.find(x=>x.id==settlingCourierId);
   if(!c||!_currentSettleOrders.length){ toast('لا توجد طلبات'); return; }
-  _doPrintSettle(c, _currentSettleOrders, true);
+  _doPrintSettle(c, _currentSettleOrders, true, null, {adj:window._settleAdj||[], adjTotal:(window._settleAdj||[]).reduce((s,a)=>s+a.amount,0)});
 }
 
 function printSettleSlip(cId){
@@ -3997,7 +4065,8 @@ function printHistorySettle(settlementId){
   _doPrintSettle(c, done, false, s.ts);
 }
 
-function _doPrintSettle(c, done, isDraft, settleDate){
+function _doPrintSettle(c, done, isDraft, settleDate, settlement){
+  const s = settlement || {};
   const cod = done.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
   const paidOrders = done.filter(o=>o.paid);
   const ship = done.reduce((s,o)=>s+(o.ship||50),0);
@@ -4027,6 +4096,7 @@ function _doPrintSettle(c, done, isDraft, settleDate){
     +(paidOrders.length?'<div><div class="sv" style="color:#0891b2">'+paidOrders.reduce((s,o)=>s+o.total,0).toLocaleString()+' ج</div><div class="sl">مدفوع</div></div>':'')
     +'<div><div class="sv" style="color:#9333ea">'+ship.toLocaleString()+' ج</div><div class="sl">يستلم المندوب</div></div>'
     +'<div><div class="sv" style="font-size:17px;color:#15803d">'+net.toLocaleString()+' ج</div><div class="sl">صافي المحل</div></div></div>'
+    +((s && s.adj && s.adj.length)?'<div style="background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:10px 14px;margin-bottom:12px"><div style="font-size:11px;font-weight:700;margin-bottom:6px">تسويات إضافية</div>'+s.adj.map(a=>'<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span>'+a.reason+'</span><strong style="color:'+(a.amount>=0?'#16a34a':'#dc2626')+'">'+(a.amount>=0?'+':'')+a.amount.toLocaleString()+' ج</strong></div>').join('')+'<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;border-top:1px solid #fde047;padding-top:6px;margin-top:6px"><span>إجمالي التعديلات</span><strong>'+(s.adjTotal>=0?'+':'')+s.adjTotal.toLocaleString()+' ج</strong></div></div>':'')
     +'<table><thead><tr><th>#</th><th>رقم الطلب</th><th>العميل</th><th>المنطقة</th><th>الإجمالي</th><th>الدفع</th><th>الشحن</th></tr></thead><tbody>'+rows
     +'<tr style="font-weight:700;background:#e0e7ff"><td colspan="4">الإجمالي</td><td>'+cod.toLocaleString()+' ج</td><td>'+(paidOrders.length?paidOrders.length+' مدفوع':'')+'</td><td>'+ship.toLocaleString()+' ج</td></tr>'
     +'</tbody></table>'
