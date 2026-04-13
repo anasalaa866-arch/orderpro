@@ -980,6 +980,7 @@ tr:hover td{background:#fafbff}
   </div>
   <div class="mft">
     <button class="btn btn-ghost" onclick="closeM('m-import')">إلغاء</button>
+    <button class="btn btn-ghost btn-sm" onclick="shopifyDiagnose()" title="تشخيص اتصال Shopify">🔍 تشخيص</button>
     <button class="btn btn-primary" id="imp-btn" onclick="doImport()">📥 استيراد الآن</button>
   </div>
 </div></div>
@@ -6487,6 +6488,40 @@ function selDays(btn, days) {
   document.querySelectorAll('#days-btns .chip').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
   document.getElementById('imp-days').value = days;
+}
+
+async function shopifyDiagnose(){
+  const shopUrl = $('imp-url').value.trim() || localStorage.getItem('orderpro_shop_url');
+  const accessToken = $('imp-token').value.trim() || localStorage.getItem('orderpro_shop_token');
+  if(!shopUrl || !accessToken){ toast('❗ أدخل رابط المتجر والـ Token أولاً'); return; }
+  if(!API_URL){ toast('❗ مفيش backend متصل'); return; }
+
+  const shopifyOrder = orders.find(o => o.src === 'shopify' && o.shopifyId);
+  if(!shopifyOrder){ toast('❗ مفيش طلبات Shopify في النظام'); return; }
+
+  toast('🔍 جاري التشخيص على طلب ' + shopifyOrder.id + '...');
+  try{
+    const r = await apiFetch('/api/shopify/diagnose','POST',{
+      shopUrl, accessToken,
+      shopifyOrderId: String(shopifyOrder.shopifyId),
+    });
+    if(!r){ toast('❗ مفيش رد من السيرفر'); return; }
+
+    const order = r.order || {};
+    const fos = Array.isArray(r.fulfillmentOrders) ? r.fulfillmentOrders : [];
+    let msg = `📋 تشخيص: ${shopifyOrder.id}\n`;
+    msg += `Shopify ID: ${shopifyOrder.shopifyId}\n`;
+    if(order.error){
+      msg += `❌ HTTP ${order.error}: ${JSON.stringify(order.data).slice(0,200)}\n`;
+    } else {
+      msg += `✅ الطلب: ${order.name} | fulfillment_status: ${order.fulfillment_status||'null'}\n`;
+      msg += `tags: "${order.tags||'فاضي'}"\n`;
+      msg += `Fulfillment Orders (${fos.length}):\n`;
+      fos.forEach(fo => { msg += `  [${fo.status}] ${fo.request_status||''}\n`; });
+      if(!fos.length) msg += `  لا يوجد!\n`;
+    }
+    alert(msg);
+  }catch(e){ toast('❗ ' + e.message); }
 }
 
 async function doImport() {
