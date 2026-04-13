@@ -1114,6 +1114,21 @@ let users=[{email:'admin@store.com',role:'admin',name:'المدير'}];
 const $=id=>document.getElementById(id);
 const cName=id=>{if(!id)return'<span style="color:var(--muted)">—</span>';const c=couriers.find(x=>x.id==id);return c?c.name:'—'};
 const oByC=(cId,st=null)=>orders.filter(o=>o.courierId==cId&&(st?o.status===st:true));
+// تحقق إذا كان الطلب "مشكلة" بأي نوع (يدوي، متكرر، بدون عنوان، بدون تليفون)
+function isProblematicOrder(o){
+  if(o.hasProblem) return true;
+  // بدون تليفون
+  if(!o.phone||o.phone==='—'||o.phone.length<8) return true;
+  // بدون عنوان
+  if(!o.addr||o.addr.length<5||o.addr===o.area) return true;
+  // متكرر (نفس الرقم موجود في أكثر من طلب غير مكتمل/ملغي)
+  const p=(o.phone||'').replace(/\D/g,'');
+  if(p){
+    const cnt=orders.filter(x=>x.id!==o.id&&x.status!=='مكتمل'&&x.status!=='ملغي'&&(x.phone||'').replace(/\D/g,'')=== p).length;
+    if(cnt>0) return true;
+  }
+  return false;
+}
 const isSameDay=o=>{
   const dt=(o.deliveryType||'').toLowerCase();
   if(dt==='express') return true;
@@ -4522,6 +4537,17 @@ function renderBatchOrder(){
   const bp=document.getElementById('batch-prev-btn');
   if(bp)bp.style.display=batchIndex>0?'inline-block':'none';
   const isPickupOrder=isPickup(o);
+  const isProbOrder=isProblematicOrder(o);
+  // سبب المشكلة للتحذير
+  let probReason='⚠️ تنبيه: هذا الطلب مُحدَّد كطلب مشكلة';
+  if(!o.hasProblem){
+    const _p=(o.phone||'').replace(/\D/g,'');
+    if(!o.phone||o.phone==='—'||o.phone.length<8) probReason='📵 تنبيه: هذا الطلب بدون رقم تليفون';
+    else if(!o.addr||o.addr.length<5||o.addr===o.area) probReason='📍 تنبيه: هذا الطلب بدون عنوان واضح';
+    else if(_p) probReason='👥 تنبيه: هذا العميل عنده أكثر من طلب واحد';
+  }
+  const pra=document.getElementById('batch-problem-alert');
+  if(pra){pra.style.display=isProbOrder?'block':'none';pra.textContent=probReason;}
   const pa=document.getElementById('batch-pickup-alert');
   if(pa)pa.style.display=isPickupOrder?'block':'none';
   const pkb=document.getElementById('batch-pickup-btn');
@@ -4529,6 +4555,8 @@ function renderBatchOrder(){
   const typeColor=isSameDay(o)?'#fee2e2':isPickupOrder?'#fef3c7':'#dbeafe';
   const typeText=isSameDay(o)?'⚡ مستعجل':isPickupOrder?'🏪 استلام محل':'🚚 عادي';
   const typeTC=isSameDay(o)?'#991b1b':isPickupOrder?'#92400e':'#1e40af';
+  const ocard=document.getElementById('batch-order-card');
+  if(ocard)ocard.style.borderColor=isProbOrder?'#ef4444':'#e2e8f0';
   const oid=document.getElementById('batch-order-id');
   if(oid)oid.innerHTML='<span style="font-size:12px;color:var(--muted)">طلب</span> <strong style="font-size:24px;color:var(--accent)">'+o.id+'</strong>';
   const onm=document.getElementById('batch-order-name');
@@ -6220,6 +6248,7 @@ refreshSelects();renderUsers();refreshAll();
       <button onclick="minimizeBatch()" style="background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;border-radius:8px;padding:6px 14px;font-family:Cairo,sans-serif;font-weight:700;font-size:12px;cursor:pointer" title="رجوع للتوزيع والاستكمال لاحقاً">⬇ تصغير</button>
     </div>
     <div style="padding:16px;flex:1;overflow-y:auto">
+      <div id="batch-problem-alert" style="display:none;background:#fee2e2;border:2px solid #ef4444;border-radius:12px;padding:12px;text-align:center;font-size:14px;font-weight:700;color:#991b1b;margin-bottom:10px">⚠️ تنبيه: هذا الطلب مُحدَّد كطلب مشكلة</div>
       <div id="batch-pickup-alert" style="display:none;background:#fef3c7;border:2px solid #f59e0b;border-radius:12px;padding:12px;text-align:center;font-size:14px;font-weight:700;color:#92400e;margin-bottom:10px">🏪 هذا الطلب استلام من المحل</div>
       <div id="batch-order-card" style="border:2px solid #e2e8f0;border-radius:14px;padding:16px;background:#f8fafc;margin-bottom:12px">
         <div id="batch-order-id"></div>
