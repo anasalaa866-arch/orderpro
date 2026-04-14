@@ -1712,7 +1712,7 @@ function openAssign(id){
     <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
       <div>
         <strong style="font-size:13px">${o.name}</strong> · 📱 ${o.phone}<br>
-        📍 <strong>${o.area}</strong><br>
+        📍 <strong>${[o.addr||o.area, o.province].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(' — ')}</strong><br>
         💰 ${o.total.toLocaleString()} ج &nbsp;·&nbsp;
         <span style="font-weight:700;color:${isExpress?'var(--danger)':'var(--info)'}">${isExpress?'⚡ Same Day Delivery':'🚚 توصيل عادي'}</span>
         ${o.paid?'&nbsp;<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">💳 مدفوع - لا تحصيل</span>':''}
@@ -1842,21 +1842,34 @@ async function printPackingSlip(orderId){
   const shippingCost = o.shippingPrice || 0;
   const fmtMoney = n => `EGP ${(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
+  // الكمية الأكثر تكراراً في الفاتورة
+  const qtyFreq = {};
+  lineItems.forEach(i=>{ const q=i.quantity||1; qtyFreq[q]=(qtyFreq[q]||0)+1; });
+  const commonQty = parseInt(Object.entries(qtyFreq).sort((a,b)=>b[1]-a[1])[0][0]);
+
   const itemsHtml = lineItems.map(i=>{
-    const lineTotal = i.totalPrice || (i.price*(i.quantity||1)) || 0;
+    const qty = i.quantity || 1;
+    const lineTotal = i.totalPrice || (i.price*qty) || 0;
+    const isDiff = lineItems.length > 1 && qty > commonQty;
     const imgHtml = i.image
       ? `<div class="aspect-ratio aspect-ratio-square"><img src="${i.image}" alt="" class="aspect-ratio__content"></div>`
-      : `<div class="aspect-ratio aspect-ratio-square" style="background:#f5f5f5;display:flex;align-items:center;justify-content:center;font-size:22px">📦</div>`;
+      : `<div class="aspect-ratio aspect-ratio-square" style="background:#fafbfc;display:flex;align-items:center;justify-content:center;font-size:22px">📦</div>`;
+    const qtyHtml = isDiff
+      ? `<div style="min-width:40px;text-align:center;border:2.5px solid #000;border-radius:4px;padding:2px 4px">
+           <div style="font-size:28px;font-weight:900;line-height:1;color:#000">${qty}</div>
+           <div style="font-size:8px;font-weight:700;color:#000;margin-top:1px">!!</div>
+         </div>`
+      : `<div style="font-size:15px;font-weight:400;width:40px;text-align:left;color:#555">${qty} ×</div>`;
+    const rowStyle = isDiff ? 'border:2px solid #000;border-radius:4px;margin:4px -4px;padding:6px 4px;' : '';
     return `
-    <div class="flex-line-item">
-      <div class="flex-line-item-quantity text-align-left"><p>${i.quantity||1} ×</p></div>
+    <div class="flex-line-item" style="${rowStyle}">
+      ${qtyHtml}
       <div class="flex-line-item-img">${imgHtml}</div>
       <div class="flex-line-item-description">
         <p>
-          <span class="line-item-description-line">${i.name||''}</span>
+          <span class="line-item-description-line" style="${isDiff?'font-weight:700;':''}">">${i.name||''}</span>
           ${i.variantTitle?`<span class="line-item-description-line">${i.variantTitle}</span>`:''}
           ${i.sku?`<span class="line-item-description-line">SKU: ${i.sku}</span>`:''}
-          ${i.sku?`<span class="line-item-description-line" style="font-size:20px">${i.quantity||1}</span>`:''}
           ${i.price>0?`<span class="line-item-description-line">${fmtMoney(i.price)}</span>`:''}
         </p>
       </div>
@@ -1865,6 +1878,20 @@ async function printPackingSlip(orderId){
   }).join('');
 
   const addr1 = [o.area, o.addr].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join('<br>');
+  // بيانات إضافية للفاتورة
+  const totalItems = lineItems.reduce((s,i)=>s+(i.quantity||1),0);
+  const uniqueItems = lineItems.length;
+  const courierName = o.courierId ? (couriers.find(c=>String(c.id)===String(o.courierId))?.name||'—') : null;
+  const deliveryLabel = o.isBosta ? 'بوسطة' : o.deliveryType==='pickup' ? 'استلام من المحل' : courierName ? courierName : '—';
+  const _src = o.src||'';
+  const _sn = String(o.sourceName||'');
+  const sourceLabel = _src==='manual' ? 'يدوي'
+    : _src!=='shopify' ? (_src||'—')
+    : _sn==='web' || _sn==='' ? 'موقع إلكتروني'
+    : _sn==='shopify_draft_orders' ? 'درافت'
+    : _sn==='pos' ? 'POS'
+    : /^\d+$/.test(_sn) ? 'تطبيق موبايل'
+    : _sn;
   const w = window.open('','_blank','width=900,height=1000');
   w.document.write(`<!DOCTYPE html><html lang="en"><head>
   <meta charset="UTF-8"><title>Order ${orderNum}</title>
@@ -1923,6 +1950,27 @@ async function printPackingSlip(orderId){
           <br>Shipping ${fmtMoney(shippingCost)}
           <br>Total ${fmtMoney(o.total||subtotal)}
         </h4>
+      </div>
+    </div>
+    <hr>
+    <div style="margin:1.2em 0.7em 0;border:1.5px solid #000;border-radius:4px;padding:10px 14px;font-size:11px">
+      <div style="display:flex;flex-wrap:wrap;gap:10px 28px;align-items:flex-start">
+        <div style="min-width:80px">
+          <div style="text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:.06em;color:#555;margin-bottom:3px">التوصيل</div>
+          <strong style="font-size:14px">${deliveryLabel}</strong>
+        </div>
+        <div style="min-width:80px">
+          <div style="text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:.06em;color:#555;margin-bottom:3px">المصدر</div>
+          <strong style="font-size:14px">${sourceLabel}</strong>
+        </div>
+        <div style="min-width:80px">
+          <div style="text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:.06em;color:#555;margin-bottom:3px">أصناف مختلفة</div>
+          <strong style="font-size:14px">${uniqueItems} صنف</strong>
+        </div>
+        <div style="border-right:2.5px solid #000;padding-right:16px">
+          <div style="text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:.06em;color:#555;margin-bottom:3px">إجمالي القطع</div>
+          <strong style="font-size:22px">${totalItems} قطعة</strong>
+        </div>
       </div>
     </div>
     <hr>
@@ -6046,16 +6094,15 @@ function dsOrderRow(o, cls){
                 new Date(o.createdAt).getTime() > dsLastPrintTimes[window._dsCourierId];
   const newBadge = isNew ? '<span style="background:#3ab877;color:#fff;font-size:9px;padding:1px 4px;border-radius:4px;margin-right:3px">جديد</span>' : '';
   const zone = o.assignedZone || getOrderZoneForCourier(o, couriers.find(c=>String(c.id)===String(window._dsCourierId))) || '';
-  const cod = o.paid ? '<span style="color:#16a34a;font-size:10px">مدفوع</span>' : (o.total||0).toLocaleString();
+  const addrFull = [o.addr||o.area||'', o.province].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(' — ');
   return `<tr class="${cls}${isNew?' ds-new-row':''}">
     <td style="text-align:center;color:var(--muted);font-size:10px">${dsRowNum}</td>
     <td><strong style="font-size:11px">${newBadge}${o.id}</strong></td>
     <td style="font-weight:700;font-size:12px">${o.name||''}</td>
-    <td style="direction:ltr;font-size:10px;white-space:nowrap">${o.phone||''}</td>
+    <td style="direction:ltr;font-size:12px;font-weight:700;white-space:nowrap">${o.phone||''}</td>
     <td style="font-size:11px;color:var(--accent)">${zone}</td>
-    <td style="font-size:10px;color:var(--muted);white-space:normal;word-break:break-word">${o.addr||o.area||''}${o.addr2?' — '+o.addr2:''}</td>
+    <td style="font-size:12px;font-weight:700;color:var(--text);white-space:normal;word-break:break-word">${addrFull}</td>
     <td style="font-weight:700;color:var(--danger);text-align:center">${cod}</td>
-    <td style="text-align:center;font-size:11px;color:var(--muted)">${o.ship||50}</td>
   </tr>`;
 }
 
