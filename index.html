@@ -1631,7 +1631,7 @@ function renderOrders(){
   if(orderTypeFilter)list=list.filter(o=>deliveryType(o)===orderTypeFilter);
   
   if(searchQ)list=list.filter(o=>(o.id+o.name+o.area+o.phone).includes(searchQ));
-  $('orders-tbody').innerHTML=list.map(o=>`<tr><td style="text-align:center"><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"></td><td><strong>${o.id}</strong></td><td>${srcBadge(o.src)}</td><td>${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px">${o.phone}</td><td>📍 ${o.area}</td><td>${deliveryBadge(o)}</td><td><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td>${cName(o.courierId)}</td><td>${sBadge(o.status)}</td><td><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="openEditOrder('${o.id}')">✏️</button><button class="btn btn-ghost btn-xs" style="color:#6366f1;border-color:#6366f1" onclick="printPackingSlip('${o.id}')" title="طباعة فاتورة">🧾</button>${o.src==='shopify'&&o.shopifyId?`<button class="btn btn-ghost btn-xs" style="color:#96bf48;border-color:#96bf48;font-size:10px" onclick="openInShopify('${o.shopifyId}')" title="افتح في Shopify">🛍️</button>`:''}${(!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-primary btn-xs" onclick="openAssign('${o.id}')">📍 تعيين</button>`:''}${o.status!=='ملغي'?`<button class="btn btn-xs" style="background:${o.paid?'var(--warn-light)':'var(--success-light)'};color:${o.paid?'#92400e':'#065f46'};border:1px solid ${o.paid?'#fcd34d':'#86efac'}" onclick="togglePaid('${o.id}')">${o.paid?'↩️ COD':'💳 مدفوع'}</button>`:''}${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✓ تم</button>`:''}${(o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}</div></td></tr>`).join('');
+  $('orders-tbody').innerHTML=list.map(o=>`<tr><td style="text-align:center"><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"></td><td><strong>${o.id}</strong>${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td>${srcBadge(o.src)}</td><td>${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px">${o.phone}</td><td>📍 ${o.area}</td><td>${deliveryBadge(o)}</td><td><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td>${cName(o.courierId)}</td><td>${sBadge(o.status)}</td><td><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="openEditOrder('${o.id}')">✏️</button><button class="btn btn-ghost btn-xs" style="color:#6366f1;border-color:#6366f1" onclick="printPackingSlip('${o.id}')" title="طباعة فاتورة">🧾</button>${o.src==='shopify'&&o.shopifyId?`<button class="btn btn-ghost btn-xs" style="color:#96bf48;border-color:#96bf48;font-size:10px" onclick="openInShopify('${o.shopifyId}')" title="افتح في Shopify">🛍️</button>`:''}${(!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-primary btn-xs" onclick="openAssign('${o.id}')">📍 تعيين</button>`:''}${o.status!=='ملغي'?`<button class="btn btn-xs" style="background:${o.paid?'var(--warn-light)':'var(--success-light)'};color:${o.paid?'#92400e':'#065f46'};border:1px solid ${o.paid?'#fcd34d':'#86efac'}" onclick="togglePaid('${o.id}')">${o.paid?'↩️ COD':'💳 مدفوع'}</button>`:''}${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✓ تم</button>`:''}${(o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}</div></td></tr>`).join('');
 }
 
 function filterSt(btn,f){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter=f;orderTypeFilter=null;renderOrders()}
@@ -4788,13 +4788,20 @@ window.addEventListener('load', function(){
 
 let batchActive=false,batchOrders=[],batchIndex=0,batchName='',batchResults=[];
 
+let _currentBatchCode = '';
+
 function getBatchName(){
   const now=new Date();
   const day=now.toLocaleDateString('ar-EG',{year:'2-digit',month:'2-digit',day:'2-digit'}).replace(/[/]/g,'-');
   const key='batch_day_'+now.toDateString();
   let num=1;
   try{const s=localStorage.getItem(key);num=s?parseInt(s)+1:1;localStorage.setItem(key,num);}catch(e){}
-  return day+' — دفعة '+num;
+  // كود مختصر للدفعة
+  const totalKey='batch_total_counter';
+  let total=1;
+  try{const t=localStorage.getItem(totalKey);total=t?parseInt(t)+1:1;localStorage.setItem(totalKey,total);}catch(e){}
+  _currentBatchCode='B-'+String(total).padStart(3,'0');
+  return day+' — دفعة '+num+' ('+_currentBatchCode+')';
 }
 
 function startBatch(){
@@ -4881,8 +4888,8 @@ async function batchAssign(courierId){
   const assignedZone=getOrderZoneForCourier(o,c||{zone:''});
   const isBosta=courierId==='bosta';
   const upd=isBosta
-    ?{courierId:null,isBosta:true,ship,status:'جاري التوصيل',assignedZone}
-    :{courierId,isBosta:false,ship,status:'جاري التوصيل',assignedZone};
+    ?{courierId:null,isBosta:true,ship,status:'جاري التوصيل',assignedZone,batchCode:_currentBatchCode}
+    :{courierId,isBosta:false,ship,status:'جاري التوصيل',assignedZone,batchCode:_currentBatchCode};
   Object.assign(o,upd);
   if(c)c.status='نشط';
   if(!isBosta && c) shopifyFulfill(o, c.name);
@@ -4895,7 +4902,8 @@ async function batchAssign(courierId){
 async function batchMarkPickup(){
   const o=batchOrders[batchIndex];
   o.status='مكتمل';
-  if(API_URL)apiFetch('/api/orders/'+o.id,'PATCH',{status:'مكتمل'}).catch(()=>{});
+  o.batchCode=_currentBatchCode;
+  if(API_URL)apiFetch('/api/orders/'+o.id,'PATCH',{status:'مكتمل',batchCode:_currentBatchCode}).catch(()=>{});
   debouncedSaveOrders();
   batchResults.push({orderId:o.id,name:o.name,action:'pickup'});
   batchIndex++;renderBatchOrder();
@@ -4926,21 +4934,101 @@ function showBatchSummary(){
   const pickups=batchResults.filter(r=>r.action==='pickup');
   const skipped=batchResults.filter(r=>r.action==='skipped');
   const byCourier={};
-  assigned.forEach(r=>{if(!byCourier[r.courierName])byCourier[r.courierName]=[];byCourier[r.courierName].push(r.name);});
+  assigned.forEach(r=>{if(!byCourier[r.courierName])byCourier[r.courierName]=[];byCourier[r.courierName].push(r);});
   ov.innerHTML='<div style="background:#fff;border-radius:20px;width:min(640px,96vw);max-height:90vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,.4)">'
     +'<div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'
     +'<div><div style="font-size:18px;font-weight:700">✅ انتهت الدفعة</div><div style="font-size:13px;color:var(--muted);margin-top:3px">'+batchName+'</div></div>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button onclick="printBatchSummary()" style="background:#1e293b;color:#fff;border:none;border-radius:9px;padding:10px 16px;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer">🖨️ طباعة</button>'
     +'<button onclick="endBatch()" style="background:var(--accent);color:#fff;border:none;border-radius:9px;padding:10px 20px;font-family:Cairo,sans-serif;font-weight:700;font-size:14px;cursor:pointer">✓ حفظ وإغلاق</button>'
-    +'</div><div style="padding:20px">'
+    +'</div></div><div style="padding:20px">'
     +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">'
     +'<div style="background:var(--success-light);border-radius:10px;padding:12px;text-align:center"><div style="font-size:28px;font-weight:700;color:var(--success)">'+assigned.length+'</div><div style="font-size:12px;color:#065f46">✅ وُزّع</div></div>'
     +'<div style="background:var(--warn-light);border-radius:10px;padding:12px;text-align:center"><div style="font-size:28px;font-weight:700;color:var(--warn)">'+pickups.length+'</div><div style="font-size:12px;color:#92400e">🏪 استُلم</div></div>'
     +'<div style="background:var(--bg);border-radius:10px;padding:12px;text-align:center;border:1px solid var(--border)"><div style="font-size:28px;font-weight:700;color:var(--muted)">'+skipped.length+'</div><div style="font-size:12px;color:var(--muted)">⏭ تخطي</div></div>'
     +'</div>'
-    +Object.entries(byCourier).map(([name,ords])=>'<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px"><div style="font-weight:700;margin-bottom:6px">🧑 '+name+' — '+ords.length+' طلب</div><div style="font-size:12px;color:var(--muted)">'+ords.join(' · ')+'</div></div>').join('')
+    +Object.entries(byCourier).map(([name,ords])=>'<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px"><div style="font-weight:700;margin-bottom:6px">🧑 '+name+' — '+ords.length+' طلب</div><div style="font-size:12px;color:var(--muted)">'+ords.map(r=>r.name).join(' · ')+'</div></div>').join('')
     +(pickups.length?'<div style="border:1px solid #fde68a;border-radius:10px;padding:12px;background:var(--warn-light);margin-bottom:8px"><div style="font-weight:700;margin-bottom:6px">🏪 المحل — '+pickups.length+' طلب</div><div style="font-size:12px;color:#92400e">'+pickups.map(r=>r.name).join(' · ')+'</div></div>':'')
     +(skipped.length?'<div style="border:1px solid var(--border);border-radius:10px;padding:12px"><div style="font-weight:700;color:var(--muted);margin-bottom:6px">⏭ متخطي — '+skipped.length+' طلب</div><div style="font-size:12px;color:var(--muted)">'+skipped.map(r=>r.name).join(' · ')+'</div></div>':'')
     +'</div></div>';
+}
+
+function printBatchSummary(){
+  const assigned=batchResults.filter(r=>r.action==='assigned');
+  const pickups=batchResults.filter(r=>r.action==='pickup');
+  const skipped=batchResults.filter(r=>r.action==='skipped');
+  const byCourier={};
+  assigned.forEach(r=>{
+    if(!byCourier[r.courierName]) byCourier[r.courierName]=[];
+    byCourier[r.courierName].push(r);
+  });
+  const now=new Date().toLocaleString('ar-EG',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  let courierRows='';
+  Object.entries(byCourier).forEach(([name,ords])=>{
+    courierRows+=`<div class="section">
+      <div class="sec-hd">🧑 ${name} — ${ords.length} طلب</div>
+      <table>
+        <thead><tr><th>#</th><th>رقم الطلب</th><th>العميل</th><th>المنطقة</th><th>COD</th></tr></thead>
+        <tbody>
+          ${ords.map((r,i)=>{
+            const o=orders.find(x=>x.id===r.orderId)||{};
+            return `<tr><td>${i+1}</td><td><strong>${r.orderId}</strong></td><td>${r.name||''}</td><td>${o.area||''}</td><td>${o.paid?'مدفوع':(o.total||0).toLocaleString()+' ج'}</td></tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  });
+
+  if(pickups.length){
+    courierRows+=`<div class="section warn">
+      <div class="sec-hd">🏪 استلام من المحل — ${pickups.length} طلب</div>
+      <table>
+        <thead><tr><th>#</th><th>رقم الطلب</th><th>العميل</th><th>المنطقة</th></tr></thead>
+        <tbody>${pickups.map((r,i)=>{const o=orders.find(x=>x.id===r.orderId)||{};return`<tr><td>${i+1}</td><td><strong>${r.orderId}</strong></td><td>${r.name||''}</td><td>${o.area||''}</td></tr>`;}).join('')}</tbody>
+      </table>
+    </div>`;
+  }
+
+  const html=`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>ملخص دفعة التوزيع</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,sans-serif;font-size:12px;padding:20px;color:#111}
+    .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:10px;margin-bottom:16px}
+    .hd h1{font-size:16px;font-weight:700}
+    .hd .meta{font-size:11px;color:#555;text-align:left;line-height:1.8}
+    .stats{display:flex;gap:16px;margin-bottom:16px;background:#f8fafc;border-radius:6px;padding:10px 14px}
+    .stat{text-align:center;min-width:60px}
+    .stat .n{font-size:22px;font-weight:700}
+    .stat .l{font-size:10px;color:#666}
+    .section{border:1px solid #ddd;border-radius:6px;margin-bottom:12px;overflow:hidden}
+    .section.warn{border-color:#fde68a}
+    .sec-hd{background:#1e293b;color:#fff;padding:7px 12px;font-weight:700;font-size:12px}
+    .section.warn .sec-hd{background:#92400e}
+    table{width:100%;border-collapse:collapse}
+    th{background:#f1f5f9;padding:5px 8px;text-align:right;font-size:10px;font-weight:700;border-bottom:1px solid #e2e8f0}
+    td{padding:5px 8px;border-bottom:1px solid #f1f5f9;font-size:11px}
+    tr:last-child td{border-bottom:none}
+    .print-btn{margin-top:16px;background:#111;color:#fff;border:none;padding:8px 24px;font-size:12px;cursor:pointer;border-radius:4px}
+    @media print{.print-btn{display:none}body{padding:10px}}
+  </style></head><body>
+  <div class="hd">
+    <div><h1>📦 ملخص دفعة التوزيع</h1><div style="font-size:13px;font-weight:700;color:#4f46e5;margin-top:2px">${_currentBatchCode}</div><div style="font-size:11px;color:#555;margin-top:2px">${batchName}</div></div>
+    <div class="meta">CAFELAX<br>${now}</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="n" style="color:#16a34a">${assigned.length}</div><div class="l">✅ وُزّع</div></div>
+    <div class="stat"><div class="n" style="color:#d97706">${pickups.length}</div><div class="l">🏪 استُلم</div></div>
+    <div class="stat"><div class="n" style="color:#94a3b8">${skipped.length}</div><div class="l">⏭ تخطي</div></div>
+    <div class="stat"><div class="n">${batchResults.length}</div><div class="l">إجمالي</div></div>
+  </div>
+  ${courierRows}
+  <div style="text-align:center"><button class="print-btn" onclick="window.print()">🖨️ طباعة</button></div>
+  </body></html>`;
+
+  const w=window.open('','_blank','width=800,height=900');
+  w.document.open();w.document.write(html);w.document.close();
+  setTimeout(()=>{w.focus();w.print();},500);
 }
 
 function minimizeBatch(){
