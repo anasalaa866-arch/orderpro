@@ -635,6 +635,8 @@ tr:hover td{background:#fafbff}
           </select>
           <input id="chk-search" placeholder="ابحث..." oninput="renderChecksPage()" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:Cairo,sans-serif;width:150px">
           <div style="margin-right:auto;display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" onclick="printChecksReport()">🖨️ طباعة</button>
+            <button class="btn btn-ghost btn-sm" style="color:#16a34a;border-color:#16a34a" onclick="exportChecksExcel()">📊 Excel</button>
             <button class="btn btn-ghost btn-sm" onclick="openCheckBook()">📚 دفاتر</button>
             <button class="btn btn-primary btn-sm" onclick="openAddChk()">+ شيك جديد</button>
           </div>
@@ -3833,6 +3835,135 @@ function renderChecksPage(){
   $('chk-sum-row').textContent=`إجمالي ${list.length} شيك: ${chkFmtAmount(total)} ج`;
   $('chk-sum-row').style.display='block';
 }
+function getFilteredChkList(){
+  const now=new Date(new Date().toDateString());
+  const weekEnd=new Date(now);weekEnd.setDate(now.getDate()+7);
+  const m0=new Date(now.getFullYear(),now.getMonth(),1);
+  const m1=new Date(now.getFullYear(),now.getMonth()+1,0);
+  const period=$('chk-period-filter')?.value||'all';
+  const q=($('chk-search')?.value||'').toLowerCase();
+  let list=[...chkList];
+  if(chkStatusFilter==='pending')list=list.filter(c=>c.status==='pending'&&!chkIsOverdue(c));
+  if(chkStatusFilter==='done')list=list.filter(c=>c.status==='done');
+  if(chkStatusFilter==='overdue')list=list.filter(c=>chkIsOverdue(c));
+  if(period==='week')list=list.filter(c=>{const d=new Date(c.date);return d>=now&&d<=weekEnd;});
+  if(period==='month')list=list.filter(c=>{const d=new Date(c.date);return d>=m0&&d<=m1;});
+  if(period==='overdue')list=list.filter(c=>chkIsOverdue(c));
+  if(q)list=list.filter(c=>(c.num+c.payee+(c.invoice||'')).toLowerCase().includes(q));
+  list.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  return list;
+}
+
+function printChecksReport(){
+  const list=getFilteredChkList();
+  if(!list.length){toast('❗ لا توجد شيكات للطباعة');return;}
+  const fmtDate=d=>d?new Date(d).toLocaleDateString('ar-EG',{year:'numeric',month:'short',day:'numeric'}):'—';
+  const total=list.reduce((s,c)=>s+Number(c.amount),0);
+  const totalDone=list.filter(c=>c.status==='done').reduce((s,c)=>s+Number(c.amount),0);
+  const totalPending=list.filter(c=>c.status!=='done').reduce((s,c)=>s+Number(c.amount),0);
+  const today=new Date().toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'});
+
+  const rows=list.map((c,i)=>{
+    const book=chkBooks.find(b=>b.id===c.bookId);
+    const isOverdue=chkIsOverdue(c);
+    const statusTxt=c.status==='done'?'✅ مصروف':isOverdue?'⚠️ متأخر':'⏳ لم يُصرف';
+    const rowBg=isOverdue?'background:#fff5f5':c.status==='done'?'background:#f0fdf4':'';
+    return `<tr style="${rowBg}">
+      <td style="text-align:center">${i+1}</td>
+      <td><strong>${c.num}</strong></td>
+      <td>${c.payee||'—'}</td>
+      <td style="font-weight:700">${chkFmtAmount(c.amount)} ج</td>
+      <td>${fmtDate(c.date)}</td>
+      <td>${book?book.name:'—'}</td>
+      <td>${c.invoice||'—'}</td>
+      <td>${statusTxt}</td>
+      <td style="font-size:11px;color:#555">${c.note||''}</td>
+    </tr>`;
+  }).join('');
+
+  const html=`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
+  <meta charset="UTF-8"><title>تقرير الشيكات</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Cairo',Arial,sans-serif;padding:20px;font-size:12px;color:#1e293b}
+    .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1e293b;padding-bottom:10px;margin-bottom:14px}
+    h1{font-size:18px;font-weight:800}
+    .meta{font-size:11px;color:#64748b;margin-top:3px}
+    .stats{display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap}
+    .stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 14px;text-align:center;min-width:80px}
+    .stat .n{font-size:18px;font-weight:800}.stat .l{font-size:10px;color:#64748b}
+    table{width:100%;border-collapse:collapse}
+    th{background:#1e293b;color:#fff;padding:6px 8px;text-align:right;font-size:11px;font-weight:700}
+    td{padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:11px}
+    .print-btn{margin-top:16px;background:#1e293b;color:#fff;border:none;padding:8px 24px;font-size:12px;cursor:pointer;border-radius:4px;font-family:'Cairo',sans-serif}
+    @media print{.print-btn{display:none}body{padding:10px}}
+  </style></head><body>
+  <div class="hd">
+    <div><h1>📋 تقرير الشيكات</h1><div class="meta">CAFELAX · ${today}</div></div>
+    <div style="font-size:11px;color:#64748b;text-align:left">${list.length} شيك</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="n">${chkFmtAmount(total)} ج</div><div class="l">الإجمالي</div></div>
+    <div class="stat"><div class="n" style="color:#dc2626">${chkFmtAmount(totalPending)} ج</div><div class="l">غير مصروف</div></div>
+    <div class="stat"><div class="n" style="color:#16a34a">${chkFmtAmount(totalDone)} ج</div><div class="l">مصروف</div></div>
+    <div class="stat"><div class="n" style="color:#d97706">${list.filter(c=>chkIsOverdue(c)).length}</div><div class="l">متأخر</div></div>
+  </div>
+  <table>
+    <thead><tr><th>#</th><th>رقم الشيك</th><th>المورد</th><th>القيمة</th><th>تاريخ الاستحقاق</th><th>الدفتر</th><th>الفاتورة</th><th>الحالة</th><th>ملاحظات</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div style="text-align:center;margin-top:16px">
+    <button class="print-btn" onclick="window.print()">🖨️ طباعة</button>
+  </div>
+  </body></html>`;
+
+  const w=window.open('','_blank','width=1000,height=800');
+  w.document.open();w.document.write(html);w.document.close();
+  setTimeout(()=>{w.focus();w.print();},600);
+}
+
+function exportChecksExcel(){
+  if(typeof XLSX==='undefined'){toast('❗ مكتبة Excel غير محملة');return;}
+  const list=getFilteredChkList();
+  if(!list.length){toast('❗ لا توجد شيكات للتصدير');return;}
+
+  const headers=['#','رقم الشيك','المورد','القيمة','تاريخ الاستحقاق','الدفتر','رقم الفاتورة','الحالة','ملاحظات'];
+  const rows=list.map((c,i)=>{
+    const book=chkBooks.find(b=>b.id===c.bookId);
+    const status=c.status==='done'?'مصروف':chkIsOverdue(c)?'متأخر':'لم يُصرف';
+    return [i+1, c.num, c.payee||'', Number(c.amount)||0,
+      c.date||'', book?book.name:'', c.invoice||'', status, c.note||''];
+  });
+
+  const ws=XLSX.utils.aoa_to_sheet([headers,...rows]);
+  ws['!cols']=[{wch:4},{wch:12},{wch:20},{wch:12},{wch:16},{wch:16},{wch:14},{wch:12},{wch:20}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'الشيكات');
+
+  // شيت ثاني — ملخص بالموردين
+  const byPayee={};
+  list.forEach(c=>{
+    if(!byPayee[c.payee])byPayee[c.payee]={total:0,pending:0,done:0,count:0};
+    byPayee[c.payee].total+=Number(c.amount);
+    byPayee[c.payee].count++;
+    if(c.status==='done')byPayee[c.payee].done+=Number(c.amount);
+    else byPayee[c.payee].pending+=Number(c.amount);
+  });
+  const sumHeaders=['المورد','عدد الشيكات','الإجمالي','مصروف','غير مصروف'];
+  const sumRows=Object.entries(byPayee)
+    .sort((a,b)=>b[1].total-a[1].total)
+    .map(([name,d])=>[name,d.count,d.total,d.done,d.pending]);
+  const ws2=XLSX.utils.aoa_to_sheet([sumHeaders,...sumRows]);
+  ws2['!cols']=[{wch:22},{wch:12},{wch:14},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws2,'ملخص الموردين');
+
+  const now=new Date();
+  const fname='Checks_'+now.toLocaleDateString('en-GB').replace(/\//g,'-')+'.xlsx';
+  XLSX.writeFile(wb,fname);
+  toast('✅ تم تصدير '+list.length+' شيك');
+}
+
 function calcChkUntil(){
   const d=$('chk-until').value;if(!d)return;
   const until=new Date(d);
@@ -3859,10 +3990,46 @@ function openEditChk(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
   editingChkId=id;chkImgData=c.img||'';
   document.getElementById('chk-modal-title').textContent='تعديل الشيك';
-  $('chk-num').value=c.num||'';$('chk-payee').value=c.payee||'';
-  $('chk-amount').value=c.amount||'';$('chk-date').value=c.date||'';
-  $('chk-invoice').value=c.invoice||'';$('chk-note').value=c.note||'';
-  fillChkBookSel();$('chk-book-sel').value=c.bookId||'';
+
+  // ملء الدفتر أولاً عشان يتملى chk-num-sel
+  fillChkBookSel();
+  if($('chk-book-sel')) $('chk-book-sel').value=c.bookId||'';
+  onChkBookChange(); // يملى قائمة الأرقام بناءً على الدفتر
+
+  // بعد ملء الأرقام — حدد رقم الشيك
+  const numSel=$('chk-num-sel');
+  if(numSel){
+    // أضف الرقم الحالي لو مش موجود في القائمة
+    const exists=[...numSel.options].some(o=>o.value==c.num);
+    if(!exists && c.num){
+      const opt=document.createElement('option');
+      opt.value=c.num;opt.textContent=c.num;
+      numSel.appendChild(opt);
+    }
+    numSel.value=c.num||'';
+  }
+
+  // المورد — حدد في select أو اكتب يدوي
+  const payeeSel=$('chk-payee-sel');
+  if(payeeSel){
+    fillSupplierSel();
+    const exists2=[...payeeSel.options].some(o=>o.value===c.payee);
+    if(exists2){
+      payeeSel.value=c.payee;
+      if($('chk-payee')) $('chk-payee').style.display='none';
+    } else {
+      payeeSel.value='__other__';
+      if($('chk-payee')){ $('chk-payee').style.display='block'; $('chk-payee').value=c.payee||''; }
+    }
+  } else {
+    if($('chk-payee')) $('chk-payee').value=c.payee||'';
+  }
+
+  $('chk-amount').value=c.amount||'';
+  $('chk-date').value=c.date||'';
+  $('chk-invoice').value=c.invoice||'';
+  $('chk-note').value=c.note||'';
+
   if(c.img){$('chk-img-show').src=c.img;$('chk-img-show').style.display='block';$('chk-img-placeholder').style.display='none';}
   else{$('chk-img-show').style.display='none';$('chk-img-placeholder').style.display='block';}
   openM('m-chk');
@@ -4073,8 +4240,9 @@ async function doLogin(){
   if(importBtn) importBtn.style.display = user.role==='admin' ? '' : 'none';
 
   await syncCouriersToDB();
-  await syncUsersFromDB(); // جلب المستخدمين من DB
+  await syncUsersFromDB();
   loadOrders();
+  loadSettlements();
   loadChks();
   checkExpiryAlerts();
   toast('✅ أهلاً '+user.name+' 👋');
@@ -4462,28 +4630,46 @@ function _doPrintSettle(c, done, isDraft, settleDate, settlement){
 function renderSettleHistory(){
   const el=document.getElementById('settle-history-content');
   if(!el) return;
-  if(!_allSettlements.length){ el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا توجد تسويات بعد</div>'; return; }
+  if(!_allSettlements.length){
+    if(!_settlementsLoaded){
+      el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div>';
+      loadSettlements().then(()=>renderSettleHistory());
+    } else {
+      el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا توجد تسويات بعد</div>';
+    }
+    return;
+  }
   const sorted=[..._allSettlements].sort((a,b)=>new Date(b.ts)-new Date(a.ts));
   let html='',lastDate='';
   sorted.forEach(s=>{
     const c=couriers.find(x=>String(x.id)===String(s.courierId));
-    if(!c) return;
+    const courierName = c ? c.name : ('مندوب #'+s.courierId);
     const ts=new Date(s.ts);
     const dateStr=ts.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
     if(dateStr!==lastDate){ html+='<div style="font-size:12px;font-weight:700;color:var(--muted);padding:10px 4px 4px;border-bottom:1px solid var(--border);margin-bottom:6px">'+dateStr+'</div>'; lastDate=dateStr; }
     const timeStr=ts.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
     const sessNum=_allSettlements.filter(x=>String(x.courierId)===String(s.courierId)&&new Date(x.ts)<=ts).length;
+    const adj = s.adj||[];
+    const adjTotal = s.adjTotal || adj.reduce((sum,a)=>sum+(parseFloat(a.amount)||0),0);
+    const net = (s.cod||0) - (s.ship||0) + adjTotal;
+    const adjBadge = adjTotal!==0
+      ? '<span style="background:'+(adjTotal>0?'#dcfce7':'#fee2e2')+';color:'+(adjTotal>0?'#166534':'#991b1b')+';padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">'+(adjTotal>0?'+':'')+adjTotal.toLocaleString()+' ج</span>'
+      : '';
     html+='<div style="border:1px solid var(--border);border-radius:9px;padding:12px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;background:var(--card)">'
-      +'<div><div style="display:flex;gap:8px;align-items:center;margin-bottom:4px"><strong>'+c.name+'</strong>'
+      +'<div><div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap"><strong>'+courierName+'</strong>'
       +'<span style="background:var(--accent-light);color:var(--accent);padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700">تسوية #'+sessNum+'</span>'
-      +'<span style="font-size:11px;color:var(--muted)">'+timeStr+'</span></div>'
-      +'<div style="display:flex;gap:14px;font-size:12px">'
+      +'<span style="font-size:11px;color:var(--muted)">'+timeStr+'</span>'
+      +adjBadge
+      +'</div>'
+      +'<div style="display:flex;gap:14px;font-size:12px;flex-wrap:wrap">'
       +'<span>📦 <strong>'+(s.orderIds||[]).length+'</strong> طلب</span>'
       +'<span>💰 <strong style="color:var(--success)">'+(s.cod||0).toLocaleString()+' ج</strong></span>'
       +'<span>🚴 <strong style="color:var(--purple)">'+(s.ship||0).toLocaleString()+' ج</strong></span>'
-      +'<span>💵 <strong style="color:var(--accent)">'+((s.cod||0)-(s.ship||0)).toLocaleString()+' ج</strong></span>'
-      +'</div></div>'
-      +((s.orderIds||[]).length?'<button class="btn btn-ghost btn-sm" onclick="printHistorySettle(this.dataset.sid)" data-sid="'+s.id+'"">🖨️ طباعة</button>':'<span style="font-size:10px;color:var(--muted)">—</span>')
+      +'<span>💵 صافي: <strong style="color:var(--accent)">'+net.toLocaleString()+' ج</strong></span>'
+      +'</div>'
+      +(adj.length?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">تعديلات: '+adj.map(a=>(a.amount>=0?'+':'')+a.amount.toLocaleString()+' ('+a.reason+')').join(' · ')+'</div>':'')
+      +'</div>'
+      +((s.orderIds||[]).length?'<button class="btn btn-ghost btn-sm" onclick="printHistorySettle(this.dataset.sid)" data-sid="'+s.id+'">🖨️ طباعة</button>':'<span style="font-size:10px;color:var(--muted)">—</span>')
       +'</div>';
   });
   el.innerHTML=html;
@@ -6159,7 +6345,13 @@ function goPage(el,page){
   if(page==='notifs')renderNotifs();
   if(page==='settings')renderUsersAdmin();
   if(page==='delivery-sheet')dsInit();
-  if(page==='settle-history')renderSettleHistory();
+  if(page==='settle-history'){
+    if(!_settlementsLoaded && API_URL){
+      loadSettlements().then(()=>renderSettleHistory());
+    } else {
+      renderSettleHistory();
+    }
+  }
   if(page==='treasury'){loadTreasury().then(()=>{renderTreasuryList();if(_activeTreasuryId)selectTreasury(_activeTreasuryId);});}
   if(page==='expiry')renderExpiryPage();
 }
