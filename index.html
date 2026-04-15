@@ -3692,7 +3692,11 @@ function printShopAccounting(){
   w.document.close();
 }
 
-let chkBooks=[];let chkList=[];let chkSuppliers=[];
+// تهيئة من localStorage أولاً
+let chkBooks=[], chkList=[], chkSuppliers=[];
+try{ const b=localStorage.getItem('chk_books'); if(b) chkBooks=JSON.parse(b); }catch(e){}
+try{ const c=localStorage.getItem('chk_list'); if(c) chkList=JSON.parse(c); }catch(e){}
+try{ const s=localStorage.getItem('chk_suppliers'); if(s) chkSuppliers=JSON.parse(s); }catch(e){}
 let editingChkId=null;let chkStatusFilter='all';let chkImgData='';
 
 async function loadChks(){
@@ -3703,23 +3707,43 @@ async function loadChks(){
       apiFetch('/api/checks'),
       apiFetch('/api/check-suppliers')
     ]);
-    if(r1?.books) chkBooks = r1.books.map(b=>({
-      id:b.id, name:b.name, bank:b.bank||'', account:b.account||'',
-      pages:b.pages||48, note:b.note||'',
-      firstNum:b.firstNum||b.first_num||1,
-      lastNum:b.lastNum||b.last_num||null,
-    }));
-    if(r2?.checks) chkList = r2.checks.map(c=>({
-      id:c.id, bookId:c.bookId||c.book_id, num:c.num,
-      payee:c.payee||c.supplier||'',
-      amount:parseFloat(c.amount)||0,
-      date:c.date||c.dueDate||c.due_date||'',
-      invoice:c.invoice||'', note:c.note||'',
-      img:c.img||'', status:c.status||'pending',
-      doneAt:c.doneAt||c.done_at||null,
-      createdAt:c.createdAt||c.created_at||null,
-    }));
-    if(r3?.suppliers) chkSuppliers = r3.suppliers.map(s=>s.name||s);
+
+    const dbBooks = r1?.books || [];
+    const dbChecks = r2?.checks || [];
+    const dbSuppliers = r3?.suppliers || [];
+
+    if(dbBooks.length || dbChecks.length){
+      // الـ DB فيه بيانات — استخدمها وحدّث localStorage
+      chkBooks = dbBooks.map(b=>({
+        id:b.id, name:b.name, bank:b.bank||'', account:b.account||'',
+        pages:b.pages||48, note:b.note||'',
+        firstNum:b.firstNum||b.first_num||1,
+        lastNum:b.lastNum||b.last_num||null,
+      }));
+      chkList = dbChecks.map(c=>({
+        id:c.id, bookId:c.bookId||c.book_id, num:c.num,
+        payee:c.payee||c.supplier||'',
+        amount:parseFloat(c.amount)||0,
+        date:c.date||c.dueDate||c.due_date||'',
+        invoice:c.invoice||'', note:c.note||'',
+        img:c.img||'', status:c.status||'pending',
+        doneAt:c.doneAt||c.done_at||null,
+        createdAt:c.createdAt||c.created_at||null,
+      }));
+      if(dbSuppliers.length) chkSuppliers = dbSuppliers.map(s=>s.name?s:{name:String(s)});
+      // احفظ في localStorage
+      try{
+        localStorage.setItem('chk_books',JSON.stringify(chkBooks));
+        localStorage.setItem('chk_list',JSON.stringify(chkList));
+        localStorage.setItem('chk_suppliers',JSON.stringify(chkSuppliers));
+      }catch(e){}
+    } else if(chkBooks.length || chkList.length){
+      // الـ DB فاضي بس عندنا بيانات محلية — ارفعها للـ DB
+      console.log('DB empty, syncing local data to DB...');
+      apiFetch('/api/sync-checks','POST',{
+        books:chkBooks, checks:chkList, suppliers:chkSuppliers
+      }).catch(e=>console.warn('sync local->DB:', e));
+    }
   }catch(e){ console.error('loadChks:', e); }
 }
 
