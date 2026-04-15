@@ -3708,17 +3708,33 @@ async function loadChks(){
       pages:b.pages||48, firstNum:b.first_num||b.firstNum||1, note:b.note||''
     }));
     if(r2?.checks) chkList = r2.checks.map(c=>({
-      id:c.id, bookId:c.book_id||c.bookId, num:c.num,
-      supplier:c.supplier, amount:parseFloat(c.amount),
-      dueDate:c.due_date||c.dueDate, status:c.status,
-      note:c.note||'', img:c.img||''
+      id:c.id, bookId:c.bookId||c.book_id, num:c.num,
+      payee:c.payee||c.supplier||'',
+      amount:parseFloat(c.amount)||0,
+      date:c.date||c.dueDate||c.due_date||'',
+      invoice:c.invoice||'', note:c.note||'',
+      img:c.img||'', status:c.status||'pending',
+      doneAt:c.doneAt||c.done_at||null,
+      createdAt:c.createdAt||c.created_at||null,
     }));
     if(r3?.suppliers) chkSuppliers = r3.suppliers.map(s=>s.name||s);
   }catch(e){ console.error('loadChks:', e); }
 }
 
+let _saveChksTimer=null;
 function saveChks(syncNow=true){
-  if(syncNow&&API_URL)apiFetch('/api/sync-checks','POST',{books:chkBooks,checks:chkList,suppliers:chkSuppliers}).catch(()=>{});
+  try{
+    localStorage.setItem('chk_books',JSON.stringify(chkBooks));
+    localStorage.setItem('chk_list',JSON.stringify(chkList));
+    localStorage.setItem('chk_suppliers',JSON.stringify(chkSuppliers));
+  }catch(e){}
+  if(!API_URL) return;
+  if(syncNow){
+    clearTimeout(_saveChksTimer);
+    _saveChksTimer=setTimeout(()=>{
+      apiFetch('/api/sync-checks','POST',{books:chkBooks,checks:chkList,suppliers:chkSuppliers}).catch(()=>{});
+    },800);
+  }
 }
 function chkFmtAmount(n){return Number(n||0).toLocaleString('ar-EG');}
 function chkFmtDate(d){if(!d)return '—';return new Date(d).toLocaleDateString('ar-EG',{year:'numeric',month:'short',day:'numeric'});}
@@ -3842,25 +3858,25 @@ function saveChk(){
     createdAt:editingChkId?(chkList.find(x=>x.id===editingChkId)?.createdAt||new Date().toISOString()):new Date().toISOString()};
   if(editingChkId){const idx=chkList.findIndex(x=>x.id===editingChkId);if(idx>=0)chkList[idx]=data;}
   else chkList.push(data);
-  saveChks(false);if(API_URL)apiFetch('/api/checks','POST',data).catch(()=>{});
+  saveChks(true);if(API_URL)apiFetch('/api/checks','POST',data).catch(()=>{});
   closeM('m-chk');renderChecksPage();toast('✅ تم حفظ الشيك');
 }
 function chkMarkDone(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
   c.status='done';c.doneAt=new Date().toISOString();
-  saveChks(false);if(API_URL)apiFetch('/api/checks','POST',c).catch(()=>{});
+  saveChks(true);if(API_URL)apiFetch('/api/checks','POST',c).catch(()=>{});
   renderChecksPage();toast('✅ تم تحديد الشيك كمصروف');
 }
 function chkMarkPending(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
   c.status='pending';delete c.doneAt;
-  saveChks(false);if(API_URL)apiFetch('/api/checks','POST',c).catch(()=>{});
+  saveChks(true);if(API_URL)apiFetch('/api/checks','POST',c).catch(()=>{});
   renderChecksPage();toast('↩️ تم إرجاع الشيك لغير مصروف');
 }
 function deleteChk(id){
   if(!confirm('هتحذف الشيك ده؟'))return;
   chkList=chkList.filter(x=>x.id!==id);
-  saveChks(false);if(API_URL)apiFetch('/api/checks/'+id,'DELETE').catch(()=>{});
+  saveChks(true);if(API_URL)apiFetch('/api/checks/'+id,'DELETE').catch(()=>{});
   renderChecksPage();toast('🗑️ تم حذف الشيك');
 }
 function previewChkImg(input){
@@ -3876,7 +3892,7 @@ function saveChkBook(){
   const name=$('bk-name').value.trim();if(!name){toast('❗ أدخل اسم الدفتر');return;}
   const firstNum=parseInt($('bk-first-num')?.value)||1;
   const b={id:Date.now()+'_bk',name,bank:$('bk-bank').value.trim(),account:$('bk-account').value.trim(),pages:parseInt($('bk-pages').value)||48,firstNum};
-  chkBooks.push(b);saveChks(false);if(API_URL)apiFetch('/api/check-books','POST',b).catch(()=>{});
+  chkBooks.push(b);saveChks(true);if(API_URL)apiFetch('/api/check-books','POST',b).catch(()=>{});
   renderChkBooks();toast('✅ تم إضافة الدفتر');['bk-name','bk-bank','bk-account'].forEach(id=>$(id)&&($(id).value=''));
 }
 function renderChkBooks(){
@@ -3894,7 +3910,7 @@ function renderChkBooks(){
 function deleteChkBook(id){
   if(!confirm('هتحذف الدفتر ده؟'))return;
   chkBooks=chkBooks.filter(x=>x.id!==id);
-  saveChks(false);if(API_URL)apiFetch('/api/check-books/'+id,'DELETE').catch(()=>{});
+  saveChks(true);if(API_URL)apiFetch('/api/check-books/'+id,'DELETE').catch(()=>{});
   renderChkBooks();toast('🗑️ تم حذف الدفتر');
 }
 
@@ -4337,7 +4353,7 @@ async function doSettle(){
     }
   });
   if(API_URL){
-    apiFetch('/api/settlements','POST',{courierId:c.id,ts:now,orderIds,cod,ship})
+    apiFetch('/api/settlements','POST',{courierId:c.id,ts:now,orderIds,cod,ship,adj,adjTotal})
       .then(r=>{ if(r&&r.id) newS.id=r.id; }).catch(e=>console.error('settle error:',e));
     apiFetch('/api/couriers/'+c.id,'PATCH',{settled:true}).catch(()=>{});
   }
@@ -4368,15 +4384,17 @@ function printHistorySettle(settlementId){
   const c = couriers.find(x=>String(x.id)===String(s.courierId));
   if(!c) return;
   const done = oByC(s.courierId,'مكتمل').filter(o=>s.orderIds.includes(o.id));
-  _doPrintSettle(c, done, false, s.ts);
+  _doPrintSettle(c, done, false, s.ts, {adj: s.adj||[], adjTotal: s.adjTotal||0});
 }
 
 function _doPrintSettle(c, done, isDraft, settleDate, settlement){
   const s = settlement || {};
+  const adj = s.adj || [];
+  const adjTotal = s.adjTotal || adj.reduce((sum,a)=>sum+(parseFloat(a.amount)||0),0);
   const cod = done.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
   const paidOrders = done.filter(o=>o.paid);
   const ship = done.reduce((s,o)=>s+(o.ship||50),0);
-  const net = cod-ship;
+  const net = cod - ship + adjTotal;
   const today = new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const nowt = new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
   const dateStr = (settleDate?new Date(settleDate):new Date()).toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'});
@@ -4402,7 +4420,7 @@ function _doPrintSettle(c, done, isDraft, settleDate, settlement){
     +(paidOrders.length?'<div><div class="sv" style="color:#0891b2">'+paidOrders.reduce((s,o)=>s+o.total,0).toLocaleString()+' ج</div><div class="sl">مدفوع</div></div>':'')
     +'<div><div class="sv" style="color:#9333ea">'+ship.toLocaleString()+' ج</div><div class="sl">يستلم المندوب</div></div>'
     +'<div><div class="sv" style="font-size:17px;color:#15803d">'+net.toLocaleString()+' ج</div><div class="sl">صافي المحل</div></div></div>'
-    +((s && s.adj && s.adj.length)?'<div style="background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:10px 14px;margin-bottom:12px"><div style="font-size:11px;font-weight:700;margin-bottom:6px">تسويات إضافية</div>'+s.adj.map(a=>'<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span>'+a.reason+'</span><strong style="color:'+(a.amount>=0?'#16a34a':'#dc2626')+'">'+(a.amount>=0?'+':'')+a.amount.toLocaleString()+' ج</strong></div>').join('')+'<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;border-top:1px solid #fde047;padding-top:6px;margin-top:6px"><span>إجمالي التعديلات</span><strong>'+(s.adjTotal>=0?'+':'')+s.adjTotal.toLocaleString()+' ج</strong></div></div>':'')
+    +(adj.length?'<div style="background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:10px 14px;margin-bottom:12px"><div style="font-size:11px;font-weight:700;margin-bottom:6px">تسويات إضافية</div>'+adj.map(a=>'<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span>'+a.reason+'</span><strong style="color:'+(a.amount>=0?'#16a34a':'#dc2626')+'">'+(a.amount>=0?'+':'')+a.amount.toLocaleString()+' ج</strong></div>').join('')+'<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;border-top:1px solid #fde047;padding-top:6px;margin-top:6px"><span>إجمالي التعديلات</span><strong>'+(adjTotal>=0?'+':'')+adjTotal.toLocaleString()+' ج</strong></div></div>':'')
     +'<table><thead><tr><th>#</th><th>رقم الطلب</th><th>العميل</th><th>المنطقة</th><th>الإجمالي</th><th>الدفع</th><th>الشحن</th></tr></thead><tbody>'+rows
     +'<tr style="font-weight:700;background:#e0e7ff"><td colspan="4">الإجمالي</td><td>'+cod.toLocaleString()+' ج</td><td>'+(paidOrders.length?paidOrders.length+' مدفوع':'')+'</td><td>'+ship.toLocaleString()+' ج</td></tr>'
     +'</tbody></table>'
@@ -4609,20 +4627,37 @@ function executeTreasuryPrint(){
   const fromVal=document.getElementById('tprint-from')?.value;
   const toVal=document.getElementById('tprint-to')?.value;
   const fmtDate=d=>new Date(d).toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'});
+
+  // كل حركات الخزنة قبل الفترة لحساب رصيد أول الفترة
+  const allTxs=_treasuryTx.filter(x=>x.treasuryId===_activeTreasuryId);
+  const fromDate=new Date(fromVal+'T00:00:00');
+  const toDate=new Date(toVal+'T23:59:59');
+  const txsBefore=allTxs.filter(x=>new Date(x.date)<fromDate);
+  const openingBalance=(parseFloat(t?.opening)||0)
+    + txsBefore.filter(x=>x.type==='in').reduce((s,x)=>s+(parseFloat(x.amount)||0),0)
+    - txsBefore.filter(x=>x.type==='out').reduce((s,x)=>s+(parseFloat(x.amount)||0),0);
+
   const totalIn=txs.filter(x=>x.type==='in').reduce((s,x)=>s+(parseFloat(x.amount)||0),0);
   const totalOut=txs.filter(x=>x.type==='out').reduce((s,x)=>s+(parseFloat(x.amount)||0),0);
-  const net=totalIn-totalOut;
+  const closingBalance=openingBalance+totalIn-totalOut;
+
+  // بناء صفوف مع رصيد تراكمي
+  let runningBalance=openingBalance;
   const rows=txs.map((tx,i)=>{
     const isIn=tx.type==='in';
+    const amt=parseFloat(tx.amount)||0;
+    runningBalance = isIn ? runningBalance+amt : runningBalance-amt;
     return `<tr>
       <td style="text-align:center">${i+1}</td>
       <td>${fmtDate(tx.date)}</td>
       <td>${tx.reason||'—'}</td>
       <td style="text-align:center">${isIn?'📥 وارد':'📤 منصرف'}</td>
-      <td style="color:green;font-weight:700;text-align:left">${isIn?tx.amount.toLocaleString()+' ج':'—'}</td>
-      <td style="color:red;font-weight:700;text-align:left">${!isIn?tx.amount.toLocaleString()+' ج':'—'}</td>
+      <td style="color:green;font-weight:700;text-align:left">${isIn?amt.toLocaleString()+' ج':'—'}</td>
+      <td style="color:red;font-weight:700;text-align:left">${!isIn?amt.toLocaleString()+' ج':'—'}</td>
+      <td style="font-weight:700;text-align:left;color:${runningBalance>=0?'#15803d':'#dc2626'}">${runningBalance.toLocaleString()} ج</td>
     </tr>`;
   }).join('');
+
   const printWin=window.open('','_blank','width=900,height=700');
   printWin.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head>
   <meta charset="UTF-8">
@@ -4632,33 +4667,53 @@ function executeTreasuryPrint(){
     body{font-family:'Cairo',Arial,sans-serif;padding:24px;color:#1e293b;font-size:13px}
     h1{font-size:20px;font-weight:800;margin-bottom:4px}
     .meta{color:#64748b;font-size:12px;margin-bottom:16px}
+    .balances{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+    .bal-box{border:1.5px solid #e2e8f0;border-radius:8px;padding:12px 16px}
+    .bal-box.opening{border-color:#93c5fd;background:#eff6ff}
+    .bal-box.closing{border-color:#6ee7b7;background:#f0fdf4}
+    .bal-lbl{font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+    .bal-val{font-size:22px;font-weight:800}
+    .bal-box.opening .bal-val{color:#1d4ed8}
+    .bal-box.closing .bal-val{color:#15803d}
     table{width:100%;border-collapse:collapse;margin-top:12px}
     th{background:#6366f1;color:#fff;padding:8px 10px;font-size:12px;font-weight:700}
     td{padding:7px 10px;border-bottom:1px solid #e2e8f0;font-size:12px}
     tr:nth-child(even) td{background:#f8fafc}
-    .summary{display:flex;gap:24px;flex-wrap:wrap;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin-top:16px}
+    .summary{display:flex;gap:24px;flex-wrap:wrap;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;padding:12px 16px;margin-top:16px}
     .s-item{font-size:13px}
     .s-item strong{font-size:15px}
-    @media print{
-      body{padding:12px}
-      button{display:none}
-      .no-print{display:none}
-    }
+    @media print{body{padding:12px}button{display:none}.no-print{display:none}}
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
   </head><body>
   <h1>🏦 ${t?.name||'الخزنة'} — حركات الفترة</h1>
   <div class="meta">من ${fmtDate(fromVal)} إلى ${fmtDate(toVal)} | طُبع بتاريخ ${fmtDate(new Date())}</div>
+
+  <div class="balances">
+    <div class="bal-box opening">
+      <div class="bal-lbl">رصيد أول الفترة</div>
+      <div class="bal-val">${openingBalance.toLocaleString()} ج</div>
+      <div style="font-size:11px;color:#64748b;margin-top:3px">${fmtDate(fromVal)}</div>
+    </div>
+    <div class="bal-box closing">
+      <div class="bal-lbl">رصيد آخر الفترة</div>
+      <div class="bal-val">${closingBalance.toLocaleString()} ج</div>
+      <div style="font-size:11px;color:#64748b;margin-top:3px">${fmtDate(toVal)}</div>
+    </div>
+  </div>
+
   <table>
-    <thead><tr><th>#</th><th>التاريخ</th><th>البيان</th><th>النوع</th><th>وارد</th><th>منصرف</th></tr></thead>
+    <thead><tr><th>#</th><th>التاريخ</th><th>البيان</th><th>النوع</th><th>وارد</th><th>منصرف</th><th>الرصيد</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
+
   <div class="summary">
     <div class="s-item">📋 عدد الحركات: <strong>${txs.length}</strong></div>
     <div class="s-item">📥 إجمالي وارد: <strong style="color:green">${totalIn.toLocaleString()} ج</strong></div>
     <div class="s-item">📤 إجمالي منصرف: <strong style="color:red">${totalOut.toLocaleString()} ج</strong></div>
-    <div class="s-item">💰 صافي: <strong style="color:${net>=0?'green':'red'}">${net>=0?'+':''}${net.toLocaleString()} ج</strong></div>
+    <div class="s-item">💰 صافي الفترة: <strong style="color:${(totalIn-totalOut)>=0?'green':'red'}">${(totalIn-totalOut)>=0?'+':''}${(totalIn-totalOut).toLocaleString()} ج</strong></div>
   </div>
+
   <div class="no-print" style="margin-top:20px;text-align:center">
     <button onclick="window.print()" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:10px 28px;font-family:Cairo,sans-serif;font-size:14px;font-weight:700;cursor:pointer">🖨️ طباعة</button>
   </div>
@@ -5166,7 +5221,7 @@ function fixOldChkBooks(){
       changed = true;
     }
   });
-  if(changed) saveChks(false);
+  if(changed) saveChks(true);
 }
 
 function onChkBookChange(){
@@ -5218,7 +5273,7 @@ function saveSupplier(){
   if(!name){toast('❗ أدخل اسم المورد');return;}
   if(chkSuppliers.find(s=>s.name===name)){toast('⚠️ المورد موجود مسبقاً');return;}
   chkSuppliers.push({id:Date.now()+'_sup',name,note:$('supplier-note-input')?.value.trim()||''});
-  saveChks(false);
+  saveChks(true);
   closeM('m-add-supplier');
   fillSupplierSel();
   toast('✅ تم إضافة المورد: '+name);
