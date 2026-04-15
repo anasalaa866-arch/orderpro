@@ -1392,7 +1392,7 @@ const getShipCost=(order,courier)=>{
 };
 const nowTime=()=>new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
 
-function sBadge(s){const m={جديد:'b-new','في الانتظار':'b-wait','جاري التوصيل':'b-go','تحت التسوية':'b-settle',مكتمل:'b-done',ملغي:'b-cancel'};return'<span class="badge '+(m[s]||'b-wait')+'">'+s+'</span>';}
+function sBadge(s){const m={جديد:'b-new','في الانتظار':'b-wait','جاري التوصيل':'b-go','تحت التسوية':'b-settle',مكتمل:'b-done',ملغي:'b-cancel',مدمج:'b-cancel'};return'<span class="badge '+(m[s]||'b-wait')+'" style="'+(s==='مدمج'?'background:#e0e7ff;color:#4338ca':'')+'">'+(s==='مدمج'?'🔗 ':'')+s+'</span>';}
 function paidBadge(o){return o.paid?'<span class="badge" style="background:#dcfce7;color:#166534;margin-right:4px">💳 مدفوع</span>':'<span class="badge" style="background:#fef9c3;color:#854d0e;margin-right:4px">💵 COD</span>'}
 function srcBadge(s){
   if(s==='web')    return '<span class="badge b-shopify">🌐 Web</span>';
@@ -1412,6 +1412,10 @@ async function apiFetch(path,method='GET',body=null){
   if(!baseUrl)return null;
   try{
     const opts={method,headers:{'Content-Type':'application/json'},mode:'cors'};
+    // أضف اسم المستخدم تلقائياً في PATCH للطلبات
+    if(body && method==='PATCH' && path.match(/\/api\/orders\/[^/]+$/) && currentUser){
+      body = {...body, _user: currentUser.name};
+    }
     if(body)opts.body=JSON.stringify(body);
     const r=await fetch(baseUrl.replace(/\/$/,'')+path,opts);
     if(!r.ok)throw new Error(r.status);
@@ -1488,8 +1492,14 @@ orders=data.orders.map(o=>{
   });
   if(orders.length>prev&&prev>0){
     const newO=orders[0];
+    const isExpress = isSameDay(newO);
     pushNotif('📦','طلب جديد من Shopify!',`${newO.id} — ${newO.name} — ${newO.total} ج`);
     toast('🛍 طلب جديد: '+newO.name+' ('+newO.total+' ج)');
+    playNotifSound(isExpress);
+    sendPushNotif(
+      isExpress ? '⚡ طلب مستعجل جديد!' : '📦 طلب جديد من Shopify!',
+      `${newO.name} — ${newO.total.toLocaleString()} ج — ${newO.area||''}`
+    );
   }
   try{
     const rc=await apiFetch('/api/couriers');
@@ -1541,6 +1551,54 @@ function setConnected(ok){
   const bn=$('main-banner');
   if(ok){bn.className='banner conn';bn.innerHTML='<div><h4>✅ Backend + Shopify متصلين</h4><p>الطلبات بتتحدث تلقائياً كل 30 ثانية</p></div><div><button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="syncNow()">🔄 مزامنة الآن</button></div>'}
   else{bn.className='banner disc';bn.innerHTML='<div><h4>🔌 Backend غير متصل</h4><p>اضبط رابط الـ API من الإعدادات</p></div><div><button class="btn btn-sm" style="background:#fff;color:#6366f1;font-weight:700" onclick="goPage(document.querySelector(\'[data-p=settings]\'),\'settings\')">الإعدادات</button></div>'}
+}
+
+// ===== NOTIFICATIONS + SOUND =====
+let _audioCtx = null;
+function getAudioCtx(){
+  if(!_audioCtx) try{ _audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
+  return _audioCtx;
+}
+
+function playNotifSound(isExpress=false){
+  try{
+    const ctx = getAudioCtx(); if(!ctx) return;
+    const play = (freq, start, dur, vol=0.3) => {
+      const o=ctx.createOscillator(), g=ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value=freq; o.type='sine';
+      g.gain.setValueAtTime(vol, ctx.currentTime+start);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+start+dur);
+      o.start(ctx.currentTime+start);
+      o.stop(ctx.currentTime+start+dur+0.05);
+    };
+    if(isExpress){
+      // صوت مميز للمستعجل — 3 نغمات صاعدة بصوت أعلى
+      play(523,0,.15,.5); play(659,.18,.15,.5); play(784,.36,.3,.6);
+      play(523,.7,.15,.5); play(659,.88,.15,.5); play(784,1.06,.3,.6);
+    } else {
+      // صوت عادي — نغمتين
+      play(523,0,.2,.3); play(659,.25,.3,.3);
+    }
+  }catch(e){}
+}
+
+function sendPushNotif(title, body){
+  if(!('Notification' in window)) return;
+  if(Notification.permission==='granted'){
+    try{ new Notification(title,{body, icon:'', tag:'orderpro-order'}); }catch(e){}
+  } else if(Notification.permission==='default'){
+    Notification.requestPermission().then(p=>{
+      if(p==='granted') try{ new Notification(title,{body, icon:'', tag:'orderpro-order'}); }catch(e){}
+    });
+  }
+}
+
+// طلب إذن الإشعارات عند اللوجين
+function requestNotifPermission(){
+  if('Notification' in window && Notification.permission==='default'){
+    Notification.requestPermission();
+  }
 }
 
 function startPolling(){
@@ -1629,17 +1687,84 @@ function renderOrders(){
   let list=orders;
   if(orderFilter!=='all')list=list.filter(o=>o.status===orderFilter);
   if(orderFilter==='all')list=list.filter(o=>!(o.status==='ملغي'&&!o.courierId));
+  if(orderFilter==='all')list=list.filter(o=>o.status!=='مدمج'); // إخفاء المدمجة من القائمة الرئيسية
   if(orderFilter==='cancelled-unassigned')list=orders.filter(o=>o.status==='ملغي'&&!o.courierId);
   if(orderTypeFilter)list=list.filter(o=>deliveryType(o)===orderTypeFilter);
-  
   if(searchQ)list=list.filter(o=>(o.id+o.name+o.area+o.phone).includes(searchQ));
-  $('orders-tbody').innerHTML=list.map(o=>`<tr><td style="text-align:center"><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"></td><td><strong>${o.id}</strong>${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td>${srcBadge(o.src)}</td><td>${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px">${o.phone}</td><td>📍 ${o.area}</td><td>${deliveryBadge(o)}</td><td><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td>${cName(o.courierId)}</td><td>${sBadge(o.status)}</td><td><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="openEditOrder('${o.id}')">✏️</button><button class="btn btn-ghost btn-xs" style="color:#6366f1;border-color:#6366f1" onclick="printPackingSlip('${o.id}')" title="طباعة فاتورة">🧾</button>${o.src==='shopify'&&o.shopifyId?`<button class="btn btn-ghost btn-xs" style="color:#96bf48;border-color:#96bf48;font-size:10px" onclick="openInShopify('${o.shopifyId}')" title="افتح في Shopify">🛍️</button>`:''}${(!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-primary btn-xs" onclick="openAssign('${o.id}')">📍 تعيين</button>`:''}${o.status!=='ملغي'?`<button class="btn btn-xs" style="background:${o.paid?'var(--warn-light)':'var(--success-light)'};color:${o.paid?'#92400e':'#065f46'};border:1px solid ${o.paid?'#fcd34d':'#86efac'}" onclick="togglePaid('${o.id}')">${o.paid?'↩️ COD':'💳 مدفوع'}</button>`:''}${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✓ تم</button>`:''}${(o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}</div></td></tr>`).join('');
+  $('orders-tbody').innerHTML=list.map(o=>`<tr><td style="text-align:center"><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"></td><td><strong>${o.id}</strong>${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td>${srcBadge(o.src)}</td><td>${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px">${o.phone}</td><td>📍 ${o.area}</td><td>${deliveryBadge(o)}</td><td><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td>${cName(o.courierId)}</td><td>${sBadge(o.status)}</td><td><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="openEditOrder('${o.id}')">✏️</button><button class="btn btn-ghost btn-xs" style="color:#64748b;border-color:#64748b;font-size:10px" onclick="openOrderHistory('${o.id}')" title="تاريخ الطلب">📋</button><button class="btn btn-ghost btn-xs" style="color:#6366f1;border-color:#6366f1" onclick="printPackingSlip('${o.id}')" title="طباعة فاتورة">🧾</button>${o.src==='shopify'&&o.shopifyId?`<button class="btn btn-ghost btn-xs" style="color:#96bf48;border-color:#96bf48;font-size:10px" onclick="openInShopify('${o.shopifyId}')" title="افتح في Shopify">🛍️</button>`:''}${(!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-primary btn-xs" onclick="openAssign('${o.id}')">📍 تعيين</button>`:''}${o.status!=='ملغي'?`<button class="btn btn-xs" style="background:${o.paid?'var(--warn-light)':'var(--success-light)'};color:${o.paid?'#92400e':'#065f46'};border:1px solid ${o.paid?'#fcd34d':'#86efac'}" onclick="togglePaid('${o.id}')">${o.paid?'↩️ COD':'💳 مدفوع'}</button>`:''}${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✓ تم</button>`:''}${(o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}</div></td></tr>`).join('');
 }
 
 function filterSt(btn,f){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter=f;orderTypeFilter=null;renderOrders()}
 let orderTypeFilter=null;
 function filterType(btn,t){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter='all';orderTypeFilter=t;renderOrders()}
-function onSearch(q){searchQ=q;renderOrders()}
+function onSearch(q){
+  searchQ=q;
+  const wrap = document.querySelector('.search-wrap');
+  // شيل الـ dropdown القديم
+  const old = document.getElementById('global-search-drop');
+  if(old) old.remove();
+  if(!q || q.length < 2){ renderOrders(); return; }
+
+  const ql = q.toLowerCase();
+  const results = orders.filter(o=>
+    (o.id||'').toLowerCase().includes(ql) ||
+    (o.name||'').toLowerCase().includes(ql) ||
+    (o.phone||'').replace(/\D/g,'').includes(ql.replace(/\D/g,'')) ||
+    (o.area||'').toLowerCase().includes(ql) ||
+    (o.shopifyId||'').includes(ql)
+  ).slice(0,8);
+
+  if(!results.length){ renderOrders(); return; }
+
+  const drop = document.createElement('div');
+  drop.id = 'global-search-drop';
+  drop.style.cssText = 'position:absolute;top:100%;right:0;left:0;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15);z-index:9999;max-height:360px;overflow-y:auto;margin-top:4px';
+  drop.innerHTML = results.map(o=>{
+    const badge = o.status==='مكتمل'?'#16a34a':o.status==='ملغي'?'#dc2626':o.status==='جاري التوصيل'?'#6366f1':'#d97706';
+    return `<div onclick="searchGoToOrder('${o.id}')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">
+      <div>
+        <div style="font-weight:700;font-size:13px">${o.id} — ${o.name}</div>
+        <div style="font-size:11px;color:var(--muted)">📍 ${o.area} · 📱 ${o.phone}</div>
+      </div>
+      <div style="text-align:left">
+        <div style="font-weight:700;font-size:12px">${(o.total||0).toLocaleString()} ج</div>
+        <div style="font-size:10px;color:${badge}">${o.status}</div>
+      </div>
+    </div>`;
+  }).join('') +
+  `<div onclick="searchGoToOrders()" style="padding:8px 14px;text-align:center;font-size:12px;color:var(--accent);cursor:pointer;font-weight:700">عرض كل النتائج في صفحة الطلبات ←</div>`;
+
+  wrap.style.position='relative';
+  wrap.appendChild(drop);
+
+  // إغلاق عند الضغط خارج
+  setTimeout(()=>{
+    document.addEventListener('click', function _close(e){
+      if(!wrap.contains(e.target)){ drop.remove(); document.removeEventListener('click',_close); }
+    });
+  },100);
+}
+
+function searchGoToOrder(id){
+  const drop=document.getElementById('global-search-drop');
+  if(drop) drop.remove();
+  $('srch').value='';
+  searchQ='';
+  // روح لصفحة الطلبات وافتح تفاصيل الطلب
+  goPage(document.querySelector('[data-p=orders]'),'orders');
+  setTimeout(()=>{
+    $('srch').value='';
+    searchQ=id;
+    renderOrders();
+  },100);
+}
+
+function searchGoToOrders(){
+  const drop=document.getElementById('global-search-drop');
+  if(drop) drop.remove();
+  goPage(document.querySelector('[data-p=orders]'),'orders');
+  renderOrders();
+}
 
 function renderCouriers(){
   $('courier-count').textContent=couriers.length+' مندوب';
@@ -1782,6 +1907,180 @@ function selC(id){
 
 // ===== SHOPIFY REVERSE SYNC =====
 // فقط المدير يقدر يعمل fulfill على Shopify
+async function openOrderHistory(orderId){
+  const o = orders.find(x=>x.id===orderId);
+  if($('oh-order-id')) $('oh-order-id').textContent = orderId;
+  const content = $('oh-content');
+  if(content) content.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div>';
+  openM('m-order-history');
+
+  if(!API_URL){
+    if(content) content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">لا يوجد سجل بدون الـ Backend</div>';
+    return;
+  }
+
+  const data = await apiFetch('/api/orders/'+orderId+'/history');
+  const history = data?.history || [];
+
+  // أضيف حدث الإنشاء من بيانات الطلب
+  const baseEvents = [];
+  if(o?.createdAt) baseEvents.push({action:'إنشاء الطلب', ts:o.createdAt, userName:'Shopify', newValue: o.src==='shopify'?'Shopify':'يدوي'});
+
+  const all = [...baseEvents, ...history].sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+
+  if(!all.length){
+    if(content) content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">لا يوجد تاريخ لهذا الطلب</div>';
+    return;
+  }
+
+  const fmtTs = ts => {
+    const d = new Date(ts);
+    return d.toLocaleDateString('ar-EG',{year:'numeric',month:'short',day:'numeric'})
+      + ' ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+  };
+
+  const iconMap = {
+    'إنشاء الطلب':'🆕', 'تغيير الحالة':'🔄', 'تعيين مندوب':'🚴',
+    'تعديل البيانات':'✏️', 'تغيير حالة الدفع':'💳', 'إلغاء':'❌',
+    'مكتمل':'✅', 'default':'📌'
+  };
+
+  if(content) content.innerHTML = all.map(h=>{
+    const icon = iconMap[h.action] || iconMap.default;
+    const hasChange = h.oldValue && h.newValue && h.oldValue !== h.newValue;
+    return `<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:18px;min-width:28px;text-align:center;margin-top:2px">${icon}</div>
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:13px">${h.action}</div>
+        ${hasChange?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${h.field||''}: <span style="text-decoration:line-through;color:var(--danger)">${h.oldValue}</span> → <span style="color:var(--success);font-weight:700">${h.newValue}</span></div>`:''}
+        ${h.newValue&&!hasChange?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${h.newValue}</div>`:''}
+        <div style="font-size:10px;color:var(--muted);margin-top:3px">👤 ${h.userName||'system'} · ${fmtTs(h.ts)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+let _mergeIds = [];
+
+function openMergeOrders(ids){
+  _mergeIds = ids;
+  const mergeOrders = ids.map(id => orders.find(o=>o.id===id)).filter(Boolean);
+
+  // قائمة الطلبات
+  const listEl = $('merge-orders-list');
+  if(listEl) listEl.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px">الطلبات المراد دمجها (${mergeOrders.length})</div>
+    ${mergeOrders.map(o=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:var(--card)">
+        <div>
+          <strong style="font-size:13px">${o.id}</strong>
+          <span style="font-size:11px;color:var(--muted);margin-right:8px">${o.name}</span>
+        </div>
+        <div style="text-align:left">
+          <strong style="color:var(--success)">${o.paid?'مدفوع':(o.total||0).toLocaleString()+' ج'}</strong>
+          <div style="font-size:10px;color:var(--muted)">${o.area||''}</div>
+        </div>
+      </div>`).join('')}`;
+
+  // اختيار الطلب الرئيسي
+  const primSel = $('merge-primary-sel');
+  if(primSel) primSel.innerHTML = mergeOrders.map(o=>
+    `<option value="${o.id}">${o.id} — ${o.name} — ${o.paid?'مدفوع':(o.total||0).toLocaleString()+' ج'}</option>`
+  ).join('');
+
+  // تكلفة الشحن الافتراضية
+  const defaultShip = mergeOrders[0]?.ship || 50;
+  const shipInput = $('merge-ship-val');
+  if(shipInput) shipInput.value = defaultShip;
+
+  updateMergeShip();
+  openM('m-merge-orders');
+}
+
+function updateMergeShip(){
+  const mergeOrders = _mergeIds.map(id=>orders.find(o=>o.id===id)).filter(Boolean);
+  const mode = document.querySelector('input[name="merge-ship-mode"]:checked')?.value || 'one';
+  const shipInput = $('merge-ship-val');
+
+  if(mode === 'all'){
+    const totalShip = mergeOrders.reduce((s,o)=>s+(o.ship||50),0);
+    if(shipInput) shipInput.value = totalShip;
+  } else {
+    if(shipInput) shipInput.value = mergeOrders[0]?.ship || 50;
+  }
+
+  renderMergeSummary();
+}
+
+function renderMergeSummary(){
+  const mergeOrders = _mergeIds.map(id=>orders.find(o=>o.id===id)).filter(Boolean);
+  const primaryId = $('merge-primary-sel')?.value;
+  const ship = parseFloat($('merge-ship-val')?.value)||0;
+  const totalCod = mergeOrders.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
+  const allIds = mergeOrders.map(o=>o.id);
+  const mergedRef = allIds.join(' + ');
+  const secondaryIds = allIds.filter(id=>id!==primaryId);
+  const summary = $('merge-summary');
+  if(!summary) return;
+  summary.innerHTML = `
+    <div style="font-weight:700;margin-bottom:8px;color:var(--accent)">ملخص الدمج</div>
+    <div style="display:flex;flex-direction:column;gap:5px;font-size:12px">
+      <div>📦 رقم الطلب الجديد: <strong>${mergedRef}</strong></div>
+      <div>💰 إجمالي التحصيل: <strong style="color:var(--success)">${totalCod.toLocaleString()} ج</strong></div>
+      <div>🚚 تكلفة الشحن: <strong style="color:var(--warn)">${ship.toLocaleString()} ج</strong></div>
+      <div>💵 صافي المحل: <strong style="color:var(--accent)">${(totalCod-ship).toLocaleString()} ج</strong></div>
+      <div style="color:var(--muted);margin-top:4px">الطلبات الثانوية (${secondaryIds.length}) ستتحول لحالة "مدمج": <strong>${secondaryIds.join(', ')}</strong></div>
+    </div>`;
+}
+
+async function confirmMergeOrders(){
+  const mergeOrders = _mergeIds.map(id=>orders.find(o=>o.id===id)).filter(Boolean);
+  if(mergeOrders.length < 2){ toast('❗ اختر طلبين على الأقل'); return; }
+  const primaryId = $('merge-primary-sel')?.value;
+  const ship = parseFloat($('merge-ship-val')?.value)||50;
+  if(!primaryId){ toast('❗ اختر الطلب الرئيسي'); return; }
+
+  const primary = orders.find(o=>o.id===primaryId);
+  const secondaryIds = _mergeIds.filter(id=>id!==primaryId);
+  const allOrders = mergeOrders;
+
+  // دمج الـ items والـ total
+  const mergedTotal = allOrders.filter(o=>!o.paid).reduce((s,o)=>s+(o.total||0),0);
+  const mergedItems = allOrders.map(o=>o.items||'').filter(Boolean).join(', ');
+  const mergedRef = allOrders.map(o=>o.id).join(' + ');
+
+  // حدّث الطلب الرئيسي محلياً
+  primary.total = mergedTotal;
+  primary.items = mergedItems;
+  primary.ship = ship;
+  primary.mergedIds = _mergeIds;
+  primary.displayId = mergedRef;
+
+  // الطلبات الثانوية → مدمج
+  secondaryIds.forEach(sid=>{
+    const sec = orders.find(o=>o.id===sid);
+    if(sec){ sec.status = 'مدمج'; sec.mergedInto = primaryId; }
+  });
+
+  debouncedSaveOrders();
+
+  // رفع للـ API
+  if(API_URL){
+    const lineItemsJson = allOrders.map(o=>{ try{ return JSON.parse(o.lineItemsJson||'[]'); }catch(e){ return []; } }).flat();
+    await apiFetch('/api/orders/merge','POST',{
+      primaryId, secondaryIds,
+      mergedTotal, mergedItems,
+      mergedLineItemsJson: JSON.stringify(lineItemsJson),
+      shipMode: document.querySelector('input[name="merge-ship-mode"]:checked')?.value||'one',
+      shipCost: ship,
+    }).catch(e=>console.error('merge error:',e));
+  }
+
+  closeM('m-merge-orders');
+  renderProblemsPage();
+  toast('✅ تم دمج '+allOrders.length+' طلبات في '+primaryId);
+}
+
 function openInShopify(shopifyId){
   const shopUrl = localStorage.getItem('orderpro_shop_url') || '';
   const host = shopUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -3443,7 +3742,10 @@ function probFilter(f, btn){
       <div class="card" style="margin-bottom:12px">
         <div class="card-hd" style="background:var(--warn-light)">
           <h3 style="color:#92400e">👥 ${group[0].name} — ${group.length} طلبات | 📱 ${group[0].phone}</h3>
-          <span style="font-size:12px;color:#92400e">إجمالي: ${group.reduce((s,o)=>s+o.total,0).toLocaleString()} ج</span>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:12px;color:#92400e">إجمالي: ${group.reduce((s,o)=>s+o.total,0).toLocaleString()} ج</span>
+            <button class="btn btn-xs" style="background:#6366f1;color:#fff;border:none;font-size:11px" onclick="openMergeOrders(${JSON.stringify(group.map(o=>o.id))})">🔗 دمج الطلبات</button>
+          </div>
         </div>
         <div class="tbl-wrap"><table>
           <thead><tr><th>رقم الطلب</th><th>النوع</th><th>المنطقة</th><th>العنوان</th><th>COD</th><th>إجراءات</th></tr></thead>
@@ -4245,6 +4547,7 @@ async function doLogin(){
   loadSettlements();
   loadChks();
   checkExpiryAlerts();
+  requestNotifPermission();
   toast('✅ أهلاً '+user.name+' 👋');
 }
 
@@ -4556,7 +4859,59 @@ async function doSettle(){
   pushNotif('💰','تمت تسوية حساب '+c.name,'');
   renderAcc();
   toast('✅ تمت تسوية '+c.name+' — '+pending.length+' طلب');
-  setTimeout(()=>{ if(confirm('هل تريد طباعة ورقة تسوية '+c.name+'؟')) printCurrentSettle(); },300);
+  const _net = cod - ship + adjTotal;
+  setTimeout(()=>{
+    if(confirm('هل تريد طباعة ورقة تسوية '+c.name+'؟')) printCurrentSettle();
+    if(_treasuries.length && _net > 0){
+      setTimeout(()=>openSettleToTreasury(c.name, _net, now), 400);
+    }
+  },300);
+}
+
+function openSettleToTreasury(courierName, net, ts){
+  if(!_treasuries.length) return;
+  const fmtAmt = n => Number(n).toLocaleString();
+  const opts = _treasuries.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  const dateStr = new Date(ts).toISOString().split('T')[0];
+
+  const div = document.createElement('div');
+  div.id = 'settle-treasury-popup';
+  div.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:center;justify-content:center';
+  div.innerHTML = `
+    <div style="background:var(--card);border-radius:16px;padding:24px;width:min(400px,92vw);font-family:Cairo,sans-serif;direction:rtl">
+      <div style="font-size:16px;font-weight:800;margin-bottom:4px">💰 إضافة للخزنة</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">تسوية ${courierName} — صافي <strong style="color:var(--success)">${fmtAmt(net)} ج</strong></div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">الخزنة</label>
+        <select id="stt-treasury" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">${opts}</select>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">المبلغ</label>
+        <input id="stt-amount" type="number" value="${net}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">البيان</label>
+        <input id="stt-reason" value="تسوية ${courierName}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="document.getElementById('settle-treasury-popup').remove()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-family:Cairo,sans-serif;cursor:pointer;font-size:13px">تخطي</button>
+        <button onclick="confirmSettleToTreasury('${dateStr}')" style="background:var(--success);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer">✅ إضافة للخزنة</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+function confirmSettleToTreasury(dateStr){
+  const tId = document.getElementById('stt-treasury')?.value;
+  const amount = parseFloat(document.getElementById('stt-amount')?.value)||0;
+  const reason = document.getElementById('stt-reason')?.value.trim()||'تسوية مندوب';
+  if(!tId||!amount){ toast('❗ اختر الخزنة والمبلغ'); return; }
+  const tx = {id:Date.now()+'_tx', treasuryId:tId, type:'in', amount, reason, date:dateStr};
+  _treasuryTx.push(tx);
+  saveChks(false); // حفظ محلي
+  if(API_URL) apiFetch('/api/treasury-tx','POST',tx).catch(()=>{});
+  document.getElementById('settle-treasury-popup')?.remove();
+  toast('✅ تم إضافة '+amount.toLocaleString()+' ج للخزنة');
 }
 
 function printCurrentSettle(){
@@ -5074,7 +5429,7 @@ function getBatchName(){
 }
 
 function startBatch(){
-  const unassigned=orders.filter(o=>!o.courierId&&!o.isBosta&&o.status!=='مكتمل'&&o.status!=='ملغي'&&!isTransit(o));
+  const unassigned=orders.filter(o=>!o.courierId&&!o.isBosta&&o.status!=='مكتمل'&&o.status!=='ملغي'&&o.status!=='مدمج'&&!isTransit(o));
   if(!unassigned.length){toast('❗ لا توجد طلبات للتوزيع');return;}
   batchOrders=[...unassigned].sort((a,b)=>{
     const na=parseInt((a.shopifyId||a.id.replace('SH-','')||0));
@@ -6945,5 +7300,41 @@ try{
   </div>
 </div>
 
+<div class="overlay" id="m-order-history"><div class="modal" style="width:min(560px,96vw);max-height:85vh;overflow-y:auto">
+  <div class="mhd"><h3>📋 تاريخ الطلب <span id="oh-order-id" style="color:var(--accent);font-size:13px"></span></h3><button class="xbtn" onclick="closeM('m-order-history')">✕</button></div>
+  <div id="oh-content" style="padding:16px">
+    <div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div>
+  </div>
+</div></div>
+
+
+<!-- MERGE ORDERS MODAL -->
+<div class="overlay" id="m-merge-orders"><div class="modal" style="width:min(600px,96vw);max-height:90vh;overflow-y:auto">
+  <div class="mhd"><h3>🔗 دمج الطلبات</h3><button class="xbtn" onclick="closeM('m-merge-orders')">✕</button></div>
+  <div style="padding:16px">
+    <div id="merge-orders-list" style="margin-bottom:16px"></div>
+    <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px">الطلب الرئيسي (الباقي نشط)</div>
+      <select id="merge-primary-sel" onchange="renderMergeSummary()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px"></select>
+    </div>
+    <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px">تكلفة الشحن</div>
+      <div style="display:flex;gap:10px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="radio" name="merge-ship-mode" value="one" checked onchange="updateMergeShip()"> شحن واحد
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="radio" name="merge-ship-mode" value="all" onchange="updateMergeShip()"> شحن لكل طلب
+        </label>
+        <input id="merge-ship-val" type="number" placeholder="تكلفة الشحن" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">
+      </div>
+    </div>
+    <div id="merge-summary" style="background:var(--accent-light);border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeM('m-merge-orders')">إلغاء</button>
+      <button class="btn btn-primary" onclick="confirmMergeOrders()">🔗 تأكيد الدمج</button>
+    </div>
+  </div>
+</div></div>
 </body>
 </html>
