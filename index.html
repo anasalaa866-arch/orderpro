@@ -2336,8 +2336,22 @@ async function checkShopifyPrice(orderId){
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ shopUrl, accessToken, shopifyOrderId: o.shopifyId })
     });
-    const d = await r.json();
-    if(!r.ok){ toast('❌ '+(d.error||'خطأ')); return; }
+    let d;
+    try { d = await r.json(); }
+    catch(je) {
+      const txt = await r.text().catch(()=>'');
+      toast('❌ الـ backend مش راد صح — تأكد من رفع آخر نسخة من server.js');
+      console.error('Non-JSON response from backend:', r.status, txt.slice(0,200));
+      return;
+    }
+    if(!r.ok){
+      const errMsg = typeof d.error === 'string' ? d.error
+        : d.error?.errors ? (typeof d.error.errors==='string'?d.error.errors:JSON.stringify(d.error.errors))
+        : JSON.stringify(d.error || d).slice(0,200);
+      toast('❌ '+errMsg);
+      console.error('Shopify price-check error (status '+r.status+'):', d);
+      return;
+    }
 
     const diff = (d.totalPrice||0) - (o.total||0);
     const localTotal = o.total || 0;
@@ -2466,13 +2480,13 @@ async function printPackingSlip(orderId){
     try{ lineItems = JSON.parse(o.lineItemsJson); }catch(e){}
   }
 
-  const hasImages = lineItems.some(i=>i.image);
-  if(!hasImages && o.src==='shopify' && o.shopifyId && API_URL){
+  const hasAllImages = lineItems.length > 0 && lineItems.every(i=>i.image);
+  if(!hasAllImages && o.src==='shopify' && o.shopifyId && API_URL){
     try{
       const shopUrl = localStorage.getItem('orderpro_shop_url');
       const accessToken = localStorage.getItem('orderpro_shop_token');
       if(shopUrl && accessToken){
-        toast('⏳ جاري جلب صور المنتجات...');
+        toast('⏳ جاري جلب صور المنتجات من Shopify...');
         const r = await apiFetch('/api/shopify/fetch-line-items','POST',{
           shopUrl, accessToken,
           shopifyOrderId: String(o.shopifyId),
@@ -2536,7 +2550,7 @@ async function printPackingSlip(orderId){
       <div class="flex-line-item-img">${imgHtml}</div>
       <div class="flex-line-item-description">
         <p>
-          <span class="line-item-description-line" style="${isDiff?'font-weight:700;':''}">">${i.name||''}</span>
+          <span class="line-item-description-line" style="${isDiff?'font-weight:700;':''}">${i.name||''}</span>
           ${i.variantTitle?`<span class="line-item-description-line">${i.variantTitle}</span>`:''}
           ${i.sku?`<span class="line-item-description-line">SKU: ${i.sku}</span>`:''}
           ${i.price>0?`<span class="line-item-description-line">${fmtMoney(i.price)}</span>`:''}
