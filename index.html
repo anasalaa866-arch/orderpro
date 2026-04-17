@@ -2906,12 +2906,6 @@ async function printPackingSlipLegacy(orderId){
 }
 
 async function shopifyFulfill(order, courierName){
-  const shopUrl = localStorage.getItem('orderpro_shop_url');
-  const accessToken = localStorage.getItem('orderpro_shop_token');
-  if(!shopUrl || !accessToken){
-    console.log('Shopify fulfill: missing credentials');
-    return;
-  }
   if(order.src !== 'shopify') return;
   const shopifyOrderId = order.shopifyId || order.shopify_id;
   if(!shopifyOrderId){
@@ -2920,10 +2914,15 @@ async function shopifyFulfill(order, courierName){
   }
   if(!API_URL) return;
 
+  // الـ credentials ممكن تبقى في localStorage (لو المدير)
+  // أو في DB على السيرفر (للمستخدمين العاديين) — السيرفر هيفلبك تلقائياً
+  const shopUrl = localStorage.getItem('orderpro_shop_url') || '';
+  const accessToken = localStorage.getItem('orderpro_shop_token') || '';
+
   try{
     console.log('Calling shopify/assign:', order.id, '→', courierName);
     const r = await apiFetch('/api/shopify/assign','POST',{
-      shopUrl, accessToken,
+      shopUrl, accessToken,  // ممكن يكونوا فاضيين — السيرفر هيجيبهم من DB
       shopifyOrderId: String(shopifyOrderId),
       courierName: courierName || 'OrderPro',
       orderId: order.id,
@@ -2938,13 +2937,12 @@ async function shopifyFulfill(order, courierName){
     if(r && r.success){
       toast('🟢 Shopify: تاج + fulfill ✅');
     } else if(r){
-      // نجاح جزئي
       if(r.tagSuccess && !r.fulfilled){
         toast('⚠️ تاج اتضاف بس الـ fulfill فشل');
       } else if(!r.tagSuccess && r.fulfilled){
         toast('⚠️ fulfill تم بس التاج فشل');
       } else {
-        toast('❌ Shopify: ' + (r.errors?.[0]?.slice(0,60) || 'فشل'));
+        toast('❌ Shopify: ' + (r.errors?.[0]?.slice(0,60) || r.error || 'فشل'));
       }
       if(r.errors && r.errors.length){
         console.warn('Shopify errors:', r.errors);
