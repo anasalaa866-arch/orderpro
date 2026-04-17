@@ -985,6 +985,7 @@ tr:hover td{background:#fafbff}
   </div>
   <div class="mft">
     <button class="btn btn-ghost" onclick="closeM('m-import')">إلغاء</button>
+    <button class="btn btn-ghost" onclick="backfillImages()" style="color:#96bf48;border-color:#96bf48" title="جلب صور المنتجات للطلبات اللي مفيهاش صور">🖼️ تحميل صور المنتجات</button>
     <button class="btn btn-primary" id="imp-btn" onclick="doImport()">📥 استيراد الآن</button>
   </div>
 </div></div>
@@ -2463,6 +2464,34 @@ function resyncOrderPrice(orderId, newTotal){
   toast('✅ تم التحديث من '+oldTotal.toLocaleString()+' إلى '+newTotal.toLocaleString()+' ج');
 }
 
+async function backfillImages(){
+  if(!API_URL){ toast('❗ الـ backend غير متصل'); return; }
+  const shopUrl = localStorage.getItem('orderpro_shop_url') || $('imp-url')?.value?.trim();
+  const accessToken = localStorage.getItem('orderpro_shop_token') || $('imp-token')?.value?.trim();
+  if(!shopUrl || !accessToken){ toast('❗ أدخل رابط المتجر والـ token'); return; }
+  if(!confirm('هيجيب صور المنتجات لآخر 100 طلب Shopify. العملية ممكن تاخد دقيقة. نبدأ؟'))return;
+
+  toast('⏳ جاري جلب صور المنتجات...');
+  try{
+    const r = await fetch(API_URL.replace(/\/$/,'')+'/api/shopify/backfill-images',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ shopUrl, accessToken, limit: 100 })
+    });
+    const d = await r.json();
+    if(!r.ok){
+      toast('❌ '+(typeof d.error==='string'?d.error:JSON.stringify(d.error).slice(0,150)));
+      return;
+    }
+    toast('✅ تم: '+d.done+' طلب نجح | '+d.skipped+' عنده صور | '+d.failed+' فشل');
+    // حدّث الـ orders من الـ DB
+    if(typeof loadOrdersFromDB==='function') await loadOrdersFromDB();
+    else location.reload();
+  }catch(e){
+    toast('❌ '+e.message);
+    console.error('Backfill images:', e);
+  }
+}
+
 function openInShopify(shopifyId){
   const shopUrl = localStorage.getItem('orderpro_shop_url') || '';
   const host = shopUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -2517,7 +2546,7 @@ async function printPackingSlip(orderId){
 
   const fmtDate = d => new Date(d).toLocaleDateString('en-GB',{year:'numeric',month:'long',day:'numeric'});
   const orderDate = o.createdAt ? fmtDate(o.createdAt) : fmtDate(new Date());
-  const orderNum = (o.shopifyId || o.id || '').toString().replace('SH-','');
+  const orderNum = (o.id || '').toString().replace('SH-','').replace('MN-','');
   const hasDetailedPrices = lineItems.some(i=>i.price>0);
   const subtotal = o.subtotalPrice > 0 ? o.subtotalPrice
     : hasDetailedPrices ? lineItems.reduce((s,i)=>s+(i.totalPrice||(i.price*(i.quantity||1)))||0,0)
@@ -2560,20 +2589,24 @@ async function printPackingSlip(orderId){
     </div>`;
   }).join('');
 
-  const addr1 = [o.area, o.addr].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join('<br>');
+  // بناء العنوان من غير تكرار
+  const addrParts = [];
+  if(o.addr) addrParts.push(o.addr);
+  if(o.area && !(o.addr||'').includes(o.area)) addrParts.push(o.area);
+  const addr1 = addrParts.filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join('<br>') || (o.area||'');
   // بيانات إضافية للفاتورة
   const totalItems = lineItems.reduce((s,i)=>s+(i.quantity||1),0);
   const uniqueItems = lineItems.length;
   const courierName = o.courierId ? (couriers.find(c=>String(c.id)===String(o.courierId))?.name||'—') : null;
-  const deliveryLabel = o.isBosta ? 'بوسطة' : o.deliveryType==='pickup' ? 'استلام من المحل' : courierName ? courierName : '—';
+  const deliveryLabel = o.isBosta ? 'Bosta' : o.deliveryType==='pickup' ? 'Store Pickup' : courierName ? courierName : '—';
   const _src = o.src||'';
   const _sn = String(o.sourceName||'');
-  const sourceLabel = _src==='manual' ? 'يدوي'
+  const sourceLabel = _src==='manual' ? 'Manual'
     : _src!=='shopify' ? (_src||'—')
-    : _sn==='web' || _sn==='' ? 'موقع إلكتروني'
-    : _sn==='shopify_draft_orders' ? 'درافت'
+    : _sn==='web' || _sn==='' ? 'Website'
+    : _sn==='shopify_draft_orders' ? 'Draft Order'
     : _sn==='pos' ? 'POS'
-    : /^\d+$/.test(_sn) ? 'تطبيق موبايل'
+    : /^\d+$/.test(_sn) ? 'Mobile App'
     : _sn;
   const w = window.open('','_blank','width=900,height=1000');
   w.document.write(`<!DOCTYPE html><html lang="en"><head>
@@ -2614,10 +2647,6 @@ async function printPackingSlip(orderId){
         <p class="subtitle-bold to-uppercase">Ship to</p>
         <p class="address-detail"><strong>${o.name||''}</strong><br>${addr1}<br>Egypt<br><span style="direction:ltr;unicode-bidi:plaintext">${o.phone||''}</span></p>
       </div>
-      <div class="billing-address">
-        <p class="subtitle-bold to-uppercase">Bill to</p>
-        <p class="address-detail"><strong>${o.name||''}</strong><br>${(o.area||'')}<br>Egypt</p>
-      </div>
     </div>
     <hr>
     <div class="order-container">
@@ -2639,20 +2668,20 @@ async function printPackingSlip(orderId){
     <div style="margin:1.2em 0.7em 0;border:1.5px solid #000;border-radius:4px;padding:10px 14px;font-size:11px">
       <div style="display:flex;flex-wrap:wrap;gap:10px 28px;align-items:flex-start">
         <div style="min-width:80px">
-          <div style="text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:.06em;color:#555;margin-bottom:3px">التوصيل</div>
+          <div style="text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:.06em;color:#555;margin-bottom:3px">Delivery</div>
           <strong style="font-size:14px">${deliveryLabel}</strong>
         </div>
         <div style="min-width:80px">
-          <div style="text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:.06em;color:#555;margin-bottom:3px">المصدر</div>
+          <div style="text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:.06em;color:#555;margin-bottom:3px">Source</div>
           <strong style="font-size:14px">${sourceLabel}</strong>
         </div>
         <div style="min-width:80px">
-          <div style="text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:.06em;color:#555;margin-bottom:3px">أصناف مختلفة</div>
-          <strong style="font-size:14px">${uniqueItems} صنف</strong>
+          <div style="text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:.06em;color:#555;margin-bottom:3px">Unique Items</div>
+          <strong style="font-size:14px">${uniqueItems} items</strong>
         </div>
         <div style="border-right:2.5px solid #000;padding-right:16px">
-          <div style="text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:.06em;color:#555;margin-bottom:3px">إجمالي القطع</div>
-          <strong style="font-size:22px">${totalItems} قطعة</strong>
+          <div style="text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:.06em;color:#555;margin-bottom:3px">Total Pieces</div>
+          <strong style="font-size:22px">${totalItems} pcs</strong>
         </div>
       </div>
     </div>
