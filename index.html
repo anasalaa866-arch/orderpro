@@ -2320,6 +2320,135 @@ async function sendAiMessage(){
   }
 }
 
+async function checkShopifyPrice(orderId){
+  const o = orders.find(x=>x.id===orderId);
+  if(!o || !o.shopifyId){ toast('❗ الطلب مش من Shopify'); return; }
+  if(!API_URL){ toast('❗ الـ backend غير متصل'); return; }
+
+  const shopUrl = localStorage.getItem('orderpro_shop_url') || localStorage.getItem('shopify_url')||'';
+  const accessToken = localStorage.getItem('orderpro_shop_token') || localStorage.getItem('shopify_token')||'';
+  if(!shopUrl || !accessToken){ toast('❗ بيانات Shopify غير مضبوطة'); return; }
+
+  toast('⏳ جاري تحليل السعر من Shopify...');
+
+  try{
+    const r = await fetch(API_URL.replace(/\/$/,'')+'/api/shopify/price-check',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ shopUrl, accessToken, shopifyOrderId: o.shopifyId })
+    });
+    const d = await r.json();
+    if(!r.ok){ toast('❌ '+(d.error||'خطأ')); return; }
+
+    const diff = (d.totalPrice||0) - (o.total||0);
+    const localTotal = o.total || 0;
+
+    const itemsRows = (d.lineItems||[]).map(i=>`<tr>
+      <td style="padding:5px;font-size:12px">${i.name}</td>
+      <td style="padding:5px;text-align:center;font-size:12px">${i.price.toLocaleString()}</td>
+      <td style="padding:5px;text-align:center;font-size:12px">× ${i.quantity}</td>
+      <td style="padding:5px;text-align:left;font-size:12px;font-weight:700">${i.total.toLocaleString()} ج</td>
+      ${i.totalDiscount>0?`<td style="padding:5px;color:#dc2626;font-size:11px">- ${i.totalDiscount.toLocaleString()} ج</td>`:'<td></td>'}
+    </tr>`).join('');
+
+    const shippingRows = (d.shippingLines||[]).map(l=>`<tr>
+      <td colspan="3" style="padding:5px;font-size:12px">🚚 ${l.title}</td>
+      <td style="padding:5px;text-align:left;font-size:12px;font-weight:700">${l.price.toLocaleString()} ج</td>
+      <td></td>
+    </tr>`).join('');
+
+    const discountsList = (d.discountApplications||[]).map(da=>
+      '<li style="font-size:12px">'+(da.code||da.title||da.type)+' — '+(da.value||'')+(da.value_type==='percentage'?'%':' ج')+'</li>'
+    ).join('');
+
+    const ov = document.createElement('div');
+    ov.id='price-check-popup';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+
+    ov.innerHTML=`
+      <div style="background:var(--card);border-radius:16px;width:min(640px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:Cairo,sans-serif">
+        <div style="padding:16px 20px;background:linear-gradient(135deg,#96bf48,#5a8c2c);color:#fff;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:800;font-size:16px">🔍 تحليل سعر الطلب ${d.orderName||'#'+d.orderNumber}</div>
+            <div style="font-size:11px;opacity:.9;margin-top:2px">${d.currency||'EGP'} — ${d.financialStatus||''}</div>
+          </div>
+          <button onclick="document.getElementById('price-check-popup').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:14px;cursor:pointer">✕</button>
+        </div>
+        <div style="padding:20px">
+          <div style="background:${diff!==0?'#fef3c7':'#dcfce7'};border:1px solid ${diff!==0?'#fde047':'#86efac'};border-radius:10px;padding:14px;margin-bottom:16px">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;text-align:center">
+              <div>
+                <div style="font-size:10px;color:var(--muted);margin-bottom:3px">Shopify الحقيقي</div>
+                <div style="font-size:18px;font-weight:800;color:#166534">${(d.totalPrice||0).toLocaleString()} ج</div>
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--muted);margin-bottom:3px">OrderPro</div>
+                <div style="font-size:18px;font-weight:800;color:${diff!==0?'#dc2626':'#166534'}">${localTotal.toLocaleString()} ج</div>
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--muted);margin-bottom:3px">الفرق</div>
+                <div style="font-size:18px;font-weight:800;color:${diff!==0?'#dc2626':'#166534'}">${diff>0?'+':''}${diff.toLocaleString()} ج</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:14px;font-size:13px;line-height:1.9">
+            <div style="display:flex;justify-content:space-between;border-bottom:1px dashed var(--border);padding-bottom:6px;margin-bottom:6px"><span>مجموع المنتجات (Subtotal)</span><strong>${(d.subtotalPrice||0).toLocaleString()} ج</strong></div>
+            <div style="display:flex;justify-content:space-between"><span>🚚 إجمالي الشحن</span><strong style="color:${d.totalShipping>0?'#d97706':'#6b7280'}">${(d.totalShipping||0).toLocaleString()} ج</strong></div>
+            <div style="display:flex;justify-content:space-between"><span>💰 الضريبة (Tax)</span><strong style="color:${d.totalTax>0?'#dc2626':'#6b7280'}">${(d.totalTax||0).toLocaleString()} ج</strong></div>
+            <div style="display:flex;justify-content:space-between"><span>🎁 الخصومات</span><strong style="color:${d.totalDiscounts>0?'#16a34a':'#6b7280'}">- ${(d.totalDiscounts||0).toLocaleString()} ج</strong></div>
+            <div style="display:flex;justify-content:space-between;border-top:2px solid var(--border);padding-top:6px;margin-top:6px;font-size:14px"><span><strong>الإجمالي النهائي</strong></span><strong style="color:#16a34a">${(d.totalPrice||0).toLocaleString()} ج</strong></div>
+          </div>
+
+          <div style="margin-bottom:14px">
+            <div style="font-weight:700;margin-bottom:6px;font-size:13px">🛒 المنتجات</div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead><tr style="background:var(--bg)"><th style="padding:6px;text-align:right">المنتج</th><th style="padding:6px;text-align:center">السعر</th><th style="padding:6px;text-align:center">الكمية</th><th style="padding:6px;text-align:left">الإجمالي</th><th style="padding:6px;text-align:right">خصم</th></tr></thead>
+              <tbody>${itemsRows}${shippingRows}</tbody>
+            </table>
+          </div>
+
+          ${discountsList?`<div style="background:#fef3c7;border-radius:8px;padding:10px;margin-bottom:12px"><div style="font-weight:700;font-size:12px;margin-bottom:4px">🎁 الخصومات المطبقة</div><ul style="margin:0;padding-right:20px">${discountsList}</ul></div>`:''}
+
+          ${diff!==0?`
+            <div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:12px;margin-bottom:14px">
+              <div style="font-weight:700;color:#991b1b;margin-bottom:6px;font-size:13px">⚠️ في فرق ${Math.abs(diff).toLocaleString()} ج</div>
+              <div style="font-size:12px;color:#7f1d1d;line-height:1.7">
+                ${diff>0?'الطلب على OrderPro <strong>أقل</strong> من Shopify بـ '+diff.toLocaleString()+' ج.':'الطلب على OrderPro <strong>أكثر</strong> من Shopify بـ '+Math.abs(diff).toLocaleString()+' ج.'}
+                <br>الأسباب المحتملة:
+                <ul style="margin:4px 0 0;padding-right:20px">
+                  <li>تعديل يدوي على OrderPro أو Shopify بعد الاستيراد</li>
+                  <li>الـ webhook وصل في وقت قيمة مختلفة</li>
+                  <li>إعادة حساب الضريبة/الشحن من Shopify admin</li>
+                  <li>خصم/إضافة مش متسجلة صح</li>
+                </ul>
+              </div>
+              <button onclick="resyncOrderPrice('${orderId}',${d.totalPrice})" style="background:#dc2626;color:#fff;border:none;padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:Cairo,sans-serif;margin-top:8px">🔄 تحديث السعر إلى ${(d.totalPrice||0).toLocaleString()} ج (Shopify)</button>
+            </div>
+          `:`<div style="background:#dcfce7;border:1px solid #86efac;border-radius:10px;padding:12px;color:#166534;font-size:13px;font-weight:700">✅ السعر مطابق تماماً</div>`}
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+  }catch(e){
+    console.error('Price check:',e);
+    toast('❌ خطأ في التحليل: '+e.message);
+  }
+}
+
+function resyncOrderPrice(orderId, newTotal){
+  if(!confirm('هتحدث إجمالي الطلب إلى '+newTotal.toLocaleString()+' ج؟'))return;
+  const o = orders.find(x=>x.id===orderId);
+  if(!o)return;
+  const oldTotal = o.total;
+  o.total = newTotal;
+  debouncedSaveOrders();
+  if(API_URL) apiFetch('/api/orders/'+orderId,'PATCH',{total:newTotal}).catch(()=>{});
+  document.getElementById('price-check-popup')?.remove();
+  const totInput = document.getElementById('eo-total');
+  if(totInput) totInput.value = newTotal;
+  refreshAll();
+  toast('✅ تم التحديث من '+oldTotal.toLocaleString()+' إلى '+newTotal.toLocaleString()+' ج');
+}
+
 function openInShopify(shopifyId){
   const shopUrl = localStorage.getItem('orderpro_shop_url') || '';
   const host = shopUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -2798,7 +2927,8 @@ function openEditOrder(id){
   if(!o){ toast('❗ الطلب غير موجود'); return; }
   _editingOrderId = id;
   const set = (elId, val) => { const el=document.getElementById(elId); if(el) el.value = val||''; };
-  document.getElementById('eo-order-id').textContent = '# '+id + (o.src==='shopify'?' — Shopify':'');
+  document.getElementById('eo-order-id').innerHTML = '# '+id + (o.src==='shopify'?' — Shopify':'') +
+    (o.src==='shopify' && o.shopifyId ? ' <button onclick="checkShopifyPrice(\''+id+'\')" style="background:#96bf48;color:#fff;border:none;border-radius:5px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer;margin-right:6px;font-family:Cairo,sans-serif">🔍 تحليل السعر</button>' : '');
   set('eo-name', o.name);
   set('eo-phone', o.phone==='—'?'':o.phone);
   set('eo-area', o.area);
