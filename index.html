@@ -374,7 +374,13 @@ tr:hover td{background:#fafbff}
 
   <!-- ASSIGN -->
   <div class="page" id="page-assign">
-    <div class="card"><div class="card-hd"><h3>📍 الطلبات بدون مندوب</h3><span id="assign-count" style="font-size:12px;color:var(--muted)"></span><button onclick="startBatch()" id="btn-start-batch" style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;border:none;border-radius:9px;padding:8px 18px;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer">🚀 ابدأ دفعة</button>
+    <div class="card"><div class="card-hd">
+      <h3>📍 الطلبات بدون مندوب</h3>
+      <span id="assign-count" style="font-size:12px;color:var(--muted)"></span>
+      <div id="batch-indicator" style="flex:1;text-align:center;padding:6px 12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:12px"></div>
+      <button onclick="printBatchInvoices()" style="background:#6366f1;color:#fff;border:none;border-radius:9px;padding:8px 14px;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer;margin-left:6px">🖨️ طباعة فواتير الدفعة</button>
+      <button onclick="closeBatch()" style="background:#dc2626;color:#fff;border:none;border-radius:9px;padding:8px 14px;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer;margin-left:6px">🔒 إنهاء الدفعة</button>
+      <button onclick="startBatch()" id="btn-start-batch" style="background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;border:none;border-radius:9px;padding:8px 18px;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer">🚀 ابدأ توزيع</button>
       <button onclick="resumeBatch()" id="btn-resume-batch" style="display:none;background:#f0fdf4;color:#15803d;border:2px solid #86efac;border-radius:9px;padding:8px 18px;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer">▶ استكمال الدفعة</button>
       <button onclick="endBatch()" id="btn-end-batch" style="display:none;background:#fef2f2;color:#ef4444;border:2px solid #fca5a5;border-radius:9px;padding:8px 18px;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer">⏹ إنهاء الدفعة</button></div>
     <div class="tbl-wrap"><table><thead><tr>
@@ -1921,6 +1927,7 @@ function renderCouriers(){
 }
 
 function renderAssignPage(){
+  updateBatchIndicator();
   const u=orders.filter(o=>!o.courierId&&!o.isBosta&&o.status!=='مكتمل'&&o.status!=='ملغي'&&!isPickup(o)&&!isTransit(o));
   $('assign-count').textContent=u.length+' طلب';
   const probCount=u.filter(o=>o.hasProblem).length;
@@ -2503,6 +2510,32 @@ async function printPackingSlip(orderId){
   const o = orders.find(x=>x.id===orderId);
   if(!o){ toast('❗ الطلب غير موجود'); return; }
 
+  // جرّب الفاتورة المخزنة من الـ backend أولاً (أسرع + صور مضمونة)
+  if(API_URL){
+    try{
+      const invoiceUrl = API_URL.replace(/\/$/,'')+'/api/orders/'+encodeURIComponent(orderId)+'/invoice';
+      // تحقق أن الـ endpoint شغال قبل ما نفتح نافذة
+      const testResp = await fetch(invoiceUrl, { method: 'HEAD' }).catch(()=>null);
+      if(testResp && testResp.ok){
+        const w = window.open(invoiceUrl, '_blank', 'width=900,height=1000');
+        if(w){
+          setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} }, 1500);
+          return;
+        }
+      } else {
+        console.log('Invoice endpoint not ready, using legacy print');
+      }
+    }catch(e){ console.warn('cached invoice failed, falling back:', e); }
+  }
+
+  // Fallback — الطريقة القديمة لو الـ backend مش شغال أو الـ endpoint مش موجود
+  return printPackingSlipLegacy(orderId);
+}
+
+async function printPackingSlipLegacy(orderId){
+  const o = orders.find(x=>x.id===orderId);
+  if(!o){ toast('❗ الطلب غير موجود'); return; }
+
   // جيب الصور من Shopify لو مش موجودة
   let lineItems = [];
   if(o.lineItemsJson){
@@ -2612,8 +2645,53 @@ async function printPackingSlip(orderId){
   w.document.write(`<!DOCTYPE html><html lang="en"><head>
   <meta charset="UTF-8"><title>Order ${orderNum}</title>
   <style>
-    body{font-size:15px;}*{box-sizing:border-box;}
-    .wrapper{width:831px;margin:auto;padding:4em;font-family:"Noto Sans",Arial,sans-serif;font-weight:250;}
+    body{font-size:15px;margin:0;padding:0}*{box-sizing:border-box;}
+    .wrapper{width:831px;margin:auto;padding:4em;font-family:"Noto Sans",Arial,sans-serif;font-weight:250;position:relative;}
+
+    /* Multi-page markers — only inserted when invoice spans multiple pages */
+    .pg-top-banner {
+      padding:10px 16px;
+      border:2px solid #000;
+      font-size:13px;
+      font-weight:700;
+      text-align:center;
+      margin-bottom:20px;
+      font-family:"Noto Sans",Arial,sans-serif;
+      letter-spacing:0.5px;
+    }
+    .pg-end {
+      padding:12px 14px;
+      border:3px solid #000;
+      text-align:center;
+      font-size:16px;
+      font-weight:700;
+      margin-top:25px;
+      font-family:"Noto Sans",Arial,sans-serif;
+      letter-spacing:1px;
+      background:#fff;
+    }
+    .pg-arrow-break {
+      margin:20px 0;
+      text-align:center;
+      page-break-after:always;
+      break-after:page;
+    }
+    .pg-arrow-break .arrow {
+      font-size:100px;
+      line-height:0.9;
+      font-weight:900;
+      color:#000;
+    }
+    .pg-arrow-break .arrow-text {
+      font-size:14px;
+      font-weight:700;
+      letter-spacing:3px;
+      margin-top:5px;
+      font-family:"Noto Sans",Arial,sans-serif;
+    }
+    @media print {
+      .no-print{display:none!important}
+    }
     .header{width:100%;display:flex;flex-direction:row;align-items:top;}
     .header p{margin:0;}.shop-title{flex:6;font-size:1.9em;}.order-title{flex:4;}
     .customer-addresses{width:100%;display:inline-block;margin:2em 0;}
@@ -2665,7 +2743,7 @@ async function printPackingSlip(orderId){
       </div>
     </div>
     <hr>
-    <div style="margin:1.2em 0.7em 0;border:1.5px solid #000;border-radius:4px;padding:10px 14px;font-size:11px">
+    <div class="summary-box" style="margin:1.2em 0.7em 0;border:1.5px solid #000;border-radius:4px;padding:10px 14px;font-size:11px;page-break-inside:avoid;break-inside:avoid">
       <div style="display:flex;flex-wrap:wrap;gap:10px 28px;align-items:flex-start">
         <div style="min-width:80px">
           <div style="text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:.06em;color:#555;margin-bottom:3px">Delivery</div>
@@ -2685,17 +2763,19 @@ async function printPackingSlip(orderId){
         </div>
       </div>
     </div>
-    <hr>
-    <div class="footer">
-      <h2>Thank you for shopping with us!</h2>
-      <p><strong>CAFELAX</strong><br>info@cafelax.com<br>www.cafelax.com</p>
-      <button class="print-btn" onclick="window.print()">Print / Save PDF</button>
+    <div class="invoice-footer-optional">
+      <hr>
+      <div class="footer">
+        <h2>Thank you for shopping with us!</h2>
+        <p><strong>CAFELAX</strong><br>info@cafelax.com<br>www.cafelax.com</p>
+        <button class="print-btn no-print" onclick="window.print()">Print / Save PDF</button>
+      </div>
     </div>
   </div>
   </body></html>`);
   w.document.close();
   w.focus();
-  setTimeout(()=>w.print(),700);
+  setTimeout(()=>w.print(), 700);
 }
 
 async function shopifyFulfill(order, courierName){
@@ -2724,7 +2804,8 @@ async function selCAndConfirm(id){
   if(!o||!c) return;
   const ship=getShipCost(o,c);
   const assignedZone = getOrderZoneForCourier(o, c);
-  const upd={courierId:id,ship,note:'',status:'جاري التوصيل',assignedZone};
+  const batch = ensureCurrentBatch();
+  const upd={courierId:id,ship,note:'',status:'جاري التوصيل',assignedZone,batchCode:batch.code};
   Object.assign(o, upd);
   if(API_URL){apiFetch('/api/orders/'+assignOrderId,'PATCH',upd).catch(()=>{});}
   debouncedSaveOrders();
@@ -2732,7 +2813,8 @@ async function selCAndConfirm(id){
   shopifyFulfill(o, c.name);
   pushNotif('🤖',`تعيين — ${c.name}`,`${assignOrderId} · ${o.name} · ${o.area}`);
   refreshAll();
-  toast(`✅ تم تعيين ${c.name} للطلب ${assignOrderId} مباشرةً`);
+  updateBatchIndicator();
+  toast(`✅ تم تعيين ${c.name} للطلب ${assignOrderId} — ${batch.code}`);
 }
 
 async function confirmAssign(){
@@ -2741,7 +2823,8 @@ async function confirmAssign(){
   const c=couriers.find(x=>x.id==selectedCourierId);
   const ship=+$('assign-ship').value||getShipCost(o,c),note=$('assign-note').value;
   const isBosta = String(selectedCourierId)==='bosta';
-  const upd={courierId:selectedCourierId,ship,note,status:'جاري التوصيل',isBosta};
+  const batch = ensureCurrentBatch();
+  const upd={courierId:selectedCourierId,ship,note,status:'جاري التوصيل',isBosta,batchCode:batch.code};
   if(isBosta){ bostaIds[assignOrderId]=true; localStorage.setItem('bosta_ids',JSON.stringify(bostaIds)); }
   if(API_URL){const r=await apiFetch('/api/orders/'+assignOrderId,'PATCH',upd);if(r)Object.assign(o,r.order);else Object.assign(o,upd)}
   else Object.assign(o,upd);
@@ -2749,7 +2832,9 @@ async function confirmAssign(){
   if(!isBosta && c) shopifyFulfill(o, c.name);
   closeM('m-assign');
   pushNotif('🚴',`تم تعيين ${c.name}`,`الطلب ${assignOrderId} — ${o.name}`);
-  refreshAll();toast(`✅ تم تعيين ${c.name} للطلب ${assignOrderId}`);
+  refreshAll();
+  updateBatchIndicator();
+  toast(`✅ تم تعيين ${c?.name||'بوسطة'} — ${batch.code}`);
 }
 
 function updateAssignBulkBtns(){
@@ -6204,18 +6289,546 @@ let batchActive=false,batchOrders=[],batchIndex=0,batchName='',batchResults=[];
 
 let _currentBatchCode = '';
 
+// ===== AUTO BATCH MANAGEMENT =====
+// النظام: في أي وقت فيه دفعة مفتوحة تلقائياً. لما تقفل يبدأ واحدة جديدة تلقائي.
+function getTodayBatchDate(){
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+function ensureCurrentBatch(){
+  const today = getTodayBatchDate();
+  try{
+    const stored = JSON.parse(localStorage.getItem('current_batch')||'null');
+    if(stored && stored.date === today && stored.status === 'open'){
+      _currentBatchCode = stored.code;
+      return stored;
+    }
+  }catch(e){}
+
+  // لازم نبدأ دفعة جديدة — جيب رقم اليوم
+  let dayCounter = 1;
+  try{
+    const history = JSON.parse(localStorage.getItem('batch_history')||'[]');
+    const todayBatches = history.filter(b=>b.date===today);
+    dayCounter = todayBatches.length + 1;
+  }catch(e){}
+
+  const code = 'B-'+today+'-'+String(dayCounter).padStart(2,'0');
+  const batch = { code, date: today, status: 'open', startedAt: new Date().toISOString() };
+  _currentBatchCode = code;
+  try{
+    localStorage.setItem('current_batch', JSON.stringify(batch));
+    const history = JSON.parse(localStorage.getItem('batch_history')||'[]');
+    history.push(batch);
+    localStorage.setItem('batch_history', JSON.stringify(history));
+  }catch(e){}
+
+  // sync to server
+  if(API_URL) apiFetch('/api/batches','POST',batch).catch(()=>{});
+
+  return batch;
+}
+
+function closeBatch(){
+  try{
+    const current = JSON.parse(localStorage.getItem('current_batch')||'null');
+    if(!current){ toast('❗ مفيش دفعة مفتوحة'); return; }
+
+    // عدد طلبات الدفعة
+    const count = orders.filter(o=>o.batchCode===current.code).length;
+    if(!confirm('هتقفل الدفعة '+current.code+' ('+count+' طلب)؟\nهتبدأ دفعة جديدة تلقائياً.'))return;
+
+    current.status = 'closed';
+    current.closedAt = new Date().toISOString();
+    current.orderCount = count;
+
+    // حدث الـ history
+    const history = JSON.parse(localStorage.getItem('batch_history')||'[]');
+    const idx = history.findIndex(b=>b.code===current.code);
+    if(idx>=0) history[idx] = current;
+    localStorage.setItem('batch_history', JSON.stringify(history));
+    localStorage.removeItem('current_batch');
+
+    if(API_URL) apiFetch('/api/batches/'+encodeURIComponent(current.code),'PATCH',{status:'closed',closedAt:current.closedAt,orderCount:count}).catch(()=>{});
+
+    toast('🔒 تم إقفال الدفعة '+current.code);
+
+    // افتح دفعة جديدة تلقائياً
+    ensureCurrentBatch();
+    updateBatchIndicator();
+  }catch(e){ console.error('closeBatch:',e); toast('❌ خطأ: '+e.message); }
+}
+
+function updateBatchIndicator(){
+  const el = document.getElementById('batch-indicator');
+  if(!el) return;
+  const batch = ensureCurrentBatch();
+  const count = orders.filter(o=>o.batchCode===batch.code).length;
+  el.innerHTML = `
+    <span style="font-size:10px;color:var(--muted)">الدفعة الحالية</span>
+    <strong style="font-size:13px;color:var(--accent);margin-right:6px">${batch.code}</strong>
+    <span style="background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-right:6px">${count} طلب</span>
+  `;
+}
+
 function getBatchName(){
-  const now=new Date();
-  const day=now.toLocaleDateString('ar-EG',{year:'2-digit',month:'2-digit',day:'2-digit'}).replace(/[/]/g,'-');
-  const key='batch_day_'+now.toDateString();
-  let num=1;
-  try{const s=localStorage.getItem(key);num=s?parseInt(s)+1:1;localStorage.setItem(key,num);}catch(e){}
-  // كود مختصر للدفعة
-  const totalKey='batch_total_counter';
-  let total=1;
-  try{const t=localStorage.getItem(totalKey);total=t?parseInt(t)+1:1;localStorage.setItem(totalKey,total);}catch(e){}
-  _currentBatchCode='B-'+String(total).padStart(3,'0');
-  return day+' — دفعة '+num+' ('+_currentBatchCode+')';
+  const b = ensureCurrentBatch();
+  return b.code;
+}
+
+// ===== BATCH INVOICE PRINTING =====
+async function printBatchInvoices(){
+  // جيب كل الدفعات الموجودة
+  const batches = {};
+  orders.forEach(o=>{
+    if(o.batchCode){
+      if(!batches[o.batchCode]) batches[o.batchCode] = { code: o.batchCode, orders: [], couriers: {} };
+      batches[o.batchCode].orders.push(o);
+    }
+  });
+
+  const batchList = Object.values(batches).sort((a,b)=>b.code.localeCompare(a.code));
+  if(!batchList.length){ toast('❗ لا توجد دفعات للطباعة'); return; }
+
+  // حدد الدفعة الحالية افتراضياً
+  const currentBatch = ensureCurrentBatch();
+
+  const batchesHtml = batchList.map(b=>{
+    const isOpen = b.code === currentBatch.code;
+    const orderCount = b.orders.length;
+    const dateStr = b.code.replace('B-','').split('-').slice(0,3).join('-');
+    return `
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:background .15s" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">
+        <input type="checkbox" class="batch-chk" value="${b.code}" ${isOpen?'checked':''} style="width:16px;height:16px;accent-color:var(--accent)">
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:13px">${b.code}</div>
+          <div style="font-size:11px;color:var(--muted)">${dateStr} — ${orderCount} طلب ${isOpen?'<span style="color:#16a34a;font-weight:700">● مفتوحة</span>':'<span style="color:#6b7280">● مقفولة</span>'}</div>
+        </div>
+      </label>
+    `;
+  }).join('');
+
+  const ov = document.createElement('div');
+  ov.id = 'batch-print-popup';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = `
+    <div style="background:var(--card);border-radius:16px;width:min(520px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:Cairo,sans-serif">
+      <div style="padding:16px 20px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:800;font-size:16px">🖨️ طباعة فواتير الدفعة</div>
+          <div style="font-size:11px;opacity:.9;margin-top:2px">اختر الدفعات اللي عايز تطبعها</div>
+        </div>
+        <button onclick="document.getElementById('batch-print-popup').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:14px;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:18px">
+        <div style="font-weight:700;font-size:12px;margin-bottom:8px;color:var(--muted)">الدفعات المتاحة (${batchList.length})</div>
+        <div style="max-height:280px;overflow-y:auto;margin-bottom:16px">
+          ${batchesHtml}
+        </div>
+
+        <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px">
+          <div style="font-weight:700;font-size:12px;margin-bottom:8px">⚙️ خيارات الطباعة</div>
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="opt-summary" checked style="width:15px;height:15px;accent-color:var(--accent)">
+            📋 ورقة ملخص لكل دفعة
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="opt-divider" checked style="width:15px;height:15px;accent-color:var(--accent)">
+            📄 صفحة فاصل بين كل مندوب (اسمه + عدد طلباته)
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="opt-bosta" checked style="width:15px;height:15px;accent-color:var(--accent)">
+            🚚 اشمل طلبات بوسطة كمندوب منفصل
+          </label>
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-ghost" onclick="document.getElementById('batch-print-popup').remove()">إلغاء</button>
+          <button class="btn btn-primary" onclick="doBatchPrint()" style="background:#6366f1">🖨️ اطبع الآن</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+
+async function doBatchPrint(){
+  const selected = [...document.querySelectorAll('.batch-chk:checked')].map(c=>c.value);
+  if(!selected.length){ toast('❗ اختر دفعة واحدة على الأقل'); return; }
+
+  const optSummary = document.getElementById('opt-summary').checked;
+  const optDivider = document.getElementById('opt-divider').checked;
+  const optBosta = document.getElementById('opt-bosta').checked;
+
+  document.getElementById('batch-print-popup').remove();
+  toast('⏳ جاري تحضير الطباعة...');
+
+  // اجمع كل الطلبات المطلوبة
+  const allPages = []; // مصفوفة صفحات HTML
+
+  for(const batchCode of selected){
+    const batchOrders = orders.filter(o=>o.batchCode===batchCode);
+    if(!batchOrders.length) continue;
+
+    // جمع الطلبات حسب المندوب/بوسطة
+    const groups = {}; // {courierId: {name, express: [], normal: []}}
+    batchOrders.forEach(o=>{
+      const key = o.isBosta ? 'bosta' : String(o.courierId||'unassigned');
+      if(!groups[key]){
+        const cname = o.isBosta ? 'بوسطة' : (couriers.find(c=>String(c.id)===String(o.courierId))?.name || 'غير محدد');
+        groups[key] = { name: cname, express: [], normal: [], isBosta: o.isBosta };
+      }
+      if(isSameDay(o)) groups[key].express.push(o);
+      else groups[key].normal.push(o);
+    });
+
+    // استبعد بوسطة لو مش مطلوبة
+    if(!optBosta) delete groups['bosta'];
+
+    // ترتيب: مندوبين أبجدي، بوسطة آخر
+    const sortedKeys = Object.keys(groups).sort((a,b)=>{
+      if(a==='bosta') return 1;
+      if(b==='bosta') return -1;
+      return groups[a].name.localeCompare(groups[b].name,'ar');
+    });
+
+    // حدد الطلبات الكبيرة (أكتر من 6 منتجات = صفحتين أو أكتر تقريباً)
+    const estimatePagesCount = (o) => {
+      let items = [];
+      try { items = JSON.parse(o.lineItemsJson || '[]'); } catch(e) {}
+      if(!items.length && o.items) items = o.items.split(',').filter(x=>x.trim());
+      const count = items.length;
+      if(count <= 6) return 1;
+      if(count <= 15) return 2;
+      return Math.ceil(count / 8);
+    };
+    // احسب pageInfo لكل group عشان نستخدمها في الملخص
+    sortedKeys.forEach(key => {
+      const g = groups[key];
+      g._pageInfo = {};
+      [...g.express, ...g.normal].forEach(o => { g._pageInfo[o.id] = estimatePagesCount(o); });
+    });
+
+    // ورقة ملخص الدفعة
+    if(optSummary){
+      allPages.push(renderBatchSummaryPage(batchCode, groups, sortedKeys));
+    }
+
+    // لكل مندوب
+    for(const key of sortedKeys){
+      const g = groups[key];
+      // فاصل
+      if(optDivider){
+        allPages.push(renderCourierDividerPage(batchCode, g));
+      }
+
+      // ترتيب: مستعجل كبير → مستعجل عادي → عادي كبير → عادي صغير (داخل كل فئة بالرقم)
+      const sortByNum = (a,b)=>{
+        const na = parseInt((a.id||'').replace(/\D/g,''))||0;
+        const nb = parseInt((b.id||'').replace(/\D/g,''))||0;
+        return na - nb;
+      };
+
+      const isLarge = o => (g._pageInfo[o.id] || 1) > 1;
+      const expressLarge = g.express.filter(isLarge).sort(sortByNum);
+      const expressSmall = g.express.filter(o => !isLarge(o)).sort(sortByNum);
+      const normalLarge = g.normal.filter(isLarge).sort(sortByNum);
+      const normalSmall = g.normal.filter(o => !isLarge(o)).sort(sortByNum);
+
+      const ordered = [...expressLarge, ...expressSmall, ...normalLarge, ...normalSmall];
+
+      // فاتورة كل طلب
+      for(const o of ordered){
+        const invoiceHtml = await buildPackingSlipHtml(o);
+        allPages.push(invoiceHtml);
+      }
+    }
+  }
+
+  if(!allPages.length){ toast('❗ لا توجد صفحات للطباعة'); return; }
+
+  // افتح نافذة الطباعة
+  const w = window.open('','_blank','width=900,height=1000');
+  w.document.write(`<!DOCTYPE html><html lang="en"><head>
+    <meta charset="UTF-8"><title>Batch Print — ${selected.join(', ')}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      *{box-sizing:border-box}
+      body{font-family:'Cairo',sans-serif;margin:0;padding:0}
+      .page{page-break-after:always;padding:30px;min-height:100vh;position:relative}
+      .page:last-child{page-break-after:auto}
+      .print-all-btn{position:fixed;bottom:20px;left:20px;background:#000;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-family:Cairo,sans-serif;font-weight:700;font-size:14px;cursor:pointer;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+
+      /* Multi-page markers — only appear if an invoice spans more than one printed page */
+      .pg-top-banner{padding:10px 16px;border:2px solid #000;font-size:13px;font-weight:700;text-align:center;margin-bottom:20px;letter-spacing:0.5px;font-family:Cairo,sans-serif}
+      .pg-end{padding:12px 14px;border:3px solid #000;text-align:center;font-size:16px;font-weight:700;margin-top:25px;letter-spacing:1px;font-family:Cairo,sans-serif;background:#fff}
+      .pg-arrow-break{margin:20px 0;text-align:center;page-break-after:always;break-after:page}
+      .pg-arrow-break .arrow{font-size:100px;line-height:0.9;font-weight:900;color:#000}
+      .pg-arrow-break .arrow-text{font-size:14px;font-weight:700;letter-spacing:3px;margin-top:5px;font-family:Cairo,sans-serif}
+
+      @media print {
+        .no-print{display:none!important}
+        .page{padding:20px}
+      }
+    </style>
+  </head>
+  <body>
+    <button class="print-all-btn no-print" onclick="window.print()">🖨️ اطبع الكل / احفظ PDF</button>
+    ${allPages.map((p,i)=>`<div class="page" data-page-idx="${i}">${p}</div>`).join('')}
+  </body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>{
+    try{ w.print(); }catch(e){ console.error('batch print:',e); }
+  }, 1500);
+  toast('✅ تم تجهيز '+allPages.length+' صفحة');
+}
+
+function renderBatchSummaryPage(batchCode, groups, sortedKeys){
+  const totalOrders = sortedKeys.reduce((s,k)=>s+groups[k].express.length+groups[k].normal.length, 0);
+  const totalExpress = sortedKeys.reduce((s,k)=>s+groups[k].express.length, 0);
+  const dateStr = batchCode.replace('B-','').split('-').slice(0,3).join('-');
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+
+  const rows = sortedKeys.map(key=>{
+    const g = groups[key];
+    const count = g.express.length + g.normal.length;
+    const pageInfo = g._pageInfo || {};
+    const sortByNum = (a,b)=>(parseInt((a.id||'').replace(/\D/g,''))||0)-(parseInt((b.id||'').replace(/\D/g,''))||0);
+
+    // ترتيب مع فصل الكبيرة عن الصغيرة للعرض في الملخص
+    const isLarge = o => (pageInfo[o.id] || 1) > 1;
+    const fmtOrderId = o => {
+      const id = (o.id||'').replace(/^SH-/,'').replace(/^MN-/,'');
+      const pages = pageInfo[o.id] || 1;
+      if(pages > 1) return `<span style="background:#000;color:#fff;padding:2px 6px;border-radius:3px;font-weight:800;display:inline-block;margin:1px 2px">${id} 📄×${pages}</span>`;
+      return `<span style="display:inline-block;margin:1px 2px">${id}</span>`;
+    };
+
+    const expressLarge = g.express.filter(isLarge).sort(sortByNum);
+    const expressSmall = g.express.filter(o => !isLarge(o)).sort(sortByNum);
+    const normalLarge = g.normal.filter(isLarge).sort(sortByNum);
+    const normalSmall = g.normal.filter(o => !isLarge(o)).sort(sortByNum);
+
+    const expressHtml = [...expressLarge, ...expressSmall].map(fmtOrderId).join(' ');
+    const normalHtml = [...normalLarge, ...normalSmall].map(fmtOrderId).join(' ');
+
+    const largeCount = [...expressLarge, ...normalLarge].length;
+
+    return `
+      <tr style="border-bottom:1px solid #e5e7eb">
+        <td style="padding:14px 10px;vertical-align:top;width:200px">
+          <div style="font-size:17px;font-weight:800">${g.isBosta?'🚚 ':''}${g.name}</div>
+          <div style="font-size:12px;color:#6b7280;margin-top:4px">${count} order${count>1?'s':''}</div>
+          ${g.express.length?`<div style="font-size:11px;color:#dc2626;margin-top:2px;font-weight:700">⚡ ${g.express.length} urgent</div>`:''}
+          ${largeCount?`<div style="font-size:11px;color:#000;margin-top:2px;font-weight:700">📄 ${largeCount} multi-page</div>`:''}
+        </td>
+        <td style="padding:14px 10px;font-size:15px;line-height:2.2;font-weight:700">
+          ${g.express.length?`<div style="margin-bottom:8px"><span style="background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-left:8px">⚡ Express</span><span style="direction:ltr;unicode-bidi:plaintext;color:#dc2626">${expressHtml}</span></div>`:''}
+          ${g.normal.length?`<div><span style="background:#dbeafe;color:#1e40af;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-left:8px">Normal</span><span style="direction:ltr;unicode-bidi:plaintext">${normalHtml}</span></div>`:''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div style="text-align:center;margin-bottom:25px;padding-bottom:15px;border-bottom:3px solid #000">
+      <div style="font-size:13px;font-weight:700;color:#6b7280;margin-bottom:5px">BATCH SUMMARY · ملخص الدفعة</div>
+      <div style="font-size:32px;font-weight:800;margin-bottom:5px">${batchCode}</div>
+      <div style="font-size:14px;color:#6b7280">${dateStr} — ${timeStr} — ${totalOrders} طلب ${totalExpress?`(⚡ ${totalExpress} مستعجل)`:''}</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead>
+        <tr style="background:#1e293b;color:#fff">
+          <th style="padding:10px;text-align:right;font-size:13px">COURIER · المندوب</th>
+          <th style="padding:10px;text-align:right;font-size:13px">ORDER NUMBERS · أرقام الطلبات</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="margin-top:20px;padding:10px 15px;background:#fef3c7;border:1px solid #fde047;border-radius:6px;font-size:12px;color:#92400e;text-align:center">
+      <strong>📄×N</strong> = طلب على N صفحات · Multi-page order with N pages — ادبس كل الصفحات مع بعض
+    </div>
+    <div style="margin-top:15px;padding:12px;background:#f9fafb;border-radius:8px;text-align:center;font-size:11px;color:#6b7280">
+      تم التجهيز · Generated ${now.toLocaleDateString('en-GB')} ${timeStr} · CAFELAX OrderPro
+    </div>
+  `;
+}
+
+function renderCourierDividerPage(batchCode, g){
+  const total = g.express.length + g.normal.length;
+  const sortByNum = (a,b)=>(parseInt((a.id||'').replace(/\D/g,''))||0)-(parseInt((b.id||'').replace(/\D/g,''))||0);
+  const expressIds = g.express.sort(sortByNum).map(o=>(o.id||'').replace(/^SH-/,'').replace(/^MN-/,''));
+  const normalIds = g.normal.sort(sortByNum).map(o=>(o.id||'').replace(/^SH-/,'').replace(/^MN-/,''));
+
+  return `
+    <div style="height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px">
+      <div style="font-size:14px;color:#6b7280;font-weight:700;margin-bottom:15px">${batchCode}</div>
+      <div style="font-size:18px;color:#6b7280;margin-bottom:10px">${g.isBosta?'🚚 SHIPPING VIA':'🚴 COURIER · المندوب'}</div>
+      <div style="font-size:64px;font-weight:800;margin-bottom:30px;color:#000">${g.name}</div>
+
+      <div style="background:#1e293b;color:#fff;border-radius:16px;padding:24px 40px;display:flex;gap:40px;margin-bottom:30px">
+        <div>
+          <div style="font-size:12px;opacity:.75;margin-bottom:4px">TOTAL · الإجمالي</div>
+          <div style="font-size:42px;font-weight:800">${total}</div>
+        </div>
+        ${g.express.length?`
+        <div style="border-right:1px solid rgba(255,255,255,.3);padding-right:40px">
+          <div style="font-size:12px;opacity:.75;margin-bottom:4px">⚡ URGENT · مستعجل</div>
+          <div style="font-size:42px;font-weight:800;color:#fde047">${g.express.length}</div>
+        </div>`:''}
+        ${g.normal.length?`
+        <div style="border-right:1px solid rgba(255,255,255,.3);padding-right:40px">
+          <div style="font-size:12px;opacity:.75;margin-bottom:4px">🚚 NORMAL · عادي</div>
+          <div style="font-size:42px;font-weight:800">${g.normal.length}</div>
+        </div>`:''}
+      </div>
+
+      <div style="max-width:600px;width:100%">
+        ${g.express.length?`
+        <div style="background:#fef3c7;border:2px solid #fde047;border-radius:12px;padding:15px;margin-bottom:12px;text-align:right">
+          <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:8px">⚡ Urgent · مستعجل (${g.express.length})</div>
+          <div style="font-size:16px;direction:ltr;unicode-bidi:plaintext;color:#7c2d12;font-weight:700;line-height:1.8">${expressIds.join(', ')}</div>
+        </div>`:''}
+        ${g.normal.length?`
+        <div style="background:#dbeafe;border:2px solid #93c5fd;border-radius:12px;padding:15px;text-align:right">
+          <div style="font-size:13px;font-weight:700;color:#1e40af;margin-bottom:8px">🚚 Normal · عادي (${g.normal.length})</div>
+          <div style="font-size:15px;direction:ltr;unicode-bidi:plaintext;color:#1e3a8a;line-height:1.8">${normalIds.join(', ')}</div>
+        </div>`:''}
+      </div>
+    </div>
+  `;
+}
+
+async function buildPackingSlipHtml(o){
+  // استخرج HTML الفاتورة من الـ function الموجودة بدون نافذة جديدة
+  let lineItems = [];
+  if(o.lineItemsJson){
+    try{ lineItems = JSON.parse(o.lineItemsJson); }catch(e){}
+  }
+
+  // لو مفيش صور، جيبهم
+  const hasAllImages = lineItems.length > 0 && lineItems.every(i=>i.image);
+  if(!hasAllImages && o.src==='shopify' && o.shopifyId && API_URL){
+    try{
+      const shopUrl = localStorage.getItem('orderpro_shop_url');
+      const accessToken = localStorage.getItem('orderpro_shop_token');
+      if(shopUrl && accessToken){
+        const r = await apiFetch('/api/shopify/fetch-line-items','POST',{
+          shopUrl, accessToken, shopifyOrderId: String(o.shopifyId), orderId: o.id,
+        });
+        if(r && r.lineItemsJson){
+          lineItems = JSON.parse(r.lineItemsJson);
+          o.lineItemsJson = r.lineItemsJson;
+          if(r.subtotalPrice) o.subtotalPrice = r.subtotalPrice;
+          if(r.shippingPrice) o.shippingPrice = r.shippingPrice;
+        }
+      }
+    }catch(e){}
+  }
+
+  if(!lineItems.length && o.items){
+    lineItems = o.items.split(',').map(s=>{
+      s=s.trim();
+      const m=s.match(/^(.+?)\s+x(\d+)$/i);
+      if(m) return {name:m[1].trim(), quantity:parseInt(m[2]), price:0, totalPrice:0};
+      return {name:s, quantity:1, price:0, totalPrice:0};
+    }).filter(i=>i.name);
+  }
+  if(!lineItems.length) lineItems=[{name:o.details||'—', quantity:1, price:o.total||0, totalPrice:o.total||0}];
+
+  const addrParts = [];
+  if(o.addr) addrParts.push(o.addr);
+  if(o.area && !(o.addr||'').includes(o.area)) addrParts.push(o.area);
+  const addr1 = addrParts.filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join('<br>') || (o.area||'');
+
+  const courierName = o.courierId ? (couriers.find(c=>String(c.id)===String(o.courierId))?.name||'—') : null;
+  const deliveryLabel = o.isBosta ? 'Bosta' : o.deliveryType==='pickup' ? 'Store Pickup' : courierName ? courierName : '—';
+  const _src = o.src||'';
+  const _sn = String(o.sourceName||'');
+  const sourceLabel = _src==='manual' ? 'Manual'
+    : _src!=='shopify' ? (_src||'—')
+    : _sn==='web' || _sn==='' ? 'Website'
+    : _sn==='shopify_draft_orders' ? 'Draft Order'
+    : _sn==='pos' ? 'POS'
+    : /^\d+$/.test(_sn) ? 'Mobile App'
+    : _sn;
+
+  const totalItems = lineItems.reduce((s,i)=>s+(i.quantity||1),0);
+  const uniqueItems = lineItems.length;
+  const orderNum = (o.id || '').toString().replace('SH-','').replace('MN-','');
+  const orderDate = o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-GB',{year:'numeric',month:'long',day:'numeric'}) : new Date().toLocaleDateString('en-GB',{year:'numeric',month:'long',day:'numeric'});
+  const subtotal = o.subtotalPrice > 0 ? o.subtotalPrice : lineItems.reduce((s,i)=>s+(i.totalPrice||(i.price*(i.quantity||1)))||0,0) || (o.total||0);
+  const shippingCost = o.shippingPrice || 0;
+  const fmtMoney = n => `EGP ${(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+
+  const qtyFreq = {};
+  lineItems.forEach(i=>{ const q=i.quantity||1; qtyFreq[q]=(qtyFreq[q]||0)+1; });
+  const commonQty = parseInt(Object.entries(qtyFreq).sort((a,b)=>b[1]-a[1])[0][0]);
+
+  const itemsHtml = lineItems.map(i=>{
+    const qty = i.quantity || 1;
+    const lineTotal = i.totalPrice || (i.price*qty) || 0;
+    const isDiff = lineItems.length > 1 && qty > commonQty;
+    const imgHtml = i.image
+      ? `<div style="width:60px;height:60px"><img src="${i.image}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:4px"></div>`
+      : `<div style="width:60px;height:60px;background:#fafbfc;display:flex;align-items:center;justify-content:center;font-size:22px;border-radius:4px">📦</div>`;
+    const qtyHtml = isDiff
+      ? `<div style="min-width:40px;text-align:center;border:2.5px solid #000;border-radius:4px;padding:2px 4px"><div style="font-size:28px;font-weight:900;line-height:1;color:#000">${qty}</div><div style="font-size:8px;font-weight:700;color:#000;margin-top:1px">!!</div></div>`
+      : `<div style="font-size:15px;font-weight:400;width:40px;text-align:left;color:#555">${qty} ×</div>`;
+    const rowStyle = isDiff ? 'border:2px solid #000;border-radius:4px;margin:4px -4px;padding:6px 4px;' : '';
+    return `
+      <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #e5e7eb;${rowStyle}">
+        ${qtyHtml}
+        ${imgHtml}
+        <div style="flex:1">
+          <div style="${isDiff?'font-weight:700;':''}font-size:14px">${i.name||''}</div>
+          ${i.variantTitle?`<div style="font-size:11px;color:#6b7280">${i.variantTitle}</div>`:''}
+          ${i.sku?`<div style="font-size:11px;color:#6b7280">SKU: ${i.sku}</div>`:''}
+          ${i.price>0?`<div style="font-size:11px;color:#6b7280">${fmtMoney(i.price)}</div>`:''}
+        </div>
+        <div style="text-align:left;font-weight:700;font-size:14px">${lineTotal>0?fmtMoney(lineTotal):''}</div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div style="max-width:700px;margin:0 auto">
+      <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:20px">
+        <div style="font-size:28px;font-weight:800">CAFELAX</div>
+        <div style="text-align:left">
+          <div style="font-size:13px">Order ${orderNum}</div>
+          <div style="font-size:13px">${orderDate}</div>
+          ${o.batchCode?`<div style="font-size:10px;color:#6b7280;margin-top:2px">${o.batchCode}</div>`:''}
+        </div>
+      </div>
+      <div style="margin-bottom:20px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:6px">Ship to</div>
+        <div style="font-size:13px;line-height:1.8"><strong>${o.name||''}</strong><br>${addr1}<br>Egypt<br><span style="direction:ltr;unicode-bidi:plaintext">${o.phone||''}</span></div>
+      </div>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:15px 0">
+      <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;text-transform:uppercase;padding-bottom:8px;border-bottom:1px solid #e5e7eb;margin-bottom:8px">
+        <div style="width:100px">Quantity</div>
+        <div style="flex:1;margin-left:60px">Items</div>
+        <div style="text-align:left">Total</div>
+      </div>
+      ${itemsHtml}
+      <div style="text-align:left;margin-top:15px;font-size:14px;font-weight:700;line-height:2">
+        Subtotal ${fmtMoney(subtotal)}<br>
+        Shipping ${fmtMoney(shippingCost)}<br>
+        Total ${fmtMoney(o.total||subtotal)}
+      </div>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:15px 0">
+      <div style="display:flex;flex-wrap:wrap;gap:10px 28px;padding:10px;border:1px solid #000;border-radius:4px;margin-top:15px;page-break-inside:avoid;break-inside:avoid">
+        <div><div style="text-transform:uppercase;font-size:9px;font-weight:700;color:#555">Delivery</div><strong style="font-size:14px">${deliveryLabel}</strong></div>
+        <div><div style="text-transform:uppercase;font-size:9px;font-weight:700;color:#555">Source</div><strong style="font-size:14px">${sourceLabel}</strong></div>
+        <div><div style="text-transform:uppercase;font-size:9px;font-weight:700;color:#555">Unique Items</div><strong style="font-size:14px">${uniqueItems} items</strong></div>
+        <div style="border-right:2.5px solid #000;padding-right:16px"><div style="text-transform:uppercase;font-size:9px;font-weight:700;color:#555">Total Pieces</div><strong style="font-size:22px">${totalItems} pcs</strong></div>
+      </div>
+    </div>
+  `;
 }
 
 function startBatch(){
