@@ -6271,6 +6271,14 @@ window.addEventListener('load', function(){
       const s=JSON.parse(localStorage.getItem('current_user_session')||'null');
       if(s){s._expires=Date.now()+8*60*60*1000;localStorage.setItem('current_user_session',JSON.stringify(s));}
     }catch(e){}
+    // ابعت الـ Shopify credentials للسيرفر لو مخزنة محلياً (عشان السيرفر يجيب الصور)
+    try{
+      const shopUrl = localStorage.getItem('orderpro_shop_url');
+      const shopToken = localStorage.getItem('orderpro_shop_token');
+      if(shopUrl && shopToken && API_URL && currentUser.role==='admin'){
+        apiFetch('/api/settings','POST',{ shopify_url: shopUrl, shopify_token: shopToken }).catch(()=>{});
+      }
+    }catch(e){}
     syncCouriersToDB().then(async ()=>{
       await loadSettlements();
       loadOrders();
@@ -8093,6 +8101,10 @@ async function doImport() {
       localStorage.setItem('orderpro_shop_token', token);
       if($('cfg-shop')) $('cfg-shop').value = url;
       if($('cfg-token')) $('cfg-token').value = token;
+      // احفظها على السيرفر كمان عشان يقدر يجيب الصور تلقائياً
+      if(API_URL){
+        apiFetch('/api/settings','POST',{ shopify_url: url, shopify_token: token }).catch(()=>{});
+      }
       await loadOrders();
       pushNotif('📥', `تم استيراد ${data.imported} طلب من Shopify`, `آخر ${days} ${days===1?'يوم':'أيام'} · ${data.total} طلب إجمالي`);
     } else {
