@@ -363,6 +363,7 @@ tr:hover td{background:#fafbff}
         <button class="btn btn-primary btn-sm" onclick="openM('m-order')">＋</button>
       </div>
       <div class="tw"><table><thead><tr><th>رقم الطلب</th><th>المصدر</th><th>العميل</th><th>الهاتف</th><th>المنطقة</th><th>نوع التوصيل</th><th>COD</th><th>الشحن</th><th>المندوب</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody id="orders-tbody"></tbody></table></div>
+      <div id="orders-pagination" style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;padding:14px 10px;margin-top:8px;border-top:1px solid var(--border)"></div>
     </div>
   </div>
 
@@ -1829,6 +1830,9 @@ function renderDash(){
   $('dash-cod-list').innerHTML = rows || `<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">لا توجد تحصيلات نشطة</div>`;
 }
 
+let ordersPage = 1;
+const ORDERS_PAGE_SIZE = 100;
+
 function renderOrders(){
   let list=orders;
   if(orderFilter!=='all')list=list.filter(o=>o.status===orderFilter);
@@ -1837,14 +1841,80 @@ function renderOrders(){
   if(orderFilter==='cancelled-unassigned')list=orders.filter(o=>o.status==='ملغي'&&!o.courierId);
   if(orderTypeFilter)list=list.filter(o=>deliveryType(o)===orderTypeFilter);
   if(searchQ)list=list.filter(o=>(o.id+o.name+o.area+o.phone).includes(searchQ));
-  $('orders-tbody').innerHTML=list.map(o=>`<tr><td style="text-align:center"><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"></td><td><strong>${o.id}</strong>${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td>${srcBadge(o.src)}</td><td>${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px">${o.phone}</td><td>📍 ${o.area}</td><td>${deliveryBadge(o)}</td><td><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td>${cName(o.courierId)}</td><td>${sBadge(o.status)}</td><td><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="openEditOrder('${o.id}')">✏️</button><button class="btn btn-ghost btn-xs" style="color:#64748b;border-color:#64748b;font-size:10px" onclick="openOrderHistory('${o.id}')" title="تاريخ الطلب">📋</button><button class="btn btn-ghost btn-xs" style="color:#6366f1;border-color:#6366f1" onclick="printPackingSlip('${o.id}')" title="طباعة فاتورة">🧾</button>${o.src==='shopify'&&o.shopifyId?`<button class="btn btn-ghost btn-xs" style="color:#96bf48;border-color:#96bf48;font-size:10px" onclick="openInShopify('${o.shopifyId}')" title="افتح في Shopify">🛍️</button>`:''}${(!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-primary btn-xs" onclick="openAssign('${o.id}')">📍 تعيين</button>`:''}${o.status!=='ملغي'?`<button class="btn btn-xs" style="background:${o.paid?'var(--warn-light)':'var(--success-light)'};color:${o.paid?'#92400e':'#065f46'};border:1px solid ${o.paid?'#fcd34d':'#86efac'}" onclick="togglePaid('${o.id}')">${o.paid?'↩️ COD':'💳 مدفوع'}</button>`:''}${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✓ تم</button>`:''}${(o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}</div></td></tr>`).join('');
+
+  // Pagination
+  const totalCount = list.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / ORDERS_PAGE_SIZE));
+  if(ordersPage > totalPages) ordersPage = totalPages;
+  if(ordersPage < 1) ordersPage = 1;
+  const startIdx = (ordersPage - 1) * ORDERS_PAGE_SIZE;
+  const endIdx = startIdx + ORDERS_PAGE_SIZE;
+  const pageList = list.slice(startIdx, endIdx);
+
+  $('orders-tbody').innerHTML=pageList.map(o=>`<tr><td style="text-align:center"><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"></td><td><strong>${o.id}</strong>${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td>${srcBadge(o.src)}</td><td>${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px">${o.phone}</td><td>📍 ${o.area}</td><td>${deliveryBadge(o)}</td><td><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td>${cName(o.courierId)}</td><td>${sBadge(o.status)}</td><td><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="openEditOrder('${o.id}')">✏️</button><button class="btn btn-ghost btn-xs" style="color:#64748b;border-color:#64748b;font-size:10px" onclick="openOrderHistory('${o.id}')" title="تاريخ الطلب">📋</button><button class="btn btn-ghost btn-xs" style="color:#6366f1;border-color:#6366f1" onclick="printPackingSlip('${o.id}')" title="طباعة فاتورة">🧾</button>${o.src==='shopify'&&o.shopifyId?`<button class="btn btn-ghost btn-xs" style="color:#96bf48;border-color:#96bf48;font-size:10px" onclick="openInShopify('${o.shopifyId}')" title="افتح في Shopify">🛍️</button>`:''}${(!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-primary btn-xs" onclick="openAssign('${o.id}')">📍 تعيين</button>`:''}${o.status!=='ملغي'?`<button class="btn btn-xs" style="background:${o.paid?'var(--warn-light)':'var(--success-light)'};color:${o.paid?'#92400e':'#065f46'};border:1px solid ${o.paid?'#fcd34d':'#86efac'}" onclick="togglePaid('${o.id}')">${o.paid?'↩️ COD':'💳 مدفوع'}</button>`:''}${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✓ تم</button>`:''}${(o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}</div></td></tr>`).join('');
+
+  // ارسم شريط pagination
+  renderOrdersPagination(totalCount, totalPages);
 }
 
-function filterSt(btn,f){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter=f;orderTypeFilter=null;renderOrders()}
+function renderOrdersPagination(totalCount, totalPages){
+  const el = document.getElementById('orders-pagination');
+  if(!el) return;
+  if(totalPages <= 1){
+    el.innerHTML = totalCount ? `<span style="color:var(--muted);font-size:12px">${totalCount} طلب</span>` : '';
+    return;
+  }
+  const startIdx = (ordersPage - 1) * ORDERS_PAGE_SIZE;
+  const endIdx = Math.min(startIdx + ORDERS_PAGE_SIZE, totalCount);
+
+  // اختر الصفحات اللي هتظهر (حد أقصى 7 أزرار)
+  const pages = [];
+  if(totalPages <= 7){
+    for(let i=1; i<=totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if(ordersPage > 3) pages.push('...');
+    for(let i=Math.max(2, ordersPage-1); i<=Math.min(totalPages-1, ordersPage+1); i++) pages.push(i);
+    if(ordersPage < totalPages-2) pages.push('...');
+    pages.push(totalPages);
+  }
+
+  const btn = (page, label, disabled) => {
+    const active = page === ordersPage;
+    const style = active
+      ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);font-weight:800'
+      : disabled
+        ? 'background:transparent;color:var(--muted);border:1px solid var(--border);cursor:not-allowed;opacity:.5'
+        : 'background:var(--card);color:var(--text);border:1px solid var(--border);cursor:pointer';
+    return `<button ${disabled?'disabled':''} onclick="goToOrdersPage(${page})" style="${style};padding:6px 12px;border-radius:6px;font-family:Cairo,sans-serif;font-size:12px;min-width:34px">${label}</button>`;
+  };
+
+  const parts = [];
+  parts.push(`<span style="color:var(--muted);font-size:12px;margin-left:12px">${startIdx+1}-${endIdx} من ${totalCount}</span>`);
+  parts.push(btn(ordersPage-1, '←', ordersPage<=1));
+  pages.forEach(p => {
+    if(p === '...') parts.push('<span style="color:var(--muted);padding:0 4px">...</span>');
+    else parts.push(btn(p, String(p), false));
+  });
+  parts.push(btn(ordersPage+1, '→', ordersPage>=totalPages));
+
+  el.innerHTML = parts.join('');
+}
+
+function goToOrdersPage(p){
+  ordersPage = p;
+  renderOrders();
+  // scroll لأعلى الجدول
+  const t = document.getElementById('orders-tbody');
+  if(t) t.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function filterSt(btn,f){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter=f;orderTypeFilter=null;ordersPage=1;renderOrders()}
 let orderTypeFilter=null;
-function filterType(btn,t){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter='all';orderTypeFilter=t;renderOrders()}
+function filterType(btn,t){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter='all';orderTypeFilter=t;ordersPage=1;renderOrders()}
 function onSearch(q){
   searchQ=q;
+  ordersPage=1;
   const wrap = document.querySelector('.search-wrap');
   // شيل الـ dropdown القديم
   const old = document.getElementById('global-search-drop');
