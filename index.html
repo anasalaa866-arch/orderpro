@@ -1988,8 +1988,8 @@ function openMergeOrders(ids){
     `<option value="${o.id}">${o.id} — ${o.name} — ${o.paid?'مدفوع':(o.total||0).toLocaleString()+' ج'}</option>`
   ).join('');
 
-  // تكلفة الشحن الافتراضية
-  const defaultShip = mergeOrders[0]?.ship || 50;
+  // تكلفة الشحن من Shopify (shippingPrice) لأول طلب
+  const defaultShip = mergeOrders[0]?.shippingPrice || mergeOrders[0]?.ship || 50;
   const shipInput = $('merge-ship-val');
   if(shipInput) shipInput.value = defaultShip;
 
@@ -2001,14 +2001,13 @@ function updateMergeShip(){
   const mergeOrders = _mergeIds.map(id=>orders.find(o=>o.id===id)).filter(Boolean);
   const mode = document.querySelector('input[name="merge-ship-mode"]:checked')?.value || 'one';
   const shipInput = $('merge-ship-val');
-
+  // استخدم الشحن الفعلي من Shopify أو الشحن المعين للطلب
+  const getShip = o => o.shippingPrice || o.ship || 0;
   if(mode === 'all'){
-    const totalShip = mergeOrders.reduce((s,o)=>s+(o.ship||50),0);
-    if(shipInput) shipInput.value = totalShip;
+    if(shipInput) shipInput.value = mergeOrders.reduce((s,o)=>s+getShip(o),0);
   } else {
-    if(shipInput) shipInput.value = mergeOrders[0]?.ship || 50;
+    if(shipInput) shipInput.value = getShip(mergeOrders[0]);
   }
-
   renderMergeSummary();
 }
 
@@ -2699,11 +2698,13 @@ function saveCouriers(){localStorage.setItem('op_couriers',JSON.stringify(courie
 function renderAcc(){
   let totCod=0,totShip=0,rows='';
   couriers.forEach(c=>{
-        const done=getPendingSettleOrders(c.id); // يشمل تحت التسوية + مكتمل غير مسوّى
-    const codOrders=done.filter(o=>!o.paid); // الطلبات اللي المندوب بيحصّلها
-    const paidOrders=done.filter(o=>o.paid);  // الطلبات المدفوعة مسبقاً
+    const done=getPendingSettleOrders(c.id); // يشمل تحت التسوية + مكتمل غير مسوّى
+    const activeOnly = oByC(c.id,'جاري التوصيل'); // طلبات شغالة لسه
+    const hasActive = activeOnly.length > 0;
+    const codOrders=done.filter(o=>!o.paid);
+    const paidOrders=done.filter(o=>o.paid);
     const cod=codOrders.reduce((a,o)=>a+o.total,0);
-    const ship=done.reduce((a,o)=>a+(o.ship||50),0); // تمن الشحن على كل الطلبات
+    const ship=done.reduce((a,o)=>a+(o.ship||50),0);
     const doneNorm=done.filter(o=>deliveryType(o)==='normal'),doneExp=done.filter(o=>isSameDay(o)),donePick=done.filter(o=>isPickup(o));
     const shipNorm=doneNorm.reduce((a,o)=>a+(o.ship||c.ship||50),0);
     const shipExp=doneExp.reduce((a,o)=>a+(o.ship||c.shipExpress||80),0);
@@ -2713,6 +2714,7 @@ function renderAcc(){
       <td style="text-align:center">
         ${done.length} طلب<br>
         <span style="font-size:10px;color:var(--muted)">عادي: ${doneNorm.length} | سريع: ${doneExp.length}</span><br>
+        ${hasActive?`<span style="font-size:10px;color:var(--warn)">🚴 ${activeOnly.length} جاري التوصيل</span>`:''}
         ${paidOrders.length?`<span style="font-size:10px;color:var(--success)">💳 مدفوع: ${paidOrders.length}</span>`:''}
       </td>
       <td class="mpos">
@@ -2725,11 +2727,12 @@ function renderAcc(){
       </td>
       <td class="mpos">${(cod-ship).toLocaleString()} ج</td>
       <td class="mpurp">${ship.toLocaleString()} ج</td>
-      <td>${c.settled?'<span class="badge b-done">✅ مسوّى</span>':'<span class="badge b-wait">⏳ لم يُسوَّ</span>'}</td>
-      <td><div style="display:flex;gap:4px">
-      ${(!c.settled&&done.length>0)?`<button class="btn btn-primary btn-xs" onclick="openSettle(${c.id})">تسوية</button>`:''}
-      ${done.length>0?`<button class="btn btn-ghost btn-xs" onclick="printSettleSlip(${c.id})">🖨️ طباعة</button>`:''}
-    </div></td>
+      <td>${done.length>0?'<span class="badge b-wait">⏳ جاهزة للتسوية</span>':hasActive?'<span class="badge b-go">🚴 طلبات شغالة</span>':'<span class="badge b-done">✅ لا يوجد</span>'}</td>
+      <td><div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn btn-xs" style="background:#4f46e5;color:#fff;border:none;font-size:11px" onclick="openCourierAccSession(${c.id})" title="محاسبة المندوب خطوة خطوة">📋 بدء محاسبة</button>
+        ${done.length>0?`<button class="btn btn-primary btn-xs" onclick="openSettle(${c.id})">تسوية</button>`:''}
+        ${done.length>0?`<button class="btn btn-ghost btn-xs" onclick="printSettleSlip(${c.id})">🖨️ طباعة</button>`:''}
+      </div></td>
     </tr>`;
   });
   $('acc-tbody').innerHTML=rows;
@@ -3744,7 +3747,7 @@ function probFilter(f, btn){
           <h3 style="color:#92400e">👥 ${group[0].name} — ${group.length} طلبات | 📱 ${group[0].phone}</h3>
           <div style="display:flex;align-items:center;gap:10px">
             <span style="font-size:12px;color:#92400e">إجمالي: ${group.reduce((s,o)=>s+o.total,0).toLocaleString()} ج</span>
-            <button class="btn btn-xs" style="background:#6366f1;color:#fff;border:none;font-size:11px" onclick="openMergeOrders(${JSON.stringify(group.map(o=>o.id))})">🔗 دمج الطلبات</button>
+            <button class="btn btn-xs" style="background:#6366f1;color:#fff;border:none;font-size:11px" onclick="openMergeOrders(this.dataset.ids.split(','))" data-ids="${group.map(o=>o.id).join(',')}">🔗 دمج الطلبات</button>
           </div>
         </div>
         <div class="tbl-wrap"><table>
@@ -4546,6 +4549,7 @@ async function doLogin(){
   loadOrders();
   loadSettlements();
   loadChks();
+  loadTreasury();
   checkExpiryAlerts();
   requestNotifPermission();
   toast('✅ أهلاً '+user.name+' 👋');
@@ -4748,6 +4752,274 @@ function renderSettle(){
   }).join('');
 }
 
+// ===== COURIER ACCOUNTING SESSION =====
+let _courierAccSession = null;
+
+function openCourierAccSession(cId){
+  const c = couriers.find(x=>x.id==cId);
+  if(!c){ toast('❗ المندوب غير موجود'); return; }
+
+  // ابدأ من الطلبات النشطة للمندوب (غير ملغي/مدمج/مكتمل مسوّى)
+  const settledIds = getSettledIds(cId);
+  let sessionOrders = orders.filter(o=>{
+    if(String(o.courierId) !== String(cId)) return false;
+    if(o.status === 'مدمج') return false;
+    if(settledIds.has(o.id)) return false;
+    // اشمل فقط الطلبات اللي محتاجة محاسبة
+    return ['جاري التوصيل','تحت التسوية','مكتمل'].includes(o.status);
+  });
+
+  // لو في وقت آخر طباعة، استبعد الطلبات اللي جت بعده (يعتبروا جداد)
+  const lastPrintTs = dsLastPrintTimes[cId] || 0;
+  if(lastPrintTs){
+    sessionOrders = sessionOrders.filter(o=>{
+      const createdTs = o.createdAt ? new Date(o.createdAt).getTime() : 0;
+      return createdTs <= lastPrintTs;
+    });
+  }
+
+  if(!sessionOrders.length){
+    toast('لا توجد طلبات للمحاسبة');
+    return;
+  }
+
+  // ترتيب زي ورقة التوصيل: Express أولاً، بعدين Normal مرتبة بالمنطقة
+  const express = sessionOrders.filter(o=>isSameDay(o));
+  const normal = sessionOrders.filter(o=>!isSameDay(o));
+
+  // ترتيب Normal: zones الخاصة بالمندوب أولاً (بنفس ترتيبها)، بعدين الباقي، "أخري" في الآخر
+  const courierZones = (c.zone||'').split(/[،,\/\-–\n]+/).map(z=>z.trim()).filter(z=>z.length>1);
+  const zonesMap = {};
+  normal.forEach(o=>{
+    const z = o.assignedZone || getOrderZoneForCourier(o,c) || 'أخري';
+    if(!zonesMap[z]) zonesMap[z] = [];
+    zonesMap[z].push(o);
+  });
+  const zoneKeys = Object.keys(zonesMap);
+  const sortedZones = [
+    ...courierZones.filter(z=>zoneKeys.includes(z)),
+    ...zoneKeys.filter(z=>!courierZones.includes(z)&&z!=='أخري').sort((a,b)=>a.localeCompare(b,'ar')),
+    ...zoneKeys.filter(z=>z==='أخري'),
+  ];
+  const normalSorted = sortedZones.flatMap(z=>zonesMap[z]||[]);
+
+  sessionOrders = [...express, ...normalSorted];
+
+  _courierAccSession = {
+    courierId: cId,
+    courierName: c.name,
+    orders: sessionOrders,
+    index: 0,
+    updates: {} // { orderId: {status, paid} }
+  };
+
+  renderCourierAccSession();
+}
+
+function renderCourierAccSession(){
+  const s = _courierAccSession;
+  if(!s) return;
+
+  // حدّث الـ overlay
+  let ov = document.getElementById('courier-acc-overlay');
+  if(!ov){
+    ov = document.createElement('div');
+    ov.id = 'courier-acc-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99990;display:flex;align-items:center;justify-content:center;padding:20px';
+    document.body.appendChild(ov);
+  }
+
+  const o = s.orders[s.index];
+  const isDone = s.index >= s.orders.length;
+
+  if(isDone){
+    // صفحة التلخيص النهائية
+    const rows = s.orders.map(o=>{
+      const u = s.updates[o.id] || {};
+      const status = u.status || o.status;
+      const paid = u.paid !== undefined ? u.paid : o.paid;
+      const statusLabel = status==='مكتمل'?'✅ تم التسليم':status==='ملغي'?'❌ ملغي':'⏳ لسا';
+      const statusColor = status==='مكتمل'?'#16a34a':status==='ملغي'?'#dc2626':'#d97706';
+      return `<tr>
+        <td><strong>${o.id}</strong></td>
+        <td>${o.name}</td>
+        <td>${paid?'<span style="color:#16a34a">💳 مدفوع</span>':(o.total||0).toLocaleString()+' ج'}</td>
+        <td style="color:${statusColor};font-weight:700">${statusLabel}</td>
+      </tr>`;
+    }).join('');
+
+    const delivered = s.orders.filter(o=>(s.updates[o.id]?.status||o.status)==='مكتمل');
+    const cancelled = s.orders.filter(o=>(s.updates[o.id]?.status||o.status)==='ملغي');
+    const pending = s.orders.filter(o=>{
+      const st=s.updates[o.id]?.status||o.status;
+      return st!=='مكتمل'&&st!=='ملغي';
+    });
+    const codTotal = delivered.filter(o=>!(s.updates[o.id]?.paid!==undefined?s.updates[o.id].paid:o.paid)).reduce((sum,o)=>sum+(o.total||0),0);
+
+    ov.innerHTML = `
+      <div style="background:var(--card);border-radius:20px;width:min(720px,96vw);max-height:90vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,.4)">
+        <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:18px;font-weight:800">📊 ملخص جلسة المحاسبة</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:3px">${s.courierName} — ${s.orders.length} طلب</div>
+          </div>
+          <button onclick="closeCourierAccSession()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
+        </div>
+        <div style="padding:20px">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+            <div style="background:#dcfce7;border-radius:10px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:#16a34a">${delivered.length}</div><div style="font-size:11px;color:#166534">✅ تم التسليم</div></div>
+            <div style="background:#fee2e2;border-radius:10px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:#dc2626">${cancelled.length}</div><div style="font-size:11px;color:#991b1b">❌ ملغي</div></div>
+            <div style="background:#fef3c7;border-radius:10px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:#d97706">${pending.length}</div><div style="font-size:11px;color:#92400e">⏳ لسا</div></div>
+            <div style="background:var(--accent-light);border-radius:10px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:800;color:var(--accent)">${codTotal.toLocaleString()} ج</div><div style="font-size:11px;color:var(--accent)">💰 COD محصّل</div></div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:var(--bg)"><th style="padding:7px;text-align:right">رقم</th><th style="padding:7px;text-align:right">العميل</th><th style="padding:7px;text-align:right">COD</th><th style="padding:7px;text-align:right">الحالة</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end">
+            <button class="btn btn-ghost" onclick="_courierAccSession.index=0;renderCourierAccSession()">↩ رجوع للمراجعة</button>
+            <button class="btn btn-primary" onclick="commitCourierAccSession()">💾 حفظ وبدء التسوية</button>
+          </div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // صفحة الطلب الحالي
+  const u = s.updates[o.id] || {};
+  const currentStatus = u.status || o.status;
+  const currentPaid = u.paid !== undefined ? u.paid : o.paid;
+  const pct = Math.round((s.index / s.orders.length) * 100);
+
+  ov.innerHTML = `
+    <div style="background:var(--card);border-radius:20px;width:min(560px,96vw);box-shadow:0 25px 60px rgba(0,0,0,.4)">
+      <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:16px;font-weight:800">🧾 محاسبة ${s.courierName}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">طلب ${s.index+1} من ${s.orders.length}${isSameDay(o)?' ⚡':''}</div>
+        </div>
+        <button onclick="closeCourierAccSession()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
+      </div>
+      <div style="height:4px;background:var(--bg)"><div style="height:100%;background:var(--accent);width:${pct}%;transition:width .3s"></div></div>
+      <div style="padding:22px">
+        <div style="background:var(--bg);border-radius:12px;padding:16px;margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:10px">
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:3px">رقم الطلب</div>
+              <div style="font-size:18px;font-weight:800;color:var(--accent)">${o.id}</div>
+            </div>
+            <div style="text-align:left">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:3px">COD</div>
+              <div style="font-size:18px;font-weight:800;color:${currentPaid?'#16a34a':'var(--text)'}">${currentPaid?'مدفوع':(o.total||0).toLocaleString()+' ج'}</div>
+            </div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:10px">
+            <div style="font-size:13px;font-weight:700">${o.name}</div>
+            <div style="font-size:12px;color:var(--muted);direction:ltr;text-align:right;margin-top:2px">${o.phone||''}</div>
+            <div style="font-size:12px;margin-top:4px">📍 ${o.area||''}</div>
+            ${o.addr?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${o.addr}</div>`:''}
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+          <button onclick="courierAccMark('مكتمل')" style="padding:14px 8px;border-radius:12px;border:2px solid ${currentStatus==='مكتمل'?'#16a34a':'var(--border)'};background:${currentStatus==='مكتمل'?'#dcfce7':'var(--card)'};color:${currentStatus==='مكتمل'?'#16a34a':'var(--text)'};font-family:Cairo,sans-serif;font-weight:700;font-size:14px;cursor:pointer">✅ تم التسليم</button>
+          <button onclick="courierAccMark('جاري التوصيل')" style="padding:14px 8px;border-radius:12px;border:2px solid ${currentStatus==='جاري التوصيل'?'#d97706':'var(--border)'};background:${currentStatus==='جاري التوصيل'?'#fef3c7':'var(--card)'};color:${currentStatus==='جاري التوصيل'?'#d97706':'var(--text)'};font-family:Cairo,sans-serif;font-weight:700;font-size:14px;cursor:pointer">⏳ لسا</button>
+          <button onclick="courierAccMark('ملغي')" style="padding:14px 8px;border-radius:12px;border:2px solid ${currentStatus==='ملغي'?'#dc2626':'var(--border)'};background:${currentStatus==='ملغي'?'#fee2e2':'var(--card)'};color:${currentStatus==='ملغي'?'#dc2626':'var(--text)'};font-family:Cairo,sans-serif;font-weight:700;font-size:14px;cursor:pointer">❌ ملغي</button>
+        </div>
+
+        ${!currentPaid && currentStatus==='مكتمل' ? `
+          <button onclick="courierAccTogglePaid()" style="width:100%;padding:10px;border-radius:10px;border:1px dashed var(--accent);background:var(--accent-light);color:var(--accent);font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer;margin-bottom:10px">💳 تحويل لمدفوع (لا تحصيل)</button>
+        ` : currentPaid ? `
+          <button onclick="courierAccTogglePaid()" style="width:100%;padding:8px;border-radius:10px;border:1px solid #16a34a;background:#dcfce7;color:#166534;font-family:Cairo,sans-serif;font-weight:700;font-size:12px;cursor:pointer;margin-bottom:10px">💳 مدفوع — اضغط للإلغاء</button>
+        ` : ''}
+
+        <div style="display:flex;gap:8px;justify-content:space-between">
+          <button onclick="courierAccPrev()" ${s.index===0?'disabled':''} style="padding:10px 18px;border-radius:10px;border:1px solid var(--border);background:var(--card);font-family:Cairo,sans-serif;font-size:13px;cursor:${s.index===0?'not-allowed':'pointer'};opacity:${s.index===0?'.4':'1'}">← السابق</button>
+          <button onclick="courierAccNext()" style="padding:10px 22px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer">${s.index===s.orders.length-1?'عرض الملخص →':'التالي →'}</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function courierAccMark(status){
+  const s = _courierAccSession;
+  if(!s) return;
+  const o = s.orders[s.index];
+  s.updates[o.id] = {...(s.updates[o.id]||{}), status};
+  renderCourierAccSession();
+}
+
+function courierAccTogglePaid(){
+  const s = _courierAccSession;
+  if(!s) return;
+  const o = s.orders[s.index];
+  const cur = s.updates[o.id] || {};
+  const currentPaid = cur.paid !== undefined ? cur.paid : o.paid;
+  s.updates[o.id] = {...cur, paid: !currentPaid};
+  renderCourierAccSession();
+}
+
+function courierAccNext(){
+  const s = _courierAccSession; if(!s) return;
+  if(s.index < s.orders.length) s.index++;
+  renderCourierAccSession();
+}
+
+function courierAccPrev(){
+  const s = _courierAccSession; if(!s) return;
+  if(s.index > 0) s.index--;
+  renderCourierAccSession();
+}
+
+function closeCourierAccSession(){
+  const ov = document.getElementById('courier-acc-overlay');
+  if(ov) ov.remove();
+  _courierAccSession = null;
+}
+
+async function commitCourierAccSession(){
+  const s = _courierAccSession; if(!s) return;
+  let applied = 0;
+  for(const ord of s.orders){
+    const u = s.updates[ord.id];
+    if(!u) continue;
+    const patch = {};
+    if(u.status && u.status !== ord.status){ ord.status = u.status; patch.status = u.status; }
+    if(u.paid !== undefined && u.paid !== ord.paid){ ord.paid = u.paid; patch.paid = u.paid; }
+    if(Object.keys(patch).length){
+      applied++;
+      if(API_URL) apiFetch('/api/orders/'+ord.id,'PATCH',patch).catch(()=>{});
+    }
+    // حول الطلبات المكتملة لـ "تحت التسوية" عشان تدخل جلسة التسوية
+    if(ord.status === 'مكتمل'){
+      ord.status = 'تحت التسوية';
+      if(API_URL) apiFetch('/api/orders/'+ord.id,'PATCH',{status:'تحت التسوية'}).catch(()=>{});
+    }
+  }
+  debouncedSaveOrders();
+  const cId = s.courierId;
+  closeCourierAccSession();
+  toast('✅ تم حفظ '+applied+' تغيير — افتح شاشة التسوية');
+  renderAcc();
+  setTimeout(()=>openSettle(cId), 400);
+}
+
+async function startSettleSession(cId){
+  const c = couriers.find(x=>x.id==cId);
+  if(!c) return;
+  const active = oByC(cId,'جاري التوصيل');
+  if(!active.length){ toast('لا توجد طلبات شغالة'); return; }
+  if(!confirm('بدء جلسة تسوية لـ '+c.name+'؟\n\nهذا سيحول '+active.length+' طلب نشط إلى "تحت التسوية" ويفتح شاشة التسوية.')) return;
+  for(const o of active){
+    o.status = 'تحت التسوية';
+    if(API_URL) apiFetch('/api/orders/'+o.id,'PATCH',{status:'تحت التسوية'}).catch(()=>{});
+  }
+  debouncedSaveOrders();
+  toast('✅ تم بدء جلسة تسوية — '+active.length+' طلب');
+  renderAcc();
+  setTimeout(()=>openSettle(cId), 300);
+}
+
 function openSettle(cId){
   settlingCourierId = cId;
   const c = couriers.find(x=>x.id==cId);
@@ -4860,12 +5132,14 @@ async function doSettle(){
   renderAcc();
   toast('✅ تمت تسوية '+c.name+' — '+pending.length+' طلب');
   const _net = cod - ship + adjTotal;
+  // طباعة
   setTimeout(()=>{
     if(confirm('هل تريد طباعة ورقة تسوية '+c.name+'؟')) printCurrentSettle();
-    if(_treasuries.length && _net > 0){
-      setTimeout(()=>openSettleToTreasury(c.name, _net, now), 400);
-    }
   },300);
+  // ربط الخزنة
+  if(_treasuries.length && _net > 0){
+    setTimeout(()=>openSettleToTreasury(c.name, _net, now), 800);
+  }
 }
 
 function openSettleToTreasury(courierName, net, ts){
@@ -4908,9 +5182,9 @@ function confirmSettleToTreasury(dateStr){
   if(!tId||!amount){ toast('❗ اختر الخزنة والمبلغ'); return; }
   const tx = {id:Date.now()+'_tx', treasuryId:tId, type:'in', amount, reason, date:dateStr};
   _treasuryTx.push(tx);
-  saveChks(false); // حفظ محلي
   if(API_URL) apiFetch('/api/treasury-tx','POST',tx).catch(()=>{});
   document.getElementById('settle-treasury-popup')?.remove();
+  if(_activeTreasuryId===tId) renderTreasuryTxList(tId);
   toast('✅ تم إضافة '+amount.toLocaleString()+' ج للخزنة');
 }
 
@@ -5402,6 +5676,7 @@ window.addEventListener('load', function(){
       await loadSettlements();
       loadOrders();
       loadChks();
+      loadTreasury();
       checkExpiryAlerts();
     });
   } else {
@@ -6356,9 +6631,6 @@ function exportBostaExcel(){
     return (parts[0]||'').trim().slice(0,50);
   }
 
-  const headerRow1=['معلومات العميل','','','','','','','','','','','معلومات الاوردر','','','','','','','','','معلومات الشحنة المرتجة في حالة التبديل فقط','','','نوع الشحنة'];
-  const headerRow2=['* اسم العميل','* تليفون','تليفون ثاني','* المدينة','المنطقة','* العنوان','علامة مميزة','عنوان عمل؟','رابط المكان','ملاحظات','','قيمة التحصيل النقدي','عدد القطع','وصف الشحنة','مرجع الطلب','قيمة الشحنة','الدفع بواسطة نقاط بوسطة؟','تطبيق رسوم Flexship','هل تسمح بفتح الشحنة؟','','عدد قطع المرتجع','وصف الشحنة المرتجعة','','نوع الشحنة'];
-
   const dataRows=selectedOrders.map(o=>{
     const area=o.area||'';
     const addr=((o.addr||area)+(o.addr2?' '+o.addr2:'')).replace(/\n/g,' ').slice(0,200);
@@ -6401,29 +6673,64 @@ function exportBostaExcel(){
     ];
   });
 
-  const wsData=[headerRow2,...dataRows];
-  const ws=XLSX.utils.aoa_to_sheet(wsData);
-  ws['!cols']=[{wch:25},{wch:15},{wch:15},{wch:20},{wch:20},{wch:40},{wch:15},{wch:10},{wch:15},{wch:40},{wch:5},{wch:18},{wch:10},{wch:60},{wch:15},{wch:12},{wch:12},{wch:12},{wch:12},{wch:5},{wch:12},{wch:20},{wch:5},{wch:15}];
-  ws['!merges']=[];
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,'Add orders here');
-  const now=new Date();
-  const fname='Bosta_'+now.toLocaleDateString('en-GB').replace(/[/]/g,'-')+'_'+checked.length+'_orders.xlsx';
-  XLSX.writeFile(wb,fname);
+  // استخدم تمبلت بوسطة الأصلي من الـ backend لو متاح
+  const templateUrl = (API_URL||BACKEND_URL||'').replace(/\/$/,'') + '/bosta-template.xlsx';
+  const fallbackExport = () => {
+    // fallback — تصدير بسيط
+    const headerRow2=['* اسم العميل','* تليفون','تليفون ثاني','* المدينة','المنطقة','* العنوان','علامة مميزة','عنوان عمل؟','رابط المكان','ملاحظات','','قيمة التحصيل النقدي','عدد القطع','وصف الشحنة','مرجع الطلب','قيمة الشحنة','الدفع بواسطة نقاط بوسطة؟','تطبيق رسوم Flexship','هل تسمح بفتح الشحنة؟','','عدد قطع المرتجع','وصف الشحنة المرتجعة','','نوع الشحنة'];
+    const wsData=[headerRow2,...dataRows];
+    const ws=XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols']=[{wch:25},{wch:15},{wch:15},{wch:20},{wch:20},{wch:40},{wch:15},{wch:10},{wch:15},{wch:40},{wch:5},{wch:18},{wch:10},{wch:60},{wch:15},{wch:12},{wch:12},{wch:12},{wch:12},{wch:5},{wch:12},{wch:20},{wch:5},{wch:15}];
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Add orders here');
+    const fname='Bosta_'+new Date().toLocaleDateString('en-GB').replace(/[/]/g,'-')+'_'+checked.length+'_orders.xlsx';
+    XLSX.writeFile(wb,fname);
+  };
 
-  selectedOrders.forEach(o=>{
-    o.bostaExported=true;
-    if(API_URL) apiFetch('/api/orders/'+o.id,'PATCH',{bostaExported:true}).catch(()=>{});
-  });
-  try{
-    const expIds=JSON.parse(localStorage.getItem('bosta_exported_ids')||'{}');
-    selectedOrders.forEach(o=>expIds[o.id]=true);
-    localStorage.setItem('bosta_exported_ids',JSON.stringify(expIds));
-    localStorage.setItem('orderpro_orders',JSON.stringify(orders));
-  }catch(e){}
+  const useTemplate = async () => {
+    try{
+      const resp = await fetch(templateUrl);
+      if(!resp.ok) throw new Error('template not found');
+      const buf = await resp.arrayBuffer();
+      const wb = XLSX.read(buf, {type:'array', cellStyles:true});
 
-  refreshAll();
-  toast('✅ تم تصدير '+checked.length+' طلب — انتقلوا لـ "تم التصدير"');
+      // اكتب في شيت "Add orders here" - الأعمدة موجودة بالفعل في الـ template
+      // Headers موجودين في الصف 1-2. نبدأ البيانات من الصف 3
+      const sheetName = 'Add orders here';
+      if(!wb.Sheets[sheetName]){
+        console.warn('Template sheet not found, using fallback');
+        return fallbackExport();
+      }
+      const ws = wb.Sheets[sheetName];
+
+      // اكتب البيانات ابتداءً من الصف 3 (A3)
+      XLSX.utils.sheet_add_aoa(ws, dataRows, {origin: 'A3'});
+
+      // احفظ الملف — xlsx-js-style لازم عشان نحفظ الـ styles
+      const fname='Bosta_'+new Date().toLocaleDateString('en-GB').replace(/[/]/g,'-')+'_'+checked.length+'_orders.xlsx';
+      XLSX.writeFile(wb, fname, {cellStyles:true, bookType:'xlsx'});
+      toast('✅ تم التصدير باستخدام تمبلت بوسطة الرسمي');
+    } catch(e){
+      console.warn('Template fetch failed, using fallback:', e);
+      toast('⚠️ تعذر تحميل التمبلت من السيرفر — تم التصدير بتنسيق أساسي');
+      fallbackExport();
+    }
+
+    selectedOrders.forEach(o=>{
+      o.bostaExported=true;
+      if(API_URL) apiFetch('/api/orders/'+o.id,'PATCH',{bostaExported:true}).catch(()=>{});
+    });
+    try{
+      const expIds=JSON.parse(localStorage.getItem('bosta_exported_ids')||'{}');
+      selectedOrders.forEach(o=>expIds[o.id]=true);
+      localStorage.setItem('bosta_exported_ids',JSON.stringify(expIds));
+      localStorage.setItem('orderpro_orders',JSON.stringify(orders));
+    }catch(e){}
+    refreshAll();
+    toast('✅ تم تصدير '+checked.length+' طلب — انتقلوا لـ "تم التصدير"');
+  };
+
+  useTemplate();
 }
 
 function undoBostaExport(id){
