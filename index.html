@@ -2908,21 +2908,45 @@ async function printPackingSlipLegacy(orderId){
 async function shopifyFulfill(order, courierName){
   const shopUrl = localStorage.getItem('orderpro_shop_url');
   const accessToken = localStorage.getItem('orderpro_shop_token');
-  if(!shopUrl || !accessToken) return;
-  if(order.src !== 'shopify') return;
+  if(!shopUrl || !accessToken){
+    console.warn('Shopify fulfill: missing credentials');
+    return;
+  }
+  if(order.src !== 'shopify'){
+    console.log('Shopify fulfill: not a shopify order');
+    return;
+  }
   const shopifyOrderId = order.shopifyId || order.shopify_id;
-  if(!shopifyOrderId) return;
-  if(!API_URL) return;
+  if(!shopifyOrderId){
+    console.warn('Shopify fulfill: missing shopifyId');
+    return;
+  }
+  if(!API_URL){
+    console.warn('Shopify fulfill: API_URL not configured');
+    return;
+  }
   try{
+    console.log('Calling shopify/assign for order:', order.id, 'courier:', courierName);
     const r = await apiFetch('/api/shopify/assign','POST',{
       shopUrl, accessToken,
       shopifyOrderId: String(shopifyOrderId),
       courierName: courierName || 'OrderPro',
       orderId: order.id,
     });
-    if(r && r.success) toast('🟢 تم تحديث Shopify');
-    else if(r && r.errors && r.errors.length) console.warn('Shopify:', r.errors.join(' | '));
-  }catch(e){ console.warn('shopifyFulfill:', e.message); }
+    console.log('Shopify assign response:', r);
+    if(r && r.success){
+      toast('🟢 تم تحديث Shopify');
+    } else if(r && r.errors && r.errors.length){
+      console.warn('Shopify errors:', r.errors.join(' | '));
+      toast('⚠️ Shopify: ' + r.errors[0].slice(0,50));
+    } else if(r && r.error){
+      console.warn('Shopify error:', r.error);
+      toast('⚠️ ' + r.error);
+    }
+  }catch(e){
+    console.error('shopifyFulfill exception:', e);
+    toast('❌ خطأ في تحديث Shopify: ' + e.message);
+  }
 }
 
 async function selCAndConfirm(id){
