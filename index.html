@@ -283,6 +283,7 @@ tr:hover td{background:#fafbff}
     <div class="ni" data-p="pickup" onclick="goPage(this,'pickup')"><span class="ni-icon">🏪</span><span class="ni-label">استلام من المحل</span><span class="nbadge" id="nb-pickup" style="background:var(--purple)">0</span></div>
     <div class="ni" data-p="transit" onclick="goPage(this,'transit')"><span class="ni-icon">🏭</span><span class="ni-label">مخزن العبور</span><span class="nbadge" id="nb-transit" style="background:var(--warn)">0</span></div>
     <div class="ni" data-p="bosta" onclick="goPage(this,'bosta')"><span class="ni-icon">🚚</span><span class="ni-label">بوسطة</span><span class="nbadge" id="nb-bosta" style="background:#6366f1">0</span></div>
+    <div class="ni" data-p="bosta-exported" onclick="goPage(this,'bosta-exported')"><span class="ni-icon">📤</span><span class="ni-label">مصدّرة</span><span class="nbadge" id="nb-bosta-exp" style="background:#f59e0b"></span></div>
     <div class="ni" data-p="courier-orders" onclick="goPage(this,'courier-orders')"><span class="ni-icon">🧑</span><span class="ni-label">طلبات المناديب</span></div>
     <div class="ni" data-p="delivery-sheet" onclick="goPage(this,'delivery-sheet')"><span class="ni-icon">🖨️</span><span class="ni-label">ورقة التوصيل</span></div>
     <div class="ni" data-p="import-excel" onclick="goPage(this,'import-excel')"><span class="ni-icon">📥</span><span class="ni-label">استيراد Excel</span></div>
@@ -544,6 +545,62 @@ tr:hover td{background:#fafbff}
     <div class="page" id="page-courier-orders">
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center" id="courier-tabs"></div>
     <div id="courier-orders-content"></div>
+  </div>
+
+  <!-- BOSTA EXPORTED ORDERS PAGE -->
+  <div class="page" id="page-bosta-exported">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <h3 style="margin:0">📤 الطلبات المصدّرة لبوسطة</h3>
+      <span id="bosta-exp-badge" style="background:var(--warn-light);color:#92400e;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700">0</span>
+    </div>
+
+    <!-- Stats Cards -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+      <div class="sc gray">
+        <div class="sc-label">إجمالي المصدّر</div>
+        <div class="sc-val" id="bosta-exp-total">0</div>
+      </div>
+      <div class="sc amber">
+        <div class="sc-label">قيمة COD</div>
+        <div class="sc-val" id="bosta-exp-cod">0 ج</div>
+      </div>
+      <div class="sc blue">
+        <div class="sc-label">محافظات</div>
+        <div class="sc-val" id="bosta-exp-govs">0</div>
+      </div>
+      <div class="sc purple">
+        <div class="sc-label">أقدم تصدير</div>
+        <div class="sc-val" id="bosta-exp-oldest">—</div>
+      </div>
+    </div>
+
+    <!-- Action Bar -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="bosta-exp-search" placeholder="🔍 ابحث برقم الطلب/العميل/الهاتف" style="flex:1;min-width:240px" oninput="renderBostaExportedPage()"/>
+      <span id="bosta-exp-sel-info" style="font-size:12px;color:var(--muted)"></span>
+      <button class="btn btn-sm" style="background:var(--warn-light);color:#92400e;border-color:#fcd34d;display:none" id="bosta-exp-undo-btn" onclick="bulkUndoBostaExport()">↩ إلغاء التصدير للمحدد</button>
+      <button class="btn btn-ghost btn-sm" onclick="reExportBostaExcel()">📥 إعادة تنزيل Excel</button>
+    </div>
+
+    <!-- Table -->
+    <div class="tw">
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align:center;width:32px"><input type="checkbox" id="bosta-exp-all" onchange="toggleAllBostaExp()"/></th>
+            <th>رقم الطلب</th>
+            <th>العميل</th>
+            <th>الهاتف</th>
+            <th>المنطقة</th>
+            <th>المبلغ</th>
+            <th>تاريخ التصدير</th>
+            <th>إجراءات</th>
+          </tr>
+        </thead>
+        <tbody id="bosta-exp-tbody"></tbody>
+      </table>
+    </div>
+    <div id="bosta-exp-pagination" style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;padding:14px 10px;margin-top:8px;border-top:1px solid var(--border)"></div>
   </div>
 
   <!-- DELIVERY SHEET -->
@@ -3699,6 +3756,171 @@ function updateBostaBulkBtn(){
   $('bosta-bulk-btn').style.display=n?'inline-block':'none';
   if($('bosta-export-btn'))$('bosta-export-btn').style.display=n?'inline-block':'none';
   if(n) $('bosta-bulk-btn').textContent='🚀 رفع '+n+' طلب على بوسطة';
+}
+
+function bostaSetFilter(f, btn){
+  window.bostaFilter=f;
+  document.querySelectorAll('#bosta-filter-sent,#bosta-filter-pending,#bosta-filter-exported').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  renderBostaPage();
+}
+
+// ===== BOSTA EXPORTED PAGE =====
+let bostaExpPage = 1;
+const BOSTA_EXP_PAGE_SIZE = 100;
+
+function renderBostaExportedPage(){
+  // الطلبات: مصدّرة + مش مرفوعة + مش ملغية
+  const searchQ = ($('bosta-exp-search')||{}).value||'';
+  let list = orders.filter(o => o && (o.isBosta || String(o.courierId)==='bosta') && !o.bostaId && o.bostaExported && o.status!=='ملغي');
+  if(searchQ) list = list.filter(o => (o.id+o.name+o.phone+(o.area||'')).includes(searchQ));
+
+  // Stats
+  const total = list.length;
+  const cod = list.filter(o=>!o.paid).reduce((s,o)=>s+(o.total||0),0);
+  const govs = [...new Set(list.map(o=>o.area))].filter(Boolean).length;
+
+  // أقدم تصدير
+  const exportDates = list.map(o=>o.bostaExportedAt).filter(Boolean);
+  const oldest = exportDates.length ? new Date(Math.min(...exportDates.map(d=>new Date(d)))) : null;
+  const oldestStr = oldest ? formatRelativeTime(oldest) : '—';
+
+  $('bosta-exp-total').textContent = total;
+  $('bosta-exp-cod').textContent = cod.toLocaleString() + ' ج';
+  $('bosta-exp-govs').textContent = govs;
+  $('bosta-exp-oldest').textContent = oldestStr;
+  $('bosta-exp-badge').textContent = total || '';
+
+  // badge عداد في sidebar
+  if($('nb-bosta-exp')) $('nb-bosta-exp').textContent = total || '';
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(total / BOSTA_EXP_PAGE_SIZE));
+  if(bostaExpPage > totalPages) bostaExpPage = totalPages;
+  if(bostaExpPage < 1) bostaExpPage = 1;
+  const startIdx = (bostaExpPage - 1) * BOSTA_EXP_PAGE_SIZE;
+  const endIdx = startIdx + BOSTA_EXP_PAGE_SIZE;
+  const pageList = list.slice(startIdx, endIdx);
+
+  // Table
+  $('bosta-exp-tbody').innerHTML = pageList.length ? pageList.map(o => {
+    const exportDate = o.bostaExportedAt ? formatRelativeTime(new Date(o.bostaExportedAt)) : 'منذ فترة';
+    return `<tr>
+      <td style="text-align:center"><input type="checkbox" class="bosta-exp-chk" value="${o.id}" onchange="updateBostaExpBtns()"/></td>
+      <td><strong>${o.id}</strong><br>${deliveryBadge(o)}</td>
+      <td><strong>${o.name}</strong></td>
+      <td style="direction:ltr;text-align:right;font-size:11px">${o.phone||'—'}</td>
+      <td><span style="background:var(--info-light);color:#1e3a5f;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">${o.area}</span></td>
+      <td><strong>${o.total.toLocaleString()} ج</strong><br>${o.paid?'<span style="font-size:10px;color:var(--success)">مدفوع</span>':'<span style="font-size:10px;color:var(--warn)">COD</span>'}</td>
+      <td style="color:var(--muted);font-size:12px">${exportDate}</td>
+      <td>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="openEditOrder('${o.id}')">✏️</button>
+          <button class="btn btn-ghost btn-xs" style="color:#64748b;border-color:#64748b;font-size:10px" onclick="openOrderHistory('${o.id}')" title="تاريخ">📋</button>
+          <button class="btn btn-ghost btn-xs" style="color:#6366f1;border-color:#6366f1" onclick="printPackingSlip('${o.id}')" title="فاتورة">🧾</button>
+          <button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="undoBostaExport('${o.id}')">↩ إلغاء</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--muted)">لا توجد طلبات مصدّرة 📭</td></tr>';
+
+  // Pagination render
+  renderBostaExpPagination(total, totalPages);
+}
+
+function renderBostaExpPagination(totalCount, totalPages){
+  const el = $('bosta-exp-pagination');
+  if(!el) return;
+  if(totalPages <= 1){
+    el.innerHTML = totalCount ? `<span style="color:var(--muted);font-size:12px">${totalCount} طلب</span>` : '';
+    return;
+  }
+  const startIdx = (bostaExpPage - 1) * BOSTA_EXP_PAGE_SIZE;
+  const endIdx = Math.min(startIdx + BOSTA_EXP_PAGE_SIZE, totalCount);
+
+  const pages = [];
+  if(totalPages <= 7){
+    for(let i=1; i<=totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if(bostaExpPage > 3) pages.push('...');
+    for(let i=Math.max(2, bostaExpPage-1); i<=Math.min(totalPages-1, bostaExpPage+1); i++) pages.push(i);
+    if(bostaExpPage < totalPages-2) pages.push('...');
+    pages.push(totalPages);
+  }
+
+  const btn = (page, label, disabled) => {
+    const active = page === bostaExpPage;
+    const style = active
+      ? 'background:var(--accent);color:#fff;border:1px solid var(--accent);font-weight:800'
+      : disabled
+        ? 'background:transparent;color:var(--muted);border:1px solid var(--border);cursor:not-allowed;opacity:.5'
+        : 'background:var(--card);color:var(--text);border:1px solid var(--border);cursor:pointer';
+    return `<button ${disabled?'disabled':''} onclick="goToBostaExpPage(${page})" style="${style};padding:6px 12px;border-radius:6px;font-family:Cairo,sans-serif;font-size:12px;min-width:34px">${label}</button>`;
+  };
+
+  const parts = [];
+  parts.push(`<span style="color:var(--muted);font-size:12px;margin-left:12px">${startIdx+1}-${endIdx} من ${totalCount}</span>`);
+  parts.push(btn(bostaExpPage-1, '←', bostaExpPage<=1));
+  pages.forEach(p => {
+    if(p === '...') parts.push('<span style="color:var(--muted);padding:0 4px">...</span>');
+    else parts.push(btn(p, String(p), false));
+  });
+  parts.push(btn(bostaExpPage+1, '→', bostaExpPage>=totalPages));
+
+  el.innerHTML = parts.join('');
+}
+
+function goToBostaExpPage(p){
+  bostaExpPage = p;
+  renderBostaExportedPage();
+  const t = $('bosta-exp-tbody');
+  if(t) t.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function toggleAllBostaExp(){
+  const all = document.querySelectorAll('.bosta-exp-chk');
+  const checked = $('bosta-exp-all').checked;
+  all.forEach(c => c.checked = checked);
+  updateBostaExpBtns();
+}
+
+function updateBostaExpBtns(){
+  const checked = [...document.querySelectorAll('.bosta-exp-chk:checked')];
+  const n = checked.length;
+  const info = $('bosta-exp-sel-info');
+  if(info) info.textContent = n ? n + ' محدد' : '';
+  const undoBtn = $('bosta-exp-undo-btn');
+  if(undoBtn) undoBtn.style.display = n ? 'inline-block' : 'none';
+}
+
+function bulkUndoBostaExport(){
+  const checked = [...document.querySelectorAll('.bosta-exp-chk:checked')].map(c=>c.value);
+  if(!checked.length){ toast('❗ اختر طلبات أولاً'); return; }
+  if(!confirm(`إلغاء تصدير ${checked.length} طلب؟`)) return;
+  checked.forEach(id => undoBostaExport(id));
+  renderBostaExportedPage();
+}
+
+function reExportBostaExcel(){
+  // نفس الطلبات المصدّرة
+  const list = orders.filter(o => o && (o.isBosta || String(o.courierId)==='bosta') && !o.bostaId && o.bostaExported && o.status!=='ملغي');
+  if(!list.length){ toast('❗ لا توجد طلبات مصدّرة'); return; }
+  exportBostaExcel(list.map(o=>o.id));
+}
+
+function formatRelativeTime(date){
+  const now = Date.now();
+  const diff = now - date;
+  const mins = Math.floor(diff / 60000);
+  const hrs = Math.floor(mins / 60);
+  const days = Math.floor(hrs / 24);
+  if(mins < 1) return 'الآن';
+  if(mins < 60) return `منذ ${mins} دقيقة`;
+  if(hrs < 24) return `منذ ${hrs} ساعة${hrs>1?'':''}`;
+  if(days === 1) return 'أمس';
+  if(days < 7) return `منذ ${days} أيام`;
+  return date.toLocaleDateString('ar-EG');
 }
 
 function bostaSetFilter(f, btn){
@@ -7927,7 +8149,8 @@ function exportBostaExcel(){
 
     selectedOrders.forEach(o=>{
       o.bostaExported=true;
-      if(API_URL) apiFetch('/api/orders/'+o.id,'PATCH',{bostaExported:true}).catch(()=>{});
+      o.bostaExportedAt=new Date().toISOString();
+      if(API_URL) apiFetch('/api/orders/'+o.id,'PATCH',{bostaExported:true, bostaExportedAt:o.bostaExportedAt}).catch(()=>{});
     });
     try{
       const expIds=JSON.parse(localStorage.getItem('bosta_exported_ids')||'{}');
@@ -8298,6 +8521,7 @@ function refreshAll(){
     case 'pickup': renderPickupPage(); break;
     case 'transit': renderTransitPage(); break;
     case 'bosta': renderBostaPage(); break;
+    case 'bosta-exported': renderBostaExportedPage(); break;
     case 'shop-accounting': renderShopAccounting(); break;
     case 'checks': renderChecksPage(); break;
     case 'expiry': renderExpiryPage(); break;
