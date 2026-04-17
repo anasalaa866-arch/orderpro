@@ -2909,43 +2909,50 @@ async function shopifyFulfill(order, courierName){
   const shopUrl = localStorage.getItem('orderpro_shop_url');
   const accessToken = localStorage.getItem('orderpro_shop_token');
   if(!shopUrl || !accessToken){
-    console.warn('Shopify fulfill: missing credentials');
+    console.log('Shopify fulfill: missing credentials');
     return;
   }
-  if(order.src !== 'shopify'){
-    console.log('Shopify fulfill: not a shopify order');
-    return;
-  }
+  if(order.src !== 'shopify') return;
   const shopifyOrderId = order.shopifyId || order.shopify_id;
   if(!shopifyOrderId){
-    console.warn('Shopify fulfill: missing shopifyId');
+    console.log('Shopify fulfill: missing shopifyId');
     return;
   }
-  if(!API_URL){
-    console.warn('Shopify fulfill: API_URL not configured');
-    return;
-  }
+  if(!API_URL) return;
+
   try{
-    console.log('Calling shopify/assign for order:', order.id, 'courier:', courierName);
+    console.log('Calling shopify/assign:', order.id, '→', courierName);
     const r = await apiFetch('/api/shopify/assign','POST',{
       shopUrl, accessToken,
       shopifyOrderId: String(shopifyOrderId),
       courierName: courierName || 'OrderPro',
       orderId: order.id,
     });
-    console.log('Shopify assign response:', r);
+
+    // طباعة كل الـ logs من السيرفر للـ debugging
+    if(r && r.logs){
+      console.log('=== Shopify fulfill logs ===');
+      r.logs.forEach(l => console.log('  ', l));
+    }
+
     if(r && r.success){
-      toast('🟢 تم تحديث Shopify');
-    } else if(r && r.errors && r.errors.length){
-      console.warn('Shopify errors:', r.errors.join(' | '));
-      toast('⚠️ Shopify: ' + r.errors[0].slice(0,50));
-    } else if(r && r.error){
-      console.warn('Shopify error:', r.error);
-      toast('⚠️ ' + r.error);
+      toast('🟢 Shopify: تاج + fulfill ✅');
+    } else if(r){
+      // نجاح جزئي
+      if(r.tagSuccess && !r.fulfilled){
+        toast('⚠️ تاج اتضاف بس الـ fulfill فشل');
+      } else if(!r.tagSuccess && r.fulfilled){
+        toast('⚠️ fulfill تم بس التاج فشل');
+      } else {
+        toast('❌ Shopify: ' + (r.errors?.[0]?.slice(0,60) || 'فشل'));
+      }
+      if(r.errors && r.errors.length){
+        console.warn('Shopify errors:', r.errors);
+      }
     }
   }catch(e){
     console.error('shopifyFulfill exception:', e);
-    toast('❌ خطأ في تحديث Shopify: ' + e.message);
+    toast('❌ خطأ في الاتصال بـ Shopify');
   }
 }
 
