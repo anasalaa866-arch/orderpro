@@ -4625,28 +4625,129 @@ function previewChkImg(input){
 }
 function clearChkImg(){chkImgData='';$('chk-img-show').style.display='none';$('chk-img-placeholder').style.display='block';$('chk-img-input').value='';}
 function viewChkImg(id){const c=chkList.find(x=>x.id===id);if(!c||!c.img)return;$('chk-img-full').src=c.img;openM('m-chk-img');}
-function openCheckBook(){renderChkBooks();['bk-name','bk-bank','bk-account'].forEach(id=>$(id)&&($(id).value=''));$('bk-pages').value=48;openM('m-chk-books');}
+function openCheckBook(){
+  renderChkBooks();
+  ['bk-name','bk-bank','bk-account','bk-first-num','bk-last-num'].forEach(id=>$(id)&&($(id).value=''));
+  $('bk-pages').value=48;
+  openM('m-chk-books');
+}
 function saveChkBook(){
-  const name=$('bk-name').value.trim();if(!name){toast('❗ أدخل اسم الدفتر');return;}
-  const firstNum=parseInt($('bk-first-num')?.value)||1;
-  const b={id:Date.now()+'_bk',name,bank:$('bk-bank').value.trim(),account:$('bk-account').value.trim(),pages:parseInt($('bk-pages').value)||48,firstNum};
-  chkBooks.push(b);saveChks(true);if(API_URL)apiFetch('/api/check-books','POST',b).catch(()=>{});
-  renderChkBooks();toast('✅ تم إضافة الدفتر');['bk-name','bk-bank','bk-account'].forEach(id=>$(id)&&($(id).value=''));
+  const name=$('bk-name').value.trim();
+  if(!name){toast('❗ أدخل اسم الدفتر');return;}
+  const firstNumRaw = $('bk-first-num')?.value?.trim();
+  if(!firstNumRaw){ toast('❗ أدخل رقم أول شيك في الدفتر'); $('bk-first-num')?.focus(); return; }
+  const firstNum = parseInt(firstNumRaw);
+  if(!firstNum || firstNum < 1){ toast('❗ رقم أول شيك غير صحيح'); return; }
+  const pages = parseInt($('bk-pages').value)||48;
+  const lastNum = firstNum + pages - 1;
+  const b = {id:Date.now()+'_bk', name, bank:$('bk-bank').value.trim(), account:$('bk-account').value.trim(), pages, firstNum, lastNum};
+  chkBooks.push(b);
+  saveChks(true);
+  if(API_URL) apiFetch('/api/check-books','POST',b).catch(()=>{});
+  renderChkBooks();
+  toast('✅ تم إضافة الدفتر — الأرقام من '+firstNum+' إلى '+lastNum);
+  ['bk-name','bk-bank','bk-account','bk-first-num','bk-last-num'].forEach(id=>$(id)&&($(id).value=''));
+  $('bk-pages').value = 48;
 }
 function renderChkBooks(){
   const el=$('chk-books-list');if(!el)return;
   if(!chkBooks.length){el.innerHTML='<div style="text-align:center;color:var(--muted);padding:12px;font-size:13px">لا توجد دفاتر</div>';return;}
   el.innerHTML=chkBooks.map(b=>{
     const used=chkList.filter(c=>c.bookId===b.id).length,rem=Math.max(0,b.pages-used);
+    const first=b.firstNum||1, last=b.lastNum||(first+b.pages-1);
     return`<div style="display:flex;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;font-size:13px">
-      <div style="flex:1"><strong>${b.name}</strong>${b.bank?' — '+b.bank:''}</div>
+      <div style="flex:1">
+        <strong>${b.name}</strong>${b.bank?' — '+b.bank:''}
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">أرقام: ${first} إلى ${last}</div>
+      </div>
       <div style="text-align:center;min-width:60px"><div style="font-weight:700;color:${rem<5?'var(--danger)':rem<10?'var(--warn)':'var(--success)'}">${rem}</div><div style="font-size:10px;color:var(--muted)">من ${b.pages}</div></div>
-      <button class="btn btn-ghost btn-xs" style="color:var(--danger);margin-right:8px" onclick="deleteChkBook('${b.id}')">🗑️</button>
+      <button class="btn btn-ghost btn-xs" style="color:var(--accent);margin-right:8px" onclick="openEditChkBook('${b.id}')" title="تعديل">✏️</button>
+      <button class="btn btn-ghost btn-xs" style="color:var(--danger);margin-right:4px" onclick="deleteChkBook('${b.id}')" title="حذف">🗑️</button>
     </div>`;
   }).join('');
 }
+
+function openEditChkBook(id){
+  const b = chkBooks.find(x=>x.id===id);
+  if(!b){ toast('❗ الدفتر غير موجود'); return; }
+  const first = b.firstNum||1, last = b.lastNum||(first+b.pages-1);
+  const used = chkList.filter(c=>c.bookId===id).length;
+
+  // modal بسيط inline
+  const ov = document.createElement('div');
+  ov.id = 'edit-book-popup';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = `
+    <div style="background:var(--card);border-radius:16px;width:min(460px,94vw);box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:Cairo,sans-serif">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <div><div style="font-weight:800;font-size:15px">✏️ تعديل دفتر الشيكات</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${used} شيك محفوظ — الأرقام الحالية ${first} إلى ${last}</div></div>
+        <button onclick="document.getElementById('edit-book-popup').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
+      </div>
+      <div style="padding:18px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+          <div class="fg" style="margin:0"><label>اسم الدفتر *</label><input id="ebk-name" value="${b.name||''}"></div>
+          <div class="fg" style="margin:0"><label>البنك</label><input id="ebk-bank" value="${b.bank||''}"></div>
+          <div class="fg" style="margin:0"><label>رقم الحساب</label><input id="ebk-account" value="${b.account||''}"></div>
+          <div class="fg" style="margin:0"><label>عدد الأوراق</label><input id="ebk-pages" type="number" value="${b.pages||48}" min="1"></div>
+          <div class="fg" style="margin:0"><label>رقم أول شيك *</label><input id="ebk-first-num" type="number" value="${first}" min="1"></div>
+          <div class="fg" style="margin:0"><label>رقم آخر شيك</label><input id="ebk-last-num" type="number" value="${last}" readonly style="background:var(--bg);color:var(--muted)"></div>
+        </div>
+        ${used > 0 ? `<div style="background:#fef3c7;border:1px solid #fde047;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;margin-bottom:12px">⚠️ في ${used} شيك محفوظ على الدفتر ده. لو غيرت رقم أول شيك هتتأكد الأرقام متطابقة.</div>`: ''}
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-ghost" onclick="document.getElementById('edit-book-popup').remove()">إلغاء</button>
+          <button class="btn btn-primary" onclick="saveEditChkBook('${b.id}')">💾 حفظ التعديلات</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+
+  // auto update last num
+  const firstInput = document.getElementById('ebk-first-num');
+  const pagesInput = document.getElementById('ebk-pages');
+  const lastInput = document.getElementById('ebk-last-num');
+  const updateLast = () => {
+    const f = parseInt(firstInput.value)||1;
+    const p = parseInt(pagesInput.value)||48;
+    lastInput.value = f + p - 1;
+  };
+  firstInput.addEventListener('input', updateLast);
+  pagesInput.addEventListener('input', updateLast);
+
+  setTimeout(()=>firstInput.focus(), 100);
+}
+
+function saveEditChkBook(id){
+  const b = chkBooks.find(x=>x.id===id);
+  if(!b){ toast('❗ الدفتر غير موجود'); return; }
+  const name = document.getElementById('ebk-name')?.value.trim();
+  if(!name){ toast('❗ اسم الدفتر مطلوب'); return; }
+  const firstNum = parseInt(document.getElementById('ebk-first-num')?.value);
+  if(!firstNum || firstNum < 1){ toast('❗ رقم أول شيك غير صحيح'); return; }
+  const pages = parseInt(document.getElementById('ebk-pages')?.value)||48;
+  const lastNum = firstNum + pages - 1;
+
+  // حدّث الدفتر
+  b.name = name;
+  b.bank = document.getElementById('ebk-bank')?.value.trim() || '';
+  b.account = document.getElementById('ebk-account')?.value.trim() || '';
+  b.pages = pages;
+  b.firstNum = firstNum;
+  b.lastNum = lastNum;
+
+  saveChks(true);
+  if(API_URL) apiFetch('/api/check-books','POST',b).catch(()=>{});
+
+  document.getElementById('edit-book-popup')?.remove();
+  renderChkBooks();
+  toast('✅ تم تعديل الدفتر — الأرقام من '+firstNum+' إلى '+lastNum);
+}
+
 function deleteChkBook(id){
-  if(!confirm('هتحذف الدفتر ده؟'))return;
+  const used = chkList.filter(c=>c.bookId===id).length;
+  const msg = used > 0
+    ? 'هتحذف الدفتر ده؟\nفيه '+used+' شيك محفوظ عليه — هيفضلوا موجودين بس من غير دفتر.'
+    : 'هتحذف الدفتر ده؟';
+  if(!confirm(msg))return;
   chkBooks=chkBooks.filter(x=>x.id!==id);
   saveChks(true);if(API_URL)apiFetch('/api/check-books/'+id,'DELETE').catch(()=>{});
   renderChkBooks();toast('🗑️ تم حذف الدفتر');
@@ -6357,8 +6458,11 @@ function saveSupplier(){
   const name=$('supplier-name-input')?.value.trim();
   if(!name){toast('❗ أدخل اسم المورد');return;}
   if(chkSuppliers.find(s=>s.name===name)){toast('⚠️ المورد موجود مسبقاً');return;}
-  chkSuppliers.push({id:Date.now()+'_sup',name,note:$('supplier-note-input')?.value.trim()||''});
+  const sup={id:Date.now()+'_sup',name,note:$('supplier-note-input')?.value.trim()||''};
+  chkSuppliers.push(sup);
   saveChks(true);
+  // ارفع فوراً كمان بدون الـ debounce
+  if(API_URL) apiFetch('/api/check-suppliers','POST',{id:sup.id,name:sup.name}).catch(()=>{});
   closeM('m-add-supplier');
   fillSupplierSel();
   toast('✅ تم إضافة المورد: '+name);
