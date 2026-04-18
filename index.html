@@ -3186,7 +3186,9 @@ async function confirmAssign(){
   if(API_URL){const r=await apiFetch('/api/orders/'+currentOrderId,'PATCH',upd);if(r)Object.assign(o,r.order);else Object.assign(o,upd)}
   else Object.assign(o,upd);
   if(!isBosta && c) c.status='نشط';
-  if(!isBosta && c) shopifyFulfill(orderSnapshot, c.name);
+  // Shopify fulfill للمناديب و لبوسطة — الكل بياخد fulfill + tag
+  if(isBosta) shopifyFulfill(orderSnapshot, 'Bosta');
+  else if(c) shopifyFulfill(orderSnapshot, c.name);
   closeM('m-assign');
   pushNotif('🚴',`تم تعيين ${c?.name||'بوسطة'}`,`الطلب ${currentOrderId} — ${o.name}`);
   refreshAll();
@@ -3275,11 +3277,19 @@ async function assignToBosta(id){
   if(!confirmEditSettledOrder(id)) return;
   const o=orders.find(x=>x.id===id);
   if(!o)return;
+  // snapshot قبل التعديل
+  const orderSnapshot = { ...o };
   o.courierId='bosta';
   o.isBosta=true;
   o.status='جاري التوصيل';
   const upd={courierId:null,isBosta:true,status:'جاري التوصيل'};
-  if(API_URL)apiFetch('/api/orders/'+id,'PATCH',upd).catch(()=>{});
+  if(API_URL){
+    _savePatchWithRetry(id, upd, 3).then(r => {
+      if(!r.success) _trackAssignmentFailure(id, o.name, 'Bosta');
+    });
+  }
+  // Shopify fulfill + tag "Bosta"
+  shopifyFulfill({ ...orderSnapshot, ...upd }, 'Bosta');
   try{
     const bIds=JSON.parse(localStorage.getItem('bosta_ids')||'{}');
     bIds[id]=true;
@@ -7683,7 +7693,9 @@ async function batchAssign(courierId){
   // طبّق محلياً فوراً
   Object.assign(o,upd);
   if(c)c.status='نشط';
-  if(!isBosta && c) shopifyFulfill({ ...orderSnapshot, ...upd }, c.name);
+  // Shopify fulfill للكل (مندوب أو بوسطة)
+  if(isBosta) shopifyFulfill({ ...orderSnapshot, ...upd }, 'Bosta');
+  else if(c) shopifyFulfill({ ...orderSnapshot, ...upd }, c.name);
   debouncedSaveOrders();
   batchResults.push({orderId,name:orderName,courierId,courierName,action:'assigned'});
   batchIndex++;
