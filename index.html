@@ -1054,6 +1054,8 @@ tr:hover td{background:#fafbff}
   </div>
   <div class="mft">
     <button class="btn btn-ghost" onclick="closeM('m-import')">إلغاء</button>
+    <button class="btn btn-ghost" onclick="testShopifyConnection()" style="color:#96bf48;border-color:#96bf48" title="اختبار الـ Token حالياً">🔍 اختبار الاتصال</button>
+    <button class="btn btn-ghost" onclick="forceUpdateServerCredentials()" style="color:#6366f1;border-color:#6366f1" title="حفظ الـ Token في الـ Database">🔐 حفظ التوكن في السيرفر</button>
     <button class="btn btn-ghost" onclick="backfillImages()" style="color:#96bf48;border-color:#96bf48" title="جلب صور المنتجات للطلبات اللي مفيهاش صور">🖼️ تحميل صور المنتجات</button>
     <button class="btn btn-primary" id="imp-btn" onclick="doImport()">📥 استيراد الآن</button>
   </div>
@@ -6963,6 +6965,7 @@ window.addEventListener('load', function(){
     }catch(e){}
     syncCouriersToDB().then(async ()=>{
       await loadSettlements();
+      await loadCurrentBatchFromServer();
       loadOrders();
       loadChks();
       loadTreasury();
@@ -6984,6 +6987,32 @@ let _currentBatchCode = '';
 function getTodayBatchDate(){
   const d = new Date();
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+// يحمّل الدفعة المفتوحة من السيرفر (يستدعى عند بدء التطبيق)
+async function loadCurrentBatchFromServer(){
+  if(!API_URL) return;
+  try{
+    const r = await apiFetch('/api/batches/current','GET');
+    if(r && r.code){
+      // السيرفر عنده دفعة مفتوحة — استخدمها
+      const serverBatch = { code: r.code, date: r.date, status: r.status, startedAt: r.startedAt };
+      localStorage.setItem('current_batch', JSON.stringify(serverBatch));
+      _currentBatchCode = r.code;
+      console.log('✅ Loaded current batch from server:', r.code);
+    } else {
+      // السيرفر مفيش دفعة مفتوحة — امسح أي دفعة قديمة في الـ localStorage
+      const local = localStorage.getItem('current_batch');
+      if(local){
+        console.log('🔄 Server has no open batch — clearing stale localStorage batch');
+        localStorage.removeItem('current_batch');
+        _currentBatchCode = null;
+      }
+    }
+    updateBatchIndicator && updateBatchIndicator();
+  }catch(e){
+    console.warn('loadCurrentBatchFromServer failed:', e.message);
+  }
 }
 
 function ensureCurrentBatch(){
@@ -8880,6 +8909,80 @@ function selDays(btn, days) {
   document.querySelectorAll('#days-btns .chip').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
   document.getElementById('imp-days').value = days;
+}
+
+// ===== SHOPIFY CONNECTION TEST & FORCE CREDENTIAL UPDATE =====
+async function testShopifyConnection(){
+  if(!API_URL){ toast('❗ الـ Backend مش متصل'); return; }
+  const urlInput = $('imp-url')?.value?.trim() || localStorage.getItem('orderpro_shop_url') || '';
+  const tokenInput = $('imp-token')?.value?.trim() || localStorage.getItem('orderpro_shop_token') || '';
+
+  toast('⏳ جاري اختبار الاتصال...');
+
+  try{
+    // أولاً اختبر الـ credentials اللي حالياً في السيرفر (DB/env)
+    const r = await apiFetch('/api/shopify/test','GET');
+    const serverStatus = r && r.ok
+      ? `✅ السيرفر:\n   متصل بـ ${r.shopName || 'Shopify'}\n   المصدر: ${r.source === 'database' ? '💾 Database' : r.source === 'env' ? '🔐 Environment Vars' : '❓'}`
+      : `❌ السيرفر:\n   ${r?.message || 'الـ credentials في السيرفر مش شغالة'}${r?.status ? ' (HTTP '+r.status+')' : ''}`;
+
+    // ثانياً اختبر الـ token اللي في الواجهة (لو فيه)
+    let frontStatus = '';
+    if(urlInput && tokenInput){
+      const localR = await apiFetch('/api/shopify/test','POST',{ shopUrl: urlInput, accessToken: tokenInput }).catch(()=>null);
+      // السيرفر مش عامل POST test — نعمل مقارنة بسيطة
+      if(r && r.ok && r.source === 'database'){
+        // الـ db token شغال — قارن لو مختلف عن اللي في الواجهة
+        const tokenPrefix = tokenInput.slice(0,10);
+        frontStatus = `\n\nالـ Token الحالي في الواجهة: ${tokenPrefix}... (${tokenInput.length} chars)`;
+      }
+    }
+
+    alert(serverStatus + frontStatus + '\n\n💡 لو السيرفر مش شغال، دوس "حفظ التوكن في السيرفر".');
+  }catch(e){
+    alert('❌ خطأ في الاختبار: ' + e.message);
+  }
+}
+
+async function forceUpdateServerCredentials(){
+  if(!API_URL){ toast('❗ الـ Backend مش متصل'); return; }
+
+  const url = $('imp-url')?.value?.trim() || localStorage.getItem('orderpro_shop_url') || '';
+  const token = $('imp-token')?.value?.trim() || localStorage.getItem('orderpro_shop_token') || '';
+
+  if(!url || !token){
+    toast('❗ املأ رابط المتجر والـ Token أولاً');
+    return;
+  }
+
+  if(!confirm('هتحفظ الـ Token الحالي في Database السيرفر؟\n\nالـ URL: '+url+'\nالـ Token: '+token.slice(0,10)+'... ('+token.length+' حرف)')) return;
+
+  toast('⏳ جاري الحفظ...');
+
+  try{
+    // احفظ محلياً كمان
+    localStorage.setItem('orderpro_shop_url', url);
+    localStorage.setItem('orderpro_shop_token', token);
+
+    // احفظ في الـ DB
+    const saveR = await apiFetch('/api/settings','POST',{ shopify_url: url, shopify_token: token });
+    if(!saveR || saveR.error){
+      toast('❌ فشل الحفظ: ' + (saveR?.error || 'unknown'));
+      return;
+    }
+
+    // جرّب الاتصال بعد الحفظ
+    await new Promise(r => setTimeout(r, 500));
+    const testR = await apiFetch('/api/shopify/test','GET');
+    if(testR && testR.ok){
+      alert('✅ تم الحفظ بنجاح!\n\nالمتجر: '+(testR.shopName||'Shopify')+'\nالمصدر دلوقتي: '+(testR.source === 'database' ? '💾 Database' : testR.source));
+      toast('✅ التوكن اتحدث في السيرفر');
+    } else {
+      alert('⚠️ اتحفظ في الـ DB لكن لسه مش شغال:\n\n'+(testR?.message || 'unknown')+'\n\nدا معناه إن الـ Token نفسه غلط. لازم تجيب واحد جديد من Shopify Admin.');
+    }
+  }catch(e){
+    toast('❌ خطأ: ' + e.message);
+  }
 }
 
 async function doImport() {
