@@ -3005,10 +3005,11 @@ function _updateShopifyQueueBadge(){
 
 function showShopifyFailures(){
   if(!_shopifyFailedOrders.length){ toast('✅ لا توجد طلبات فاشلة'); return; }
-  const list = _shopifyFailedOrders.map(t =>
-    `• ${t.order.id} — ${t.order.name} → ${t.courierName}`
-  ).join('\n');
-  alert('طلبات Shopify فشلت:\n\n' + list + '\n\nممكن تعيد المحاولة من الـ badge.');
+  const list = _shopifyFailedOrders.map(t => {
+    const errDetail = t.lastError ? `\n   ↳ السبب: ${t.lastError.slice(0,200)}` : '';
+    return `• ${t.order.id} — ${t.order.name} → ${t.courierName}${errDetail}`;
+  }).join('\n\n');
+  alert('طلبات Shopify فشلت:\n\n' + list + '\n\n💡 ممكن تعيد المحاولة من الـ badge، أو تشوف تفاصيل أكتر في Console (F12).');
 }
 
 function retryShopifyFailures(){
@@ -3041,9 +3042,13 @@ async function _processShopifyQueue(){
       } else if(r && (r.tagSuccess || r.fulfilled)){
         // نجاح جزئي يتعتبر نجاح
         success = true;
+      } else if(r){
+        // فشل كامل — احفظ السبب
+        task.lastError = (r.errors && r.errors.length ? r.errors.join(' | ') : '') || r.error || r.message || 'فشل بدون سبب واضح';
       }
     }catch(e){
       console.warn('Shopify queue task error:', task.order?.id, e);
+      task.lastError = 'خطأ في الاتصال: ' + (e.message || 'unknown');
     }
 
     if(success){
