@@ -205,7 +205,11 @@ tr:hover td{background:#fafbff}
   .sidebar,.topbar,.ds-ctrl,.zone-picker,
   .toast,.overlay,.topbar,.btn,
   #nb-orders,#nb-assign,#nb-pickup,#nb-transit,#nb-bosta,
-  #nb-problems,#nb-checks,#nb-expiry,#nb-notifs,#nb-bosta{display:none!important}
+  #nb-problems,#nb-checks,#nb-expiry,#nb-notifs,#nb-bosta,
+  #ai-fab,#ai-panel,
+  #shopify-queue-badge,#assign-failures-badge,
+  #batch-indicator,
+  [id^="toast-"]{display:none!important}
   .main-area{overflow:visible!important;height:auto!important}
   .content{padding:0!important;overflow:visible!important;height:auto!important}
   .ds{border:none;border-radius:0;box-shadow:none;overflow:visible!important}
@@ -213,6 +217,7 @@ tr:hover td{background:#fafbff}
   .ds-table tr{page-break-inside:avoid;break-inside:avoid;page-break-after:auto}
   .ds-table thead{display:table-header-group}
   .ds-zone-hdr{page-break-after:avoid;break-after:avoid}
+  .ds-note-row{page-break-before:avoid!important;break-before:avoid!important}
   .ds-foot{page-break-inside:avoid}
   .ds-sec{page-break-after:avoid}
   body{background:#fff!important;overflow:visible!important}
@@ -1108,7 +1113,14 @@ tr:hover td{background:#fafbff}
     <div style="background:var(--bg);border-radius:9px;padding:12px">
       <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px">📦 تفاصيل الطلب</div>
       <div class="fg" style="margin-bottom:8px"><label>المنتجات / البيان</label><textarea id="eo-details" placeholder="المنتجات..." style="min-height:55px"></textarea></div>
-      <div class="fg"><label>ملاحظات للمندوب</label><input type="text" id="eo-note" placeholder="تعليمات التوصيل..."></div>
+
+      <!-- Customer note من Shopify (read-only) -->
+      <div id="eo-customer-note-box" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 10px;margin-bottom:10px">
+        <div style="font-size:10px;font-weight:700;color:#1e40af;margin-bottom:4px">💬 ملاحظة العميل (من Shopify)</div>
+        <div id="eo-customer-note" style="font-size:12px;color:#1e3a8a;white-space:pre-wrap"></div>
+      </div>
+
+      <div class="fg"><label>ملاحظات الطلب (تظهر للمندوب)</label><textarea id="eo-order-note" placeholder="تعليمات خاصة، ملاحظة للمندوب..." style="min-height:50px"></textarea></div>
     </div>
     <!-- نوع التوصيل والحالة -->
     <div style="background:var(--bg);border-radius:9px;padding:12px">
@@ -1908,7 +1920,42 @@ function renderOrders(){
   const endIdx = startIdx + ORDERS_PAGE_SIZE;
   const pageList = list.slice(startIdx, endIdx);
 
-  $('orders-tbody').innerHTML=pageList.map(o=>`<tr><td style="text-align:center"><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"></td><td><strong>${o.id}</strong>${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td>${srcBadge(o.src)}</td><td>${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px">${o.phone}</td><td>📍 ${o.area}</td><td>${deliveryBadge(o)}</td><td><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td>${cName(o.courierId)}</td><td>${sBadge(o.status)}</td><td><div style="display:flex;gap:4px;flex-wrap:wrap"><button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="openEditOrder('${o.id}')">✏️</button><button class="btn btn-ghost btn-xs" style="color:#64748b;border-color:#64748b;font-size:10px" onclick="openOrderHistory('${o.id}')" title="تاريخ الطلب">📋</button><button class="btn btn-ghost btn-xs" style="color:#6366f1;border-color:#6366f1" onclick="printPackingSlip('${o.id}')" title="طباعة فاتورة">🧾</button>${o.src==='shopify'&&o.shopifyId?`<button class="btn btn-ghost btn-xs" style="color:#96bf48;border-color:#96bf48;font-size:10px" onclick="openInShopify('${o.shopifyId}')" title="افتح في Shopify">🛍️</button>`:''}${(!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-primary btn-xs" onclick="openAssign('${o.id}')">📍 تعيين</button>`:''}${o.status!=='ملغي'?`<button class="btn btn-xs" style="background:${o.paid?'var(--warn-light)':'var(--success-light)'};color:${o.paid?'#92400e':'#065f46'};border:1px solid ${o.paid?'#fcd34d':'#86efac'}" onclick="togglePaid('${o.id}')">${o.paid?'↩️ COD':'💳 مدفوع'}</button>`:''}${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✓ تم</button>`:''}${(o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}</div></td></tr>`).join('');
+  $('orders-tbody').innerHTML=pageList.map(o=>{
+    const settled = isOrderSettled(o.id);
+    const canModify = !settled || canEditSettled();
+    const showFullActions = !settled;
+
+    // شارة "مسوّى" على رقم الطلب
+    const settledBadge = settled
+      ? `<span style="font-size:9px;background:var(--success);color:#fff;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700" title="الطلب مسوّى — مقفول">🔒 مسوّى</span>`
+      : '';
+
+    // الأزرار: لو مسوّى، نحط 🔒 بدل الأزرار (إلا للأدمن اللي يقدر يعدل بحذر)
+    let actionsHtml;
+    if(settled && !canEditSettled()){
+      // مستخدم عادي: بس الأزرار اللي read-only
+      actionsHtml = `<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:11px;color:var(--success);font-weight:700;padding:2px 6px;background:var(--success-light);border-radius:4px">🔒 مسوّى</span>
+        <button class="btn btn-ghost btn-xs" style="color:#64748b;border-color:#64748b;font-size:10px" onclick="openOrderHistory('${o.id}')" title="تاريخ الطلب">📋</button>
+        <button class="btn btn-ghost btn-xs" style="color:#6366f1;border-color:#6366f1" onclick="printPackingSlip('${o.id}')" title="طباعة فاتورة">🧾</button>
+        ${o.src==='shopify'&&o.shopifyId?`<button class="btn btn-ghost btn-xs" style="color:#96bf48;border-color:#96bf48;font-size:10px" onclick="openInShopify('${o.shopifyId}')" title="افتح في Shopify">🛍️</button>`:''}
+      </div>`;
+    } else {
+      // أدمن أو طلب غير مسوّى: كل الأزرار
+      actionsHtml = `<div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="openEditOrder('${o.id}')">✏️</button>
+        <button class="btn btn-ghost btn-xs" style="color:#64748b;border-color:#64748b;font-size:10px" onclick="openOrderHistory('${o.id}')" title="تاريخ الطلب">📋</button>
+        <button class="btn btn-ghost btn-xs" style="color:#6366f1;border-color:#6366f1" onclick="printPackingSlip('${o.id}')" title="طباعة فاتورة">🧾</button>
+        ${o.src==='shopify'&&o.shopifyId?`<button class="btn btn-ghost btn-xs" style="color:#96bf48;border-color:#96bf48;font-size:10px" onclick="openInShopify('${o.shopifyId}')" title="افتح في Shopify">🛍️</button>`:''}
+        ${(!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-primary btn-xs" onclick="openAssign('${o.id}')">📍 تعيين</button>`:''}
+        ${o.status!=='ملغي'?`<button class="btn btn-xs" style="background:${o.paid?'var(--warn-light)':'var(--success-light)'};color:${o.paid?'#92400e':'#065f46'};border:1px solid ${o.paid?'#fcd34d':'#86efac'}" onclick="togglePaid('${o.id}')">${o.paid?'↩️ COD':'💳 مدفوع'}</button>`:''}
+        ${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✓ تم</button>`:''}
+        ${(o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}
+      </div>`;
+    }
+
+    return `<tr${settled?' style="background:#f0fdf4"':''}><td style="text-align:center"><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"${settled && !canEditSettled()?' disabled':''}></td><td><strong>${o.id}</strong>${settledBadge}${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td>${srcBadge(o.src)}</td><td>${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px">${o.phone}</td><td>📍 ${o.area}</td><td>${deliveryBadge(o)}</td><td><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td>${cName(o.courierId)}</td><td>${sBadge(o.status)}</td><td>${actionsHtml}</td></tr>`;
+  }).join('');
 
   // ارسم شريط pagination
   renderOrdersPagination(totalCount, totalPages);
@@ -2104,6 +2151,7 @@ function renderAssignPage(){
 }
 
 function openAssign(id){
+  if(!confirmEditSettledOrder(id)) return;
   assignOrderId=id;selectedCourierId=null;
   const o=orders.find(x=>x.id===id);
   $('assign-title').textContent=`تعيين مندوب للطلب ${id}`;
@@ -2905,89 +2953,242 @@ async function printPackingSlipLegacy(orderId){
   setTimeout(()=>w.print(), 700);
 }
 
-async function shopifyFulfill(order, courierName){
-  if(order.src !== 'shopify') return;
-  const shopifyOrderId = order.shopifyId || order.shopify_id;
-  if(!shopifyOrderId){
-    console.log('Shopify fulfill: missing shopifyId');
+// ===== SHOPIFY FULFILL QUEUE =====
+// لحل مشكلة الـ race condition لما نوزع طلبات بسرعة
+const _shopifyQueue = [];
+let _shopifyProcessing = false;
+let _shopifyQueueStats = { pending: 0, done: 0, failed: 0 };
+const _shopifyFailedOrders = []; // قائمة الطلبات اللي فشلت
+
+function _updateShopifyQueueBadge(){
+  const el = document.getElementById('shopify-queue-badge');
+  if(_shopifyQueueStats.pending === 0 && _shopifyQueueStats.done === 0 && _shopifyQueueStats.failed === 0){
+    if(el) el.remove();
     return;
   }
-  if(!API_URL) return;
+  if(!el){
+    const badge = document.createElement('div');
+    badge.id = 'shopify-queue-badge';
+    badge.style.cssText = 'position:fixed;bottom:20px;left:20px;background:#fff;border:2px solid #96bf48;border-radius:12px;padding:12px 16px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:9999;font-family:Cairo,sans-serif;font-size:12px;min-width:220px;max-width:320px';
+    document.body.appendChild(badge);
+  }
+  const b = document.getElementById('shopify-queue-badge');
+  if(!b) return;
+  let html = `<div style="font-weight:700;color:#96bf48;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+    <span>🛍️ Shopify Sync</span>
+    <span onclick="this.parentElement.parentElement.remove()" style="cursor:pointer;color:var(--muted);font-size:14px;padding:0 4px">✕</span>
+  </div>
+  <div style="font-size:11px;color:var(--muted);line-height:1.8">`;
 
-  // الـ credentials ممكن تبقى في localStorage (لو المدير)
-  // أو في DB على السيرفر (للمستخدمين العاديين) — السيرفر هيفلبك تلقائياً
+  if(_shopifyQueueStats.pending > 0) html += `⏳ ${_shopifyQueueStats.pending} في الانتظار<br>`;
+  if(_shopifyQueueStats.done > 0) html += `✅ ${_shopifyQueueStats.done} تم<br>`;
+  if(_shopifyQueueStats.failed > 0){
+    html += `<span style="color:var(--danger);font-weight:700">❌ ${_shopifyQueueStats.failed} فشل</span>`;
+    if(_shopifyFailedOrders.length){
+      html += ` <button onclick="showShopifyFailures()" style="font-size:10px;padding:2px 8px;background:var(--danger);color:#fff;border:none;border-radius:4px;cursor:pointer;margin-right:4px">عرض</button>`;
+      html += ` <button onclick="retryShopifyFailures()" style="font-size:10px;padding:2px 8px;background:var(--warn);color:#fff;border:none;border-radius:4px;cursor:pointer">إعادة محاولة</button>`;
+    }
+  }
+
+  html += '</div>';
+  b.innerHTML = html;
+
+  // شيل الـ badge بعد 10 ثواني من الانتهاء (بس لو مفيش failures)
+  if(_shopifyQueueStats.pending === 0 && _shopifyQueueStats.failed === 0){
+    setTimeout(() => {
+      _shopifyQueueStats = { pending: 0, done: 0, failed: 0 };
+      const el = document.getElementById('shopify-queue-badge');
+      if(el) el.remove();
+    }, 10000);
+  }
+}
+
+function showShopifyFailures(){
+  if(!_shopifyFailedOrders.length){ toast('✅ لا توجد طلبات فاشلة'); return; }
+  const list = _shopifyFailedOrders.map(t =>
+    `• ${t.order.id} — ${t.order.name} → ${t.courierName}`
+  ).join('\n');
+  alert('طلبات Shopify فشلت:\n\n' + list + '\n\nممكن تعيد المحاولة من الـ badge.');
+}
+
+function retryShopifyFailures(){
+  if(!_shopifyFailedOrders.length){ toast('✅ لا توجد طلبات فاشلة'); return; }
+  const count = _shopifyFailedOrders.length;
+  _shopifyFailedOrders.forEach(task => {
+    task.attempts = 0; // رجّع العداد
+    _shopifyQueue.push(task);
+    _shopifyQueueStats.pending++;
+  });
+  _shopifyQueueStats.failed = 0;
+  _shopifyFailedOrders.length = 0;
+  _updateShopifyQueueBadge();
+  _processShopifyQueue();
+  toast(`🔄 إعادة محاولة ${count} طلب`);
+}
+
+async function _processShopifyQueue(){
+  if(_shopifyProcessing) return;
+  _shopifyProcessing = true;
+
+  while(_shopifyQueue.length > 0){
+    const task = _shopifyQueue.shift();
+    task.attempts = (task.attempts || 0) + 1;
+    let success = false;
+    try{
+      const r = await _doShopifyFulfill(task.order, task.courierName);
+      if(r && r.success){
+        success = true;
+      } else if(r && (r.tagSuccess || r.fulfilled)){
+        // نجاح جزئي يتعتبر نجاح
+        success = true;
+      }
+    }catch(e){
+      console.warn('Shopify queue task error:', task.order?.id, e);
+    }
+
+    if(success){
+      _shopifyQueueStats.pending--;
+      _shopifyQueueStats.done++;
+    } else if(task.attempts < 3){
+      // أعد المحاولة (أقصاه 3 محاولات)
+      console.log(`⟳ Retry ${task.attempts}/3 for order ${task.order?.id}`);
+      _shopifyQueue.push(task); // أعده للطابور
+      await new Promise(r => setTimeout(r, 2000)); // انتظار أطول قبل الإعادة
+    } else {
+      _shopifyQueueStats.pending--;
+      _shopifyQueueStats.failed++;
+      _shopifyFailedOrders.push(task);
+      console.error(`❌ Shopify failed after 3 attempts for order ${task.order?.id}`);
+    }
+
+    _updateShopifyQueueBadge();
+    await new Promise(r => setTimeout(r, 300));
+  }
+
+  _shopifyProcessing = false;
+}
+
+async function _doShopifyFulfill(order, courierName){
+  if(order.src !== 'shopify') return null;
+  const shopifyOrderId = order.shopifyId || order.shopify_id;
+  if(!shopifyOrderId) return null;
+  if(!API_URL) return null;
+
   const shopUrl = localStorage.getItem('orderpro_shop_url') || '';
   const accessToken = localStorage.getItem('orderpro_shop_token') || '';
 
   try{
     console.log('Calling shopify/assign:', order.id, '→', courierName);
     const r = await apiFetch('/api/shopify/assign','POST',{
-      shopUrl, accessToken,  // ممكن يكونوا فاضيين — السيرفر هيجيبهم من DB
+      shopUrl, accessToken,
       shopifyOrderId: String(shopifyOrderId),
       courierName: courierName || 'OrderPro',
       orderId: order.id,
     });
 
-    // طباعة كل الـ logs من السيرفر للـ debugging
     if(r && r.logs){
-      console.log('=== Shopify fulfill logs ===');
+      console.log('=== Shopify fulfill logs for', order.id, '===');
       r.logs.forEach(l => console.log('  ', l));
     }
 
-    if(r && r.success){
-      toast('🟢 Shopify: تاج + fulfill ✅');
-    } else if(r){
-      if(r.tagSuccess && !r.fulfilled){
-        toast('⚠️ تاج اتضاف بس الـ fulfill فشل');
-      } else if(!r.tagSuccess && r.fulfilled){
-        toast('⚠️ fulfill تم بس التاج فشل');
-      } else {
-        toast('❌ Shopify: ' + (r.errors?.[0]?.slice(0,60) || r.error || 'فشل'));
-      }
-      if(r.errors && r.errors.length){
-        console.warn('Shopify errors:', r.errors);
-      }
+    if(r && !r.success && r.errors && r.errors.length){
+      console.warn('Shopify fulfill failed for', order.id, ':', r.errors);
     }
+    return r;
   }catch(e){
-    console.error('shopifyFulfill exception:', e);
-    toast('❌ خطأ في الاتصال بـ Shopify');
+    console.error('shopifyFulfill exception:', order.id, e);
+    return { success: false, error: e.message };
   }
 }
 
+// الـ entry point — بيحط الطلب في queue ويبدأ processing
+function shopifyFulfill(order, courierName){
+  if(order.src !== 'shopify') return;
+  const shopifyOrderId = order.shopifyId || order.shopify_id;
+  if(!shopifyOrderId) return;
+
+  _shopifyQueue.push({ order, courierName });
+  _shopifyQueueStats.pending++;
+  _updateShopifyQueueBadge();
+
+  // ابدأ processing (لو مش شغال)
+  _processShopifyQueue();
+}
+
 async function selCAndConfirm(id){
-  const o=orders.find(x=>x.id===assignOrderId);
+  // ⚠️ احفظ الـ orderId فوراً قبل أي عملية async (عشان ما يتغيرش لو ضغط بسرعة)
+  const currentOrderId = assignOrderId;
+  if(!currentOrderId){ toast('❗ لا يوجد طلب محدد'); return; }
+  const o=orders.find(x=>x.id===currentOrderId);
   const c=couriers.find(x=>x.id==id);
-  if(!o||!c) return;
+  if(!o){ toast('❗ الطلب غير موجود: '+currentOrderId); return; }
+  if(!c){ toast('❗ المندوب غير موجود'); return; }
+
+  // تحقق إن الطلب لسه ما اتوزعش
+  if(o.courierId && o.status==='جاري التوصيل'){
+    toast('⚠️ الطلب '+currentOrderId+' موزع بالفعل');
+    return;
+  }
+
   const ship=getShipCost(o,c);
   const assignedZone = getOrderZoneForCourier(o, c);
   const batch = ensureCurrentBatch();
   const upd={courierId:id,ship,note:'',status:'جاري التوصيل',assignedZone,batchCode:batch.code};
+
+  // خد snapshot من الطلب للـ shopify queue (عشان ما يتأثرش بأي تعديل لاحق)
+  const orderSnapshot = { ...o, ...upd };
+
   Object.assign(o, upd);
-  if(API_URL){apiFetch('/api/orders/'+assignOrderId,'PATCH',upd).catch(()=>{});}
+  // احفظ على السيرفر مع retry
+  if(API_URL){
+    _savePatchWithRetry(currentOrderId, upd, 3).then(r => {
+      if(!r.success){
+        _trackAssignmentFailure(currentOrderId, o.name, c.name);
+      }
+    });
+  }
   debouncedSaveOrders();
   c.status='نشط';
-  shopifyFulfill(o, c.name);
-  pushNotif('🤖',`تعيين — ${c.name}`,`${assignOrderId} · ${o.name} · ${o.area}`);
+  shopifyFulfill(orderSnapshot, c.name);
+  pushNotif('🤖',`تعيين — ${c.name}`,`${currentOrderId} · ${o.name} · ${o.area}`);
   refreshAll();
   updateBatchIndicator();
-  toast(`✅ تم تعيين ${c.name} للطلب ${assignOrderId} — ${batch.code}`);
+  toast(`✅ تم تعيين ${c.name} للطلب ${currentOrderId} — ${batch.code}`);
 }
 
 async function confirmAssign(){
   if(!selectedCourierId){toast('❗ اختر مندوب أولاً');return}
-  const o=orders.find(x=>x.id===assignOrderId);
-  const c=couriers.find(x=>x.id==selectedCourierId);
+  // خد snapshots فوراً قبل أي async
+  const currentOrderId = assignOrderId;
+  const currentCourierId = selectedCourierId;
+  if(!currentOrderId){ toast('❗ لا يوجد طلب محدد'); return; }
+
+  const o=orders.find(x=>x.id===currentOrderId);
+  const c=couriers.find(x=>x.id==currentCourierId);
+  if(!o){ toast('❗ الطلب غير موجود'); return; }
+
+  // تحقق إن الطلب لسه ما اتوزعش
+  if(o.courierId && o.status==='جاري التوصيل'){
+    toast('⚠️ الطلب '+currentOrderId+' موزع بالفعل');
+    closeM('m-assign');
+    return;
+  }
+
   const ship=+$('assign-ship').value||getShipCost(o,c),note=$('assign-note').value;
-  const isBosta = String(selectedCourierId)==='bosta';
+  const isBosta = String(currentCourierId)==='bosta';
   const batch = ensureCurrentBatch();
-  const upd={courierId:selectedCourierId,ship,note,status:'جاري التوصيل',isBosta,batchCode:batch.code};
-  if(isBosta){ bostaIds[assignOrderId]=true; localStorage.setItem('bosta_ids',JSON.stringify(bostaIds)); }
-  if(API_URL){const r=await apiFetch('/api/orders/'+assignOrderId,'PATCH',upd);if(r)Object.assign(o,r.order);else Object.assign(o,upd)}
+  const upd={courierId:currentCourierId,ship,note,status:'جاري التوصيل',isBosta,batchCode:batch.code};
+  if(isBosta){ bostaIds[currentOrderId]=true; localStorage.setItem('bosta_ids',JSON.stringify(bostaIds)); }
+
+  // snapshot للـ shopify queue
+  const orderSnapshot = { ...o, ...upd };
+
+  if(API_URL){const r=await apiFetch('/api/orders/'+currentOrderId,'PATCH',upd);if(r)Object.assign(o,r.order);else Object.assign(o,upd)}
   else Object.assign(o,upd);
   if(!isBosta && c) c.status='نشط';
-  if(!isBosta && c) shopifyFulfill(o, c.name);
+  if(!isBosta && c) shopifyFulfill(orderSnapshot, c.name);
   closeM('m-assign');
-  pushNotif('🚴',`تم تعيين ${c.name}`,`الطلب ${assignOrderId} — ${o.name}`);
+  pushNotif('🚴',`تم تعيين ${c?.name||'بوسطة'}`,`الطلب ${currentOrderId} — ${o.name}`);
   refreshAll();
   updateBatchIndicator();
   toast(`✅ تم تعيين ${c?.name||'بوسطة'} — ${batch.code}`);
@@ -3071,6 +3272,7 @@ async function toggleProblem(id){
 }
 
 async function assignToBosta(id){
+  if(!confirmEditSettledOrder(id)) return;
   const o=orders.find(x=>x.id===id);
   if(!o)return;
   o.courierId='bosta';
@@ -3158,6 +3360,7 @@ async function markPaid(id){
 }
 
 async function togglePaid(id){
+  if(!confirmEditSettledOrder(id)) return;
   const o=orders.find(x=>x.id===id);
   if(!o)return;
   if(o.paid && o.src==='shopify'){
@@ -3170,6 +3373,7 @@ async function togglePaid(id){
 }
 
 async function cancelOrderByCustomer(id){
+  if(!confirmEditSettledOrder(id)) return;
   if(!confirm('هل تأكد إلغاء هذا الطلب؟')) return;
   const o=orders.find(x=>x.id===id);
   if(!o) return;
@@ -3180,6 +3384,7 @@ async function cancelOrderByCustomer(id){
 }
 
 async function undoSettleStatus(id){
+  if(!confirmEditSettledOrder(id)) return;
   const o=orders.find(x=>x.id===id);
   if(!o) return;
   o.status='جاري التوصيل';
@@ -3189,6 +3394,7 @@ async function undoSettleStatus(id){
 }
 
 async function markDone(id){
+  if(!confirmEditSettledOrder(id)) return;
   const o=orders.find(x=>x.id===id);
   if(!o) return;
   o.status='تحت التسوية';
@@ -3199,6 +3405,7 @@ async function markDone(id){
 }
 
 async function cancelOrder(id){
+  if(!confirmEditSettledOrder(id)) return;
   const o=orders.find(x=>x.id===id);
   if(API_URL)await apiFetch('/api/orders/'+id,'PATCH',{status:'ملغي',courierId:null});
   o.status='ملغي';o.courierId=null;refreshAll();toast('❌ تم إلغاء الطلب');
@@ -3207,6 +3414,7 @@ async function cancelOrder(id){
 var _editingOrderId = null;
 
 function openEditOrder(id){
+  if(!confirmEditSettledOrder(id)) return;
   const o = orders.find(x=>x.id===id);
   if(!o){ toast('❗ الطلب غير موجود'); return; }
   _editingOrderId = id;
@@ -3221,7 +3429,23 @@ function openEditOrder(id){
   set('eo-ship', o.ship||50);
   document.getElementById('eo-paid').checked = !!o.paid;
   set('eo-details', o.details||o.items||'');
-  set('eo-note', o.note||'');
+
+  // Customer note من Shopify (read-only)
+  const customerNote = o.customerNote || (o.src==='shopify' ? (o.note||'') : '');
+  const cnBox = document.getElementById('eo-customer-note-box');
+  if(customerNote){
+    if(cnBox) cnBox.style.display = 'block';
+    document.getElementById('eo-customer-note').textContent = customerNote;
+  } else {
+    if(cnBox) cnBox.style.display = 'none';
+  }
+
+  // Order note — نسخة الموظف (لو فاضية، ناخد نسخة من customer note أول مرة)
+  const orderNote = o.orderNote !== undefined && o.orderNote !== null
+    ? o.orderNote
+    : (customerNote || o.note || '');
+  set('eo-order-note', orderNote);
+
   set('eo-delivery-type', o.deliveryType||'normal');
   set('eo-status', o.status||'في الانتظار');
   const sel = document.getElementById('eo-courier');
@@ -3242,15 +3466,21 @@ async function saveEditOrder(){
   const paid  = document.getElementById('eo-paid')?.checked||false;
   const phone = get('eo-phone')||'—';
   const addr  = get('eo-addr');
-  const note  = get('eo-note');
+  const orderNote = get('eo-order-note');
   const details = get('eo-details');
   const deliveryType = get('eo-delivery-type')||'normal';
   const status = get('eo-status');
   const courierRaw = document.getElementById('eo-courier')?.value;
   const courierId = courierRaw ? (isNaN(+courierRaw)?courierRaw:+courierRaw) : null;
-  const upd = { name, phone, area, addr, total, ship, paid, note, details, deliveryType, status, courierId };
+  // orderNote بدل note — نحفظها في الحقلين للتوافق
+  const upd = { name, phone, area, addr, total, ship, paid, note: orderNote, orderNote, details, deliveryType, status, courierId };
   Object.assign(o, upd);
-  if(API_URL) apiFetch('/api/orders/'+o.id,'PATCH',upd).catch(()=>{});
+  // احفظ مع retry
+  if(API_URL){
+    _savePatchWithRetry(o.id, upd, 3).then(r => {
+      if(!r.success) _trackAssignmentFailure(o.id, o.name, 'تعديل الطلب');
+    });
+  }
   debouncedSaveOrders();
   closeM('m-edit-order');
   refreshAll();
@@ -4150,11 +4380,12 @@ function renderCourierOrdersPage(){
                     <button class="btn btn-ghost btn-xs" style="font-size:10px;padding:2px 6px" onclick="openZoneEdit('${o.id}',${c.id})">✏️</button>
                   </div>
                 </td>
-                <td style="font-size:11px;color:var(--muted);max-width:130px">${(o.addr||o.area||'')}${o.addr2?' / '+o.addr2:''}</td>
+                <td style="font-size:11px;color:var(--muted);max-width:130px">${(o.addr||o.area||'')}${o.addr2?' / '+o.addr2:''}${(o.orderNote||o.note||o.customerNote||'').trim()?'<div style="margin-top:4px;padding:4px 6px;background:#fef3c7;border:1px solid #fde047;border-radius:4px;font-size:10px;color:#78350f;font-weight:600;line-height:1.4">📝 '+((o.orderNote||o.note||o.customerNote||'').trim().replace(/[<>]/g,''))+'</div>':''}</td>
                 <td><strong>${o.paid?'<span style="color:var(--success)">مدفوع</span>':(o.total.toLocaleString()+' ج')}</strong></td>
                 <td>${sBadge(o.status)}</td>
                 <td>
                   <div style="display:flex;gap:4px;flex-wrap:wrap">
+                    <button class="btn btn-ghost btn-xs" style="color:#d97706;border-color:#f59e0b;font-size:10px" onclick="openNoteEdit('${o.id}')" title="ملاحظة الطلب">${(o.orderNote||o.note||o.customerNote||'').trim()?'📝✓':'📝'}</button>
                     ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="unassignOrder('${o.id}')">↩️ إلغاء</button>`:''}
                     ${o.status!=='ملغي'?`<button class="btn btn-ghost btn-xs" style="color:var(--danger);border-color:var(--danger)" onclick="cancelOrderByCustomer('${o.id}')">🚫 إلغاء</button>`:''}'
                     ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" onclick="reassignOrder('${o.id}')">🔄 تعيين</button>`:''}
@@ -4206,11 +4437,12 @@ function coFilter(f, cId){
           <button class="btn btn-ghost btn-xs" style="font-size:10px;padding:2px 6px" onclick="openZoneEdit('${o.id}',${cId})">✏️</button>
         </div>
       </td>
-      <td style="font-size:11px;color:var(--muted);max-width:130px;line-height:1.6">${o.addr||o.area}</td>
+      <td style="font-size:11px;color:var(--muted);max-width:130px;line-height:1.6">${o.addr||o.area}${(o.orderNote||o.note||o.customerNote||'').trim()?'<div style="margin-top:4px;padding:4px 6px;background:#fef3c7;border:1px solid #fde047;border-radius:4px;font-size:10px;color:#78350f;font-weight:600;line-height:1.4">📝 '+((o.orderNote||o.note||o.customerNote||'').trim().replace(/[<>]/g,''))+'</div>':''}</td>
       <td><strong>${o.paid?'<span style="color:var(--success)">مدفوع</span>':(o.total.toLocaleString()+' ج')}</strong></td>
       <td>${sBadge(o.status)}</td>
       <td>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-xs" style="color:#d97706;border-color:#f59e0b;font-size:10px" onclick="openNoteEdit('${o.id}')" title="ملاحظة الطلب">${(o.orderNote||o.note||o.customerNote||'').trim()?'📝✓':'📝'}</button>
           ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="unassignOrder('${o.id}')">↩️ إلغاء</button>`:''}
           ${o.status!=='مكتمل'?`<button class="btn btn-ghost btn-xs" onclick="reassignOrder('${o.id}')">🔄 تعيين</button>`:''}
           ${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✅ تم</button>`:''}
@@ -5376,6 +5608,7 @@ async function undoPickup(id){
 }
 
 async function unassignBosta(id){
+  if(!confirmEditSettledOrder(id)) return;
   const o=orders.find(x=>x.id===id);if(!o)return;
   o.courierId=null;o.status='جديد';o.bostaId=null;o.bostaTrackingNo=null;o.bostaStatus=null;
   if(API_URL)apiFetch('/api/orders/'+id,'PATCH',{courierId:null,status:'جديد',bostaId:null,bostaTrackingNo:null,bostaStatus:null}).catch(()=>{});
@@ -5653,6 +5886,31 @@ function getSettledIds(cId){
   return ids;
 }
 
+// يتحقق إن الطلب مسوّى (في أي settlement)
+function isOrderSettled(orderId){
+  if(!_allSettlements || !orderId) return false;
+  for(const s of _allSettlements){
+    if((s.orderIds||[]).includes(orderId)) return true;
+  }
+  return false;
+}
+
+// حماية: يرجع true لو المستخدم مسموح له يعدل طلب مسوّى
+// الأدمن فقط يقدر يعدل (بعد تحذير). باقي المستخدمين مش يقدروا.
+function canEditSettled(){
+  return currentUser && currentUser.role === 'admin';
+}
+
+// تحذير قبل تعديل طلب مسوّى — يرجع true لو المستخدم أكد
+function confirmEditSettledOrder(orderId){
+  if(!isOrderSettled(orderId)) return true; // مش مسوّى، اعمل اللي إنت عايزه
+  if(!canEditSettled()){
+    toast('🔒 هذا الطلب مسوّى — لا يمكن تعديله');
+    return false;
+  }
+  return confirm('⚠️ تحذير: هذا الطلب مسوّى بالفعل.\n\nالتعديل قد يؤثر على كشف الحساب السابق.\nهل أنت متأكد من المتابعة؟');
+}
+
 function getPendingSettleOrders(cId){
   const settled = getSettledIds(cId);
   const underSettle = oByC(cId,'تحت التسوية');
@@ -5681,28 +5939,116 @@ function openCourierAccSession(cId){
 
   // ابدأ من الطلبات النشطة للمندوب (غير ملغي/مدمج/مكتمل مسوّى)
   const settledIds = getSettledIds(cId);
-  let sessionOrders = orders.filter(o=>{
+  const allActiveOrders = orders.filter(o=>{
     if(String(o.courierId) !== String(cId)) return false;
     if(o.status === 'مدمج') return false;
     if(settledIds.has(o.id)) return false;
-    // اشمل فقط الطلبات اللي محتاجة محاسبة
     return ['جاري التوصيل','تحت التسوية','مكتمل'].includes(o.status);
   });
 
-  // لو في وقت آخر طباعة، استبعد الطلبات اللي جت بعده (يعتبروا جداد)
-  const lastPrintTs = dsLastPrintTimes[cId] || 0;
-  if(lastPrintTs){
-    sessionOrders = sessionOrders.filter(o=>{
-      const createdTs = o.createdAt ? new Date(o.createdAt).getTime() : 0;
-      return createdTs <= lastPrintTs;
-    });
-  }
-
-  if(!sessionOrders.length){
+  if(!allActiveOrders.length){
     toast('لا توجد طلبات للمحاسبة');
     return;
   }
 
+  // جمّع الطلبات حسب الدفعة
+  const batchMap = {};
+  const noBatchOrders = [];
+  allActiveOrders.forEach(o => {
+    if(o.batchCode){
+      if(!batchMap[o.batchCode]) batchMap[o.batchCode] = [];
+      batchMap[o.batchCode].push(o);
+    } else {
+      noBatchOrders.push(o);
+    }
+  });
+
+  const batchCodes = Object.keys(batchMap).sort();
+
+  // لو دفعة واحدة بس وما فيش طلبات بدون دفعة → افتح مباشرة
+  if(batchCodes.length <= 1 && !noBatchOrders.length){
+    _startCourierAccSession(cId, c, allActiveOrders);
+    return;
+  }
+
+  // عرض popup اختيار الدفعات
+  const formatBatchDate = (code) => {
+    const m = code.match(/B-(\d{4})-(\d{2})-(\d{2})-(\d+)/);
+    if(!m) return code;
+    const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+    return `${parseInt(m[3])} ${months[parseInt(m[2])-1]} · دفعة ${parseInt(m[4])}`;
+  };
+
+  let html = `<div style="padding:4px"><div style="font-size:13px;color:var(--muted);margin-bottom:12px">اختر الدفعات اللي عايز تحاسب عليها. الدفعات الجديدة ممكن تستبعدها عشان ما تختلطش بالقديمة:</div>`;
+
+  batchCodes.forEach(code => {
+    const batchOrders = batchMap[code];
+    const cod = batchOrders.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
+    const ship = batchOrders.reduce((s,o)=>s+(o.ship||50),0);
+    html += `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--card)">
+      <input type="checkbox" class="acc-batch-chk" value="${code}" checked style="width:18px;height:18px;cursor:pointer">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:13px">📦 ${formatBatchDate(code)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">${batchOrders.length} طلب · 💰 ${cod.toLocaleString()} ج COD · 🚴 ${ship.toLocaleString()} ج شحن</div>
+        <div style="font-size:10px;color:var(--muted);font-family:monospace;margin-top:2px">${code}</div>
+      </div>
+    </label>`;
+  });
+
+  if(noBatchOrders.length){
+    const cod = noBatchOrders.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
+    const ship = noBatchOrders.reduce((s,o)=>s+(o.ship||50),0);
+    html += `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--warn);border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--warn-light)">
+      <input type="checkbox" class="acc-batch-chk" value="__nobatch__" checked style="width:18px;height:18px;cursor:pointer">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:13px;color:#92400e">⚠️ طلبات قديمة بدون دفعة</div>
+        <div style="font-size:11px;color:#92400e;margin-top:3px">${noBatchOrders.length} طلب · 💰 ${cod.toLocaleString()} ج COD · 🚴 ${ship.toLocaleString()} ج شحن</div>
+      </div>
+    </label>`;
+  }
+
+  html += `<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+    <button class="btn btn-ghost btn-sm" onclick="closeM('m-acc-batch')">إلغاء</button>
+    <button class="btn btn-primary btn-sm" onclick="confirmAccBatchSelection()">ابدأ المحاسبة ←</button>
+  </div></div>`;
+
+  let m = document.getElementById('m-acc-batch');
+  if(!m){
+    m = document.createElement('div');
+    m.id = 'm-acc-batch';
+    m.className = 'overlay';
+    m.innerHTML = `<div class="modal" style="width:560px;max-width:95vw">
+      <div class="mhd"><h3>🗂️ اختر دفعات المحاسبة — ${c.name}</h3><button class="xbtn" onclick="closeM('m-acc-batch')">✕</button></div>
+      <div class="mbody" id="acc-batch-body"></div>
+    </div>`;
+    document.body.appendChild(m);
+  } else {
+    m.querySelector('.mhd h3').textContent = `🗂️ اختر دفعات المحاسبة — ${c.name}`;
+  }
+  document.getElementById('acc-batch-body').innerHTML = html;
+  window._accBatchCtx = { cId, batchMap, noBatchOrders, courier: c };
+  openM('m-acc-batch');
+}
+
+function confirmAccBatchSelection(){
+  const ctx = window._accBatchCtx;
+  if(!ctx) return;
+  const checked = [...document.querySelectorAll('.acc-batch-chk:checked')].map(c=>c.value);
+  if(!checked.length){ toast('❗ اختر دفعة واحدة على الأقل'); return; }
+
+  let selectedOrders = [];
+  checked.forEach(code => {
+    if(code === '__nobatch__') selectedOrders.push(...ctx.noBatchOrders);
+    else if(ctx.batchMap[code]) selectedOrders.push(...ctx.batchMap[code]);
+  });
+
+  if(!selectedOrders.length){ toast('❗ لا توجد طلبات'); return; }
+
+  closeM('m-acc-batch');
+  _startCourierAccSession(ctx.cId, ctx.courier, selectedOrders);
+}
+
+function _startCourierAccSession(cId, c, sessionOrders){
   // ترتيب زي ورقة التوصيل: Express أولاً، بعدين Normal مرتبة بالمنطقة
   const express = sessionOrders.filter(o=>isSameDay(o));
   const normal = sessionOrders.filter(o=>!isSameDay(o));
@@ -7236,23 +7582,122 @@ function renderBatchOrder(){
   }
 }
 
+// ===== INTERNAL ASSIGNMENT TRACKING =====
+// بنتتبع الـ API calls بتاعة التوزيع عشان نتأكد إن كل طلب وصل DB
+const _assignmentQueue = [];
+let _assignmentFailed = []; // الطلبات اللي PATCH بتاعها فشل
+
+async function _savePatchWithRetry(orderId, upd, maxAttempts = 3){
+  for(let attempt = 1; attempt <= maxAttempts; attempt++){
+    try{
+      const r = await apiFetch('/api/orders/'+orderId, 'PATCH', upd);
+      if(r) return { success: true, result: r };
+    }catch(e){
+      console.warn(`PATCH attempt ${attempt}/${maxAttempts} failed for ${orderId}:`, e.message);
+    }
+    if(attempt < maxAttempts){
+      await new Promise(r => setTimeout(r, 500 * attempt)); // backoff
+    }
+  }
+  return { success: false };
+}
+
+function _trackAssignmentFailure(orderId, orderName, courierName){
+  _assignmentFailed.push({ orderId, orderName, courierName, ts: Date.now() });
+  _updateAssignmentFailuresBadge();
+}
+
+function _updateAssignmentFailuresBadge(){
+  let el = document.getElementById('assign-failures-badge');
+  if(!_assignmentFailed.length){
+    if(el) el.remove();
+    return;
+  }
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'assign-failures-badge';
+    el.style.cssText = 'position:fixed;bottom:90px;left:20px;background:#fff;border:2px solid var(--danger);border-radius:12px;padding:12px 16px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:9999;font-family:Cairo,sans-serif;font-size:12px;min-width:220px;max-width:320px';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<div style="font-weight:700;color:var(--danger);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+    <span>⚠️ طلبات لم تحفظ</span>
+    <span onclick="this.parentElement.parentElement.remove()" style="cursor:pointer;color:var(--muted);font-size:14px;padding:0 4px">✕</span>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin-bottom:6px">${_assignmentFailed.length} طلب مش متأكدين إنه وصل السيرفر</div>
+  <button onclick="showAssignmentFailures()" style="font-size:11px;padding:4px 10px;background:var(--danger);color:#fff;border:none;border-radius:4px;cursor:pointer;margin-left:4px">عرض القائمة</button>
+  <button onclick="retryAssignmentFailures()" style="font-size:11px;padding:4px 10px;background:var(--warn);color:#fff;border:none;border-radius:4px;cursor:pointer">إعادة محاولة</button>`;
+}
+
+function showAssignmentFailures(){
+  if(!_assignmentFailed.length){ toast('✅ لا توجد فشل'); return; }
+  const list = _assignmentFailed.map(t =>
+    `• ${t.orderId} — ${t.orderName} → ${t.courierName}`
+  ).join('\n');
+  alert('طلبات لم نتأكد إنها اتحفظت في السيرفر:\n\n' + list + '\n\nيُفضّل إعادة المحاولة أو إعادة التوزيع يدوياً.');
+}
+
+async function retryAssignmentFailures(){
+  if(!_assignmentFailed.length) return;
+  const failures = [..._assignmentFailed];
+  _assignmentFailed = [];
+  _updateAssignmentFailuresBadge();
+  let recovered = 0;
+  for(const f of failures){
+    const o = orders.find(x => x.id === f.orderId);
+    if(!o) continue;
+    const upd = {
+      courierId: o.courierId,
+      isBosta: o.isBosta || false,
+      ship: o.ship,
+      status: o.status,
+      assignedZone: o.assignedZone,
+      batchCode: o.batchCode,
+    };
+    const r = await _savePatchWithRetry(f.orderId, upd, 3);
+    if(r.success) recovered++;
+    else _trackAssignmentFailure(f.orderId, f.orderName, f.courierName);
+  }
+  toast(`🔄 تم حفظ ${recovered} من ${failures.length}`);
+}
+
 async function batchAssign(courierId){
   const o=batchOrders[batchIndex];
+  if(!o){ console.warn('batchAssign: no order at index', batchIndex); return; }
+
+  // خد snapshot من الطلب + index حالا (قبل ما batchIndex يتغير)
+  const orderSnapshot = { ...o };
+  const currentIndex = batchIndex;
+  const orderId = o.id;
+  const orderName = o.name;
+
   if(courierId===0)courierId='bosta';
   const c=courierId!=='bosta'?couriers.find(x=>x.id==courierId):null;
   const ship=c?(isSameDay(o)?c.shipExpress||80:c.ship||50):50;
   const assignedZone=getOrderZoneForCourier(o,c||{zone:''});
   const isBosta=courierId==='bosta';
+  const courierName = c ? c.name : 'بوسطة';
   const upd=isBosta
     ?{courierId:null,isBosta:true,ship,status:'جاري التوصيل',assignedZone,batchCode:_currentBatchCode}
     :{courierId,isBosta:false,ship,status:'جاري التوصيل',assignedZone,batchCode:_currentBatchCode};
+
+  // طبّق محلياً فوراً
   Object.assign(o,upd);
   if(c)c.status='نشط';
-  if(!isBosta && c) shopifyFulfill(o, c.name);
-  if(API_URL)apiFetch('/api/orders/'+o.id,'PATCH',upd).catch(()=>{});
+  if(!isBosta && c) shopifyFulfill({ ...orderSnapshot, ...upd }, c.name);
   debouncedSaveOrders();
-  batchResults.push({orderId:o.id,name:o.name,courierId,courierName:c?c.name:'بوسطة',action:'assigned'});
-  batchIndex++;renderBatchOrder();
+  batchResults.push({orderId,name:orderName,courierId,courierName,action:'assigned'});
+  batchIndex++;
+  renderBatchOrder();
+
+  // احفظ على السيرفر في الخلفية (مع retry تلقائي)
+  if(API_URL){
+    _savePatchWithRetry(orderId, upd, 3).then(r => {
+      if(!r.success){
+        console.error(`❌ Failed to save assignment for ${orderId} after 3 attempts`);
+        _trackAssignmentFailure(orderId, orderName, courierName);
+      }
+    });
+  }
 }
 
 async function batchMarkPickup(){
@@ -7498,12 +7943,84 @@ async function saveZoneEdit(){
   const activeChip=document.querySelector('#zone-edit-chips .chip.on');
   const newZone=inputVal||( activeChip?activeChip.textContent.trim():'')||'أخري';
   o.assignedZone=newZone;
-  if(API_URL)apiFetch('/api/orders/'+o.id,'PATCH',{assignedZone:newZone}).catch(()=>{});
+  o.zoneManuallySet=true; // علامة إن المنطقة اتحددت يدوياً — ما يتغيرش تلقائياً
+  // احفظ على السيرفر مع retry
+  if(API_URL){
+    _savePatchWithRetry(o.id, {assignedZone:newZone, zoneManuallySet:true}, 3).then(r => {
+      if(!r.success){
+        _trackAssignmentFailure(o.id, o.name, 'تغيير منطقة: '+newZone);
+        toast('⚠️ تعذر حفظ المنطقة — حاول تاني');
+      }
+    });
+  }
   debouncedSaveOrders();
   closeM('m-zone-edit');
   const lbl=document.getElementById('zone-label-'+o.id);
   if(lbl)lbl.textContent=newZone;
   toast('✅ تم تحديث المنطقة إلى: '+newZone);
+}
+
+// ===== NOTE EDIT =====
+let editingNoteOrderId = null;
+
+function openNoteEdit(orderId){
+  if(!confirmEditSettledOrder(orderId)) return;
+  const o = orders.find(x=>x.id===orderId);
+  if(!o){ toast('❗ الطلب غير موجود'); return; }
+  editingNoteOrderId = orderId;
+
+  const info = document.getElementById('note-edit-order-info');
+  if(info) info.innerHTML = '<strong>'+orderId+'</strong> — '+o.name+'<br><span style="color:var(--muted);font-size:11px">📍 '+(o.area||'—')+'</span>';
+
+  // Customer note من Shopify (read-only)
+  const customerNote = (o.customerNote || (o.src==='shopify' ? o.note : '') || '').trim();
+  const cnBox = document.getElementById('note-edit-customer-box');
+  if(customerNote){
+    if(cnBox) cnBox.style.display = 'block';
+    document.getElementById('note-edit-customer').textContent = customerNote;
+  } else {
+    if(cnBox) cnBox.style.display = 'none';
+  }
+
+  // الملاحظة الحالية (أولوية للداخلية)
+  const currentNote = o.orderNote !== undefined && o.orderNote !== null
+    ? o.orderNote
+    : (o.note || customerNote || '');
+  const input = document.getElementById('note-edit-input');
+  if(input){
+    input.value = currentNote;
+    setTimeout(() => input.focus(), 100);
+  }
+
+  openM('m-note-edit');
+}
+
+async function saveOrderNote(){
+  const o = orders.find(x=>x.id===editingNoteOrderId);
+  if(!o){ toast('❗ الطلب غير موجود'); return; }
+  const newNote = (document.getElementById('note-edit-input')?.value || '').trim();
+
+  o.orderNote = newNote;
+  o.note = newNote; // للتوافق مع الحقل القديم
+
+  if(API_URL){
+    _savePatchWithRetry(o.id, {orderNote:newNote, note:newNote}, 3).then(r => {
+      if(!r.success){
+        _trackAssignmentFailure(o.id, o.name, 'تعديل الملاحظة');
+        toast('⚠️ تعذر حفظ الملاحظة — حاول تاني');
+      }
+    });
+  }
+  debouncedSaveOrders();
+  closeM('m-note-edit');
+  refreshAll();
+  toast(newNote ? '✅ تم حفظ الملاحظة' : '🗑️ تم مسح الملاحظة');
+}
+
+function clearOrderNote(){
+  const input = document.getElementById('note-edit-input');
+  if(input) input.value = '';
+  saveOrderNote();
 }
 
 document.addEventListener('input', function(e){
@@ -8195,6 +8712,7 @@ function exportBostaExcel(){
 }
 
 function undoBostaExport(id){
+  if(!confirmEditSettledOrder(id)) return;
   const o=orders.find(x=>x.id===id);
   if(!o) return;
   o.bostaExported=false;
@@ -8308,9 +8826,8 @@ function coDsRender(){
       const zo=zones[z];if(!zo)return;
       const iO=z==='أخري';
       const hC=iO?'color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:4px':'color:var(--muted)';
-      rows+='<tr class="ds-zone-hdr"><td colspan="8"><span style="font-size:10px;font-weight:700;'+hC+'">📍 '+z+' · '+zo.length+' طلب'+(iO?' ⚠️':'')+'</span></td></tr>';
+      rows+='<tr class="ds-zone-hdr"><td colspan="7"><span style="font-size:10px;font-weight:700;'+hC+'">📍 '+z+' · '+zo.length+' طلب'+(iO?' ⚠️':'')+'</span></td></tr>';
       zo.forEach(o=>{
-        if(rc>0&&rc%20===0)rows+='</tbody></table><table class="ds-table">'+DS_HEADERS+'<tbody>';
         rows+=dsOrderRow(o,'ds-nr');rc++;
       });
     });
@@ -8586,6 +9103,11 @@ function dsOrderRow(o, cls){
   const zone = o.assignedZone || getOrderZoneForCourier(o, couriers.find(c=>String(c.id)===String(window._dsCourierId))) || '';
   const addrFull = [o.addr||o.area||'', o.province].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(' — ');
   const cod = o.paid ? '<span style="color:#16a34a;font-size:10px">مدفوع</span>' : (o.total||0).toLocaleString();
+  // ملاحظة الطلب (أولوية للملاحظة الداخلية، وإلا ملاحظة العميل من Shopify)
+  const noteText = (o.orderNote || o.note || o.customerNote || '').trim();
+  const noteRow = noteText
+    ? `<tr class="${cls} ds-note-row"><td colspan="7" style="background:#fef3c7;border-top:none;padding:4px 10px 6px"><div style="font-size:11px;line-height:1.5;color:#78350f;font-weight:600">📝 <strong>ملاحظة:</strong> ${noteText.replace(/[<>]/g,'')}</div></td></tr>`
+    : '';
   return `<tr class="${cls}${isNew?' ds-new-row':''}">
     <td style="text-align:center;color:var(--muted);font-size:10px">${dsRowNum}</td>
     <td><strong style="font-size:11px">${newBadge}${o.id}</strong></td>
@@ -8594,7 +9116,7 @@ function dsOrderRow(o, cls){
     <td style="font-size:11px;color:var(--accent)">${zone}</td>
     <td style="font-size:12px;font-weight:700;color:var(--text);white-space:normal;word-break:break-word">${addrFull}</td>
     <td style="font-weight:700;color:var(--danger);text-align:center">${cod}</td>
-  </tr>`;
+  </tr>${noteRow}`;
 }
 
 function dsInit(){
@@ -8783,11 +9305,8 @@ function dsRender(){
       const isOther = z==='أخري';
       const hdrColor = isOther ? 'color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:4px' : 'color:var(--muted)';
       const hdrLabel = '📍 '+z+' · '+zo.length+' طلب'+(isOther?' ⚠️':'');
-      rows += '<tr class="ds-zone-hdr"><td colspan="8"><span style="font-size:10px;font-weight:700;'+hdrColor+'">'+hdrLabel+'</span></td></tr>';
+      rows += '<tr class="ds-zone-hdr"><td colspan="7"><span style="font-size:10px;font-weight:700;'+hdrColor+'">'+hdrLabel+'</span></td></tr>';
       zo.forEach(o=>{
-        if(rowCount>0&&rowCount%20===0){
-          rows+='</tbody></table><table class="ds-table">'+DS_HEADERS+'<tbody>';
-        }
         rows+=dsOrderRow(o,'ds-nr');
         rowCount++;
       });
@@ -8917,6 +9436,32 @@ try{
     <div class="mft">
       <button class="btn btn-ghost" onclick="closeM('m-zone-edit')">إلغاء</button>
       <button class="btn btn-primary" onclick="saveZoneEdit()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- NOTE EDIT MODAL -->
+<div class="overlay" id="m-note-edit">
+  <div class="modal" style="width:480px;max-width:95vw">
+    <div class="mhd"><h3>📝 ملاحظة الطلب</h3><button class="xbtn" onclick="closeM('m-note-edit')">✕</button></div>
+    <div class="mbody">
+      <div id="note-edit-order-info" style="background:var(--bg);border-radius:8px;padding:10px;margin-bottom:12px;font-size:13px"></div>
+
+      <div id="note-edit-customer-box" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 10px;margin-bottom:10px">
+        <div style="font-size:10px;font-weight:700;color:#1e40af;margin-bottom:4px">💬 ملاحظة العميل (من Shopify)</div>
+        <div id="note-edit-customer" style="font-size:12px;color:#1e3a8a;white-space:pre-wrap"></div>
+      </div>
+
+      <div class="fg">
+        <label>ملاحظة الطلب (تظهر للمندوب في ورقة التوصيل)</label>
+        <textarea id="note-edit-input" style="width:100%;min-height:100px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:14px;line-height:1.6" placeholder="اكتب أي تعليمات خاصة بالتوصيل..."></textarea>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">💡 الملاحظة بتظهر للمندوب في ورقة التوصيل المطبوعة</div>
+    </div>
+    <div class="mft">
+      <button class="btn btn-ghost" onclick="closeM('m-note-edit')">إلغاء</button>
+      <button class="btn btn-ghost" style="color:var(--danger);border-color:var(--danger)" onclick="clearOrderNote()">🗑️ مسح الملاحظة</button>
+      <button class="btn btn-primary" onclick="saveOrderNote()">💾 حفظ</button>
     </div>
   </div>
 </div>
