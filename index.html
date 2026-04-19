@@ -295,6 +295,7 @@ tr:hover td{background:#fafbff}
     <div class="ni" data-p="problems" onclick="goPage(this,'problems')"><span class="ni-icon">⚠️</span><span class="ni-label">طلبات مشكلة</span><span class="nbadge" id="nb-problems" style="background:var(--danger)"></span></div>
     <div class="nav-label">المالية</div>
     <div class="ni" data-p="accounting" onclick="goPage(this,'accounting')"><span class="ni-icon">💰</span><span class="ni-label">محاسبة المناديب</span></div>
+    <div class="ni" data-p="stars-reviews" onclick="goPage(this,'stars-reviews')"><span class="ni-icon">⭐</span><span class="ni-label">مراجعات Stars</span><span class="nbadge" id="nb-stars-reviews" style="background:var(--warn)">0</span></div>
     <div class="ni" data-p="settle-history" onclick="goPage(this,'settle-history')"><span class="ni-icon">📚</span><span class="ni-label">سجل التسويات</span></div>
     <div class="ni" data-p="treasury" onclick="goPage(this,'treasury')"><span class="ni-icon">🏦</span><span class="ni-label">الخزنة</span></div>
     <div class="ni" data-p="shop-accounting" onclick="goPage(this,'shop-accounting')"><span class="ni-icon">🏪</span><span class="ni-label">محاسبة المحل</span></div>
@@ -935,6 +936,42 @@ tr:hover td{background:#fafbff}
     <div class="acc-sec" id="acc-set"><div class="card"><div class="card-hd"><h3>✅ تسوية الحسابات</h3></div><div class="card-body" id="settle-list"></div></div></div>
   </div>
 
+  <!-- ⭐ CAFELAX STARS REVIEWS -->
+  <div class="page" id="page-stars-reviews">
+    <div class="stats-row" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+      <div class="sc" style="border-right:4px solid var(--warn)">
+        <div class="sc-icon">💳</div>
+        <div class="sc-label">طلبات تحويل لمدفوع</div>
+        <div class="sc-val" id="stars-pending-payment">0</div>
+      </div>
+      <div class="sc" style="border-right:4px solid #6366f1">
+        <div class="sc-icon">➕</div>
+        <div class="sc-label">تسويات معلقة</div>
+        <div class="sc-val" id="stars-pending-adj">0</div>
+      </div>
+      <div class="sc" style="border-right:4px solid var(--danger)">
+        <div class="sc-icon">⏱️</div>
+        <div class="sc-label">أقدم طلب</div>
+        <div class="sc-val" id="stars-oldest" style="font-size:14px">—</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-hd">
+        <h3>💳 طلبات تحويل من COD لمدفوع</h3>
+        <button class="btn btn-ghost btn-sm" onclick="loadStarsReviews()" title="تحديث">🔄</button>
+      </div>
+      <div class="card-body" id="stars-payment-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">
+        <h3>➕ تسويات إضافية من المناديب</h3>
+      </div>
+      <div class="card-body" id="stars-adj-list"></div>
+    </div>
+  </div>
+
   <!-- REPORTS -->
   <div class="page" id="page-reports">
     <div class="stats-row" style="grid-template-columns:repeat(4,1fr)">
@@ -1274,7 +1311,7 @@ tr:hover td{background:#fafbff}
 <script>
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات',accounting:'محاسبة المناديب',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -1483,6 +1520,181 @@ function srcBadge(s){
   return '<span class="badge b-manual">✍️ يدوي</span>';
 }
 function toast(msg){const t=$('toast');t.innerHTML=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500)}
+
+// ===== RICH TOAST SYSTEM =====
+// Supports pending → success/error transitions with unique IDs
+const _richToasts = new Map(); // id -> element
+let _toastCounter = 0;
+
+function _ensureToastContainer(){
+  let c = document.getElementById('rich-toast-container');
+  if(!c){
+    c = document.createElement('div');
+    c.id = 'rich-toast-container';
+    c.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:10001;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;font-family:Cairo,sans-serif';
+    document.body.appendChild(c);
+  }
+  return c;
+}
+
+function _makeToastEl(id, kind, msg, retryFn){
+  const bg = kind === 'success' ? '#16a34a'
+           : kind === 'error'   ? '#dc2626'
+           : kind === 'warning' ? '#ea580c'
+           : '#475569'; // pending
+  const icon = kind === 'success' ? '✅'
+             : kind === 'error'   ? '❌'
+             : kind === 'warning' ? '⚠️'
+             : '⏳';
+
+  const t = document.createElement('div');
+  t.dataset.toastId = id;
+  t.style.cssText = `background:${bg};color:#fff;padding:11px 16px;border-radius:10px;font-size:13px;font-weight:500;box-shadow:0 8px 30px rgba(0,0,0,.3);max-width:440px;display:flex;align-items:center;gap:10px;pointer-events:auto;transition:all .3s;opacity:0;transform:translateY(20px)`;
+
+  const spinner = kind === 'pending'
+    ? '<div style="width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>'
+    : `<span style="font-size:16px;flex-shrink:0">${icon}</span>`;
+
+  let actions = '';
+  if(kind === 'error' && retryFn){
+    actions = `<button class="toast-retry-btn" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:Cairo,sans-serif;margin-right:4px">🔄 إعادة المحاولة</button>`;
+  }
+  const closeBtn = (kind !== 'pending')
+    ? `<span class="toast-close-btn" style="cursor:pointer;opacity:.8;font-size:15px;padding:0 4px;user-select:none;flex-shrink:0">✕</span>`
+    : '';
+
+  t.innerHTML = `${spinner}<div style="flex:1;line-height:1.4">${msg}</div>${actions}${closeBtn}`;
+
+  // ensure spin animation exists
+  if(!document.getElementById('rich-toast-anim')){
+    const s = document.createElement('style');
+    s.id = 'rich-toast-anim';
+    s.textContent = '@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
+    document.head.appendChild(s);
+  }
+
+  // fade in next tick
+  setTimeout(() => { t.style.opacity = '1'; t.style.transform = 'translateY(0)'; }, 10);
+
+  // wire up buttons
+  const closeEl = t.querySelector('.toast-close-btn');
+  if(closeEl) closeEl.onclick = () => _dismissToast(id);
+  const retryEl = t.querySelector('.toast-retry-btn');
+  if(retryEl && retryFn) retryEl.onclick = () => { _dismissToast(id); retryFn(); };
+
+  return t;
+}
+
+function _dismissToast(id){
+  const el = _richToasts.get(id);
+  if(!el) return;
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(20px)';
+  setTimeout(() => { if(el.parentNode) el.parentNode.removeChild(el); }, 300);
+  _richToasts.delete(id);
+}
+
+// Public API:
+function toastPending(msg){
+  const id = 'tp_' + (++_toastCounter);
+  const c = _ensureToastContainer();
+  const t = _makeToastEl(id, 'pending', msg);
+  c.appendChild(t);
+  _richToasts.set(id, t);
+  return id;
+}
+
+function toastSuccess(idOrMsg, maybeMsg){
+  // توست نجاح جديد، أو تحويل pending لنجاح
+  if(typeof idOrMsg === 'string' && idOrMsg.startsWith('tp_') && _richToasts.has(idOrMsg)){
+    // تحويل pending موجود
+    const id = idOrMsg;
+    const msg = maybeMsg;
+    const old = _richToasts.get(id);
+    const c = _ensureToastContainer();
+    const t = _makeToastEl(id, 'success', msg);
+    c.replaceChild(t, old);
+    _richToasts.set(id, t);
+    // auto-dismiss بعد 3 ثواني
+    setTimeout(() => _dismissToast(id), 3000);
+    return id;
+  }
+  // توست نجاح جديد
+  const msg = idOrMsg;
+  const id = 'ts_' + (++_toastCounter);
+  const c = _ensureToastContainer();
+  const t = _makeToastEl(id, 'success', msg);
+  c.appendChild(t);
+  _richToasts.set(id, t);
+  setTimeout(() => _dismissToast(id), 3000);
+  return id;
+}
+
+function toastError(idOrMsg, maybeMsg, retryFn){
+  if(typeof idOrMsg === 'string' && idOrMsg.startsWith('tp_') && _richToasts.has(idOrMsg)){
+    const id = idOrMsg;
+    const msg = maybeMsg;
+    const old = _richToasts.get(id);
+    const c = _ensureToastContainer();
+    const t = _makeToastEl(id, 'error', msg, retryFn);
+    c.replaceChild(t, old);
+    _richToasts.set(id, t);
+    // errors تفضل 10 ثواني أو تختفي بس لو المستخدم دوس ✕
+    setTimeout(() => _dismissToast(id), 10000);
+    return id;
+  }
+  const msg = idOrMsg;
+  const id = 'te_' + (++_toastCounter);
+  const c = _ensureToastContainer();
+  const t = _makeToastEl(id, 'error', msg, retryFn);
+  c.appendChild(t);
+  _richToasts.set(id, t);
+  setTimeout(() => _dismissToast(id), 10000);
+  return id;
+}
+
+function toastWarning(msg){
+  const id = 'tw_' + (++_toastCounter);
+  const c = _ensureToastContainer();
+  const t = _makeToastEl(id, 'warning', msg);
+  c.appendChild(t);
+  _richToasts.set(id, t);
+  setTimeout(() => _dismissToast(id), 5000);
+  return id;
+}
+
+// ===== doAction — wrapper موحد =====
+// Usage: await doAction('توزيع المندوب', async () => apiPatch(...), { rollback: () => Object.assign(o, snapshot) })
+async function doAction(label, apiCall, opts = {}){
+  const pendingId = toastPending(label + '...');
+  try{
+    const result = await apiCall();
+    // نجاح: لازم result يكون object ومش null، و success !== false
+    if(result && result.success !== false && !result.error){
+      toastSuccess(pendingId, '✅ ' + label);
+      if(opts.onSuccess) opts.onSuccess(result);
+      return { ok: true, result };
+    }
+    // فشل من السيرفر — رسالة الفشل من result
+    const errMsg = result?.error || result?.message || 'فشل بدون سبب واضح';
+    const retry = opts.retry !== false
+      ? () => doAction(label, apiCall, opts)
+      : null;
+    toastError(pendingId, '❌ فشل ' + label + '\n↳ ' + errMsg, retry);
+    if(opts.rollback) opts.rollback();
+    if(opts.onError) opts.onError(result);
+    return { ok: false, result };
+  }catch(e){
+    const retry = opts.retry !== false
+      ? () => doAction(label, apiCall, opts)
+      : null;
+    toastError(pendingId, '❌ خطأ شبكة: ' + label + '\n↳ ' + (e.message || 'unknown'), retry);
+    if(opts.rollback) opts.rollback();
+    if(opts.onError) opts.onError(e);
+    return { ok: false, error: e };
+  }
+}
+
 function openM(id){refreshSelects();if(id==='m-assign')renderAssignGrid();$(id).classList.add('open')}
 function closeM(id){$(id).classList.remove('open');selectedCourierId=null}
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open')}));
@@ -2092,14 +2304,56 @@ function renderCouriers(){
   $('courier-count').textContent=couriers.length+' مندوب';
   $('couriers-grid').innerHTML=couriers.map((c,i)=>{
     const active=oByC(c.id,'جاري التوصيل').length,done=oByC(c.id,'مكتمل').length,tot=active+done,rate=tot?Math.round(done/tot*100):0;
-    return`<div class="cc"><div class="cc-av" style="background:${COLORS[i%COLORS.length]}">${c.name[0]}</div><div class="cc-name">${c.name}</div><div class="cc-info">📱 ${c.phone}</div><div class="cc-info">📍 ${c.zone}</div><div class="cc-info">🚗 ${c.vehicle}</div><div class="cc-info">💰 شحن: <strong>${c.ship} ج</strong></div><div class="cc-info" style="margin-top:5px">📦 نشط: <strong>${active}</strong> | مكتمل: <strong>${done}</strong></div><div class="pbar"><div class="pbar-f" style="width:${rate}%"></div></div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+    const hasStarsAccount = c.username ? '⭐' : '';
+    return`<div class="cc"><div class="cc-av" style="background:${COLORS[i%COLORS.length]}">${c.name[0]}</div><div class="cc-name">${c.name} ${hasStarsAccount}</div><div class="cc-info">📱 ${c.phone}</div><div class="cc-info">📍 ${c.zone}</div><div class="cc-info">🚗 ${c.vehicle}</div><div class="cc-info">💰 شحن: <strong>${c.ship} ج</strong></div><div class="cc-info" style="margin-top:5px">📦 نشط: <strong>${active}</strong> | مكتمل: <strong>${done}</strong></div><div class="pbar"><div class="pbar-f" style="width:${rate}%"></div></div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
         <span class="cc-status s-active">${c.status}</span>
-        <div style="display:flex;gap:4px">
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-xs" onclick="openStarsCredentials(${c.id})" style="color:#d4af37;border-color:#d4af37" title="Cafelax Stars — حساب دخول التطبيق">⭐ ${c.username?'تعديل دخول':'إنشاء دخول'}</button>
           <button class="btn btn-ghost btn-xs" onclick="openEditCourier(${c.id})" style="color:var(--accent);border-color:var(--accent)">✏️ تعديل</button>
           <button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="delCourier(${c.id})">✕</button>
         </div>
       </div></div>`}).join('');
   saveCouriers();refreshSelects();
+}
+
+// ===== CAFELAX STARS: Set courier credentials =====
+async function openStarsCredentials(courierId){
+  const c = couriers.find(x => x.id == courierId);
+  if(!c){ toast('❗ المندوب غير موجود'); return; }
+
+  const current = c.username || '';
+  const username = prompt('⭐ Cafelax Stars — حساب دخول\n\nالمندوب: ' + c.name + '\n\nأدخل اسم المستخدم (بالإنجليزية):', current);
+  if(username === null) return;
+  if(!username.trim()){ toast('❌ اسم المستخدم مطلوب'); return; }
+
+  const password = prompt('أدخل كلمة المرور (4 أحرف على الأقل):');
+  if(password === null) return;
+  if(!password || password.length < 4){ toast('❌ كلمة المرور قصيرة'); return; }
+
+  try{
+    // SHA-256 hash
+    const passHash = await _sha256Hash(password);
+    const r = await apiFetch('/api/couriers/'+courierId+'/set-credentials', 'POST', {
+      username: username.trim(),
+      passHash
+    });
+    if(r && r.success){
+      c.username = username.trim();
+      saveCouriers();
+      renderCouriers();
+      alert('✅ تم حفظ حساب الدخول\n\nالمندوب: ' + c.name + '\nاسم المستخدم: ' + username + '\nكلمة المرور: ' + password + '\n\nشارك دي مع المندوب عشان يدخل التطبيق.\n\nرابط التطبيق:\n' + (window._starsAppUrl || 'Cafelax Stars'));
+    } else {
+      toast('❌ فشل: ' + (r?.error || 'غير معروف'));
+    }
+  }catch(e){
+    toast('❌ خطأ: ' + e.message);
+  }
+}
+
+async function _sha256Hash(str){
+  const buf = new TextEncoder().encode(str);
+  const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
 function renderAssignPage(){
@@ -3131,9 +3385,10 @@ async function selCAndConfirm(id){
   if(!o){ toast('❗ الطلب غير موجود: '+currentOrderId); return; }
   if(!c){ toast('❗ المندوب غير موجود'); return; }
 
-  // تحقق إن الطلب لسه ما اتوزعش
-  if(o.courierId && o.status==='جاري التوصيل'){
-    toast('⚠️ الطلب '+currentOrderId+' موزع بالفعل');
+  // تحقق إن الطلب لسه ما اتوزعش لنفس المندوب (حماية من double-click)
+  // لو موزع لمندوب تاني، ده reassignment مسموح
+  if(o.courierId && o.status==='جاري التوصيل' && String(o.courierId) === String(id)){
+    toast('⚠️ الطلب '+currentOrderId+' موزع لنفس المندوب بالفعل');
     return;
   }
 
@@ -3174,9 +3429,12 @@ async function confirmAssign(){
   const c=couriers.find(x=>x.id==currentCourierId);
   if(!o){ toast('❗ الطلب غير موجود'); return; }
 
-  // تحقق إن الطلب لسه ما اتوزعش
-  if(o.courierId && o.status==='جاري التوصيل'){
-    toast('⚠️ الطلب '+currentOrderId+' موزع بالفعل');
+  // تحقق إن الطلب مش موزع لنفس المندوب بالفعل (حماية من double-click)
+  // لو موزع لمندوب تاني، ده reassignment مسموح
+  const sameBosta = String(currentCourierId)==='bosta' && o.isBosta;
+  const sameCourier = o.courierId && String(o.courierId) === String(currentCourierId);
+  if(o.status==='جاري التوصيل' && (sameCourier || sameBosta)){
+    toast('⚠️ الطلب '+currentOrderId+' موزع لنفس المندوب بالفعل');
     closeM('m-assign');
     return;
   }
@@ -3233,6 +3491,8 @@ async function assignBulkBosta(){
   for(const id of ids){
     const o=orders.find(x=>x.id===id);
     if(!o||o.bostaId)continue;
+    // snapshot قبل التعديل
+    const orderSnapshot = { ...o };
     try{
       const result=await createBostaDelivery(o);
       if(result.success){
@@ -3241,6 +3501,8 @@ async function assignBulkBosta(){
         o.bostaStatus='created';
         o.status='جاري التوصيل';
         if(API_URL) await apiFetch('/api/orders/'+id,'PATCH',{bostaId:result.deliveryId,bostaTrackingNo:result.trackingNumber,bostaStatus:'created',status:'جاري التوصيل'});
+        // Shopify fulfill + tag "Bosta"
+        shopifyFulfill({ ...orderSnapshot, status:'جاري التوصيل', isBosta:true }, 'Bosta');
         success++;
       }else fail++;
     }catch{fail++;}
@@ -3259,10 +3521,14 @@ async function assignBulkCourier(){
   for(const id of ids){
     const o=orders.find(x=>x.id===id);
     if(!o)continue;
+    // snapshot قبل التعديل
+    const orderSnapshot = { ...o };
     const ship=getShipCost(o,c);
     const upd={courierId:cId,ship,status:'جاري التوصيل'};
     if(API_URL) await apiFetch('/api/orders/'+id,'PATCH',upd);
     Object.assign(o,upd);
+    // Shopify fulfill + tag اسم المندوب
+    shopifyFulfill({ ...orderSnapshot, ...upd }, c.name);
   }
   c.status='نشط';
   pushNotif('🚴',`تم توزيع ${ids.length} طلب على ${c.name}`,ids.join('، '));
@@ -3317,6 +3583,8 @@ async function bostaCreateOne(id){
     return;
   }
   toast('⏳ جاري الرفع على بوسطة...');
+  // snapshot قبل التعديل
+  const orderSnapshot = { ...o };
   try{
     const result=await createBostaDelivery(o);
     if(result.success){
@@ -3331,6 +3599,8 @@ async function bostaCreateOne(id){
       if(result.awbBase64) patch.bostaAwbBase64=result.awbBase64;
       if(API_URL) await apiFetch('/api/orders/'+id,'PATCH',patch).catch(()=>{});
       debouncedSaveOrders();
+      // Shopify fulfill + tag "Bosta" (لو الطلب من Shopify وفي نفس الوقت بيتوزع لبوسطة)
+      shopifyFulfill({ ...orderSnapshot, isBosta:true, status:'جاري التوصيل' }, 'Bosta');
       pushNotif('🚚','تم رفع بوليصة بوسطة',id+' — '+o.name+' — '+result.trackingNumber);
       refreshAll();
       if(result.awbBase64) toast('✅ تم الرفع وتحميل البوليصة PDF — '+result.trackingNumber);
@@ -4520,12 +4790,18 @@ async function coBulkReassign(cId){
 async function doCoBulkReassign(idsStr, newCourierId){
   const ids=idsStr.split(',');
   const isBosta=newCourierId==='bosta';
+  const c = isBosta ? null : couriers.find(x=>x.id==newCourierId);
+  const courierName = isBosta ? 'Bosta' : (c ? c.name : 'OrderPro');
   for(const id of ids){
     const o=orders.find(x=>x.id===id);
     if(!o) continue;
+    // snapshot قبل التعديل
+    const orderSnapshot = { ...o };
     if(isBosta){o.courierId='bosta';o.isBosta=true;o.status='جاري التوصيل';}
     else{o.courierId=newCourierId;o.isBosta=false;o.status='جاري التوصيل';}
     if(API_URL) apiFetch('/api/orders/'+id,'PATCH',{courierId:isBosta?null:newCourierId,isBosta,status:'جاري التوصيل'}).catch(()=>{});
+    // Shopify fulfill + tag
+    shopifyFulfill({ ...orderSnapshot, courierId: isBosta?null:newCourierId, isBosta, status:'جاري التوصيل' }, courierName);
   }
   try{const _s=orders.map(o=>{const{bostaAwbBase64,...r}=o;return r;});localStorage.setItem('orderpro_orders',JSON.stringify(_s));}catch(e){}
   refreshAll();toast('✅ تم تعيين '+ids.length+' طلب');
@@ -7180,17 +7456,19 @@ async function doBatchPrint(){
   const optBosta = document.getElementById('opt-bosta').checked;
 
   document.getElementById('batch-print-popup').remove();
-  toast('⏳ جاري تحضير الطباعة...');
 
   // اجمع كل الطلبات المطلوبة
   const allPages = []; // مصفوفة صفحات HTML
+  const allOrderIds = []; // كل الـ IDs اللي هنطبعها (عشان نعمل pre-cache)
+
+  // البداية: جمّع الـ groups والترتيب
+  const batchesData = []; // [{batchCode, sortedKeys, groups, ordered: [...orders]}]
 
   for(const batchCode of selected){
     const batchOrders = orders.filter(o=>o.batchCode===batchCode);
     if(!batchOrders.length) continue;
 
-    // جمع الطلبات حسب المندوب/بوسطة
-    const groups = {}; // {courierId: {name, express: [], normal: []}}
+    const groups = {};
     batchOrders.forEach(o=>{
       const key = o.isBosta ? 'bosta' : String(o.courierId||'unassigned');
       if(!groups[key]){
@@ -7201,17 +7479,14 @@ async function doBatchPrint(){
       else groups[key].normal.push(o);
     });
 
-    // استبعد بوسطة لو مش مطلوبة
     if(!optBosta) delete groups['bosta'];
 
-    // ترتيب: مندوبين أبجدي، بوسطة آخر
     const sortedKeys = Object.keys(groups).sort((a,b)=>{
       if(a==='bosta') return 1;
       if(b==='bosta') return -1;
       return groups[a].name.localeCompare(groups[b].name,'ar');
     });
 
-    // حدد الطلبات الكبيرة (أكتر من 6 منتجات = صفحتين أو أكتر تقريباً)
     const estimatePagesCount = (o) => {
       let items = [];
       try { items = JSON.parse(o.lineItemsJson || '[]'); } catch(e) {}
@@ -7221,52 +7496,101 @@ async function doBatchPrint(){
       if(count <= 15) return 2;
       return Math.ceil(count / 8);
     };
-    // احسب pageInfo لكل group عشان نستخدمها في الملخص
     sortedKeys.forEach(key => {
       const g = groups[key];
       g._pageInfo = {};
       [...g.express, ...g.normal].forEach(o => { g._pageInfo[o.id] = estimatePagesCount(o); });
     });
 
-    // ورقة ملخص الدفعة
-    if(optSummary){
-      allPages.push(renderBatchSummaryPage(batchCode, groups, sortedKeys));
-    }
-
-    // لكل مندوب
+    // حضّر قائمة الطلبات المرتبة
+    const orderedList = [];
     for(const key of sortedKeys){
       const g = groups[key];
-      // فاصل
-      if(optDivider){
-        allPages.push(renderCourierDividerPage(batchCode, g));
-      }
-
-      // ترتيب: مستعجل كبير → مستعجل عادي → عادي كبير → عادي صغير (داخل كل فئة بالرقم)
       const sortByNum = (a,b)=>{
         const na = parseInt((a.id||'').replace(/\D/g,''))||0;
         const nb = parseInt((b.id||'').replace(/\D/g,''))||0;
         return na - nb;
       };
-
       const isLarge = o => (g._pageInfo[o.id] || 1) > 1;
       const expressLarge = g.express.filter(isLarge).sort(sortByNum);
       const expressSmall = g.express.filter(o => !isLarge(o)).sort(sortByNum);
       const normalLarge = g.normal.filter(isLarge).sort(sortByNum);
       const normalSmall = g.normal.filter(o => !isLarge(o)).sort(sortByNum);
-
       const ordered = [...expressLarge, ...expressSmall, ...normalLarge, ...normalSmall];
+      ordered.forEach(o => allOrderIds.push(o.id));
+      g._ordered = ordered;
+    }
 
-      // فاتورة كل طلب
-      for(const o of ordered){
-        const invoiceHtml = await buildPackingSlipHtml(o);
-        allPages.push(invoiceHtml);
+    batchesData.push({ batchCode, sortedKeys, groups });
+  }
+
+  if(!allOrderIds.length){ toast('❗ لا توجد طلبات للطباعة'); return; }
+
+  // ===== الخطوة 1: اطلب من السيرفر يولّد كل الفواتير بالـ parallel =====
+  toast(`⏳ تحضير ${allOrderIds.length} فاتورة — ده يستغرق ثواني قليلة...`);
+  let cacheStats = { generated: 0, cached: 0, failed: 0, tookSec: 0 };
+  if(API_URL){
+    try{
+      const startTs = Date.now();
+      const r = await apiFetch('/api/invoices/batch-generate','POST',{ orderIds: allOrderIds });
+      if(r){
+        cacheStats = r;
+        console.log('batch-generate:', r);
+      }
+      const took = ((Date.now() - startTs) / 1000).toFixed(1);
+      toast(`✅ جاهز في ${took}s — ${r?.cached||0} موجود · ${r?.generated||0} جديد${r?.failed?' · '+r.failed+' فاشل':''}`);
+    }catch(e){
+      console.warn('batch-generate failed:', e);
+      toast('⚠️ تعذر التحضير المسبق — هيستخدم الطريقة القديمة');
+    }
+  }
+
+  // ===== الخطوة 2: حضّر الصفحات =====
+  toast('⏳ جاري بناء الصفحات...');
+
+  for(const bd of batchesData){
+    const { batchCode, sortedKeys, groups } = bd;
+
+    if(optSummary){
+      allPages.push(renderBatchSummaryPage(batchCode, groups, sortedKeys));
+    }
+
+    for(const key of sortedKeys){
+      const g = groups[key];
+      if(optDivider){
+        allPages.push(renderCourierDividerPage(batchCode, g));
+      }
+
+      // استخدم iframe للفواتير من الكاش — أسرع جداً من rebuild
+      for(const o of g._ordered){
+        // جرّب الكاش الأول
+        let html = null;
+        if(API_URL){
+          try{
+            const invoiceUrl = API_URL.replace(/\/$/,'')+'/api/orders/'+encodeURIComponent(o.id)+'/invoice';
+            const resp = await fetch(invoiceUrl);
+            if(resp.ok){
+              const fullHtml = await resp.text();
+              // استخرج body content فقط
+              const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+              html = bodyMatch ? bodyMatch[1] : fullHtml;
+            }
+          }catch(e){ console.warn('cache fetch failed for', o.id, e); }
+        }
+
+        // Fallback للطريقة القديمة
+        if(!html){
+          html = await buildPackingSlipHtml(o);
+        }
+
+        allPages.push(html);
       }
     }
   }
 
   if(!allPages.length){ toast('❗ لا توجد صفحات للطباعة'); return; }
 
-  // افتح نافذة الطباعة
+  // ===== الخطوة 3: افتح نافذة الطباعة =====
   const w = window.open('','_blank','width=900,height=1000');
   w.document.write(`<!DOCTYPE html><html lang="en"><head>
     <meta charset="UTF-8"><title>Batch Print — ${selected.join(', ')}</title>
@@ -7280,7 +7604,6 @@ async function doBatchPrint(){
       .page:last-child{page-break-after:auto}
       .print-all-btn{position:fixed;bottom:20px;left:20px;background:#000;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-family:Cairo,sans-serif;font-weight:700;font-size:14px;cursor:pointer;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.3)}
 
-      /* Multi-page markers — only appear if an invoice spans more than one printed page */
       .pg-top-banner{padding:10px 16px;border:2px solid #000;font-size:13px;font-weight:700;text-align:center;margin-bottom:20px;letter-spacing:0.5px;font-family:Cairo,sans-serif}
       .pg-end{padding:12px 14px;border:3px solid #000;text-align:center;font-size:16px;font-weight:700;margin-top:25px;letter-spacing:1px;font-family:Cairo,sans-serif;background:#fff}
       .pg-arrow-break{margin:20px 0;text-align:center;page-break-after:always;break-after:page}
@@ -7708,9 +8031,8 @@ async function batchAssign(courierId){
   const o=batchOrders[batchIndex];
   if(!o){ console.warn('batchAssign: no order at index', batchIndex); return; }
 
-  // خد snapshot من الطلب + index حالا (قبل ما batchIndex يتغير)
-  const orderSnapshot = { ...o };
-  const currentIndex = batchIndex;
+  // خد snapshot من الطلب كامل (قبل أي تعديل)
+  const orderSnapshot = JSON.parse(JSON.stringify(o));
   const orderId = o.id;
   const orderName = o.name;
 
@@ -7724,26 +8046,52 @@ async function batchAssign(courierId){
     ?{courierId:null,isBosta:true,ship,status:'جاري التوصيل',assignedZone,batchCode:_currentBatchCode}
     :{courierId,isBosta:false,ship,status:'جاري التوصيل',assignedZone,batchCode:_currentBatchCode};
 
-  // طبّق محلياً فوراً
+  // طبّق محلياً فوراً (optimistic) — عشان الـ wizard يتحرك
   Object.assign(o,upd);
   if(c)c.status='نشط';
-  // Shopify fulfill للكل (مندوب أو بوسطة)
-  if(isBosta) shopifyFulfill({ ...orderSnapshot, ...upd }, 'Bosta');
-  else if(c) shopifyFulfill({ ...orderSnapshot, ...upd }, c.name);
   debouncedSaveOrders();
   batchResults.push({orderId,name:orderName,courierId,courierName,action:'assigned'});
   batchIndex++;
   renderBatchOrder();
 
-  // احفظ على السيرفر في الخلفية (مع retry تلقائي)
-  if(API_URL){
-    _savePatchWithRetry(orderId, upd, 3).then(r => {
-      if(!r.success){
-        console.error(`❌ Failed to save assignment for ${orderId} after 3 attempts`);
-        _trackAssignmentFailure(orderId, orderName, courierName);
-      }
-    });
+  // احفظ على السيرفر مع توست حقيقي (بيتحول من pending لنجاح أو فشل)
+  if(!API_URL){
+    // لا يوجد backend — بنحفظ محلياً بس، ونعرض توست نجاح عادي
+    toastSuccess(`✅ ${orderName} → ${courierName} (محلياً فقط)`);
+    // Shopify fulfill مش منطقي لو مفيش backend
+    return;
   }
+
+  doAction(
+    `${orderId} → ${courierName}`,
+    async () => {
+      // الخطوة الأولى: حفظ الـ PATCH على السيرفر
+      const r = await _savePatchWithRetry(orderId, upd, 3);
+      if(!r.success) return { success: false, error: 'تعذر حفظ التعيين على السيرفر بعد 3 محاولات' };
+      return { success: true, patched: true };
+    },
+    {
+      onSuccess: () => {
+        // بعد ما نتأكد إن السيرفر حفظ، ابدأ الـ Shopify fulfill
+        if(isBosta) shopifyFulfill({ ...orderSnapshot, ...upd }, 'Bosta');
+        else if(c) shopifyFulfill({ ...orderSnapshot, ...upd }, c.name);
+      },
+      rollback: () => {
+        // فشل السيرفر → ارجع الطلب لحالته الأصلية
+        const orderRef = orders.find(x => x.id === orderId);
+        if(orderRef){
+          Object.assign(orderRef, orderSnapshot);
+          debouncedSaveOrders();
+        }
+        // كمان شيله من batchResults
+        const idx = batchResults.findIndex(br => br.orderId === orderId && br.action === 'assigned');
+        if(idx >= 0) batchResults.splice(idx, 1);
+        // نعرض تحذير واضح
+        _trackAssignmentFailure(orderId, orderName, courierName);
+      },
+      retry: true, // السماح بإعادة المحاولة من الـ toast
+    }
+  );
 }
 
 async function batchMarkPickup(){
@@ -9118,7 +9466,206 @@ function goPage(el,page){
   }
   if(page==='treasury'){loadTreasury().then(()=>{renderTreasuryList();if(_activeTreasuryId)selectTreasury(_activeTreasuryId);});}
   if(page==='expiry')renderExpiryPage();
+  if(page==='stars-reviews')loadStarsReviews();
 }
+
+// ===== CAFELAX STARS — Reviews Page =====
+let _starsPendingPayment = [];
+let _starsPendingAdj = [];
+
+async function loadStarsReviews(){
+  if(!API_URL) return;
+  try{
+    const [reviews, adjustments] = await Promise.all([
+      apiFetch('/api/pending-reviews','GET').catch(()=>[]),
+      apiFetch('/api/courier-adjustments/pending','GET').catch(()=>[])
+    ]);
+    _starsPendingPayment = (reviews || []).filter(r => r.type === 'payment_change');
+    _starsPendingAdj = adjustments || [];
+    renderStarsReviews();
+  }catch(e){ console.warn('loadStarsReviews:', e); }
+}
+
+function renderStarsReviews(){
+  // stats
+  const pEl = document.getElementById('stars-pending-payment');
+  const aEl = document.getElementById('stars-pending-adj');
+  const oEl = document.getElementById('stars-oldest');
+  if(pEl) pEl.textContent = _starsPendingPayment.length;
+  if(aEl) aEl.textContent = _starsPendingAdj.length;
+
+  const allItems = [..._starsPendingPayment, ..._starsPendingAdj];
+  if(allItems.length && oEl){
+    const oldest = allItems.reduce((min, x) => new Date(x.createdAt) < new Date(min.createdAt) ? x : min);
+    const age = Math.round((Date.now() - new Date(oldest.createdAt).getTime()) / (1000*60));
+    oEl.textContent = age < 60 ? (age + ' دقيقة') : age < 1440 ? (Math.round(age/60) + ' ساعة') : (Math.round(age/1440) + ' يوم');
+  } else if(oEl) oEl.textContent = '—';
+
+  // badge في السايدبار
+  const navBadge = document.getElementById('nb-stars-reviews');
+  if(navBadge){
+    const total = _starsPendingPayment.length + _starsPendingAdj.length;
+    navBadge.textContent = total;
+    navBadge.style.display = total > 0 ? '' : 'none';
+  }
+
+  // قائمة طلبات التحويل
+  const payList = document.getElementById('stars-payment-list');
+  if(payList){
+    if(!_starsPendingPayment.length){
+      payList.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">✅ لا توجد طلبات تحويل قيد المراجعة</div>';
+    } else {
+      payList.innerHTML = _starsPendingPayment.map(r => {
+        const age = _timeAgo(r.createdAt);
+        const note = r.data && r.data.note ? r.data.note : '';
+        return `<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;background:var(--bg)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+            <div style="flex:1;min-width:200px">
+              <div style="font-size:12px;color:var(--muted);font-family:monospace">${r.orderId}</div>
+              <div style="font-weight:700;font-size:14px">${_escapeHtml(r.customerName || '—')}</div>
+              <div style="font-size:13px;color:var(--muted);margin-top:3px">
+                🚴 المندوب: <strong>${_escapeHtml(r.courierName || '—')}</strong>
+              </div>
+              <div style="font-size:13px;color:var(--success);font-weight:700;margin-top:3px">
+                💰 ${(r.orderTotal||0).toLocaleString()} ج
+              </div>
+              ${note ? `<div style="margin-top:6px;padding:6px 10px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--muted)">📝 ${_escapeHtml(note)}</div>` : ''}
+              <div style="font-size:11px;color:var(--muted);margin-top:6px">⏱️ ${age}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <button class="btn btn-primary btn-sm" onclick="viewStarsProof('payment',${r.id})">🔍 عرض الصورة</button>
+              <button class="btn btn-success btn-sm" onclick="approvePaymentReview(${r.id})">✅ موافق</button>
+              <button class="btn btn-ghost btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="rejectPaymentReview(${r.id})">❌ رفض</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // قائمة التسويات
+  const adjList = document.getElementById('stars-adj-list');
+  if(adjList){
+    if(!_starsPendingAdj.length){
+      adjList.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">✅ لا توجد تسويات قيد المراجعة</div>';
+    } else {
+      adjList.innerHTML = _starsPendingAdj.map(a => {
+        const age = _timeAgo(a.createdAt);
+        const amountColor = a.amount >= 0 ? 'var(--success)' : 'var(--danger)';
+        const amountSign = a.amount > 0 ? '+' : '';
+        return `<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;background:var(--bg)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+            <div style="flex:1;min-width:200px">
+              <div style="font-weight:700;font-size:15px">🚴 ${_escapeHtml(a.courierName || '—')}</div>
+              <div style="font-size:18px;font-weight:800;color:${amountColor};margin-top:3px">${amountSign}${a.amount.toLocaleString()} ج</div>
+              <div style="font-size:13px;color:var(--muted);margin-top:3px">📝 ${_escapeHtml(a.reason)}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:6px">⏱️ ${age}${a.hasProof ? ' · 📸 مع صورة' : ''}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              ${a.hasProof ? `<button class="btn btn-primary btn-sm" onclick="viewStarsProof('adjustment',${a.id})">🔍 عرض الصورة</button>` : ''}
+              <button class="btn btn-success btn-sm" onclick="approveAdjustment(${a.id})">✅ موافق</button>
+              <button class="btn btn-ghost btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="rejectAdjustment(${a.id})">❌ رفض</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+}
+
+function _timeAgo(ts){
+  if(!ts) return '—';
+  const age = Math.round((Date.now() - new Date(ts).getTime()) / (1000*60));
+  if(age < 1) return 'الآن';
+  if(age < 60) return 'من ' + age + ' دقيقة';
+  if(age < 1440) return 'من ' + Math.round(age/60) + ' ساعة';
+  return 'من ' + Math.round(age/1440) + ' يوم';
+}
+
+function _escapeHtml(s){
+  if(s == null) return '';
+  return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function viewStarsProof(kind, id){
+  const url = API_URL.replace(/\/$/,'') +
+    (kind === 'payment' ? '/api/pending-reviews/'+id+'/proof' : '/api/courier-adjustments/'+id+'/proof');
+  window.open(url, '_blank', 'width=600,height=800');
+}
+
+async function approvePaymentReview(id){
+  if(!confirm('موافقة على تحويل الطلب لمدفوع؟\n\nالطلب هيعتبر مدفوع وهتتحدث حسابات المندوب.')) return;
+  try{
+    const r = await apiFetch('/api/pending-reviews/'+id+'/approve','POST',{
+      reviewedBy: currentUser?.username || 'admin'
+    });
+    if(r && r.success){
+      toast('✅ تم الاعتماد');
+      loadStarsReviews();
+      loadOrders();
+    } else toast('❌ فشل');
+  }catch(e){ toast('❌ '+e.message); }
+}
+
+async function rejectPaymentReview(id){
+  const reason = prompt('سبب الرفض (اختياري):');
+  if(reason === null) return;
+  try{
+    const r = await apiFetch('/api/pending-reviews/'+id+'/reject','POST',{
+      reviewedBy: currentUser?.username || 'admin',
+      reason: reason || ''
+    });
+    if(r && r.success){
+      toast('✅ تم الرفض');
+      loadStarsReviews();
+      loadOrders();
+    }
+  }catch(e){ toast('❌ '+e.message); }
+}
+
+async function approveAdjustment(id){
+  if(!confirm('موافقة على التسوية؟\n\nهتدخل في كشف حساب المندوب.')) return;
+  try{
+    const r = await apiFetch('/api/courier-adjustments/'+id+'/approve','POST',{
+      reviewedBy: currentUser?.username || 'admin'
+    });
+    if(r && r.success){
+      toast('✅ تم الاعتماد');
+      loadStarsReviews();
+    }
+  }catch(e){ toast('❌ '+e.message); }
+}
+
+async function rejectAdjustment(id){
+  const reason = prompt('سبب الرفض (اختياري):');
+  if(reason === null) return;
+  try{
+    const r = await apiFetch('/api/courier-adjustments/'+id+'/reject','POST',{
+      reviewedBy: currentUser?.username || 'admin',
+      reason: reason || ''
+    });
+    if(r && r.success){
+      toast('✅ تم الرفض');
+      loadStarsReviews();
+    }
+  }catch(e){ toast('❌ '+e.message); }
+}
+
+// Auto-refresh stars reviews badge every 2 min
+setInterval(() => {
+  if(API_URL && currentUser){
+    apiFetch('/api/pending-reviews','GET').then(reviews => {
+      apiFetch('/api/courier-adjustments/pending','GET').then(adj => {
+        const total = (reviews||[]).length + (adj||[]).length;
+        const navBadge = document.getElementById('nb-stars-reviews');
+        if(navBadge){
+          navBadge.textContent = total;
+          navBadge.style.display = total > 0 ? '' : 'none';
+        }
+      }).catch(()=>{});
+    }).catch(()=>{});
+  }
+}, 120000);
 
 function refreshSelects(){const opts='<option value="">— بدون تعيين الآن —</option>'+couriers.map(c=>`<option value="${c.id}">${c.name} (${c.zone})</option>`).join('');$('o-courier').innerHTML=opts}
 function ordToggleAll(val){
@@ -9340,6 +9887,23 @@ function doPrint(){
   if(cId){
     dsLastPrintTimes[cId] = Date.now();
     try{localStorage.setItem('ds_last_print',JSON.stringify(dsLastPrintTimes));}catch(e){}
+
+    // ✨ Cafelax Stars: علّم طلبات المندوب اللي جاري توصيلها إنها اتسلمت (picked_up_at)
+    // دا بيخلّيها تظهر في تبويب "معاي" في تطبيق المندوب
+    try{
+      const activeOrders = orders.filter(o =>
+        String(o.courierId) === String(cId) &&
+        o.status === 'جاري التوصيل' &&
+        !o.pickedUpAt
+      );
+      if(activeOrders.length && API_URL){
+        const orderIds = activeOrders.map(o => o.id);
+        apiFetch('/api/couriers/'+cId+'/mark-picked-up', 'POST', {orderIds}).then(() => {
+          // حدّث محلياً كمان
+          activeOrders.forEach(o => { o.pickedUpAt = new Date().toISOString(); });
+        }).catch(()=>{});
+      }
+    }catch(e){ console.warn('mark-picked-up:', e); }
   }
   window.print();
 }
