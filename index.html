@@ -7878,22 +7878,32 @@ async function doBatchPrint(){
 
   if(!allOrderIds.length){ toast('❗ لا توجد طلبات للطباعة'); return; }
 
-  // ===== الخطوة 1: اطلب من السيرفر يولّد كل الفواتير بالـ parallel =====
-  toast(`⏳ تحضير ${allOrderIds.length} فاتورة — ده يستغرق ثواني قليلة...`);
-  let cacheStats = { generated: 0, cached: 0, failed: 0, tookSec: 0 };
+  // ===== الخطوة 1: اطلب من السيرفر كل الفواتير في request واحد =====
+  toast(`⏳ تحضير ${allOrderIds.length} فاتورة...`);
+  const invoicesMap = {}; // orderId -> html
+  let fetchStats = { tookSec: 0, missing: 0 };
+
   if(API_URL){
     try{
       const startTs = Date.now();
-      const r = await apiFetch('/api/invoices/batch-generate','POST',{ orderIds: allOrderIds });
-      if(r){
-        cacheStats = r;
-        console.log('batch-generate:', r);
+      // الـ endpoint الجديد يرجع كل الفواتير + يولّد المفقود تلقائياً
+      const r = await apiFetch('/api/invoices/batch-html','POST',{ orderIds: allOrderIds });
+      if(r && r.invoices){
+        r.invoices.forEach(inv => {
+          if(inv.html){
+            // استخرج body content فقط
+            const bodyMatch = inv.html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+            invoicesMap[inv.orderId] = bodyMatch ? bodyMatch[1] : inv.html;
+          }
+        });
+        fetchStats = { tookSec: r.tookSec || 0, missing: r.missing || 0 };
+        const took = ((Date.now() - startTs) / 1000).toFixed(1);
+        toast(`✅ ${allOrderIds.length - (r.missing||0)} فاتورة جاهزة في ${took}s`);
+        console.log('batch-html:', r);
       }
-      const took = ((Date.now() - startTs) / 1000).toFixed(1);
-      toast(`✅ جاهز في ${took}s — ${r?.cached||0} موجود · ${r?.generated||0} جديد${r?.failed?' · '+r.failed+' فاشل':''}`);
     }catch(e){
-      console.warn('batch-generate failed:', e);
-      toast('⚠️ تعذر التحضير المسبق — هيستخدم الطريقة القديمة');
+      console.warn('batch-html failed, falling back to old method:', e);
+      toast('⚠️ تعذر التحضير السريع — هيستخدم الطريقة القديمة');
     }
   }
 
@@ -7913,24 +7923,11 @@ async function doBatchPrint(){
         allPages.push(renderCourierDividerPage(batchCode, g));
       }
 
-      // استخدم iframe للفواتير من الكاش — أسرع جداً من rebuild
+      // استخدم الـ HTML من الـ bulk response
       for(const o of g._ordered){
-        // جرّب الكاش الأول
-        let html = null;
-        if(API_URL){
-          try{
-            const invoiceUrl = API_URL.replace(/\/$/,'')+'/api/orders/'+encodeURIComponent(o.id)+'/invoice';
-            const resp = await fetch(invoiceUrl);
-            if(resp.ok){
-              const fullHtml = await resp.text();
-              // استخرج body content فقط
-              const bodyMatch = fullHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-              html = bodyMatch ? bodyMatch[1] : fullHtml;
-            }
-          }catch(e){ console.warn('cache fetch failed for', o.id, e); }
-        }
+        let html = invoicesMap[o.id];
 
-        // Fallback للطريقة القديمة
+        // Fallback للطريقة القديمة لو الـ bulk ما رجعهاش
         if(!html){
           html = await buildPackingSlipHtml(o);
         }
@@ -7946,37 +7943,97 @@ async function doBatchPrint(){
   const w = window.open('','_blank','width=900,height=1000');
   w.document.write(`<!DOCTYPE html><html lang="en"><head>
     <meta charset="UTF-8"><title>Batch Print — ${selected.join(', ')}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
+      @font-face{
+        font-family:'Cairo';
+        font-weight:400 800;
+        font-display:swap;
+        src:local('Cairo');
+      }
       *{box-sizing:border-box}
-      body{font-family:'Cairo',sans-serif;margin:0;padding:0}
+      body{font-family:'Cairo','Segoe UI',Tahoma,sans-serif;margin:0;padding:0}
       .page{page-break-after:always;padding:30px;min-height:100vh;position:relative}
       .page:last-child{page-break-after:auto}
-      .print-all-btn{position:fixed;bottom:20px;left:20px;background:#000;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-family:Cairo,sans-serif;font-weight:700;font-size:14px;cursor:pointer;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+      .print-all-btn{position:fixed;bottom:20px;left:20px;background:#000;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+      .loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;font-size:16px}
+      .loading-overlay .spinner{width:40px;height:40px;border:4px solid #eee;border-top-color:#000;border-radius:50%;animation:sp 0.8s linear infinite;margin-bottom:14px}
+      @keyframes sp{to{transform:rotate(360deg)}}
 
-      .pg-top-banner{padding:10px 16px;border:2px solid #000;font-size:13px;font-weight:700;text-align:center;margin-bottom:20px;letter-spacing:0.5px;font-family:Cairo,sans-serif}
-      .pg-end{padding:12px 14px;border:3px solid #000;text-align:center;font-size:16px;font-weight:700;margin-top:25px;letter-spacing:1px;font-family:Cairo,sans-serif;background:#fff}
+      .pg-top-banner{padding:10px 16px;border:2px solid #000;font-size:13px;font-weight:700;text-align:center;margin-bottom:20px;letter-spacing:0.5px}
+      .pg-end{padding:12px 14px;border:3px solid #000;text-align:center;font-size:16px;font-weight:700;margin-top:25px;letter-spacing:1px;background:#fff}
       .pg-arrow-break{margin:20px 0;text-align:center;page-break-after:always;break-after:page}
       .pg-arrow-break .arrow{font-size:100px;line-height:0.9;font-weight:900;color:#000}
-      .pg-arrow-break .arrow-text{font-size:14px;font-weight:700;letter-spacing:3px;margin-top:5px;font-family:Cairo,sans-serif}
+      .pg-arrow-break .arrow-text{font-size:14px;font-weight:700;letter-spacing:3px;margin-top:5px}
 
       @media print {
         .no-print{display:none!important}
+        .loading-overlay{display:none!important}
         .page{padding:20px}
       }
     </style>
   </head>
   <body>
+    <div class="loading-overlay no-print" id="print-loader">
+      <div class="spinner"></div>
+      <div>⏳ جاري تحضير الصفحات للطباعة...</div>
+      <div id="print-progress" style="font-size:12px;color:#666;margin-top:6px"></div>
+    </div>
     <button class="print-all-btn no-print" onclick="window.print()">🖨️ اطبع الكل / احفظ PDF</button>
     ${allPages.map((p,i)=>`<div class="page" data-page-idx="${i}">${p}</div>`).join('')}
+    <script>
+      (function(){
+        var startTs = Date.now();
+        var progressEl = document.getElementById('print-progress');
+        var loader = document.getElementById('print-loader');
+
+        function hideLoaderAndPrint(){
+          if(loader) loader.style.display = 'none';
+          try{ window.focus(); window.print(); }catch(e){}
+        }
+
+        // استنى كل الصور تحمّل (أهم حاجة — الصور هي سبب البطء)
+        var imgs = document.images;
+        var total = imgs.length;
+        var loaded = 0;
+
+        if(total === 0){
+          // مفيش صور — طبع فوراً بعد 300ms
+          setTimeout(hideLoaderAndPrint, 300);
+          return;
+        }
+
+        if(progressEl) progressEl.textContent = '0/' + total + ' صورة';
+
+        function onImgDone(){
+          loaded++;
+          if(progressEl) progressEl.textContent = loaded + '/' + total + ' صورة';
+          if(loaded >= total){
+            // كل الصور جاهزة — طبع بعد delay صغير للـ render
+            setTimeout(hideLoaderAndPrint, 200);
+          }
+        }
+
+        for(var i = 0; i < total; i++){
+          var img = imgs[i];
+          if(img.complete){
+            onImgDone();
+          } else {
+            img.addEventListener('load', onImgDone);
+            img.addEventListener('error', onImgDone);
+          }
+        }
+
+        // Safety: حد أقصى 10 ثواني، وبعدين اطبع على أي حال
+        setTimeout(function(){
+          if(loader && loader.style.display !== 'none'){
+            if(progressEl) progressEl.innerHTML = '⚠️ بعض الصور لم تُحمّل بعد — هتطبع على أي حال<br><small>' + loaded + '/' + total + ' جاهزة</small>';
+            setTimeout(hideLoaderAndPrint, 600);
+          }
+        }, 10000);
+      })();
+    <\/script>
   </body></html>`);
   w.document.close();
-  w.focus();
-  setTimeout(()=>{
-    try{ w.print(); }catch(e){ console.error('batch print:',e); }
-  }, 1500);
   toast('✅ تم تجهيز '+allPages.length+' صفحة');
 }
 
