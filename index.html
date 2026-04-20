@@ -296,6 +296,8 @@ tr:hover td{background:#fafbff}
     <div class="nav-label">المالية</div>
     <div class="ni" data-p="accounting" onclick="goPage(this,'accounting')"><span class="ni-icon">💰</span><span class="ni-label">محاسبة المناديب</span></div>
     <div class="ni" data-p="stars-reviews" onclick="goPage(this,'stars-reviews')"><span class="ni-icon">⭐</span><span class="ni-label">مراجعات Stars</span><span class="nbadge" id="nb-stars-reviews" style="background:var(--warn)">0</span></div>
+    <div class="ni" data-p="shop-transfers" onclick="goPage(this,'shop-transfers')"><span class="ni-icon">🔄</span><span class="ni-label">تحويلات من المحل</span><span class="nbadge" id="nb-shop-transfers" style="background:var(--danger)">0</span></div>
+    <div class="ni" data-p="field-cancels" onclick="goPage(this,'field-cancels')"><span class="ni-icon">🚫</span><span class="ni-label">إلغاءات بانتظار الاستلام</span><span class="nbadge" id="nb-field-cancels" style="background:var(--danger)">0</span></div>
     <div class="ni" data-p="settle-history" onclick="goPage(this,'settle-history')"><span class="ni-icon">📚</span><span class="ni-label">سجل التسويات</span></div>
     <div class="ni" data-p="treasury" onclick="goPage(this,'treasury')"><span class="ni-icon">🏦</span><span class="ni-label">الخزنة</span></div>
     <div class="ni" data-p="shop-accounting" onclick="goPage(this,'shop-accounting')"><span class="ni-icon">🏪</span><span class="ni-label">محاسبة المحل</span></div>
@@ -376,7 +378,10 @@ tr:hover td{background:#fafbff}
 
   <!-- COURIERS -->
   <div class="page" id="page-couriers">
-    <div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="btn btn-primary" onclick="openM('m-courier')">＋ إضافة مندوب</button></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="openShopUsersManager()" style="border-color:var(--accent);color:var(--accent)">🏪 حسابات موظفي المحل</button>
+      <button class="btn btn-primary" onclick="openM('m-courier')">＋ إضافة مندوب</button>
+    </div>
     <div class="card"><div class="card-hd"><h3>🚴 فريق التوصيل</h3><span id="courier-count" style="font-size:12px;color:var(--muted)"></span></div><div class="cgrid" id="couriers-grid"></div></div>
   </div>
 
@@ -837,6 +842,9 @@ tr:hover td{background:#fafbff}
         </div>
         <button class="btn btn-primary btn-sm" onclick="saveChkBook()" style="width:100%;margin-bottom:12px">+ إضافة دفتر</button>
         <div id="chk-books-list"></div>
+        <div style="margin-top:14px;padding-top:10px;border-top:1px dashed var(--border)">
+          <button class="btn btn-ghost btn-xs" onclick="diagnoseCheckBooks()" style="width:100%;font-size:11px">🔍 فحص حالة الدفاتر في السيرفر</button>
+        </div>
       </div>
       <div class="mft"><button class="btn btn-ghost" onclick="closeM('m-chk-books')">إغلاق</button></div>
     </div>
@@ -969,6 +977,72 @@ tr:hover td{background:#fafbff}
         <h3>➕ تسويات إضافية من المناديب</h3>
       </div>
       <div class="card-body" id="stars-adj-list"></div>
+    </div>
+  </div>
+
+  <!-- 🚫 FIELD CANCELLATIONS (بانتظار استلام الإدارة) -->
+  <div class="page" id="page-field-cancels">
+    <div class="stats-row" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+      <div class="sc" style="border-right:4px solid var(--danger)">
+        <div class="sc-icon">🚫</div>
+        <div class="sc-label">إلغاءات من المناديب</div>
+        <div class="sc-val" id="fc-from-couriers">0</div>
+      </div>
+      <div class="sc" style="border-right:4px solid #6366f1">
+        <div class="sc-icon">🏪</div>
+        <div class="sc-label">إلغاءات من المحل</div>
+        <div class="sc-val" id="fc-from-shop">0</div>
+      </div>
+      <div class="sc" style="border-right:4px solid var(--warn)">
+        <div class="sc-icon">⏱️</div>
+        <div class="sc-label">أقدم إلغاء</div>
+        <div class="sc-val" id="fc-oldest" style="font-size:14px">—</div>
+      </div>
+    </div>
+
+    <div class="card" style="background:rgba(251,191,36,.05);border:1px solid rgba(251,191,36,.2);margin-bottom:16px">
+      <div class="card-body" style="padding:12px 16px;font-size:13px;color:var(--muted)">
+        ℹ️ دي طلبات العميل رفض يستلمها. المندوب/المحل بيسجلها هنا، وإنت تضغط <strong>"✅ استلمت الطلب"</strong> بعد ما تستلم البضاعة فعلاً منه. لو الإلغاء غلط، اضغط <strong>"↩️ إرجاع الطلب"</strong> وهيرجع في طلباته.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">
+        <h3>🚫 الطلبات الملغية بانتظار الاستلام</h3>
+        <button class="btn btn-ghost btn-sm" onclick="loadFieldCancels()" title="تحديث">🔄</button>
+      </div>
+      <div class="card-body" id="field-cancels-list"></div>
+    </div>
+  </div>
+
+  <!-- 🔄 SHOP TRANSFERS (Pickup → Shipping) -->
+  <div class="page" id="page-shop-transfers">
+    <div class="stats-row" style="grid-template-columns:repeat(2,1fr);margin-bottom:16px">
+      <div class="sc" style="border-right:4px solid var(--danger)">
+        <div class="sc-icon">🔄</div>
+        <div class="sc-label">تحويلات بانتظار المراجعة</div>
+        <div class="sc-val" id="st-pending-count">0</div>
+      </div>
+      <div class="sc" style="border-right:4px solid var(--warn)">
+        <div class="sc-icon">⏱️</div>
+        <div class="sc-label">أقدم تحويل</div>
+        <div class="sc-val" id="st-oldest" style="font-size:14px">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">
+        <h3>🔄 تحويلات من المحل (Pickup → شحن)</h3>
+        <button class="btn btn-ghost btn-sm" onclick="loadShopTransfers()" title="تحديث">🔄</button>
+      </div>
+      <div class="card-body" id="shop-transfers-list"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-hd">
+        <h3>📜 التحويلات المعالجة مؤخراً</h3>
+      </div>
+      <div class="card-body" id="shop-transfers-history"></div>
     </div>
   </div>
 
@@ -1311,7 +1385,7 @@ tr:hover td{background:#fafbff}
 <script>
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -2354,6 +2428,110 @@ async function _sha256Hash(str){
   const buf = new TextEncoder().encode(str);
   const hashBuf = await crypto.subtle.digest('SHA-256', buf);
   return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// ===== Shop Users Manager =====
+async function openShopUsersManager(){
+  // جيب الحسابات الموجودة
+  let users = [];
+  try{
+    users = await apiFetch('/api/shop-users','GET') || [];
+  }catch(e){ console.warn(e); }
+
+  // أنشئ modal
+  let modal = document.getElementById('m-shop-users');
+  if(modal) modal.remove();
+
+  const usersHtml = users.length
+    ? users.map(u => `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:700;font-size:13px">${_escapeHtml(u.display_name || u.username)}</div>
+          <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:2px">@${_escapeHtml(u.username)}</div>
+          ${u.last_login_at ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">آخر دخول: ${_timeAgo(u.last_login_at)}</div>` : ''}
+        </div>
+        <button class="btn btn-ghost btn-xs" onclick="resetShopUserPassword('${_escapeHtml(u.username)}')" style="color:var(--accent);border-color:var(--accent)">🔑 تغيير كلمة المرور</button>
+      </div>
+    `).join('')
+    : '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">لا توجد حسابات — أنشئ أول حساب</div>';
+
+  modal = document.createElement('div');
+  modal.id = 'm-shop-users';
+  modal.className = 'overlay';
+  modal.style.display = 'flex';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:500px">
+      <div class="mhd">
+        <h3>🏪 حسابات موظفي المحل</h3>
+        <button class="xbtn" onclick="document.getElementById('m-shop-users').remove()">✕</button>
+      </div>
+      <div class="mbody" style="padding:16px;max-height:70vh;overflow-y:auto">
+        <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:var(--muted)">
+          ℹ️ الحسابات دي بتستخدم في تطبيق <strong>Cafelax Stars</strong> في وضع "موظف محل". بيشوفوا طلبات الاستلام من المحل وبيقدروا يحولوا طلبات لشحن.
+        </div>
+        <div style="margin-bottom:14px">${usersHtml}</div>
+        <button class="btn btn-primary" onclick="createShopUser()" style="width:100%">＋ إنشاء حساب جديد</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+async function createShopUser(){
+  const username = prompt('🏪 اسم المستخدم (بالإنجليزية، بدون مسافات):');
+  if(!username || !username.trim()) return;
+  const cleanUsername = username.trim().toLowerCase();
+  if(!/^[a-z0-9_-]+$/.test(cleanUsername)){
+    toast('❌ الاسم يجب أن يحتوي على حروف إنجليزية وأرقام فقط');
+    return;
+  }
+
+  const displayName = prompt('الاسم المعروض (اختياري):', cleanUsername);
+  const password = prompt('كلمة المرور (4 أحرف على الأقل):');
+  if(!password || password.length < 4){
+    toast('❌ كلمة المرور قصيرة');
+    return;
+  }
+
+  try{
+    const passHash = await _sha256Hash(password);
+    const r = await apiFetch('/api/shop-users', 'POST', {
+      username: cleanUsername,
+      passHash,
+      displayName: displayName || cleanUsername
+    });
+    if(r && r.success){
+      alert(`✅ تم إنشاء الحساب\n\nاسم المستخدم: ${cleanUsername}\nكلمة المرور: ${password}\n\nشارك دي مع موظف المحل.\nوفكّره يختار "🏪 موظف محل" في شاشة الدخول.`);
+      // refresh
+      document.getElementById('m-shop-users').remove();
+      openShopUsersManager();
+    } else {
+      toast('❌ فشل: ' + (r?.error || 'غير معروف'));
+    }
+  }catch(e){
+    toast('❌ خطأ: ' + e.message);
+  }
+}
+
+async function resetShopUserPassword(username){
+  const password = prompt('كلمة المرور الجديدة لـ ' + username + ':');
+  if(!password || password.length < 4){
+    toast('❌ كلمة المرور قصيرة');
+    return;
+  }
+  try{
+    const passHash = await _sha256Hash(password);
+    const r = await apiFetch('/api/shop-users', 'POST', {
+      username,
+      passHash
+    });
+    if(r && r.success){
+      toast('✅ تم تغيير كلمة المرور');
+      alert(`✅ تم التحديث\n\nاسم المستخدم: ${username}\nكلمة المرور الجديدة: ${password}`);
+    }
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
 }
 
 function renderAssignPage(){
@@ -5353,15 +5531,60 @@ let editingChkId=null;let chkStatusFilter='all';let chkImgData='';
 async function loadChks(){
   if(!API_URL) return;
   try{
-    const [r1, r2, r3] = await Promise.all([
+    // جيب كل endpoint بشكل منفصل عشان لو واحد فشل ما يأثرش على الباقي
+    const results = await Promise.allSettled([
       apiFetch('/api/check-books'),
       apiFetch('/api/checks'),
       apiFetch('/api/check-suppliers')
     ]);
 
+    const r1 = results[0].status === 'fulfilled' ? results[0].value : null;
+    const r2 = results[1].status === 'fulfilled' ? results[1].value : null;
+    const r3 = results[2].status === 'fulfilled' ? results[2].value : null;
+
+    // ⚠️ apiFetch بيرجع null لما يفشل (مش throw)، فلازم نعتبر null = فشل
+    const booksFetchFailed = results[0].status === 'rejected' || r1 === null || r1 === undefined;
+    const checksFetchFailed = results[1].status === 'rejected' || r2 === null || r2 === undefined;
+
+    if(booksFetchFailed || checksFetchFailed){
+      console.warn('⚠️ loadChks: أحد الطلبات فشل أو رجع فاضي، نحتفظ بالبيانات المحلية');
+      console.warn('  books response:', r1, '| rejected:', results[0].status === 'rejected');
+      console.warn('  checks response:', r2, '| rejected:', results[1].status === 'rejected');
+      // بس نرنّد الواجهة بالبيانات المحلية
+      renderChecksPage();
+      return;
+    }
+
     const dbBooks = r1?.books || [];
     const dbChecks = r2?.checks || [];
     const dbSuppliers = r3?.suppliers || [];
+
+    // ⚠️ Safety net: لو الـ DB فيه شيكات بس مفيش دفاتر → ممكن يكون API شغال مع response ناقص
+    // نفحص أول لو الـ localStorage عنده دفاتر لنفس الشيكات — لو نعم، ما نمسحش
+    if(dbBooks.length === 0 && dbChecks.length > 0 && chkBooks.length > 0){
+      console.error('⚠️ تحذير: الـ DB فيه شيكات بس مفيش دفاتر — الـ localStorage عندنا دفاتر، مش هنمسحها.');
+      // دمج: استخدم شيكات الـ DB + دفاتر الـ localStorage
+      chkList = dbChecks.map(c=>({
+        id:c.id, bookId:c.bookId||c.book_id, num:c.num,
+        payee:c.payee||c.supplier||'',
+        amount:parseFloat(c.amount)||0,
+        date:c.date||c.dueDate||c.due_date||'',
+        invoice:c.invoice||'', note:c.note||'',
+        img:c.img||'', status:c.status||'pending',
+        doneAt:c.doneAt||c.done_at||null,
+        createdAt:c.createdAt||c.created_at||null,
+      }));
+      // ارفع الدفاتر المحلية تاني للـ DB عشان الحالة دي ما تتكررش
+      console.log('🔄 رفع الدفاتر المحلية تاني للـ DB...');
+      apiFetch('/api/sync-checks','POST',{
+        books:chkBooks, checks:[], suppliers:chkSuppliers
+      }).then(() => console.log('✅ الدفاتر اترفعت تاني')).catch(e => console.warn('sync failed:', e));
+      try{
+        localStorage.setItem('chk_list',JSON.stringify(chkList));
+      }catch(e){}
+      renderChecksPage();
+      return;
+    }
 
     if(dbBooks.length || dbChecks.length){
       // الـ DB فيه بيانات — استخدمها وحدّث localStorage
@@ -5393,8 +5616,21 @@ async function loadChks(){
       console.log('DB empty, syncing local data to DB...');
       apiFetch('/api/sync-checks','POST',{
         books:chkBooks, checks:chkList, suppliers:chkSuppliers
-      }).catch(e=>console.warn('sync local->DB:', e));
+      }).then(r => {
+        if(r && r.ok){
+          console.log(`✅ تم رفع ${r.books || 0} دفتر و ${r.checks || 0} شيك للـ DB`);
+          if(chkBooks.length){
+            toast('✅ تم رفع ' + chkBooks.length + ' دفتر للسيرفر');
+          }
+        }
+      }).catch(e=>{
+        console.warn('sync local->DB:', e);
+        if(chkBooks.length){
+          toast('⚠️ تحذير: الدفاتر محلية فقط — تعذر رفعها للسيرفر');
+        }
+      });
     }
+    renderChecksPage();
   }catch(e){ console.error('loadChks:', e); }
 }
 
@@ -5409,6 +5645,8 @@ function saveChks(syncNow=true){
   if(syncNow){
     clearTimeout(_saveChksTimer);
     _saveChksTimer=setTimeout(()=>{
+      // 🛡️ Safety: لو الدفاتر فاضية بشكل مريب والـ DB عنده دفاتر — ما تبعتش
+      // ده بيمنع مسح دفاتر من DB بالغلط لو في race condition
       apiFetch('/api/sync-checks','POST',{books:chkBooks,checks:chkList,suppliers:chkSuppliers}).catch(()=>{});
     },800);
   }
@@ -5747,12 +5985,109 @@ function saveChkBook(){
   const b = {id:Date.now()+'_bk', name, bank:$('bk-bank').value.trim(), account:$('bk-account').value.trim(), pages, firstNum, lastNum};
   chkBooks.push(b);
   saveChks(true);
-  if(API_URL) apiFetch('/api/check-books','POST',b).catch(()=>{});
+  // 🛡️ بنعمل POST مع 3 محاولات retry عشان نضمن إن الدفتر يوصل الـ DB
+  if(API_URL){
+    (async () => {
+      for(let attempt = 1; attempt <= 3; attempt++){
+        try{
+          const r = await apiFetch('/api/check-books','POST',b);
+          if(r){ console.log('✅ الدفتر اتحفظ في DB:', b.id); return; }
+        }catch(e){ console.warn(`محاولة ${attempt} فشلت:`, e); }
+        if(attempt < 3) await new Promise(r => setTimeout(r, 500 * attempt));
+      }
+      console.error('❌ فشل حفظ الدفتر في DB بعد 3 محاولات:', b.id);
+      toast('⚠️ تحذير: الدفتر محفوظ محلياً بس تعذر حفظه في السيرفر — افتح الصفحة تاني للمحاولة');
+    })();
+  }
   renderChkBooks();
   toast('✅ تم إضافة الدفتر — الأرقام من '+firstNum+' إلى '+lastNum);
   ['bk-name','bk-bank','bk-account','bk-first-num','bk-last-num'].forEach(id=>$(id)&&($(id).value=''));
   $('bk-pages').value = 48;
 }
+
+// 🔍 تشخيص حالة الدفاتر في السيرفر
+async function diagnoseCheckBooks(){
+  if(!API_URL){
+    alert('❌ لا يوجد اتصال بالسيرفر');
+    return;
+  }
+
+  toast('⏳ جاري الفحص...');
+
+  try{
+    const [r1, r2] = await Promise.all([
+      apiFetch('/api/check-books').catch(e => ({_error: e.message})),
+      apiFetch('/api/checks').catch(e => ({_error: e.message}))
+    ]);
+
+    const serverBooks = (r1 && r1.books) ? r1.books : [];
+    const serverChecks = (r2 && r2.checks) ? r2.checks : [];
+    const localBooks = chkBooks.length;
+    const localChecks = chkList.length;
+
+    // تحليل
+    const missingInServer = chkBooks.filter(lb => !serverBooks.find(sb => sb.id === lb.id));
+    const missingLocally = serverBooks.filter(sb => !chkBooks.find(lb => lb.id === sb.id));
+
+    let report = `📊 تقرير حالة الدفاتر والشيكات\n\n`;
+    report += `المحلي (localStorage):\n`;
+    report += `  • ${localBooks} دفتر\n`;
+    report += `  • ${localChecks} شيك\n\n`;
+    report += `السيرفر (DB):\n`;
+    report += `  • ${serverBooks.length} دفتر\n`;
+    report += `  • ${serverChecks.length} شيك\n\n`;
+
+    if(r1 && r1._error) report += `⚠️ خطأ في تحميل الدفاتر من السيرفر: ${r1._error}\n\n`;
+    if(r2 && r2._error) report += `⚠️ خطأ في تحميل الشيكات من السيرفر: ${r2._error}\n\n`;
+
+    if(missingInServer.length){
+      report += `❌ ${missingInServer.length} دفتر في الجهاز ده مش موجود في السيرفر:\n`;
+      missingInServer.slice(0, 5).forEach(b => report += `  • ${b.name}\n`);
+      if(missingInServer.length > 5) report += `  • ... و ${missingInServer.length - 5} دفتر آخر\n`;
+      report += `\n`;
+    }
+
+    if(missingLocally.length){
+      report += `⚠️ ${missingLocally.length} دفتر في السيرفر مش محفوظ محلياً:\n`;
+      missingLocally.slice(0, 5).forEach(b => report += `  • ${b.name}\n`);
+      report += `\n`;
+    }
+
+    if(!missingInServer.length && !missingLocally.length){
+      report += `✅ كل حاجة متطابقة!`;
+      alert(report);
+      return;
+    }
+
+    if(missingInServer.length){
+      report += `\n❓ هل تريد رفع الدفاتر المفقودة للسيرفر؟`;
+      if(confirm(report)){
+        let success = 0, failed = 0;
+        for(const b of missingInServer){
+          try{
+            // 3 retries
+            let ok = false;
+            for(let attempt = 1; attempt <= 3 && !ok; attempt++){
+              const r = await apiFetch('/api/check-books', 'POST', b);
+              if(r){ ok = true; success++; break; }
+              if(attempt < 3) await new Promise(r => setTimeout(r, 500));
+            }
+            if(!ok) failed++;
+          }catch(e){ failed++; }
+        }
+        alert(`✅ تم رفع ${success} دفتر${failed ? `\n❌ فشل ${failed}` : ''}\n\nأعد تحميل الصفحة للتحقق.`);
+        // إعادة تحميل
+        loadChks();
+      }
+    } else {
+      alert(report);
+    }
+
+  }catch(e){
+    alert('❌ فشل الفحص: ' + e.message);
+  }
+}
+
 function renderChkBooks(){
   const el=$('chk-books-list');if(!el)return;
   if(!chkBooks.length){el.innerHTML='<div style="text-align:center;color:var(--muted);padding:12px;font-size:13px">لا توجد دفاتر</div>';return;}
@@ -7270,16 +7605,32 @@ async function loadCurrentBatchFromServer(){
   if(!API_URL) return;
   try{
     const r = await apiFetch('/api/batches/current','GET');
-    if(r && r.code){
+    // 🛡️ لو الـ response undefined/null → اعتبرها خطأ، ما تمسحش البيانات المحلية
+    if(r === null || r === undefined){
+      console.warn('loadCurrentBatchFromServer: response فارغ — نحتفظ بالـ localStorage');
+      return;
+    }
+
+    if(r.code){
       // السيرفر عنده دفعة مفتوحة — استخدمها
       const serverBatch = { code: r.code, date: r.date, status: r.status, startedAt: r.startedAt };
       localStorage.setItem('current_batch', JSON.stringify(serverBatch));
       _currentBatchCode = r.code;
       console.log('✅ Loaded current batch from server:', r.code);
-    } else {
-      // السيرفر مفيش دفعة مفتوحة — امسح أي دفعة قديمة في الـ localStorage
+    } else if(r.code === null || r.noBatch === true || (r && Object.keys(r).length === 0 && r.constructor === Object)) {
+      // السيرفر أكد إنه مفيش دفعة مفتوحة (response صريح بمفيش)
+      // لاحظ: نفضل الـ error side — لو response غامض، ما نمسحش
       const local = localStorage.getItem('current_batch');
       if(local){
+        try{
+          const l = JSON.parse(local);
+          // لو الدفعة المحلية أحدث من 24 ساعة، نحترمها لحين تأكيد
+          const ageHours = (Date.now() - new Date(l.startedAt || 0).getTime()) / (3600*1000);
+          if(ageHours < 24){
+            console.warn('🤔 السيرفر قال مفيش دفعة، بس الدفعة المحلية حديثة — نحتفظ بيها');
+            return;
+          }
+        }catch(e){}
         console.log('🔄 Server has no open batch — clearing stale localStorage batch');
         localStorage.removeItem('current_batch');
         _currentBatchCode = null;
@@ -7288,6 +7639,7 @@ async function loadCurrentBatchFromServer(){
     updateBatchIndicator && updateBatchIndicator();
   }catch(e){
     console.warn('loadCurrentBatchFromServer failed:', e.message);
+    // لا نمس الـ localStorage لو حصل خطأ
   }
 }
 
@@ -9467,6 +9819,8 @@ function goPage(el,page){
   if(page==='treasury'){loadTreasury().then(()=>{renderTreasuryList();if(_activeTreasuryId)selectTreasury(_activeTreasuryId);});}
   if(page==='expiry')renderExpiryPage();
   if(page==='stars-reviews')loadStarsReviews();
+  if(page==='shop-transfers')loadShopTransfers();
+  if(page==='field-cancels')loadFieldCancels();
 }
 
 // ===== CAFELAX STARS — Reviews Page =====
@@ -9663,6 +10017,412 @@ setInterval(() => {
           navBadge.style.display = total > 0 ? '' : 'none';
         }
       }).catch(()=>{});
+    }).catch(()=>{});
+  }
+}, 120000);
+
+// ===== SHOP TRANSFERS (🔄 تحويلات من المحل) =====
+let _shopTransfersPending = [];
+let _shopTransfersHistory = [];
+
+async function loadShopTransfers(){
+  if(!API_URL) return;
+  try{
+    const [pending, history] = await Promise.all([
+      apiFetch('/api/shipping-transfers?status=pending','GET').catch(()=>[]),
+      apiFetch('/api/shipping-transfers?status=accepted','GET').catch(()=>[])
+    ]);
+    _shopTransfersPending = pending || [];
+    _shopTransfersHistory = history || [];
+    renderShopTransfers();
+  }catch(e){ console.warn('loadShopTransfers:', e); }
+}
+
+function renderShopTransfers(){
+  const count = _shopTransfersPending.length;
+  const countEl = document.getElementById('st-pending-count');
+  if(countEl) countEl.textContent = count;
+
+  const oldestEl = document.getElementById('st-oldest');
+  if(oldestEl){
+    if(count > 0){
+      const oldest = _shopTransfersPending.reduce((min, x) => new Date(x.createdAt) < new Date(min.createdAt) ? x : min);
+      oldestEl.textContent = _timeAgo(oldest.createdAt);
+    } else oldestEl.textContent = '—';
+  }
+
+  // nav badge
+  const navBadge = document.getElementById('nb-shop-transfers');
+  if(navBadge){
+    navBadge.textContent = count;
+    navBadge.style.display = count > 0 ? '' : 'none';
+  }
+
+  // Pending list
+  const list = document.getElementById('shop-transfers-list');
+  if(list){
+    if(!count){
+      list.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">✅ لا توجد تحويلات بانتظار المراجعة</div>';
+    } else {
+      list.innerHTML = _shopTransfersPending.map(t => renderShopTransferCard(t)).join('');
+    }
+  }
+
+  // History
+  const historyEl = document.getElementById('shop-transfers-history');
+  if(historyEl){
+    const recent = _shopTransfersHistory.slice(0, 10);
+    if(!recent.length){
+      historyEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">لا توجد تحويلات سابقة</div>';
+    } else {
+      historyEl.innerHTML = recent.map(t => `
+        <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div>
+            <strong>${t.orderId}</strong> — ${_escapeHtml(t.order?.name || '')}
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">
+              محوّل بواسطة: ${_escapeHtml(t.transferredByUsername || '—')} · ${_timeAgo(t.createdAt)}
+            </div>
+          </div>
+          <div style="text-align:left">
+            <div style="color:var(--success);font-weight:700">✅ ${_escapeHtml(t.assignedTo || '')}</div>
+            <div style="font-size:11px;color:var(--muted)">شحن: ${(t.shippingCost||0).toLocaleString()} ج</div>
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+}
+
+function renderShopTransferCard(t){
+  const o = t.order || {};
+  const age = _timeAgo(t.createdAt);
+  const addr = [o.addr, o.addr2].filter(Boolean).join(' — ');
+  const notes = [];
+  if(o.customerNote) notes.push({label: 'العميل', text: o.customerNote, color: '#3b82f6'});
+  if(o.orderNote && o.orderNote !== o.customerNote) notes.push({label: 'الإدارة', text: o.orderNote, color: '#f59e0b'});
+  if(o.shopNote) notes.push({label: 'المحل', text: o.shopNote, color: '#10b981'});
+
+  return `<div style="border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;background:var(--bg)">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <div style="flex:1;min-width:240px">
+        <div style="font-size:11px;color:var(--muted);font-family:monospace">${t.orderId}</div>
+        <div style="font-weight:800;font-size:15px;margin-top:2px">${_escapeHtml(o.name || '—')}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:3px">
+          📱 <span style="direction:ltr;font-family:monospace">${_escapeHtml(o.phone || '—')}</span>
+        </div>
+        <div style="font-size:13px;margin-top:3px">
+          📍 <strong style="color:var(--accent)">${_escapeHtml(o.area || '—')}</strong>
+        </div>
+        ${addr ? `<div style="font-size:12px;color:var(--muted);margin-top:3px">${_escapeHtml(addr)}</div>` : ''}
+        <div style="font-size:13px;margin-top:6px">
+          💰 <strong style="color:var(--success)">${(o.total||0).toLocaleString()} ج</strong>
+          ${o.paid ? ' <span style="color:#60a5fa;font-size:11px;margin-right:4px">💳 مدفوع</span>' : ' <span style="color:#34d399;font-size:11px;margin-right:4px">💵 COD</span>'}
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">
+          🏪 محوّل بواسطة: <strong>${_escapeHtml(t.transferredByUsername || '—')}</strong> · ⏱️ ${age}
+        </div>
+      </div>
+    </div>
+    ${notes.length ? `<div style="margin-top:8px">${notes.map(n => `
+      <div style="background:${n.color}14;border-right:3px solid ${n.color};padding:6px 10px;border-radius:4px;font-size:12px;margin-bottom:4px">
+        <strong style="color:${n.color}">${n.label}:</strong> ${_escapeHtml(n.text)}
+      </div>
+    `).join('')}</div>` : ''}
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="openAcceptAndAssign(${t.id})" style="flex:1;min-width:160px">✅ استلم وعيّن الوجهة</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="rejectShopTransfer(${t.id})">❌ رفض</button>
+    </div>
+  </div>`;
+}
+
+// ===== Accept & Assign Modal =====
+let _currentTransfer = null;
+
+function openAcceptAndAssign(transferId){
+  const t = _shopTransfersPending.find(x => x.id === transferId);
+  if(!t){ toast('❗ التحويل غير موجود'); return; }
+  _currentTransfer = t;
+
+  // أنشئ modal ديناميكياً
+  let modal = document.getElementById('m-accept-transfer');
+  if(modal) modal.remove();
+
+  const o = t.order || {};
+  const courierOptions = couriers.map(c => {
+    const active = oByC(c.id, 'جاري التوصيل').length;
+    return `<option value="courier:${c.id}">${c.name} (${active} طلب نشط) — ${c.zone || 'بدون منطقة'}</option>`;
+  }).join('');
+
+  modal = document.createElement('div');
+  modal.id = 'm-accept-transfer';
+  modal.className = 'overlay';
+  modal.style.display = 'flex';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:500px">
+      <div class="mhd">
+        <h3>✅ استلام وتعيين الوجهة</h3>
+        <button class="xbtn" onclick="closeAcceptAndAssign()">✕</button>
+      </div>
+      <div class="mbody" style="padding:16px">
+        <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px">
+          <div style="font-family:monospace;color:var(--muted);font-size:11px">${t.orderId}</div>
+          <div style="font-weight:800;margin-top:2px">${_escapeHtml(o.name || '')}</div>
+          <div style="margin-top:4px">📍 ${_escapeHtml(o.area || '—')}</div>
+          <div style="margin-top:4px">💰 <strong>${(o.total||0).toLocaleString()} ج</strong> ${o.paid ? '(مدفوع)' : '(COD)'}</div>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <label style="font-weight:700;font-size:13px;display:block;margin-bottom:6px">💰 سعر الشحن *</label>
+          <input type="number" id="accept-shipping" placeholder="مثلاً: 50" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:14px;outline:none" step="any">
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">الشحن اللي هيضاف للطلب عشان يتشحن</div>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <label style="font-weight:700;font-size:13px;display:block;margin-bottom:6px">🚚 الوجهة *</label>
+          <select id="accept-target" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:14px;outline:none">
+            <option value="">— اختر الوجهة —</option>
+            <option value="bosta">🚚 بوسطة (تصدير Excel / API)</option>
+            <option disabled>──────────</option>
+            ${courierOptions}
+          </select>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">هيدخل الطلب مباشرة في طلبات الوجهة اللي اختارتها</div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button class="btn btn-primary" style="flex:1" onclick="confirmAcceptAndAssign()">✅ تأكيد</button>
+          <button class="btn btn-ghost" onclick="closeAcceptAndAssign()">إلغاء</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  // ركّز على input الشحن
+  setTimeout(() => { const inp = document.getElementById('accept-shipping'); if(inp) inp.focus(); }, 100);
+}
+
+function closeAcceptAndAssign(){
+  const m = document.getElementById('m-accept-transfer');
+  if(m) m.remove();
+  _currentTransfer = null;
+}
+
+async function confirmAcceptAndAssign(){
+  const t = _currentTransfer;
+  if(!t){ toast('❗ خطأ — التحويل غير محدد'); return; }
+
+  const shippingInput = document.getElementById('accept-shipping');
+  const targetSel = document.getElementById('accept-target');
+  const shippingCost = parseFloat(shippingInput.value);
+  const target = targetSel.value;
+
+  if(isNaN(shippingCost) || shippingCost < 0){
+    toast('❌ أدخل سعر شحن صحيح');
+    shippingInput.focus();
+    return;
+  }
+  if(!target){
+    toast('❌ اختر الوجهة');
+    targetSel.focus();
+    return;
+  }
+
+  try{
+    const r = await apiFetch('/api/shipping-transfers/'+t.id+'/accept-and-assign', 'POST', {
+      shippingCost,
+      target,
+      acceptedBy: currentUser?.username || 'admin'
+    });
+    if(r && r.success){
+      // حدّث الطلب في الذاكرة المحلية
+      const orderIdx = orders.findIndex(o => o.id === r.orderId);
+      if(orderIdx >= 0){
+        orders[orderIdx].ship = r.shippingCost;
+        orders[orderIdx].deliveryType = 'normal';
+        orders[orderIdx].status = 'جاري التوصيل';
+        if(r.isBosta){
+          orders[orderIdx].isBosta = true;
+          orders[orderIdx].courierId = null;
+        } else {
+          orders[orderIdx].isBosta = false;
+          // courier_id يتعبى من الـ sync
+        }
+        debouncedSaveOrders();
+      }
+      closeAcceptAndAssign();
+      toast('✅ تم الاستلام — الطلب انتقل لـ ' + r.assignedTo);
+      loadShopTransfers();
+      refreshAll();
+      // حمل البيانات من السيرفر تاني عشان نضمن تطابق
+      if(typeof loadOrders === 'function') loadOrders().catch(()=>{});
+    } else {
+      toast('❌ فشل: ' + (r?.error || 'غير معروف'));
+    }
+  }catch(e){
+    toast('❌ خطأ: ' + e.message);
+  }
+}
+
+async function rejectShopTransfer(transferId){
+  const t = _shopTransfersPending.find(x => x.id === transferId);
+  if(!t) return;
+  const reason = prompt('سبب الرفض (اختياري):\n\nالطلب ' + t.orderId + ' هيرجع pickup عادي.');
+  if(reason === null) return;
+  try{
+    const r = await apiFetch('/api/shipping-transfers/'+transferId+'/reject', 'POST', {
+      rejectedBy: currentUser?.username || 'admin',
+      reason: reason || ''
+    });
+    if(r && r.success){
+      toast('✅ تم الرفض — الطلب رجع pickup');
+      loadShopTransfers();
+    }
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// Auto-refresh shop transfers badge every 2 min
+setInterval(() => {
+  if(API_URL && currentUser){
+    apiFetch('/api/shipping-transfers?status=pending','GET').then(pending => {
+      const total = (pending||[]).length;
+      const navBadge = document.getElementById('nb-shop-transfers');
+      if(navBadge){
+        navBadge.textContent = total;
+        navBadge.style.display = total > 0 ? '' : 'none';
+      }
+    }).catch(()=>{});
+  }
+}, 120000);
+
+// ===== FIELD CANCELLATIONS (🚫 إلغاءات بانتظار الاستلام) =====
+let _fieldCancels = [];
+
+async function loadFieldCancels(){
+  if(!API_URL) return;
+  try{
+    _fieldCancels = await apiFetch('/api/field-cancellations','GET') || [];
+    renderFieldCancels();
+  }catch(e){ console.warn('loadFieldCancels:', e); }
+}
+
+function renderFieldCancels(){
+  const total = _fieldCancels.length;
+  const fromCouriers = _fieldCancels.filter(c => c.cancelledBySource === 'courier').length;
+  const fromShop = _fieldCancels.filter(c => c.cancelledBySource === 'shop').length;
+
+  const el1 = document.getElementById('fc-from-couriers');
+  const el2 = document.getElementById('fc-from-shop');
+  const el3 = document.getElementById('fc-oldest');
+  if(el1) el1.textContent = fromCouriers;
+  if(el2) el2.textContent = fromShop;
+  if(el3){
+    if(total > 0){
+      const oldest = _fieldCancels.reduce((min, x) => new Date(x.cancelledAt) < new Date(min.cancelledAt) ? x : min);
+      el3.textContent = _timeAgo(oldest.cancelledAt);
+    } else el3.textContent = '—';
+  }
+
+  // nav badge
+  const navBadge = document.getElementById('nb-field-cancels');
+  if(navBadge){
+    navBadge.textContent = total;
+    navBadge.style.display = total > 0 ? '' : 'none';
+  }
+
+  const list = document.getElementById('field-cancels-list');
+  if(!list) return;
+
+  if(!total){
+    list.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">✅ لا توجد إلغاءات بانتظار الاستلام</div>';
+    return;
+  }
+
+  list.innerHTML = _fieldCancels.map(c => {
+    const sourceLabel = c.cancelledBySource === 'shop'
+      ? `🏪 موظف المحل: <strong>${_escapeHtml(c.cancelledByUsername || '—')}</strong>`
+      : `🚴 مندوب: <strong>${_escapeHtml(c.courierName || c.cancelledByUsername || '—')}</strong>`;
+    const sourceBg = c.cancelledBySource === 'shop' ? '#6366f1' : '#f59e0b';
+    const addr = [c.addr, c.addr2].filter(Boolean).join(' — ');
+    const age = _timeAgo(c.cancelledAt);
+
+    return `<div style="border:1px solid var(--border);border-right:4px solid ${sourceBg};border-radius:10px;padding:14px;margin-bottom:10px;background:var(--bg)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:240px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+            <span style="font-family:monospace;font-size:11px;color:var(--muted)">${c.id}</span>
+            <span style="background:${sourceBg}22;color:${sourceBg};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">${sourceLabel}</span>
+            <span style="font-size:11px;color:var(--muted)">⏱️ ${age}</span>
+          </div>
+          <div style="font-weight:800;font-size:15px">${_escapeHtml(c.name || '—')}</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:3px">
+            📱 <span style="direction:ltr;font-family:monospace">${_escapeHtml(c.phone || '—')}</span>
+          </div>
+          <div style="font-size:13px;margin-top:3px">
+            📍 ${_escapeHtml(c.area || '—')}${addr ? ' — ' + _escapeHtml(addr) : ''}
+          </div>
+          <div style="font-size:13px;margin-top:3px">
+            💰 <strong style="color:var(--success)">${(c.total||0).toLocaleString()} ج</strong>
+            ${c.paid ? ' <span style="color:#60a5fa;font-size:11px">💳 مدفوع</span>' : ' <span style="color:#34d399;font-size:11px">💵 COD</span>'}
+            ${c.deliveryType === 'pickup' ? ' <span style="color:#a78bfa;font-size:11px">🏪 Pickup</span>' : ''}
+          </div>
+          ${c.cancellationReason ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(239,68,68,.08);border-right:3px solid var(--danger);border-radius:4px;font-size:13px">
+            <strong style="color:#fca5a5">🚫 سبب الإلغاء:</strong> ${_escapeHtml(c.cancellationReason)}
+          </div>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;min-width:150px">
+          <button class="btn btn-success btn-sm" onclick="confirmReceiveCancellation('${c.id}')">✅ استلمت الطلب</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--accent);border-color:var(--accent)" onclick="revertFieldCancellation('${c.id}')">↩️ إرجاع الطلب</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function confirmReceiveCancellation(orderId){
+  const c = _fieldCancels.find(x => x.id === orderId);
+  if(!c) return;
+  const ok = confirm(`✅ تأكيد استلام البضاعة من ${c.cancelledBySource === 'shop' ? 'المحل' : c.courierName || 'المندوب'}؟\n\nالطلب ${orderId} — ${c.name}\n\nبعد التأكيد، الطلب يعتبر ملغي نهائياً.`);
+  if(!ok) return;
+  try{
+    const r = await apiFetch('/api/field-cancellations/'+orderId+'/confirm-receive','POST',{
+      receivedBy: currentUser?.username || 'admin'
+    });
+    if(r && r.success){
+      // حدّث الطلب محلياً
+      const oIdx = orders.findIndex(o => o.id === orderId);
+      if(oIdx >= 0){ orders[oIdx].status = 'ملغي'; debouncedSaveOrders(); }
+      toast('✅ تم تأكيد الاستلام — الطلب ملغي نهائياً');
+      loadFieldCancels();
+      refreshAll();
+    }
+  }catch(e){ toast('❌ '+e.message); }
+}
+
+async function revertFieldCancellation(orderId){
+  const c = _fieldCancels.find(x => x.id === orderId);
+  if(!c) return;
+  const ok = confirm(`↩️ إرجاع الطلب ${orderId}؟\n\nالطلب هيرجع عند ${c.cancelledBySource === 'shop' ? 'المحل' : c.courierName || 'المندوب'} وهيختفي من هذه القائمة.`);
+  if(!ok) return;
+  try{
+    const r = await apiFetch('/api/field-cancellations/'+orderId+'/revert','POST',{
+      revertedBy: currentUser?.username || 'admin'
+    });
+    if(r && r.success){
+      toast('✅ تم إرجاع الطلب');
+      loadFieldCancels();
+    }
+  }catch(e){ toast('❌ '+e.message); }
+}
+
+// Auto-refresh field cancellations badge every 2 min
+setInterval(() => {
+  if(API_URL && currentUser){
+    apiFetch('/api/field-cancellations','GET').then(cancels => {
+      const total = (cancels||[]).length;
+      const navBadge = document.getElementById('nb-field-cancels');
+      if(navBadge){
+        navBadge.textContent = total;
+        navBadge.style.display = total > 0 ? '' : 'none';
+      }
     }).catch(()=>{});
   }
 }, 120000);
