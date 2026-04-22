@@ -2432,49 +2432,58 @@ async function _sha256Hash(str){
 
 // ===== Shop Users Manager =====
 async function openShopUsersManager(){
+  console.log('🏪 openShopUsersManager called');
   // جيب الحسابات الموجودة
   let users = [];
   try{
     users = await apiFetch('/api/shop-users','GET') || [];
-  }catch(e){ console.warn(e); }
+    console.log('📋 Shop users fetched:', users.length);
+  }catch(e){ 
+    console.error('❌ Error fetching shop users:', e);
+  }
 
   // أنشئ modal
   let modal = document.getElementById('m-shop-users');
   if(modal) modal.remove();
 
-  const usersHtml = users.length
-    ? users.map(u => `
-      <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <div>
-          <div style="font-weight:700;font-size:13px">${_escapeHtml(u.display_name || u.username)}</div>
-          <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:2px">@${_escapeHtml(u.username)}</div>
-          ${u.last_login_at ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">آخر دخول: ${_timeAgo(u.last_login_at)}</div>` : ''}
+  try{
+    const usersHtml = users.length
+      ? users.map(u => `
+        <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div>
+            <div style="font-weight:700;font-size:13px">${_escapeHtml(u.display_name || u.username)}</div>
+            <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:2px">@${_escapeHtml(u.username)}</div>
+            ${u.last_login_at ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">آخر دخول: ${_timeAgo(u.last_login_at)}</div>` : ''}
+          </div>
+          <button class="btn btn-ghost btn-xs" onclick="resetShopUserPassword('${_escapeHtml(u.username)}')" style="color:var(--accent);border-color:var(--accent)">🔑 تغيير كلمة المرور</button>
         </div>
-        <button class="btn btn-ghost btn-xs" onclick="resetShopUserPassword('${_escapeHtml(u.username)}')" style="color:var(--accent);border-color:var(--accent)">🔑 تغيير كلمة المرور</button>
-      </div>
-    `).join('')
-    : '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">لا توجد حسابات — أنشئ أول حساب</div>';
+      `).join('')
+      : '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">لا توجد حسابات — أنشئ أول حساب</div>';
 
-  modal = document.createElement('div');
-  modal.id = 'm-shop-users';
-  modal.className = 'overlay';
-  modal.style.display = 'flex';
-  modal.innerHTML = `
-    <div class="modal" style="max-width:500px">
-      <div class="mhd">
-        <h3>🏪 حسابات موظفي المحل</h3>
-        <button class="xbtn" onclick="document.getElementById('m-shop-users').remove()">✕</button>
-      </div>
-      <div class="mbody" style="padding:16px;max-height:70vh;overflow-y:auto">
-        <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:var(--muted)">
-          ℹ️ الحسابات دي بتستخدم في تطبيق <strong>Cafelax Stars</strong> في وضع "موظف محل". بيشوفوا طلبات الاستلام من المحل وبيقدروا يحولوا طلبات لشحن.
+    modal = document.createElement('div');
+    modal.id = 'm-shop-users';
+    modal.className = 'overlay open';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:500px">
+        <div class="mhd">
+          <h3>🏪 حسابات موظفي المحل</h3>
+          <button class="xbtn" onclick="document.getElementById('m-shop-users').remove()">✕</button>
         </div>
-        <div style="margin-bottom:14px">${usersHtml}</div>
-        <button class="btn btn-primary" onclick="createShopUser()" style="width:100%">＋ إنشاء حساب جديد</button>
+        <div class="mbody" style="padding:16px;max-height:70vh;overflow-y:auto">
+          <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:var(--muted)">
+            ℹ️ الحسابات دي بتستخدم في تطبيق <strong>Cafelax Stars</strong> في وضع "موظف محل". بيشوفوا طلبات الاستلام من المحل وبيقدروا يحولوا طلبات لشحن.
+          </div>
+          <div style="margin-bottom:14px">${usersHtml}</div>
+          <button class="btn btn-primary" onclick="createShopUser()" style="width:100%">＋ إنشاء حساب جديد</button>
+        </div>
       </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
+    `;
+    document.body.appendChild(modal);
+    console.log('✅ Modal appended to body');
+  }catch(err){
+    console.error('❌ Error creating modal:', err);
+    toast('❌ خطأ في فتح النافذة: ' + err.message);
+  }
 }
 
 async function createShopUser(){
@@ -2484,8 +2493,8 @@ async function createShopUser(){
 
   modal = document.createElement('div');
   modal.id = 'm-create-shop-user';
-  modal.className = 'overlay';
-  modal.style.cssText = 'display:flex;z-index:100000';
+  modal.className = 'overlay open';
+  modal.style.cssText = 'z-index:100000';
   modal.innerHTML = `
     <div class="modal" style="max-width:440px">
       <div class="mhd">
