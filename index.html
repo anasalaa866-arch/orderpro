@@ -5718,14 +5718,20 @@ function saveChks(syncNow=true){
     localStorage.setItem('chk_books',JSON.stringify(chkBooks));
     localStorage.setItem('chk_list',JSON.stringify(chkList));
     localStorage.setItem('chk_suppliers',JSON.stringify(chkSuppliers));
-  }catch(e){}
+  }catch(e){
+    console.error('localStorage save error:', e);
+  }
   if(!API_URL) return;
   if(syncNow){
     clearTimeout(_saveChksTimer);
-    _saveChksTimer=setTimeout(()=>{
-      // 🛡️ Safety: لو الدفاتر فاضية بشكل مريب والـ DB عنده دفاتر — ما تبعتش
-      // ده بيمنع مسح دفاتر من DB بالغلط لو في race condition
-      apiFetch('/api/sync-checks','POST',{books:chkBooks,checks:chkList,suppliers:chkSuppliers}).catch(()=>{});
+    _saveChksTimer=setTimeout(async ()=>{
+      try{
+        const r = await apiFetch('/api/sync-checks','POST',{books:chkBooks,checks:chkList,suppliers:chkSuppliers});
+        console.log('✅ Sync checks success:', r);
+      }catch(e){
+        console.error('❌ Sync checks failed:', e);
+        toast('⚠️ فشل حفظ الشيكات في السيرفر — البيانات محفوظة محلياً', 'error');
+      }
     },800);
   }
 }
@@ -6061,22 +6067,36 @@ function saveChkBook(){
   const pages = parseInt($('bk-pages').value)||48;
   const lastNum = firstNum + pages - 1;
   const b = {id:Date.now()+'_bk', name, bank:$('bk-bank').value.trim(), account:$('bk-account').value.trim(), pages, firstNum, lastNum};
+  
+  console.log('📘 Creating new book:', b);
+  
   chkBooks.push(b);
   saveChks(true);
-  // 🛡️ بنعمل POST مع 3 محاولات retry عشان نضمن إن الدفتر يوصل الـ DB
+  
+  // 🛡️ بنعمل POST مباشر للدفتر الجديد
   if(API_URL){
     (async () => {
+      console.log('📤 Sending book to server:', b.id);
       for(let attempt = 1; attempt <= 3; attempt++){
         try{
+          console.log(`Attempt ${attempt}/3 for book ${b.id}`);
           const r = await apiFetch('/api/check-books','POST',b);
-          if(r){ console.log('✅ الدفتر اتحفظ في DB:', b.id); return; }
-        }catch(e){ console.warn(`محاولة ${attempt} فشلت:`, e); }
+          if(r){ 
+            console.log('✅ Book saved to DB:', b.id, r);
+            toast('✅ تم حفظ الدفتر في السيرفر', 'success');
+            return; 
+          }
+        }catch(e){ 
+          console.error(`❌ Attempt ${attempt} failed:`, e.message);
+          if(attempt === 3){
+            toast('⚠️ تحذير: الدفتر محفوظ محلياً لكن فشل حفظه في السيرفر', 'error');
+          }
+        }
         if(attempt < 3) await new Promise(r => setTimeout(r, 500 * attempt));
       }
-      console.error('❌ فشل حفظ الدفتر في DB بعد 3 محاولات:', b.id);
-      toast('⚠️ تحذير: الدفتر محفوظ محلياً بس تعذر حفظه في السيرفر — افتح الصفحة تاني للمحاولة');
     })();
   }
+  
   renderChkBooks();
   toast('✅ تم إضافة الدفتر — الأرقام من '+firstNum+' إلى '+lastNum);
   ['bk-name','bk-bank','bk-account','bk-first-num','bk-last-num'].forEach(id=>$(id)&&($(id).value=''));
