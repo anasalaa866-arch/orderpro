@@ -2139,7 +2139,8 @@ function updateStats(){
   $('nb-orders').textContent=orders.filter(o=>o.status==='جديد').length;
   $('nb-assign').textContent=wait;
   $('nb-notifs').textContent=notifications.filter(n=>!n.read).length||'';
-  const pickupCount=orders.filter(o=>isPickup(o)&&o.status!=='مكتمل'&&o.status!=='ملغي').length;
+  // فقط الطلبات الموزعة وفي انتظار الاستلام
+  const pickupCount=orders.filter(o=>isPickup(o) && o.courierId && !o.pickedUpAt && o.status!=='مكتمل' && o.status!=='ملغي').length;
   const transitCount=orders.filter(o=>isTransit(o)&&o.status!=='مكتمل'&&o.status!=='ملغي').length;
   const bostaCount=orders.filter(o=>o.bostaId).length;
   $('nb-pickup').textContent=pickupCount||'';
@@ -4151,12 +4152,18 @@ function accTab(tab,sec){document.querySelectorAll('.acc-tab').forEach(t=>t.clas
 
 function renderPickupPage(){
   updateLastPrintDisplay();
-  const list=orders.filter(o=>isPickup(o));
+  // فقط الطلبات اللي (1) pickup (2) اتوزعت على مندوب
+  const list=orders.filter(o => isPickup(o) && o.courierId);
   $('pickup-count').textContent=list.length+' طلب';
   updatePickupBulkBtns();
-  $('pickup-tbody').innerHTML=list.length?list.map(o=>`
-    <tr id="pickup-row-${o.id}">
-      <td style="text-align:center"><input type="checkbox" class="pickup-chk" value="${o.id}" onchange="updatePickupBulkBtns()"></td>
+  
+  // فصّل: في الانتظار (ما استلموش) vs مكتمل (استلموا)
+  const pending = list.filter(o => !o.pickedUpAt && o.status !== 'مكتمل' && o.status !== 'ملغي');
+  const done = list.filter(o => o.pickedUpAt || o.status === 'مكتمل');
+  
+  const renderRow = (o, isPending) => `
+    <tr id="pickup-row-${o.id}" style="${isPending?'':'opacity:0.6'}">
+      <td style="text-align:center"><input type="checkbox" class="pickup-chk" value="${o.id}" onchange="updatePickupBulkBtns()" ${isPending?'':'disabled'}></td>
       <td>
         <strong>${o.id}</strong><br>
         <span style="font-size:10px;color:var(--muted)">${o.time||''}</span>
@@ -4169,17 +4176,20 @@ function renderPickupPage(){
       <td style="font-size:11px;color:var(--muted);max-width:220px;line-height:1.6">${o.items||'—'}</td>
       <td><strong>${o.total.toLocaleString()} ج</strong></td>
       <td>${o.paid?'<span class="badge b-done">💳 مدفوع</span>':'<span class="badge b-wait">💵 COD</span>'}</td>
-      <td>${sBadge(o.status)}</td>
+      <td>${isPending ? '<span class="badge b-wait">⏳ في الانتظار</span>' : '<span class="badge b-done">✅ مكتمل</span>'}</td>
       <td>
         <div style="display:flex;gap:4px">
-          ${o.status==='جديد'||o.status==='في الانتظار'?`<button class="btn btn-success btn-xs" onclick="markPickedUp('${o.id}')">✅ استلم</button>`:''}
-          ${o.status==='جديد'||o.status==='في الانتظار'?`<button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="convertToDelivery('${o.id}')">🚚 شحن</button>`:''}
-          ${o.status==='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="undoPickup('${o.id}')">↩️ رجّع</button>`:''}
-          ${o.status!=='مكتمل'&&o.status!=='ملغي'?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}
+          ${isPending ? `<button class="btn btn-success btn-xs" onclick="markPickedUp('${o.id}')">✅ استلم</button>` : ''}
+          ${isPending ? `<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>` : ''}
+          ${!isPending ? `<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="undoPickup('${o.id}')">↩️ رجّع</button>` : ''}
         </div>
       </td>
-    </tr>`).join('')
-    :'<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--muted)">لا توجد طلبات للاستلام من المحل</td></tr>';
+    </tr>`;
+  
+  const html = [...pending.map(o => renderRow(o, true)), ...done.map(o => renderRow(o, false))];
+  $('pickup-tbody').innerHTML = html.length 
+    ? html.join('')
+    : '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--muted)">لا توجد طلبات موزعة للاستلام من المحل<br><small style="font-size:11px;margin-top:6px;display:block">الطلبات تظهر هنا بعد توزيعها من صفحة "توزيع الطلبات"</small></td></tr>';
 }
 
 function updatePickupBulkBtns(){
@@ -4206,7 +4216,18 @@ function pickupSelAll(){
 function pickupBulkDone(){
   const ids=[...document.querySelectorAll('.pickup-chk:checked')].map(c=>c.value);
   if(!ids.length)return;
-  ids.forEach(id=>{ const o=orders.find(x=>x.id===id); if(o){o.status='مكتمل';} });
+  const now = new Date().toISOString();
+  ids.forEach(id=>{ 
+    const o=orders.find(x=>x.id===id); 
+    if(o){
+      o.status='مكتمل';
+      o.pickedUpAt = now;
+    }
+  });
+  // أرسل للـ backend
+  if(API_URL && ids.length){
+    apiFetch('/api/orders/bulk-pickup','POST',{orderIds: ids}).catch(()=>{});
+  }
   pushNotif('🏪',`تم استلام ${ids.length} طلب من المحل`,ids.join('، '));
   refreshAll();
   toast(`✅ تم تسجيل استلام ${ids.length} طلب`);
@@ -4323,7 +4344,13 @@ async function markPickedUp(id){
   const o=orders.find(x=>x.id===id);
   if(!o)return;
   o.status='مكتمل';
-  if(API_URL)await apiFetch('/api/orders/'+id,'PATCH',{status:'مكتمل'}).catch(()=>{});
+  o.pickedUpAt = new Date().toISOString();
+  if(API_URL){
+    await apiFetch('/api/orders/'+id,'PATCH',{
+      status:'مكتمل',
+      pickedUpAt: o.pickedUpAt
+    }).catch(()=>{});
+  }
   debouncedSaveOrders();
   refreshAll();
   pushNotif('🏪','تم استلام طلب من المحل',`${id} — ${o.name}`);
@@ -6281,10 +6308,17 @@ async function doConvertDelivery(courierId){
 
 async function undoPickup(id){
   const o=orders.find(x=>x.id===id);if(!o)return;
-  o.status='في الانتظار';
-  if(API_URL)apiFetch('/api/orders/'+id,'PATCH',{status:'في الانتظار'}).catch(()=>{});
+  o.status='جاري التوصيل';
+  o.pickedUpAt = null;
+  if(API_URL){
+    apiFetch('/api/orders/'+id,'PATCH',{
+      status:'جاري التوصيل',
+      pickedUpAt: null
+    }).catch(()=>{});
+  }
   debouncedSaveOrders();
-  refreshAll();toast('↩️ تم رجوع الطلب '+id+' لـ "في الانتظار"');
+  refreshAll();
+  toast('↩️ تم رجوع الطلب '+id+' لـ "في الانتظار"');
 }
 
 async function unassignBosta(id){
