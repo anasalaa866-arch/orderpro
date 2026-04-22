@@ -2478,16 +2478,57 @@ async function openShopUsersManager(){
 }
 
 async function createShopUser(){
-  const username = prompt('🏪 اسم المستخدم (بالإنجليزية، بدون مسافات):');
-  if(!username || !username.trim()) return;
-  const cleanUsername = username.trim().toLowerCase();
-  if(!/^[a-z0-9_-]+$/.test(cleanUsername)){
-    toast('❌ الاسم يجب أن يحتوي على حروف إنجليزية وأرقام فقط');
+  // بدل prompt() نستخدم modal نضيف
+  let modal = document.getElementById('m-create-shop-user');
+  if(modal) modal.remove();
+
+  modal = document.createElement('div');
+  modal.id = 'm-create-shop-user';
+  modal.className = 'overlay';
+  modal.style.cssText = 'display:flex;z-index:100000';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:440px">
+      <div class="mhd">
+        <h3>🏪 إضافة موظف محل جديد</h3>
+        <button class="xbtn" onclick="document.getElementById('m-create-shop-user').remove()">✕</button>
+      </div>
+      <div class="mbody" style="padding:16px">
+        <div class="fg" style="margin-bottom:10px">
+          <label>اسم المستخدم * <span style="font-size:11px;color:var(--muted)">(بالإنجليزية فقط، بدون مسافات)</span></label>
+          <input id="csu-username" type="text" placeholder="مثلاً: shop1" autocomplete="off" style="direction:ltr">
+        </div>
+        <div class="fg" style="margin-bottom:10px">
+          <label>الاسم المعروض</label>
+          <input id="csu-display" type="text" placeholder="مثلاً: أحمد" autocomplete="off">
+        </div>
+        <div class="fg" style="margin-bottom:10px">
+          <label>كلمة المرور * <span style="font-size:11px;color:var(--muted)">(4 أحرف على الأقل)</span></label>
+          <input id="csu-pass" type="text" placeholder="كلمة المرور" autocomplete="off" style="direction:ltr">
+        </div>
+        <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:10px;font-size:12px;margin-top:10px">
+          ℹ️ هيتم تسجيل الحساب، وبعدين تشارك البيانات مع الموظف. فكّره يختار "🏪 موظف محل" في شاشة الدخول في التطبيق.
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn btn-primary" style="flex:1" onclick="submitCreateShopUser()">💾 حفظ</button>
+          <button class="btn btn-ghost" onclick="document.getElementById('m-create-shop-user').remove()">إلغاء</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  setTimeout(() => document.getElementById('csu-username')?.focus(), 100);
+}
+
+async function submitCreateShopUser(){
+  const username = document.getElementById('csu-username')?.value.trim().toLowerCase();
+  const displayName = document.getElementById('csu-display')?.value.trim();
+  const password = document.getElementById('csu-pass')?.value;
+
+  if(!username){ toast('❌ أدخل اسم المستخدم'); return; }
+  if(!/^[a-z0-9_-]+$/.test(username)){
+    toast('❌ اسم المستخدم يجب أن يحتوي على حروف إنجليزية وأرقام فقط');
     return;
   }
-
-  const displayName = prompt('الاسم المعروض (اختياري):', cleanUsername);
-  const password = prompt('كلمة المرور (4 أحرف على الأقل):');
   if(!password || password.length < 4){
     toast('❌ كلمة المرور قصيرة');
     return;
@@ -2496,15 +2537,17 @@ async function createShopUser(){
   try{
     const passHash = await _sha256Hash(password);
     const r = await apiFetch('/api/shop-users', 'POST', {
-      username: cleanUsername,
-      passHash,
-      displayName: displayName || cleanUsername
+      username, passHash, displayName: displayName || username
     });
     if(r && r.success){
-      alert(`✅ تم إنشاء الحساب\n\nاسم المستخدم: ${cleanUsername}\nكلمة المرور: ${password}\n\nشارك دي مع موظف المحل.\nوفكّره يختار "🏪 موظف محل" في شاشة الدخول.`);
-      // refresh
-      document.getElementById('m-shop-users').remove();
-      openShopUsersManager();
+      document.getElementById('m-create-shop-user').remove();
+      toast(`✅ تم إنشاء الحساب — ${username}`);
+      // refresh manager
+      const existingMgr = document.getElementById('m-shop-users');
+      if(existingMgr){
+        existingMgr.remove();
+        openShopUsersManager();
+      }
     } else {
       toast('❌ فشل: ' + (r?.error || 'غير معروف'));
     }
@@ -6400,15 +6443,50 @@ function auSelectAll(checked){
   document.querySelectorAll('[name="au-page"]').forEach(cb=>cb.checked=checked);
 }
 
+// يولّد الـ checkboxes تلقائياً من الـ sidebar items — أي صفحة جديدة تتضاف للـ sidebar
+// هتظهر هنا أوتوماتيك بدون تعديل الـ code
+function buildPermissionsGrid(checkedPages){
+  const grid = document.getElementById('au-pages-grid');
+  if(!grid) return;
+  checkedPages = checkedPages || [];
+
+  // اجمع كل الـ sidebar items + الـ labels من النصوص بتاعتها
+  const items = [];
+  document.querySelectorAll('.ni[data-p]').forEach(ni => {
+    const page = ni.dataset.p;
+    if(!page) return;
+    // خد الـ icon + الـ label
+    const icon = ni.querySelector('.ni-icon')?.textContent?.trim() || '📄';
+    const label = ni.querySelector('.ni-label')?.textContent?.trim() || page;
+    items.push({ page, icon, label });
+  });
+
+  // لو مفيش sidebar items (edge case)، استخدم الأسماء من PAGE_T
+  if(!items.length && typeof PAGE_T === 'object'){
+    Object.keys(PAGE_T).forEach(page => items.push({ page, icon: '📄', label: PAGE_T[page] }));
+  }
+
+  grid.innerHTML = items.map(it => {
+    const isChecked = checkedPages.includes(it.page) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">
+      <input type="checkbox" name="au-page" value="${it.page}" style="width:15px;height:15px;accent-color:var(--accent)" ${isChecked}>
+      ${it.icon} ${it.label}
+    </label>`;
+  }).join('');
+}
+
 function openAddUser(){
   editingUsername=null;
   ['au-name','au-username','au-pass'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('add-user-modal-title').textContent='+ مستخدم جديد';
   const hint=document.getElementById('au-pass-hint');
   if(hint)hint.style.display='none';
-  document.querySelectorAll('[name="au-page"]').forEach(cb=>{
-    cb.checked = cb.value !== 'settings';
+  // اعمل grid بكل الصفحات متاحة كـ default (ماعدا settings)
+  const allPages = [];
+  document.querySelectorAll('.ni[data-p]').forEach(ni => {
+    if(ni.dataset.p && ni.dataset.p !== 'settings') allPages.push(ni.dataset.p);
   });
+  buildPermissionsGrid(allPages);
   openM('m-add-user');
 }
 
@@ -6423,10 +6501,8 @@ function openEditUser(username){
   document.getElementById('add-user-modal-title').textContent='✏️ تعديل المستخدم';
   const hint=document.getElementById('au-pass-hint');
   if(hint)hint.style.display='';
-  const userPages=u.pages||[];
-  document.querySelectorAll('[name="au-page"]').forEach(cb=>{
-    cb.checked=userPages.includes(cb.value);
-  });
+  // بني الـ grid مع الصفحات المحددة للمستخدم
+  buildPermissionsGrid(u.pages || []);
   openM('m-add-user');
 }
 
@@ -11088,27 +11164,8 @@ try{
           <button type="button" class="btn btn-ghost btn-xs" onclick="auSelectAll(true)">تحديد الكل</button>
           <button type="button" class="btn btn-ghost btn-xs" onclick="auSelectAll(false)">إلغاء الكل</button>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--bg);border-radius:8px;padding:8px;border:1px solid var(--border)">
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="dashboard" style="width:15px;height:15px;accent-color:var(--accent)"> 🏠 لوحة التحكم</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="orders" style="width:15px;height:15px;accent-color:var(--accent)"> 📋 الطلبات</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="couriers" style="width:15px;height:15px;accent-color:var(--accent)"> 🚴 المناديب</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="assign" style="width:15px;height:15px;accent-color:var(--accent)"> 📍 توزيع الطلبات</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="pickup" style="width:15px;height:15px;accent-color:var(--accent)"> 🏪 استلام من المحل</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="transit" style="width:15px;height:15px;accent-color:var(--accent)"> 🏭 مخزن العبور</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="bosta" style="width:15px;height:15px;accent-color:var(--accent)"> 🚚 بوسطة</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="delivery-sheet" style="width:15px;height:15px;accent-color:var(--accent)"> 🖨️ ورقة التوصيل</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="courier-orders" style="width:15px;height:15px;accent-color:var(--accent)"> 🧑 طلبات المناديب</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="import-excel" style="width:15px;height:15px;accent-color:var(--accent)"> 📥 استيراد Excel</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="problems" style="width:15px;height:15px;accent-color:var(--accent)"> ⚠️ طلبات مشكلة</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="accounting" style="width:15px;height:15px;accent-color:var(--accent)"> 💰 محاسبة المناديب</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="settle-history" style="width:15px;height:15px;accent-color:var(--accent)"> 📚 سجل التسويات</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="treasury" style="width:15px;height:15px;accent-color:var(--accent)"> 🏦 الخزنة</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="shop-accounting" style="width:15px;height:15px;accent-color:var(--accent)"> 🏪 محاسبة المحل</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="checks" style="width:15px;height:15px;accent-color:var(--accent)"> 📋 الشيكات</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="reports" style="width:15px;height:15px;accent-color:var(--accent)"> 📊 التقارير</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="expiry" style="width:15px;height:15px;accent-color:var(--accent)"> ⏳ تواريخ الصلاحية</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="notifs" style="width:15px;height:15px;accent-color:var(--accent)"> 🔔 الإشعارات</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="settings" style="width:15px;height:15px;accent-color:var(--accent)"> ⚙️ الإعدادات</label>
+        <div id="au-pages-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--bg);border-radius:8px;padding:8px;border:1px solid var(--border)">
+          <!-- يتولد تلقائياً من buildPermissionsGrid() -->
         </div>
       </div>
     </div>
