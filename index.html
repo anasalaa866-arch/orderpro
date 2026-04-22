@@ -6418,7 +6418,35 @@ async function doLogin(){
   loadTreasury();
   checkExpiryAlerts();
   requestNotifPermission();
+  
+  // روح لأول صفحة متاحة للمستخدم
+  const firstPage = getFirstAvailablePage(user);
+  if(firstPage){
+    const navItem = document.querySelector(`.ni[data-p="${firstPage}"]`);
+    if(navItem) goPage(navItem, firstPage);
+  }
+  
   toast('✅ أهلاً '+user.name+' 👋');
+}
+
+// دالة تجيب أول صفحة متاحة للمستخدم
+function getFirstAvailablePage(user){
+  if(user.role === 'admin') return 'dashboard';
+  
+  const userPages = user.pages || [];
+  if(!userPages.length) return null;
+  
+  // ترتيب الأولوية
+  const pageOrder = ['orders','assign','pickup','couriers','transit','bosta','delivery-sheet',
+    'courier-orders','import-excel','problems','accounting','settle-history','treasury',
+    'shop-accounting','checks','reports','stars-reviews','shop-transfers','field-cancels',
+    'expiry','notifs','settings','dashboard'];
+  
+  for(const page of pageOrder){
+    if(userPages.includes(page)) return page;
+  }
+  
+  return userPages[0]; // fallback لأول صفحة متاحة
 }
 
 function doLogout(){
