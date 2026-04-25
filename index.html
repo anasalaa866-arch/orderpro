@@ -9760,7 +9760,7 @@ function coDsRender(){
   const courierOrders=orders.filter(o=>{
     const oc=String(o.courierId||'');const cc=String(cId||'');
     const dm=oc!==''&&oc!=='null'&&oc!=='0'&&(oc===cc||Number(oc)===Number(cc));
-    return dm&&o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o);
+    return dm&&o.status==='جاري التوصيل'&&!isTransit(o);
   });
 
   const express=courierOrders.filter(o=>isSameDay(o));
@@ -10749,6 +10749,22 @@ function refreshAll(){
   }
 }
 
+// ===== Missing helpers (added v181 fix) =====
+// escapeHtml: لتأمين النصوص اللي بتتعرض في HTML (بيمنع XSS)
+function escapeHtml(s){
+  if(s===null||s===undefined) return '';
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+// Delivery Sheet state
+let dsMode = 'full';
+let dsZone = 'all';
+
 const DS_HEADERS = `<thead><tr>
   <th style="width:22px">#</th>
   <th style="width:85px">رقم الطلب</th>
@@ -10793,7 +10809,7 @@ function dsInit(){
   const sel=$('ds-courier-sel');
   if(!sel) return;
 
-  const activeOrders=orders.filter(o=>o.status==='جاري التوصيل'&&!isPickup(o)&&!isTransit(o));
+  const activeOrders=orders.filter(o=>o.status==='جاري التوصيل'&&!isTransit(o));
 
   if(!activeOrders.length && !couriers.length){
     sel.innerHTML='<option>لا توجد طلبات نشطة</option>';
@@ -10924,7 +10940,7 @@ function dsRender(){
 
   dsRowNum = 0; // reset row counter
   const courierOrders=orders.filter(o=>{
-    if(o.status!=='جاري التوصيل'||isPickup(o)||isTransit(o)) return false;
+    if(o.status!=='جاري التوصيل'||isTransit(o)) return false;
     if(cId==='bosta') return o.isBosta||String(o.courierId)==='bosta';
     if(!o.courierId||o.courierId==='null'||o.courierId==='undefined') return false;
     return String(o.courierId)===String(cId)||Number(o.courierId)===Number(cId);
