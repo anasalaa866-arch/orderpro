@@ -2059,8 +2059,16 @@ try{_bostaExported=JSON.parse(localStorage.getItem('bosta_exported_ids')||'{}');
 
 orders=data.orders.map(o=>{
     const base={ship:50,...o};
-    if(!base.isBosta && _bostaIds[base.id]) base.isBosta=true;
-    if(base.isBosta) base.courierId='bosta';
+    // ⚠️ مهم: نحترم الـ courierId اللي جاي من السيرفر
+    // _bostaIds مخزن قديم، لو الطلب اتعاد توزيعه على مندوب/محل، ما نـ override
+    // الـ override يحصل بس لو ما فيش courierId في السيرفر (أو null) والطلب في bosta_ids
+    if(!base.courierId && !base.isBosta && _bostaIds[base.id]) base.isBosta=true;
+    if(base.isBosta && !base.courierId) base.courierId='bosta';
+    // لو الطلب اتعين لمندوب حقيقي، شيله من bosta_ids عشان مايحصلش conflict في المرة الجاية
+    if(base.courierId && base.courierId!=='bosta' && _bostaIds[base.id]){
+      delete _bostaIds[base.id];
+      try{ localStorage.setItem('bosta_ids', JSON.stringify(_bostaIds)); }catch(e){}
+    }
     if(!base.bostaExported && _bostaExported[base.id]) base.bostaExported=true;
     if(!base.deliveryType||base.deliveryType==='normal'){
       const sm=(base.shippingMethod||'').toLowerCase();
@@ -3786,7 +3794,14 @@ async function confirmAssign(){
   const isBosta = String(currentCourierId)==='bosta';
   const batch = ensureCurrentBatch();
   const upd={courierId:currentCourierId,ship,note,status:'جاري التوصيل',isBosta,batchCode:batch.code};
-  if(isBosta){ bostaIds[currentOrderId]=true; localStorage.setItem('bosta_ids',JSON.stringify(bostaIds)); }
+  if(isBosta){
+    bostaIds[currentOrderId]=true;
+    localStorage.setItem('bosta_ids',JSON.stringify(bostaIds));
+  } else if(bostaIds[currentOrderId]){
+    // الطلب كان لـ bosta، دلوقتي اتعاد توزيعه — شيله من القايمة
+    delete bostaIds[currentOrderId];
+    localStorage.setItem('bosta_ids',JSON.stringify(bostaIds));
+  }
 
   // snapshot للـ shopify queue
   const orderSnapshot = { ...o, ...upd };
@@ -8612,6 +8627,23 @@ async function batchAssign(courierId){
 
   // طبّق محلياً فوراً (optimistic) — عشان الـ wizard يتحرك
   Object.assign(o,upd);
+  // لو الطلب اتعاد توزيعه لمندوب/محل، شيله من bosta_ids المحلية
+  if(!isBosta){
+    try{
+      const bIds = JSON.parse(localStorage.getItem('bosta_ids')||'{}');
+      if(bIds[orderId]){
+        delete bIds[orderId];
+        localStorage.setItem('bosta_ids', JSON.stringify(bIds));
+      }
+    }catch(e){}
+  } else {
+    // لو اتعمل assign لـ bosta، احفظه في bosta_ids
+    try{
+      const bIds = JSON.parse(localStorage.getItem('bosta_ids')||'{}');
+      bIds[orderId] = true;
+      localStorage.setItem('bosta_ids', JSON.stringify(bIds));
+    }catch(e){}
+  }
   if(c)c.status='نشط';
   debouncedSaveOrders();
   batchResults.push({orderId,name:orderName,courierId,courierName,action:'assigned'});
