@@ -2232,7 +2232,7 @@ function updateStats(){
 
 function renderDash(){
   $('dash-orders').innerHTML=orders.slice(0,6).map(o=>`<tr><td><strong>${o.id}</strong></td><td>${o.name}</td><td>📍 ${o.area}</td><td><strong>${o.total.toLocaleString()} ج</strong></td><td>${sBadge(o.status)}</td></tr>`).join('');
-  $('dash-couriers').innerHTML=couriers.map(c=>`<tr><td><strong>${c.name}</strong></td><td><span class="badge b-go">${oByC(c.id,'جاري التوصيل').length}</span></td><td><span class="badge b-done">${oByC(c.id,'مكتمل').length}</span></td></tr>`).join('');
+  $('dash-couriers').innerHTML=couriers.filter(c => (c.role || 'courier') !== 'preparer').map(c=>`<tr><td><strong>${c.name}</strong></td><td><span class="badge b-go">${oByC(c.id,'جاري التوصيل').length}</span></td><td><span class="badge b-done">${oByC(c.id,'مكتمل').length}</span></td></tr>`).join('');
 
   // تحصيلات مع المناديب (COD فقط — غير مدفوع)
   const activeOrders = orders.filter(o => o.status==='جاري التوصيل' && !o.paid && o.courierId && o.courierId!=='bosta' && !o.isBosta);
@@ -2452,8 +2452,10 @@ function searchGoToOrders(){
 }
 
 function renderCouriers(){
-  $('courier-count').textContent=couriers.length+' مندوب';
-  $('couriers-grid').innerHTML=couriers.map((c,i)=>{
+  // فلترة: مش نعرض المحضرين (هما عندهم صفحة منفصلة لو احتجنا)
+  const visibleCouriers = couriers.filter(c => (c.role || 'courier') !== 'preparer');
+  $('courier-count').textContent=visibleCouriers.length+' مندوب';
+  $('couriers-grid').innerHTML=visibleCouriers.map((c,i)=>{
     const active=oByC(c.id,'جاري التوصيل').length,done=oByC(c.id,'مكتمل').length,tot=active+done,rate=tot?Math.round(done/tot*100):0;
     const hasStarsAccount = c.username ? '⭐' : '';
     const role = c.role || 'courier';
@@ -2705,7 +2707,7 @@ function renderAssignPage(){
   const probBtn=$('assign-prob-btn');
   if(probBtn){probBtn.style.display=probCount?'inline-flex':'none';probBtn.textContent='⚠️ '+probCount+' طلب مشكلة';}
   $('assign-tbody').innerHTML=u.map(o=>{
-    const rankedCouriers=couriers.map(c=>{
+    const rankedCouriers=couriers.filter(c => (c.role || 'courier') !== 'preparer').map(c=>{
       const zm=zoneMatchScore(o.area,c.zone);
       const active=oByC(c.id,'جاري التوصيل').length;
       return{...c,zs:zm.score,zm:zm.matched,zr:zm.reason,active};
@@ -4083,7 +4085,7 @@ function openEditOrder(id){
   set('eo-status', o.status||'في الانتظار');
   const sel = document.getElementById('eo-courier');
   sel.innerHTML = '<option value="">— بدون تعيين —</option>'
-    + couriers.map(c=>`<option value="${c.id}" ${String(o.courierId)===String(c.id)?'selected':''}>${c.name}</option>`).join('');
+    + couriers.filter(c => (c.role || 'courier') !== 'preparer' || String(o.courierId)===String(c.id)).map(c=>`<option value="${c.id}" ${String(o.courierId)===String(c.id)?'selected':''}>${c.name}</option>`).join('');
   openM('m-edit-order');
 }
 
@@ -4214,7 +4216,9 @@ function saveCouriers(){localStorage.setItem('op_couriers',JSON.stringify(courie
 
 function renderAcc(){
   let totCod=0,totShip=0,rows='';
-  couriers.forEach(c=>{
+  // فلترة: مش نعرض المحضرين في المحاسبة
+  const visibleCouriers = couriers.filter(c => (c.role || 'courier') !== 'preparer');
+  visibleCouriers.forEach(c=>{
     const done=getPendingSettleOrders(c.id); // يشمل تحت التسوية + مكتمل غير مسوّى
     const activeOnly = oByC(c.id,'جاري التوصيل'); // طلبات شغالة لسه
     const hasActive = activeOnly.length > 0;
@@ -4254,7 +4258,7 @@ function renderAcc(){
   });
   $('acc-tbody').innerHTML=rows;
   $('acc-total').innerHTML=`<td colspan="2"><strong>الإجمالي</strong></td><td class="mpos">${totCod.toLocaleString()} ج</td><td class="mwarn">${totShip.toLocaleString()} ج</td><td class="mpos">${(totCod-totShip).toLocaleString()} ج</td><td class="mpurp">${totShip.toLocaleString()} ج</td><td colspan="2"></td>`;
-  $('acc-cf').innerHTML='<option value="all">كل المناديب</option>'+couriers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  $('acc-cf').innerHTML='<option value="all">كل المناديب</option>'+visibleCouriers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
   renderSettle();
 }
 
@@ -8497,7 +8501,7 @@ function renderBatchOrder(){
   if(hint)hint.textContent=isPickupOrder?'استلم من المحل أو وزّع على مندوب':'اختر مندوباً للتوزيع';
   const grid=document.getElementById('batch-couriers-grid');
   if(grid){
-    const ranked=couriers.map(c=>({...c,zm:zoneMatchScore(o.area,c.zone)})).sort((a,b)=>(b.zm-a.zm));
+    const ranked=couriers.filter(c => (c.role || 'courier') !== 'preparer').map(c=>({...c,zm:zoneMatchScore(o.area,c.zone)})).sort((a,b)=>(b.zm-a.zm));
     grid.innerHTML=ranked.map(c=>{
       const ship=isSameDay(o)?(c.shipExpress||80):(c.ship||50);
       const star=c.zm===2?'⭐ ':'';
@@ -8655,13 +8659,12 @@ async function batchAssign(courierId){
 }
 
 async function batchMarkPickup(){
-  const o=batchOrders[batchIndex];
-  o.status='مكتمل';
-  o.batchCode=_currentBatchCode;
-  if(API_URL)apiFetch('/api/orders/'+o.id,'PATCH',{status:'مكتمل',batchCode:_currentBatchCode}).catch(()=>{});
-  debouncedSaveOrders();
-  batchResults.push({orderId:o.id,name:o.name,action:'pickup'});
-  batchIndex++;renderBatchOrder();
+  // الزرار ده بقى بيعمل assign للمحل (كأنك ضغطت على المحل - Trivium Square)
+  if(!SHOP_COURIER_ID){
+    toast('❌ لم يتم تحديد المحل في الإعدادات', 'error');
+    return;
+  }
+  return batchAssign(SHOP_COURIER_ID);
 }
 
 function batchSkip(){
@@ -10635,7 +10638,7 @@ setInterval(() => {
   }
 }, 120000);
 
-function refreshSelects(){const opts='<option value="">— بدون تعيين الآن —</option>'+couriers.map(c=>`<option value="${c.id}">${c.name} (${c.zone})</option>`).join('');$('o-courier').innerHTML=opts}
+function refreshSelects(){const opts='<option value="">— بدون تعيين الآن —</option>'+couriers.filter(c => (c.role || 'courier') !== 'preparer').map(c=>`<option value="${c.id}">${c.name} (${c.zone})</option>`).join('');$('o-courier').innerHTML=opts}
 function ordToggleAll(val){
   document.querySelectorAll('.ord-chk').forEach(c=>c.checked=val);
   updateOrdersBulk();
