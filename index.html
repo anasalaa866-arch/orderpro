@@ -243,6 +243,10 @@ tr:hover td{background:#fafbff}
 .login-err{color:#e53e3e;font-size:12px;text-align:center;margin-top:8px;min-height:18px;font-family:Roboto,sans-serif}
 .login-ver{font-size:10px;color:#ccc;text-align:center;margin-top:14px;font-family:Roboto,sans-serif}
 
+/* Pickup Tab Styles */
+.pickup-tab{position:relative}
+.pickup-tab.active{color:var(--primary);border-bottom-color:var(--primary)!important}
+.pickup-tab:hover{background:rgba(0,0,0,0.02)}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -413,44 +417,33 @@ tr:hover td{background:#fafbff}
     <div class="card">
       <div class="card-hd">
         <h3>🏪 طلبات الاستلام من المحل</h3>
-        <span id="pickup-count" style="font-size:12px;color:var(--muted)"></span>
-      </div>
-      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center">
-        <button class="btn btn-ghost btn-sm" id="pickup-sel-all" onclick="pickupSelAll()">☐ تحديد الكل</button>
-        <button class="btn btn-success btn-sm" onclick="pickupBulkDone()" id="pickup-bulk-done" style="display:none">✅ تسليم المحدد</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--danger);display:none" onclick="pickupBulkCancel()" id="pickup-bulk-cancel">❌ إلغاء المحدد</button>
-        <span id="pickup-sel-count" style="font-size:12px;color:var(--muted)"></span>
-        <div style="margin-right:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-primary btn-sm" onclick="printPickupSlip('pending')">🖨️ الطلبات المعلقة</button>
-          <button class="btn btn-ghost btn-sm" onclick="printPickupSlip('new')">🆕 جديدة منذ آخر طباعة</button>
-          <span id="pickup-last-print" style="font-size:10px;color:var(--muted)">لم تتم طباعة بعد</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span id="pickup-count" class="badge b-primary">0 طلب</span>
+          <button onclick="printPickupSlip('pending')" class="btn btn-ghost btn-sm">🖨️ طباعة المعلق</button>
+          <button onclick="printPickupSlip('all')" class="btn btn-ghost btn-sm">🖨️ طباعة الكل</button>
         </div>
+      </div>
+      <div style="display:flex;gap:8px;padding:12px 16px;border-bottom:2px solid var(--border);background:var(--bg)">
+        <button id="pickup-tab-pending" class="pickup-tab" onclick="switchPickupTab('pending')" style="padding:10px 16px;background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;font-weight:600;transition:all 0.2s">⏳ في الانتظار <span id="pickup-badge-pending" class="badge b-wait" style="margin-left:6px">0</span></button>
+        <button id="pickup-tab-withMe" class="pickup-tab" onclick="switchPickupTab('withMe')" style="padding:10px 16px;background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;font-weight:600;transition:all 0.2s">📦 معاي <span id="pickup-badge-withme" class="badge b-progress" style="margin-left:6px">0</span></button>
+        <button id="pickup-tab-done" class="pickup-tab" onclick="switchPickupTab('done')" style="padding:10px 16px;background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;font-weight:600;transition:all 0.2s">✅ مكتمل <span id="pickup-badge-done" class="badge b-done" style="margin-left:6px">0</span></button>
+      </div>
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="pickupSelAll()">☐ تحديد الكل</button>
+        <button id="pickup-bulk-print" onclick="pickupBulkPrint()" class="btn btn-primary btn-sm" style="display:none">🖨️ طباعة المحدد</button>
+        <button id="pickup-bulk-done" onclick="pickupBulkDone()" class="btn btn-success btn-sm" style="display:none">✅ تسليم المحدد</button>
+        <button id="pickup-bulk-cancel" onclick="pickupBulkCancel()" class="btn btn-ghost btn-sm" style="color:var(--danger);display:none">❌ إلغاء المحدد</button>
+        <span id="pickup-sel-count" style="font-size:12px;color:var(--muted);font-weight:600"></span>
+        <div style="margin-right:auto"><span id="pickup-last-print" style="font-size:10px;color:var(--muted)">لم تتم طباعة بعد</span></div>
       </div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th style="width:36px"><input type="checkbox" id="pickup-check-all" onchange="pickupToggleAll(this.checked)"></th><th>رقم الطلب</th><th>العميل</th><th>الهاتف</th><th>المنتجات</th><th>إجمالي</th><th>الدفع</th><th>الحالة</th><th>إجراءات</th></tr></thead>
-          <tbody id="pickup-tbody"></tbody>
+          <thead><tr><th style="width:36px"><input type="checkbox" id="pickup-check-all" onchange="pickupSelAll()"></th><th>رقم الطلب</th><th>العميل</th><th>الهاتف</th><th>المنتجات</th><th>إجمالي</th><th>الدفع</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+          <tbody id="pickup-tbody"><tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">جاري التحميل...</td></tr></tbody>
         </table>
       </div>
     </div>
   </div>
-
-  <!-- TRANSIT PAGE -->
-  <!-- MODAL: إضافة مورد -->
-  <div class="overlay" id="m-add-supplier">
-    <div class="modal" style="width:380px">
-      <div class="mhd"><h3>+ إضافة مورد</h3><button class="xbtn" onclick="closeM('m-add-supplier')">✕</button></div>
-      <div class="mbody">
-        <div class="fg"><label>اسم المورد *</label><input id="supplier-name-input" placeholder="مثال: شركة المواد الغذائية"></div>
-        <div class="fg"><label>ملاحظات</label><input id="supplier-note-input" placeholder="اختياري"></div>
-      </div>
-      <div class="mft">
-        <button class="btn btn-ghost" onclick="closeM('m-add-supplier')">إلغاء</button>
-        <button class="btn btn-primary" onclick="saveSupplier()">💾 إضافة</button>
-      </div>
-    </div>
-  </div>
-
   <div class="page" id="page-transit">
     <div class="card">
       <div class="card-hd">
@@ -1080,7 +1073,7 @@ tr:hover td{background:#fafbff}
           <div class="wnote" style="margin-top:8px">بعد ما ترفعهم على Railway هيديك رابط — انسخه وحطه في الخطوة الجاية</div>
         </div>
       </div>
-      <div class="wstep">
+      <div class="wstep" style="display:none">
         <div class="wnum" id="wn3">3</div>
         <div class="wbody">
           <h4>حط رابط الـ Backend هنا</h4>
@@ -1165,7 +1158,6 @@ tr:hover td{background:#fafbff}
   </div>
   <div class="mft">
     <button class="btn btn-ghost" onclick="closeM('m-import')">إلغاء</button>
-    <button class="btn btn-ghost" onclick="testShopifyConnection()" style="color:#96bf48;border-color:#96bf48" title="اختبار الـ Token حالياً">🔍 اختبار الاتصال</button>
     <button class="btn btn-ghost" onclick="forceUpdateServerCredentials()" style="color:#6366f1;border-color:#6366f1" title="حفظ الـ Token في الـ Database">🔐 حفظ التوكن في السيرفر</button>
     <button class="btn btn-ghost" onclick="backfillImages()" style="color:#96bf48;border-color:#96bf48" title="جلب صور المنتجات للطلبات اللي مفيهاش صور">🖼️ تحميل صور المنتجات</button>
     <button class="btn btn-primary" id="imp-btn" onclick="doImport()">📥 استيراد الآن</button>
@@ -1384,6 +1376,90 @@ tr:hover td{background:#fafbff}
 
 <script>
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
+
+// ===== Shop Pickup Variables =====
+// SHOP_COURIER_ID: يتحمّل ديناميكياً من السيرفر (settings) — fallback للقيمة المحفوظة
+let SHOP_COURIER_ID = parseInt(localStorage.getItem('shop_courier_id') || '7', 10);
+async function loadShopCourierId(){
+  try{
+    const r = await apiFetch('/api/settings');
+    if(r && r.shop_courier_id){
+      const id = parseInt(r.shop_courier_id, 10);
+      if(!isNaN(id) && id > 0){
+        SHOP_COURIER_ID = id;
+        localStorage.setItem('shop_courier_id', String(id));
+      }
+    }
+  }catch(e){ /* fallback to cached value */ }
+}
+let ACTIVE_PICKUP_TAB = 'pending';
+
+// ===== STATE VALIDATION SYSTEM =====
+// ملاحظة: السيرفر بينقل من 'جاري التوصيل' لـ 'تحت التسوية' مباشرة (skip لـ 'تم التسليم')
+// وكمان في حالات بنرجّع طلب مرتجع لـ 'جديد' عشان يتعاد توزيعه
+const STATE_MACHINE = {
+  'جديد': ['تم التعيين', 'جاري التوصيل', 'ملغي'],
+  'تم التعيين': ['جاري التوصيل', 'جديد', 'ملغي'],
+  'جاري التوصيل': ['تم التسليم', 'تحت التسوية', 'مرتجع', 'تم التعيين', 'ملغي'],
+  'تم التسليم': ['تحت التسوية', 'مرتجع'],
+  'مرتجع': ['تحت التسوية', 'جديد', 'جاري التوصيل'],
+  'تحت التسوية': ['مسوّى', 'تم التسليم', 'جاري التوصيل', 'ملغي'],
+  'مسوّى': [],
+  'ملغي': ['جديد']  // السماح بإلغاء الإلغاء (uncancel)
+};
+
+function validateStateTransition(currentStatus, newStatus) {
+  if (currentStatus === newStatus) return { valid: true };
+  const allowed = STATE_MACHINE[currentStatus] || [];
+  if (!allowed.includes(newStatus)) {
+    return {
+      valid: false,
+      error: `لا يمكن تغيير الحالة من "${currentStatus}" إلى "${newStatus}"`
+    };
+  }
+  return { valid: true };
+}
+
+function canOrderSettle(order) {
+  if (!order) return false;
+  const validStatuses = ['تم التسليم', 'مرتجع'];
+  if (!validStatuses.includes(order.status)) return false;
+  if (!order.courierId) return false;
+  if (order.status === 'تم التسليم' && !order.courierDeliveredAt) return false;
+  if (order.status === 'مرتجع' && !order.courierReturnedAt) return false;
+  return true;
+}
+
+function getStatusBadgeClass(status) {
+  const map = {
+    'جديد': 'b-new',
+    'تم التعيين': 'b-assigned',
+    'جاري التوصيل': 'b-progress',
+    'تم التسليم': 'b-done',
+    'مرتجع': 'b-return',
+    'تحت التسوية': 'b-settle',
+    'مسوّى': 'b-done',
+    'ملغي': 'b-cancel'
+  };
+  return map[status] || 'b-wait';
+}
+
+async function safeStatusChange(orderId, newStatus) {
+  const order = orders.find(o => o.id === orderId);
+  if (!order) {
+    toast('الطلب غير موجود', 'error');
+    return false;
+  }
+  
+  const validation = validateStateTransition(order.status, newStatus);
+  if (!validation.valid) {
+    const confirmed = confirm(`⚠️ تحذير:\n\n${validation.error}\n\nهل تريد المتابعة رغم التحذير؟`);
+    if (!confirmed) return false;
+  }
+  
+  return true;
+}
+
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
 const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات'};
 
@@ -2139,7 +2215,8 @@ function updateStats(){
   $('nb-orders').textContent=orders.filter(o=>o.status==='جديد').length;
   $('nb-assign').textContent=wait;
   $('nb-notifs').textContent=notifications.filter(n=>!n.read).length||'';
-  const pickupCount=orders.filter(o=>isPickup(o)&&o.status!=='مكتمل'&&o.status!=='ملغي').length;
+  // فقط الطلبات الموزعة وفي انتظار الاستلام
+  const pickupCount=orders.filter(o=>isPickup(o) && o.courierId && !o.pickedUpAt && o.status!=='مكتمل' && o.status!=='ملغي').length;
   const transitCount=orders.filter(o=>isTransit(o)&&o.status!=='مكتمل'&&o.status!=='ملغي').length;
   const bostaCount=orders.filter(o=>o.bostaId).length;
   $('nb-pickup').textContent=pickupCount||'';
@@ -2432,62 +2509,112 @@ async function _sha256Hash(str){
 
 // ===== Shop Users Manager =====
 async function openShopUsersManager(){
+  console.log('🏪 openShopUsersManager called');
   // جيب الحسابات الموجودة
   let users = [];
   try{
     users = await apiFetch('/api/shop-users','GET') || [];
-  }catch(e){ console.warn(e); }
+    console.log('📋 Shop users fetched:', users.length);
+  }catch(e){ 
+    console.error('❌ Error fetching shop users:', e);
+  }
 
   // أنشئ modal
   let modal = document.getElementById('m-shop-users');
   if(modal) modal.remove();
 
-  const usersHtml = users.length
-    ? users.map(u => `
-      <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <div>
-          <div style="font-weight:700;font-size:13px">${_escapeHtml(u.display_name || u.username)}</div>
-          <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:2px">@${_escapeHtml(u.username)}</div>
-          ${u.last_login_at ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">آخر دخول: ${_timeAgo(u.last_login_at)}</div>` : ''}
+  try{
+    const usersHtml = users.length
+      ? users.map(u => `
+        <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div>
+            <div style="font-weight:700;font-size:13px">${_escapeHtml(u.display_name || u.username)}</div>
+            <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:2px">@${_escapeHtml(u.username)}</div>
+            ${u.last_login_at ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">آخر دخول: ${_timeAgo(u.last_login_at)}</div>` : ''}
+          </div>
+          <button class="btn btn-ghost btn-xs" onclick="resetShopUserPassword('${_escapeHtml(u.username)}')" style="color:var(--accent);border-color:var(--accent)">🔑 تغيير كلمة المرور</button>
         </div>
-        <button class="btn btn-ghost btn-xs" onclick="resetShopUserPassword('${_escapeHtml(u.username)}')" style="color:var(--accent);border-color:var(--accent)">🔑 تغيير كلمة المرور</button>
+      `).join('')
+      : '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">لا توجد حسابات — أنشئ أول حساب</div>';
+
+    modal = document.createElement('div');
+    modal.id = 'm-shop-users';
+    modal.className = 'overlay open';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:500px">
+        <div class="mhd">
+          <h3>🏪 حسابات موظفي المحل</h3>
+          <button class="xbtn" onclick="document.getElementById('m-shop-users').remove()">✕</button>
+        </div>
+        <div class="mbody" style="padding:16px;max-height:70vh;overflow-y:auto">
+          <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:var(--muted)">
+            ℹ️ الحسابات دي بتستخدم في تطبيق <strong>Cafelax Stars</strong> في وضع "موظف محل". بيشوفوا طلبات الاستلام من المحل وبيقدروا يحولوا طلبات لشحن.
+          </div>
+          <div style="margin-bottom:14px">${usersHtml}</div>
+          <button class="btn btn-primary" onclick="createShopUser()" style="width:100%">＋ إنشاء حساب جديد</button>
+        </div>
       </div>
-    `).join('')
-    : '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">لا توجد حسابات — أنشئ أول حساب</div>';
+    `;
+    document.body.appendChild(modal);
+    console.log('✅ Modal appended to body');
+  }catch(err){
+    console.error('❌ Error creating modal:', err);
+    toast('❌ خطأ في فتح النافذة: ' + err.message);
+  }
+}
+
+async function createShopUser(){
+  // بدل prompt() نستخدم modal نضيف
+  let modal = document.getElementById('m-create-shop-user');
+  if(modal) modal.remove();
 
   modal = document.createElement('div');
-  modal.id = 'm-shop-users';
-  modal.className = 'overlay';
-  modal.style.display = 'flex';
+  modal.id = 'm-create-shop-user';
+  modal.className = 'overlay open';
+  modal.style.cssText = 'z-index:100000';
   modal.innerHTML = `
-    <div class="modal" style="max-width:500px">
+    <div class="modal" style="max-width:440px">
       <div class="mhd">
-        <h3>🏪 حسابات موظفي المحل</h3>
-        <button class="xbtn" onclick="document.getElementById('m-shop-users').remove()">✕</button>
+        <h3>🏪 إضافة موظف محل جديد</h3>
+        <button class="xbtn" onclick="document.getElementById('m-create-shop-user').remove()">✕</button>
       </div>
-      <div class="mbody" style="padding:16px;max-height:70vh;overflow-y:auto">
-        <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:var(--muted)">
-          ℹ️ الحسابات دي بتستخدم في تطبيق <strong>Cafelax Stars</strong> في وضع "موظف محل". بيشوفوا طلبات الاستلام من المحل وبيقدروا يحولوا طلبات لشحن.
+      <div class="mbody" style="padding:16px">
+        <div class="fg" style="margin-bottom:10px">
+          <label>اسم المستخدم * <span style="font-size:11px;color:var(--muted)">(بالإنجليزية فقط، بدون مسافات)</span></label>
+          <input id="csu-username" type="text" placeholder="مثلاً: shop1" autocomplete="off" style="direction:ltr">
         </div>
-        <div style="margin-bottom:14px">${usersHtml}</div>
-        <button class="btn btn-primary" onclick="createShopUser()" style="width:100%">＋ إنشاء حساب جديد</button>
+        <div class="fg" style="margin-bottom:10px">
+          <label>الاسم المعروض</label>
+          <input id="csu-display" type="text" placeholder="مثلاً: أحمد" autocomplete="off">
+        </div>
+        <div class="fg" style="margin-bottom:10px">
+          <label>كلمة المرور * <span style="font-size:11px;color:var(--muted)">(4 أحرف على الأقل)</span></label>
+          <input id="csu-pass" type="text" placeholder="كلمة المرور" autocomplete="off" style="direction:ltr">
+        </div>
+        <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:10px;font-size:12px;margin-top:10px">
+          ℹ️ هيتم تسجيل الحساب، وبعدين تشارك البيانات مع الموظف. فكّره يختار "🏪 موظف محل" في شاشة الدخول في التطبيق.
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn btn-primary" style="flex:1" onclick="submitCreateShopUser()">💾 حفظ</button>
+          <button class="btn btn-ghost" onclick="document.getElementById('m-create-shop-user').remove()">إلغاء</button>
+        </div>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
+  setTimeout(() => document.getElementById('csu-username')?.focus(), 100);
 }
 
-async function createShopUser(){
-  const username = prompt('🏪 اسم المستخدم (بالإنجليزية، بدون مسافات):');
-  if(!username || !username.trim()) return;
-  const cleanUsername = username.trim().toLowerCase();
-  if(!/^[a-z0-9_-]+$/.test(cleanUsername)){
-    toast('❌ الاسم يجب أن يحتوي على حروف إنجليزية وأرقام فقط');
+async function submitCreateShopUser(){
+  const username = document.getElementById('csu-username')?.value.trim().toLowerCase();
+  const displayName = document.getElementById('csu-display')?.value.trim();
+  const password = document.getElementById('csu-pass')?.value;
+
+  if(!username){ toast('❌ أدخل اسم المستخدم'); return; }
+  if(!/^[a-z0-9_-]+$/.test(username)){
+    toast('❌ اسم المستخدم يجب أن يحتوي على حروف إنجليزية وأرقام فقط');
     return;
   }
-
-  const displayName = prompt('الاسم المعروض (اختياري):', cleanUsername);
-  const password = prompt('كلمة المرور (4 أحرف على الأقل):');
   if(!password || password.length < 4){
     toast('❌ كلمة المرور قصيرة');
     return;
@@ -2496,15 +2623,17 @@ async function createShopUser(){
   try{
     const passHash = await _sha256Hash(password);
     const r = await apiFetch('/api/shop-users', 'POST', {
-      username: cleanUsername,
-      passHash,
-      displayName: displayName || cleanUsername
+      username, passHash, displayName: displayName || username
     });
     if(r && r.success){
-      alert(`✅ تم إنشاء الحساب\n\nاسم المستخدم: ${cleanUsername}\nكلمة المرور: ${password}\n\nشارك دي مع موظف المحل.\nوفكّره يختار "🏪 موظف محل" في شاشة الدخول.`);
-      // refresh
-      document.getElementById('m-shop-users').remove();
-      openShopUsersManager();
+      document.getElementById('m-create-shop-user').remove();
+      toast(`✅ تم إنشاء الحساب — ${username}`);
+      // refresh manager
+      const existingMgr = document.getElementById('m-shop-users');
+      if(existingMgr){
+        existingMgr.remove();
+        openShopUsersManager();
+      }
     } else {
       toast('❌ فشل: ' + (r?.error || 'غير معروف'));
     }
@@ -3842,6 +3971,7 @@ async function cancelOrderByCustomer(id){
   if(!confirm('هل تأكد إلغاء هذا الطلب؟')) return;
   const o=orders.find(x=>x.id===id);
   if(!o) return;
+  if(!(await safeStatusChange(id,'ملغي'))) return;
   o.status='ملغي';
   if(API_URL) apiFetch('/api/orders/'+id,'PATCH',{status:'ملغي'}).catch(()=>{});
   refreshAll();
@@ -3852,6 +3982,7 @@ async function undoSettleStatus(id){
   if(!confirmEditSettledOrder(id)) return;
   const o=orders.find(x=>x.id===id);
   if(!o) return;
+  if(!(await safeStatusChange(id,'جاري التوصيل'))) return;
   o.status='جاري التوصيل';
   if(API_URL) apiFetch('/api/orders/'+id,'PATCH',{status:'جاري التوصيل'}).catch(()=>{});
   refreshAll();
@@ -3862,6 +3993,7 @@ async function markDone(id){
   if(!confirmEditSettledOrder(id)) return;
   const o=orders.find(x=>x.id===id);
   if(!o) return;
+  if(!(await safeStatusChange(id,'تحت التسوية'))) return;
   o.status='تحت التسوية';
   if(API_URL) apiFetch('/api/orders/'+id,'PATCH',{status:'تحت التسوية'}).catch(()=>{});
   pushNotif('✅','تم التوصيل — في انتظار التسوية','الطلب '+id+' — '+o.name);
@@ -3872,6 +4004,8 @@ async function markDone(id){
 async function cancelOrder(id){
   if(!confirmEditSettledOrder(id)) return;
   const o=orders.find(x=>x.id===id);
+  if(!o) return;
+  if(!(await safeStatusChange(id,'ملغي'))) return;
   if(API_URL)await apiFetch('/api/orders/'+id,'PATCH',{status:'ملغي',courierId:null});
   o.status='ملغي';o.courierId=null;refreshAll();toast('❌ تم إلغاء الطلب');
 }
@@ -4097,169 +4231,56 @@ function renderAccDet(){
 
 function accTab(tab,sec){document.querySelectorAll('.acc-tab').forEach(t=>t.classList.remove('on'));tab.classList.add('on');document.querySelectorAll('.acc-sec').forEach(s=>s.classList.remove('on'));$(sec).classList.add('on');if(sec==='acc-det')renderAccDet();if(sec==='acc-set')renderSettle()}
 
-function renderPickupPage(){
+function renderPickupPage() {
   updateLastPrintDisplay();
-  const list=orders.filter(o=>isPickup(o));
-  $('pickup-count').textContent=list.length+' طلب';
+  const list = orders.filter(o => isPickup(o) && String(o.courierId) === String(SHOP_COURIER_ID));
+  const pending = list.filter(o => !o.pickedUpAt && o.status !== 'مكتمل' && o.status !== 'ملغي');
+  const withMe = list.filter(o => o.pickedUpAt && !o.courierDeliveredAt && o.status !== 'مكتمل' && o.status !== 'ملغي');
+  const done = list.filter(o => o.courierDeliveredAt || o.status === 'مكتمل');
+  const totalPending = pending.length + withMe.length;
+  $('pickup-count').textContent = totalPending + ' طلب';
   updatePickupBulkBtns();
-  $('pickup-tbody').innerHTML=list.length?list.map(o=>`
-    <tr id="pickup-row-${o.id}">
-      <td style="text-align:center"><input type="checkbox" class="pickup-chk" value="${o.id}" onchange="updatePickupBulkBtns()"></td>
-      <td>
-        <strong>${o.id}</strong><br>
-        <span style="font-size:10px;color:var(--muted)">${o.time||''}</span>
-      </td>
-      <td>
-        <strong>${o.name}</strong><br>
-        <span style="font-size:10px;color:var(--muted)">${srcBadge(o.src)}</span>
-      </td>
-      <td style="direction:ltr;font-size:12px;white-space:nowrap;font-weight:600">${o.phone||'—'}</td>
-      <td style="font-size:11px;color:var(--muted);max-width:220px;line-height:1.6">${o.items||'—'}</td>
-      <td><strong>${o.total.toLocaleString()} ج</strong></td>
-      <td>${o.paid?'<span class="badge b-done">💳 مدفوع</span>':'<span class="badge b-wait">💵 COD</span>'}</td>
-      <td>${sBadge(o.status)}</td>
-      <td>
-        <div style="display:flex;gap:4px">
-          ${o.status==='جديد'||o.status==='في الانتظار'?`<button class="btn btn-success btn-xs" onclick="markPickedUp('${o.id}')">✅ استلم</button>`:''}
-          ${o.status==='جديد'||o.status==='في الانتظار'?`<button class="btn btn-ghost btn-xs" style="color:var(--accent);border-color:var(--accent)" onclick="convertToDelivery('${o.id}')">🚚 شحن</button>`:''}
-          ${o.status==='مكتمل'?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="undoPickup('${o.id}')">↩️ رجّع</button>`:''}
-          ${o.status!=='مكتمل'&&o.status!=='ملغي'?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}
-        </div>
-      </td>
-    </tr>`).join('')
-    :'<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--muted)">لا توجد طلبات للاستلام من المحل</td></tr>';
+  const renderRow = (o, section) => {
+    let badge, actions;
+    const isActive = section !== 'done';
+    switch(section) {
+      case 'pending':
+        badge = '<span class="badge b-wait">⏳ في الانتظار</span>';
+        actions = `<button class="btn btn-primary btn-xs" onclick="printSinglePickup('${o.id}')">🖨️ طباعة</button><button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`;
+        break;
+      case 'withMe':
+        badge = '<span class="badge b-progress">📦 معاي</span>';
+        actions = `<button class="btn btn-success btn-xs" onclick="markPickedUp('${o.id}')">✅ تم التسليم</button><button class="btn btn-ghost btn-xs" onclick="undoPickup('${o.id}')">↩️ رجّع</button>`;
+        break;
+      case 'done':
+        badge = '<span class="badge b-done">✅ مكتمل</span>';
+        actions = `<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="undoPickup('${o.id}')">↩️ رجّع</button>`;
+        break;
+    }
+    const checkboxHtml = isActive ? `<input type="checkbox" class="pickup-chk" value="${o.id}" onchange="updatePickupBulkBtns()">` : '';
+    return `<tr id="pickup-row-${o.id}" style="${!isActive ? 'opacity:0.6' : ''}"><td style="text-align:center">${checkboxHtml}</td><td><strong>${o.id}</strong><br><span style="font-size:10px;color:var(--muted)">${o.time || ''}</span></td><td><strong>${escapeHtml(o.name)}</strong><br><span style="font-size:10px;color:var(--muted)">${srcBadge(o.src)}</span></td><td style="direction:ltr;font-size:12px;white-space:nowrap;font-weight:600">${o.phone || '—'}</td><td style="font-size:11px;color:var(--muted);max-width:220px;line-height:1.6">${o.items || '—'}</td><td><strong>${o.total.toLocaleString()} ج</strong></td><td>${o.paid ? '<span class="badge b-done">💳 مدفوع</span>' : '<span class="badge b-wait">💵 COD</span>'}</td><td>${badge}</td><td><div style="display:flex;gap:4px;flex-wrap:wrap">${actions}</div></td></tr>`;
+  };
+  let html = '';
+  if (ACTIVE_PICKUP_TAB === 'pending') html = pending.map(o => renderRow(o, 'pending')).join('');
+  else if (ACTIVE_PICKUP_TAB === 'withMe') html = withMe.map(o => renderRow(o, 'withMe')).join('');
+  else if (ACTIVE_PICKUP_TAB === 'done') html = done.map(o => renderRow(o, 'done')).join('');
+  $('pickup-tbody').innerHTML = html.length ? html : `<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--muted)">لا توجد طلبات في هذا القسم</td></tr>`;
+  $('pickup-badge-pending').textContent = pending.length;
+  $('pickup-badge-withme').textContent = withMe.length;
+  $('pickup-badge-done').textContent = done.length;
+  document.querySelectorAll('.pickup-tab').forEach(t => t.classList.remove('active'));
+  $('pickup-tab-' + ACTIVE_PICKUP_TAB).classList.add('active');
 }
-
-function updatePickupBulkBtns(){
-  const checked=document.querySelectorAll('.pickup-chk:checked');
-  const n=checked.length;
-  $('pickup-sel-count').textContent=n?n+' محدد':'';
-  $('pickup-bulk-done').style.display=n?'':'none';
-  $('pickup-bulk-cancel').style.display=n?'':'none';
-}
-
-function pickupToggleAll(val){
-  document.querySelectorAll('.pickup-chk').forEach(c=>{c.checked=val});
-  updatePickupBulkBtns();
-}
-
-function pickupSelAll(){
-  const all=document.querySelectorAll('.pickup-chk');
-  const anyUnchecked=[...all].some(c=>!c.checked);
-  all.forEach(c=>c.checked=anyUnchecked);
-  $('pickup-check-all').checked=anyUnchecked;
-  updatePickupBulkBtns();
-}
-
-function pickupBulkDone(){
-  const ids=[...document.querySelectorAll('.pickup-chk:checked')].map(c=>c.value);
-  if(!ids.length)return;
-  ids.forEach(id=>{ const o=orders.find(x=>x.id===id); if(o){o.status='مكتمل';} });
-  pushNotif('🏪',`تم استلام ${ids.length} طلب من المحل`,ids.join('، '));
-  refreshAll();
-  toast(`✅ تم تسجيل استلام ${ids.length} طلب`);
-}
-
-function pickupBulkCancel(){
-  const ids=[...document.querySelectorAll('.pickup-chk:checked')].map(c=>c.value);
-  if(!ids.length)return;
-  ids.forEach(id=>{ const o=orders.find(x=>x.id===id); if(o){o.status='ملغي';} });
-  refreshAll();
-  toast(`❌ تم إلغاء ${ids.length} طلب`);
-}
-
-let lastPickupPrint = localStorage.getItem('lastPickupPrint')||null;
-
-function printPickupSlip(mode='all'){
-  let list, title;
-  const today=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-
-  if(mode==='new'){
-    const lastTime=lastPickupPrint?new Date(lastPickupPrint):null;
-    list=orders.filter(o=>isPickup(o)&&o.status!=='ملغي'&&(!lastTime||new Date(o.createdAt||0)>lastTime));
-    title='قائمة استلام جديدة — منذ آخر طباعة';
-    if(!list.length){toast('لا توجد طلبات جديدة');return;}
-  } else {
-    list=orders.filter(o=>isPickup(o)&&o.status!=='ملغي'&&o.status!=='مكتمل');
-    title='قائمة الطلبات المعلقة — غير المستلمة';
-    if(!list.length){toast('لا توجد طلبات معلقة');return;}
-  }
-
-  const printTime=new Date().toISOString();
-  lastPickupPrint=printTime;
-  localStorage.setItem('lastPickupPrint',printTime);
-
-  const printTimeStr=new Date().toLocaleString('ar-EG');
-  const totalCOD=list.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-
-  const rows=list.map((o,i)=>`
-    <tr>
-      <td>${i+1}</td>
-      <td><b>${o.id}</b></td>
-      <td>${o.name||'—'}</td>
-      <td>${o.phone||'—'}</td>
-      <td>${(o.addr||o.area||'—').substring(0,60)}</td>
-      <td><b>${o.total.toLocaleString()} ج</b></td>
-      <td>${o.paid?'مدفوع':'COD'}</td>
-      <td><div class="chk"></div></td>
-    </tr>`).join('');
-
-  const html=`<!DOCTYPE html><html dir="rtl">
-<head><meta charset="UTF-8"><title>طباعة</title>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:Arial,sans-serif;padding:12px;direction:rtl;font-size:11px}
-  h2{font-size:15px;margin-bottom:4px}
-  .sub{font-size:10px;color:#666;margin-bottom:10px}
-  table{width:100%;border-collapse:collapse;table-layout:fixed}
-  th{background:#0f172a;color:#fff;padding:5px 6px;text-align:right;font-size:10px}
-  td{padding:4px 6px;border-bottom:1px solid #ddd;vertical-align:top;font-size:10px;overflow:hidden;word-break:break-word}
-  tr:nth-child(even) td{background:#f8fafc}
-  .total-row td{font-weight:700;background:#eef2ff;padding:6px}
-  .chk{width:16px;height:16px;border:1.5px solid #999;border-radius:2px;display:inline-block}
-  .sigs{margin-top:24px;display:flex;gap:40px}
-  .sig{text-align:center}
-  .sig-line{width:120px;border-bottom:1px solid #000;height:28px;margin-bottom:3px}
-  .sig-lbl{font-size:10px;color:#666}
-  @media print{body{padding:6px}}
-</style>
-</head>
-<body>
-  <h2>🏪 ${title}</h2>
-  <div class="sub">${today} · طُبع: ${printTimeStr} · ${list.length} طلب · COD: ${totalCOD.toLocaleString()} ج</div>
-  <table>
-    <colgroup>
-      <col style="width:22px"><col style="width:85px"><col style="width:100px">
-      <col style="width:95px"><col><col style="width:75px">
-      <col style="width:55px"><col style="width:24px">
-    </colgroup>
-    <thead><tr>
-      <th>#</th><th>رقم الطلب</th><th>العميل</th><th>الهاتف</th>
-      <th>العنوان</th><th>الإجمالي</th><th>الدفع</th><th>✓</th>
-    </tr></thead>
-    <tbody>
-      ${rows}
-      <tr class="total-row">
-        <td colspan="5" style="text-align:left">الإجمالي COD المطلوب تحصيله</td>
-        <td>${totalCOD.toLocaleString()} ج</td>
-        <td colspan="2"></td>
-      </tr>
-    </tbody>
-  </table>
-  <div class="sigs">
-    <div class="sig"><div class="sig-line"></div><div class="sig-lbl">توقيع المسؤول</div></div>
-    <div class="sig"><div class="sig-line"></div><div class="sig-lbl">توقيع العميل</div></div>
-  </div>
-</body></html>`;
-
-  const w=window.open('','_blank');
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  setTimeout(()=>{w.focus();w.print();},500);
-  updateLastPrintDisplay();
-}
-
+function switchPickupTab(tab) { ACTIVE_PICKUP_TAB = tab; renderPickupPage(); }
+function printSinglePickup(id) { const o = orders.find(x => x.id === id); if (!o) return; o.pickedUpAt = new Date().toISOString(); if (API_URL) apiFetch(\`/api/courier/orders/\${id}/pickup\`, 'POST').catch(() => {}); printPickupSlip('single', id); toast(\`🖨️ تم طباعة الطلب \${id}\`); refreshAll(); }
+async function markPickedUp(id) { const o = orders.find(x => x.id === id); if (!o) return; o.status = 'مكتمل'; o.courierDeliveredAt = new Date().toISOString(); if (API_URL) await apiFetch(\`/api/orders/\${id}\`, 'PATCH', { status: 'مكتمل', courierDeliveredAt: o.courierDeliveredAt }).catch(() => {}); pushNotif('✅', \`الطلب \${id} تم التسليم\`, o.name); toast(\`✅ تم تسجيل تسليم الطلب \${id}\`); refreshAll(); }
+async function undoPickup(id) { const o = orders.find(x => x.id === id); if (!o) return; if (!confirm(\`هل تريد إرجاع الطلب \${id} إلى "في الانتظار"؟\`)) return; o.pickedUpAt = null; o.courierDeliveredAt = null; o.status = 'جديد'; if (API_URL) await apiFetch(\`/api/orders/\${id}\`, 'PATCH', { pickedUpAt: null, courierDeliveredAt: null, status: 'جديد' }).catch(() => {}); toast(\`↩️ تم إرجاع الطلب \${id} إلى "في الانتظار"\`); refreshAll(); }
+function updatePickupBulkBtns() { const checked = document.querySelectorAll('.pickup-chk:checked'); const n = checked.length; $('pickup-sel-count').textContent = n ? n + ' محدد' : ''; if (ACTIVE_PICKUP_TAB === 'pending') { $('pickup-bulk-print').style.display = n ? '' : 'none'; $('pickup-bulk-done').style.display = 'none'; $('pickup-bulk-cancel').style.display = n ? '' : 'none'; } else if (ACTIVE_PICKUP_TAB === 'withMe') { $('pickup-bulk-print').style.display = 'none'; $('pickup-bulk-done').style.display = n ? '' : 'none'; $('pickup-bulk-cancel').style.display = 'none'; } else { $('pickup-bulk-print').style.display = 'none'; $('pickup-bulk-done').style.display = 'none'; $('pickup-bulk-cancel').style.display = 'none'; } }
+function pickupBulkPrint() { const ids = [...document.querySelectorAll('.pickup-chk:checked')].map(c => c.value); if (!ids.length) return; const now = new Date().toISOString(); ids.forEach(id => { const o = orders.find(x => x.id === id); if (o) o.pickedUpAt = now; }); if (API_URL && ids.length) ids.forEach(id => apiFetch(\`/api/courier/orders/\${id}/pickup\`, 'POST').catch(() => {})); printPickupSlip('selected', ids); toast(\`🖨️ تم طباعة \${ids.length} طلب\`); refreshAll(); }
+function pickupBulkDone() { const ids = [...document.querySelectorAll('.pickup-chk:checked')].map(c => c.value); if (!ids.length) return; const now = new Date().toISOString(); ids.forEach(id => { const o = orders.find(x => x.id === id); if (o) { o.status = 'مكتمل'; o.courierDeliveredAt = now; } }); if (API_URL && ids.length) apiFetch('/api/orders/bulk-pickup', 'POST', { orderIds: ids }).catch(() => {}); pushNotif('✅', \`تم تسليم \${ids.length} طلب\`, ids.join('، ')); toast(\`✅ تم تسجيل تسليم \${ids.length} طلب\`); refreshAll(); }
+function pickupBulkCancel() { const ids = [...document.querySelectorAll('.pickup-chk:checked')].map(c => c.value); if (!ids.length) return; if (!confirm(\`هل تريد إلغاء \${ids.length} طلب؟\`)) return; ids.forEach(id => { const o = orders.find(x => x.id === id); if (o) o.status = 'ملغي'; }); toast(\`❌ تم إلغاء \${ids.length} طلب\`); refreshAll(); }
+function pickupSelAll() { const all = document.querySelectorAll('.pickup-chk'); const anyUnchecked = [...all].some(c => !c.checked); all.forEach(c => c.checked = anyUnchecked); $('pickup-check-all').checked = anyUnchecked; updatePickupBulkBtns(); }
+function printPickupSlip(mode = 'all', singleId = null) { let list, title; const today = new Date().toLocaleDateString('ar-EG', {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'}); if (mode === 'single' && singleId) { list = orders.filter(o => o.id === singleId); title = 'قسيمة استلام — طلب واحد'; } else if (mode === 'selected' && Array.isArray(singleId)) { list = orders.filter(o => singleId.includes(o.id)); title = 'قائمة استلام — طلبات محددة'; } else if (mode === 'new') { const lastTime = lastPickupPrint ? new Date(lastPickupPrint) : null; list = orders.filter(o => isPickup(o) && String(o.courierId) === String(SHOP_COURIER_ID) && o.status !== 'ملغي' && (!lastTime || new Date(o.createdAt || 0) > lastTime)); title = 'قائمة استلام جديدة — منذ آخر طباعة'; if (!list.length) { toast('لا توجد طلبات جديدة'); return; } } else { list = orders.filter(o => isPickup(o) && String(o.courierId) === String(SHOP_COURIER_ID) && o.status !== 'ملغي' && o.status !== 'مكتمل'); title = 'قائمة الطلبات المعلقة — غير المستلمة'; if (!list.length) { toast('لا توجد طلبات معلقة'); return; } } const printTime = new Date().toISOString(); lastPickupPrint = printTime; localStorage.setItem('lastPickupPrint', printTime); const printTimeStr = new Date().toLocaleString('ar-EG'); const totalCOD = list.filter(o => !o.paid).reduce((s, o) => s + o.total, 0); const rows = list.map((o, i) => \`<tr><td>\${i + 1}</td><td><b>\${o.id}</b></td><td>\${escapeHtml(o.name) || '—'}</td><td>\${o.phone || '—'}</td><td>\${escapeHtml((o.addr || o.area || '—').substring(0, 60))}</td><td><b>\${o.total.toLocaleString()} ج</b></td><td>\${o.paid ? 'مدفوع' : 'COD'}</td><td><div class="chk"></div></td></tr>\`).join(''); const html = \`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>طباعة</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;padding:12px;direction:rtl;font-size:11px}h2{font-size:15px;margin-bottom:4px}.sub{font-size:10px;color:#666;margin-bottom:10px}table{width:100%;border-collapse:collapse;table-layout:fixed}th{background:#0f172a;color:#fff;padding:5px 6px;text-align:right;font-size:10px}td{padding:4px 6px;border-bottom:1px solid #ddd;vertical-align:top;font-size:10px;overflow:hidden;word-break:break-word}tr:nth-child(even) td{background:#f8fafc}.total-row td{font-weight:700;background:#eef2ff;padding:6px}.chk{width:16px;height:16px;border:1.5px solid #999;border-radius:2px;display:inline-block}.sigs{margin-top:24px;display:flex;gap:40px}.sig{text-align:center}.sig-line{width:120px;border-bottom:1px solid #000;height:28px;margin-bottom:3px}.sig-lbl{font-size:10px;color:#666}@media print{body{padding:6px}}</style></head><body><h2>🏪 \${title}</h2><div class="sub">\${today} · طُبع: \${printTimeStr} · \${list.length} طلب · COD: \${totalCOD.toLocaleString()} ج</div><table><colgroup><col style="width:22px"><col style="width:85px"><col style="width:100px"><col style="width:95px"><col><col style="width:75px"><col style="width:55px"><col style="width:24px"></colgroup><thead><tr><th>#</th><th>رقم الطلب</th><th>العميل</th><th>الهاتف</th><th>العنوان</th><th>الإجمالي</th><th>الدفع</th><th>✓</th></tr></thead><tbody>\${rows}<tr class="total-row"><td colspan="5" style="text-align:left">الإجمالي COD المطلوب تحصيله</td><td>\${totalCOD.toLocaleString()} ج</td><td colspan="2"></td></tr></tbody></table><div class="sigs"><div class="sig"><div class="sig-line"></div><div class="sig-lbl">توقيع موظف المحل</div></div><div class="sig"><div class="sig-line"></div><div class="sig-lbl">توقيع العميل</div></div></div></body></html>\`; const w = window.open('', '_blank'); w.document.open(); w.document.write(html); w.document.close(); setTimeout(() => { w.focus(); w.print(); }, 500); updateLastPrintDisplay(); }
 function updateLastPrintDisplay(){
   const el=document.getElementById('pickup-last-print');
   if(!el)return;
@@ -4271,7 +4292,13 @@ async function markPickedUp(id){
   const o=orders.find(x=>x.id===id);
   if(!o)return;
   o.status='مكتمل';
-  if(API_URL)await apiFetch('/api/orders/'+id,'PATCH',{status:'مكتمل'}).catch(()=>{});
+  o.pickedUpAt = new Date().toISOString();
+  if(API_URL){
+    await apiFetch('/api/orders/'+id,'PATCH',{
+      status:'مكتمل',
+      pickedUpAt: o.pickedUpAt
+    }).catch(()=>{});
+  }
   debouncedSaveOrders();
   refreshAll();
   pushNotif('🏪','تم استلام طلب من المحل',`${id} — ${o.name}`);
@@ -5640,14 +5667,20 @@ function saveChks(syncNow=true){
     localStorage.setItem('chk_books',JSON.stringify(chkBooks));
     localStorage.setItem('chk_list',JSON.stringify(chkList));
     localStorage.setItem('chk_suppliers',JSON.stringify(chkSuppliers));
-  }catch(e){}
+  }catch(e){
+    console.error('localStorage save error:', e);
+  }
   if(!API_URL) return;
   if(syncNow){
     clearTimeout(_saveChksTimer);
-    _saveChksTimer=setTimeout(()=>{
-      // 🛡️ Safety: لو الدفاتر فاضية بشكل مريب والـ DB عنده دفاتر — ما تبعتش
-      // ده بيمنع مسح دفاتر من DB بالغلط لو في race condition
-      apiFetch('/api/sync-checks','POST',{books:chkBooks,checks:chkList,suppliers:chkSuppliers}).catch(()=>{});
+    _saveChksTimer=setTimeout(async ()=>{
+      try{
+        const r = await apiFetch('/api/sync-checks','POST',{books:chkBooks,checks:chkList,suppliers:chkSuppliers});
+        console.log('✅ Sync checks success:', r);
+      }catch(e){
+        console.error('❌ Sync checks failed:', e);
+        toast('⚠️ فشل حفظ الشيكات في السيرفر — البيانات محفوظة محلياً', 'error');
+      }
     },800);
   }
 }
@@ -5983,22 +6016,36 @@ function saveChkBook(){
   const pages = parseInt($('bk-pages').value)||48;
   const lastNum = firstNum + pages - 1;
   const b = {id:Date.now()+'_bk', name, bank:$('bk-bank').value.trim(), account:$('bk-account').value.trim(), pages, firstNum, lastNum};
+  
+  console.log('📘 Creating new book:', b);
+  
   chkBooks.push(b);
   saveChks(true);
-  // 🛡️ بنعمل POST مع 3 محاولات retry عشان نضمن إن الدفتر يوصل الـ DB
+  
+  // 🛡️ بنعمل POST مباشر للدفتر الجديد
   if(API_URL){
     (async () => {
+      console.log('📤 Sending book to server:', b.id);
       for(let attempt = 1; attempt <= 3; attempt++){
         try{
+          console.log(`Attempt ${attempt}/3 for book ${b.id}`);
           const r = await apiFetch('/api/check-books','POST',b);
-          if(r){ console.log('✅ الدفتر اتحفظ في DB:', b.id); return; }
-        }catch(e){ console.warn(`محاولة ${attempt} فشلت:`, e); }
+          if(r){ 
+            console.log('✅ Book saved to DB:', b.id, r);
+            toast('✅ تم حفظ الدفتر في السيرفر', 'success');
+            return; 
+          }
+        }catch(e){ 
+          console.error(`❌ Attempt ${attempt} failed:`, e.message);
+          if(attempt === 3){
+            toast('⚠️ تحذير: الدفتر محفوظ محلياً لكن فشل حفظه في السيرفر', 'error');
+          }
+        }
         if(attempt < 3) await new Promise(r => setTimeout(r, 500 * attempt));
       }
-      console.error('❌ فشل حفظ الدفتر في DB بعد 3 محاولات:', b.id);
-      toast('⚠️ تحذير: الدفتر محفوظ محلياً بس تعذر حفظه في السيرفر — افتح الصفحة تاني للمحاولة');
     })();
   }
+  
   renderChkBooks();
   toast('✅ تم إضافة الدفتر — الأرقام من '+firstNum+' إلى '+lastNum);
   ['bk-name','bk-bank','bk-account','bk-first-num','bk-last-num'].forEach(id=>$(id)&&($(id).value=''));
@@ -6229,10 +6276,17 @@ async function doConvertDelivery(courierId){
 
 async function undoPickup(id){
   const o=orders.find(x=>x.id===id);if(!o)return;
-  o.status='في الانتظار';
-  if(API_URL)apiFetch('/api/orders/'+id,'PATCH',{status:'في الانتظار'}).catch(()=>{});
+  o.status='جاري التوصيل';
+  o.pickedUpAt = null;
+  if(API_URL){
+    apiFetch('/api/orders/'+id,'PATCH',{
+      status:'جاري التوصيل',
+      pickedUpAt: null
+    }).catch(()=>{});
+  }
   debouncedSaveOrders();
-  refreshAll();toast('↩️ تم رجوع الطلب '+id+' لـ "في الانتظار"');
+  refreshAll();
+  toast('↩️ تم رجوع الطلب '+id+' لـ "في الانتظار"');
 }
 
 async function unassignBosta(id){
@@ -6333,7 +6387,35 @@ async function doLogin(){
   loadTreasury();
   checkExpiryAlerts();
   requestNotifPermission();
+  
+  // روح لأول صفحة متاحة للمستخدم
+  const firstPage = getFirstAvailablePage(user);
+  if(firstPage){
+    const navItem = document.querySelector(`.ni[data-p="${firstPage}"]`);
+    if(navItem) goPage(navItem, firstPage);
+  }
+  
   toast('✅ أهلاً '+user.name+' 👋');
+}
+
+// دالة تجيب أول صفحة متاحة للمستخدم
+function getFirstAvailablePage(user){
+  if(user.role === 'admin') return 'dashboard';
+  
+  const userPages = user.pages || [];
+  if(!userPages.length) return null;
+  
+  // ترتيب الأولوية
+  const pageOrder = ['orders','assign','pickup','couriers','transit','bosta','delivery-sheet',
+    'courier-orders','import-excel','problems','accounting','settle-history','treasury',
+    'shop-accounting','checks','reports','stars-reviews','shop-transfers','field-cancels',
+    'expiry','notifs','settings','dashboard'];
+  
+  for(const page of pageOrder){
+    if(userPages.includes(page)) return page;
+  }
+  
+  return userPages[0]; // fallback لأول صفحة متاحة
 }
 
 function doLogout(){
@@ -6400,15 +6482,50 @@ function auSelectAll(checked){
   document.querySelectorAll('[name="au-page"]').forEach(cb=>cb.checked=checked);
 }
 
+// يولّد الـ checkboxes تلقائياً من الـ sidebar items — أي صفحة جديدة تتضاف للـ sidebar
+// هتظهر هنا أوتوماتيك بدون تعديل الـ code
+function buildPermissionsGrid(checkedPages){
+  const grid = document.getElementById('au-pages-grid');
+  if(!grid) return;
+  checkedPages = checkedPages || [];
+
+  // اجمع كل الـ sidebar items + الـ labels من النصوص بتاعتها
+  const items = [];
+  document.querySelectorAll('.ni[data-p]').forEach(ni => {
+    const page = ni.dataset.p;
+    if(!page) return;
+    // خد الـ icon + الـ label
+    const icon = ni.querySelector('.ni-icon')?.textContent?.trim() || '📄';
+    const label = ni.querySelector('.ni-label')?.textContent?.trim() || page;
+    items.push({ page, icon, label });
+  });
+
+  // لو مفيش sidebar items (edge case)، استخدم الأسماء من PAGE_T
+  if(!items.length && typeof PAGE_T === 'object'){
+    Object.keys(PAGE_T).forEach(page => items.push({ page, icon: '📄', label: PAGE_T[page] }));
+  }
+
+  grid.innerHTML = items.map(it => {
+    const isChecked = checkedPages.includes(it.page) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">
+      <input type="checkbox" name="au-page" value="${it.page}" style="width:15px;height:15px;accent-color:var(--accent)" ${isChecked}>
+      ${it.icon} ${it.label}
+    </label>`;
+  }).join('');
+}
+
 function openAddUser(){
   editingUsername=null;
   ['au-name','au-username','au-pass'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('add-user-modal-title').textContent='+ مستخدم جديد';
   const hint=document.getElementById('au-pass-hint');
   if(hint)hint.style.display='none';
-  document.querySelectorAll('[name="au-page"]').forEach(cb=>{
-    cb.checked = cb.value !== 'settings';
+  // اعمل grid بكل الصفحات متاحة كـ default (ماعدا settings)
+  const allPages = [];
+  document.querySelectorAll('.ni[data-p]').forEach(ni => {
+    if(ni.dataset.p && ni.dataset.p !== 'settings') allPages.push(ni.dataset.p);
   });
+  buildPermissionsGrid(allPages);
   openM('m-add-user');
 }
 
@@ -6423,10 +6540,8 @@ function openEditUser(username){
   document.getElementById('add-user-modal-title').textContent='✏️ تعديل المستخدم';
   const hint=document.getElementById('au-pass-hint');
   if(hint)hint.style.display='';
-  const userPages=u.pages||[];
-  document.querySelectorAll('[name="au-page"]').forEach(cb=>{
-    cb.checked=userPages.includes(cb.value);
-  });
+  // بني الـ grid مع الصفحات المحددة للمستخدم
+  buildPermissionsGrid(u.pages || []);
   openM('m-add-user');
 }
 
@@ -7562,6 +7677,8 @@ window.addEventListener('load', function(){
     if(userBadge) userBadge.textContent = '👤 '+currentUser.name;
     const importBtn = document.getElementById('btn-import-shopify');
     if(importBtn) importBtn.style.display = currentUser.role==='admin' ? '' : 'none';
+    // حمّل SHOP_COURIER_ID من السيرفر
+    loadShopCourierId().catch(()=>{});
     try{
       const s=JSON.parse(localStorage.getItem('current_user_session')||'null');
       if(s){s._expires=Date.now()+8*60*60*1000;localStorage.setItem('current_user_session',JSON.stringify(s));}
@@ -11088,27 +11205,8 @@ try{
           <button type="button" class="btn btn-ghost btn-xs" onclick="auSelectAll(true)">تحديد الكل</button>
           <button type="button" class="btn btn-ghost btn-xs" onclick="auSelectAll(false)">إلغاء الكل</button>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--bg);border-radius:8px;padding:8px;border:1px solid var(--border)">
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="dashboard" style="width:15px;height:15px;accent-color:var(--accent)"> 🏠 لوحة التحكم</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="orders" style="width:15px;height:15px;accent-color:var(--accent)"> 📋 الطلبات</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="couriers" style="width:15px;height:15px;accent-color:var(--accent)"> 🚴 المناديب</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="assign" style="width:15px;height:15px;accent-color:var(--accent)"> 📍 توزيع الطلبات</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="pickup" style="width:15px;height:15px;accent-color:var(--accent)"> 🏪 استلام من المحل</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="transit" style="width:15px;height:15px;accent-color:var(--accent)"> 🏭 مخزن العبور</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="bosta" style="width:15px;height:15px;accent-color:var(--accent)"> 🚚 بوسطة</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="delivery-sheet" style="width:15px;height:15px;accent-color:var(--accent)"> 🖨️ ورقة التوصيل</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="courier-orders" style="width:15px;height:15px;accent-color:var(--accent)"> 🧑 طلبات المناديب</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="import-excel" style="width:15px;height:15px;accent-color:var(--accent)"> 📥 استيراد Excel</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="problems" style="width:15px;height:15px;accent-color:var(--accent)"> ⚠️ طلبات مشكلة</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="accounting" style="width:15px;height:15px;accent-color:var(--accent)"> 💰 محاسبة المناديب</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="settle-history" style="width:15px;height:15px;accent-color:var(--accent)"> 📚 سجل التسويات</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="treasury" style="width:15px;height:15px;accent-color:var(--accent)"> 🏦 الخزنة</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="shop-accounting" style="width:15px;height:15px;accent-color:var(--accent)"> 🏪 محاسبة المحل</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="checks" style="width:15px;height:15px;accent-color:var(--accent)"> 📋 الشيكات</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="reports" style="width:15px;height:15px;accent-color:var(--accent)"> 📊 التقارير</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="expiry" style="width:15px;height:15px;accent-color:var(--accent)"> ⏳ تواريخ الصلاحية</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="notifs" style="width:15px;height:15px;accent-color:var(--accent)"> 🔔 الإشعارات</label>
-<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''"><input type="checkbox" name="au-page" value="settings" style="width:15px;height:15px;accent-color:var(--accent)"> ⚙️ الإعدادات</label>
+        <div id="au-pages-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--bg);border-radius:8px;padding:8px;border:1px solid var(--border)">
+          <!-- يتولد تلقائياً من buildPermissionsGrid() -->
         </div>
       </div>
     </div>
