@@ -2456,15 +2456,49 @@ function renderCouriers(){
   $('couriers-grid').innerHTML=couriers.map((c,i)=>{
     const active=oByC(c.id,'جاري التوصيل').length,done=oByC(c.id,'مكتمل').length,tot=active+done,rate=tot?Math.round(done/tot*100):0;
     const hasStarsAccount = c.username ? '⭐' : '';
-    return`<div class="cc"><div class="cc-av" style="background:${COLORS[i%COLORS.length]}">${c.name[0]}</div><div class="cc-name">${c.name} ${hasStarsAccount}</div><div class="cc-info">📱 ${c.phone}</div><div class="cc-info">📍 ${c.zone}</div><div class="cc-info">🚗 ${c.vehicle}</div><div class="cc-info">💰 شحن: <strong>${c.ship} ج</strong></div><div class="cc-info" style="margin-top:5px">📦 نشط: <strong>${active}</strong> | مكتمل: <strong>${done}</strong></div><div class="pbar"><div class="pbar-f" style="width:${rate}%"></div></div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+    const role = c.role || 'courier';
+    const roleLabel = role === 'preparer' ? '📦 محضر' : role === 'shop' ? '🏪 محل' : '🛵 مندوب';
+    const roleColor = role === 'preparer' ? '#7c3aed' : role === 'shop' ? '#0891b2' : '#64748b';
+    return`<div class="cc"><div class="cc-av" style="background:${COLORS[i%COLORS.length]}">${c.name[0]}</div><div class="cc-name">${c.name} ${hasStarsAccount}</div><div class="cc-info"><span style="background:${roleColor}20;color:${roleColor};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">${roleLabel}</span></div><div class="cc-info">📱 ${c.phone}</div><div class="cc-info">📍 ${c.zone}</div><div class="cc-info">🚗 ${c.vehicle}</div><div class="cc-info">💰 شحن: <strong>${c.ship} ج</strong></div><div class="cc-info" style="margin-top:5px">📦 نشط: <strong>${active}</strong> | مكتمل: <strong>${done}</strong></div><div class="pbar"><div class="pbar-f" style="width:${rate}%"></div></div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
         <span class="cc-status s-active">${c.status}</span>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-xs" onclick="changeCourierRole(${c.id})" style="color:#7c3aed;border-color:#7c3aed" title="تغيير الدور (مندوب/محضر/محل)">🎭 الدور</button>
           <button class="btn btn-ghost btn-xs" onclick="openStarsCredentials(${c.id})" style="color:#d4af37;border-color:#d4af37" title="Cafelax Stars — حساب دخول التطبيق">⭐ ${c.username?'تعديل دخول':'إنشاء دخول'}</button>
           <button class="btn btn-ghost btn-xs" onclick="openEditCourier(${c.id})" style="color:var(--accent);border-color:var(--accent)">✏️ تعديل</button>
           <button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="delCourier(${c.id})">✕</button>
         </div>
       </div></div>`}).join('');
   saveCouriers();refreshSelects();
+}
+
+// ===== Change courier role (courier/preparer/shop) =====
+async function changeCourierRole(courierId){
+  const c = couriers.find(x => x.id == courierId);
+  if(!c){ toast('❗ المندوب غير موجود'); return; }
+  const current = c.role || 'courier';
+  const opts = `الدور الحالي: ${current === 'preparer' ? 'محضر' : current === 'shop' ? 'محل' : 'مندوب'}\n\n` +
+               `اختر الدور الجديد:\n` +
+               `1 = مندوب توصيل\n` +
+               `2 = موظف تحضير (باركود)\n` +
+               `3 = موظف محل (Pickup)`;
+  const choice = prompt(opts, current === 'preparer' ? '2' : current === 'shop' ? '3' : '1');
+  if(choice === null) return;
+  const roleMap = { '1': 'courier', '2': 'preparer', '3': 'shop' };
+  const newRole = roleMap[choice.trim()];
+  if(!newRole){ toast('❌ اختيار غير صحيح'); return; }
+  try{
+    const r = await apiFetch('/api/couriers/'+courierId, 'PATCH', { role: newRole });
+    if(r && r.courier){
+      c.role = newRole;
+      saveCouriers();
+      renderCouriers();
+      toast('✅ تم تغيير الدور إلى: ' + (newRole === 'preparer' ? 'محضر' : newRole === 'shop' ? 'محل' : 'مندوب'));
+    } else {
+      toast('❌ فشل التحديث');
+    }
+  }catch(e){
+    toast('❌ خطأ: ' + e.message);
+  }
 }
 
 // ===== CAFELAX STARS: Set courier credentials =====
