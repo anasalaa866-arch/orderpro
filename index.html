@@ -10200,7 +10200,29 @@ async function approvePaymentReview(id){
       toast('✅ تم الاعتماد');
       loadStarsReviews();
       loadOrders();
-    } else toast('❌ فشل');
+      return;
+    }
+
+    // الـ response جالى null أو success=false — تأكد من السيرفر إن الموافقة فعلاً اتحفظت
+    // ده بيحصل أحياناً بسبب انقطاع شبكة بسيط بين الـ request والـ response
+    // المراجعة ممكن تكون اتنفّذت في السيرفر بنجاح، فنتحقق
+    try{
+      const allReviews = await apiFetch('/api/pending-reviews','GET');
+      if(allReviews){
+        const stillPending = (allReviews.reviews || allReviews || []).find(rv =>
+          String(rv.id) === String(id) && rv.status === 'pending'
+        );
+        if(!stillPending){
+          // الموافقة اتحفظت فعلاً — كان فيه noise في الشبكة بس
+          toast('✅ تم الاعتماد');
+          loadStarsReviews();
+          loadOrders();
+          return;
+        }
+      }
+    }catch(verifyErr){ /* لو حتى التحقق فشل، نعرض الفشل */ }
+
+    toast('❌ فشل العملية — حاول تاني');
   }catch(e){ toast('❌ '+e.message); }
 }
 
@@ -10216,7 +10238,24 @@ async function rejectPaymentReview(id){
       toast('✅ تم الرفض');
       loadStarsReviews();
       loadOrders();
+      return;
     }
+    // verify لو الـ response ضاع
+    try{
+      const allReviews = await apiFetch('/api/pending-reviews','GET');
+      if(allReviews){
+        const stillPending = (allReviews.reviews || allReviews || []).find(rv =>
+          String(rv.id) === String(id) && rv.status === 'pending'
+        );
+        if(!stillPending){
+          toast('✅ تم الرفض');
+          loadStarsReviews();
+          loadOrders();
+          return;
+        }
+      }
+    }catch(verifyErr){}
+    toast('❌ فشل العملية — حاول تاني');
   }catch(e){ toast('❌ '+e.message); }
 }
 
