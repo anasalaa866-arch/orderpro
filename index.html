@@ -701,7 +701,14 @@ tr:hover td{background:#fafbff}
             <option value="week">هذا الأسبوع</option>
             <option value="month">هذا الشهر</option>
             <option value="overdue">متأخرة فقط</option>
+            <option value="custom">📅 فترة مخصصة</option>
           </select>
+          <div id="chk-date-range" style="display:none;gap:6px;align-items:center">
+            <label style="font-size:11px;color:var(--muted)">من:</label>
+            <input type="date" id="chk-from" onchange="renderChecksPage()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+            <label style="font-size:11px;color:var(--muted)">إلى:</label>
+            <input type="date" id="chk-to" onchange="renderChecksPage()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+          </div>
           <input id="chk-search" placeholder="ابحث..." oninput="renderChecksPage()" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:Cairo,sans-serif;width:150px">
           <div style="margin-right:auto;display:flex;gap:6px">
             <button class="btn btn-ghost btn-sm" onclick="printChecksReport()">🖨️ طباعة</button>
@@ -4542,6 +4549,7 @@ function renderBostaPage(){
       <td>${statusBadge}</td>
       <td>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
+          ${!o.bostaId?`<button class="btn btn-xs" style="background:#10b981;color:#fff;border:none;font-weight:700" onclick="bostaCreateOne('${o.id}')" title="رفع الطلب على بوسطة الآن">🚀 رفع على بوسطة</button>`:''}
           ${!o.bostaId&&!o.bostaExported?`<button class="btn btn-ghost btn-xs" style="color:var(--warn);border-color:var(--warn)" onclick="undoBostaExport('${o.id}')">↩ إلغاء التصدير</button>`:''}
           ${o.bostaId?`<button class="btn btn-ghost btn-xs" onclick="openBostaAWB('${o.id}')">🖨️ بوليصة</button>`:''}
           ${o.bostaId?`<button class="btn btn-ghost btn-xs" onclick="bostaTrackOne('${o.id}')">📍 تتبع</button>`:''}
@@ -5770,6 +5778,11 @@ function renderChecksPage(){
 
   const period=$('chk-period-filter')?.value||'all';
   const q=($('chk-search')?.value||'').toLowerCase();
+
+  // أظهر/أخفي حقل الـ date range
+  const dr=$('chk-date-range');
+  if(dr) dr.style.display = period==='custom' ? 'flex' : 'none';
+
   let list=[...chkList];
   if(chkStatusFilter==='pending')list=list.filter(c=>c.status==='pending'&&!chkIsOverdue(c));
   if(chkStatusFilter==='done')list=list.filter(c=>c.status==='done');
@@ -5777,6 +5790,12 @@ function renderChecksPage(){
   if(period==='week')list=list.filter(c=>{const d=new Date(c.date);return d>=now&&d<=weekEnd;});
   if(period==='month')list=list.filter(c=>{const d=new Date(c.date);return d>=m0&&d<=m1;});
   if(period==='overdue')list=list.filter(c=>chkIsOverdue(c));
+  if(period==='custom'){
+    const fromV=$('chk-from')?.value;
+    const toV=$('chk-to')?.value;
+    if(fromV) list=list.filter(c=>c.date && c.date>=fromV);
+    if(toV) list=list.filter(c=>c.date && c.date<=toV);
+  }
   if(q)list=list.filter(c=>(c.num+c.payee+(c.invoice||'')).toLowerCase().includes(q));
   list.sort((a,b)=>new Date(a.date)-new Date(b.date));
 
@@ -5822,6 +5841,12 @@ function getFilteredChkList(){
   if(period==='week')list=list.filter(c=>{const d=new Date(c.date);return d>=now&&d<=weekEnd;});
   if(period==='month')list=list.filter(c=>{const d=new Date(c.date);return d>=m0&&d<=m1;});
   if(period==='overdue')list=list.filter(c=>chkIsOverdue(c));
+  if(period==='custom'){
+    const fromV=$('chk-from')?.value;
+    const toV=$('chk-to')?.value;
+    if(fromV) list=list.filter(c=>c.date && c.date>=fromV);
+    if(toV) list=list.filter(c=>c.date && c.date<=toV);
+  }
   if(q)list=list.filter(c=>(c.num+c.payee+(c.invoice||'')).toLowerCase().includes(q));
   list.sort((a,b)=>new Date(a.date)-new Date(b.date));
   return list;
@@ -6200,10 +6225,193 @@ function renderChkBooks(){
         <div style="font-size:10px;color:var(--muted);margin-top:2px">أرقام: ${first} إلى ${last}</div>
       </div>
       <div style="text-align:center;min-width:60px"><div style="font-weight:700;color:${rem<5?'var(--danger)':rem<10?'var(--warn)':'var(--success)'}">${rem}</div><div style="font-size:10px;color:var(--muted)">من ${b.pages}</div></div>
-      <button class="btn btn-ghost btn-xs" style="color:var(--accent);margin-right:8px" onclick="openEditChkBook('${b.id}')" title="تعديل">✏️</button>
+      <button class="btn btn-ghost btn-xs" style="color:var(--success);margin-right:8px;border-color:var(--success)" onclick="openBookDetails('${b.id}')" title="فتح وعرض الشيكات">📋 فتح</button>
+      <button class="btn btn-ghost btn-xs" style="color:var(--accent);margin-right:4px" onclick="openEditChkBook('${b.id}')" title="تعديل">✏️</button>
       <button class="btn btn-ghost btn-xs" style="color:var(--danger);margin-right:4px" onclick="deleteChkBook('${b.id}')" title="حذف">🗑️</button>
     </div>`;
   }).join('');
+}
+
+// 🆕 v190: تقرير مفصل لدفتر واحد — كل الشيكات بتفاصيلها
+function openBookDetails(bookId){
+  const b = chkBooks.find(x=>x.id===bookId);
+  if(!b){ toast('❗ الدفتر غير موجود'); return; }
+  const checks = chkList.filter(c=>c.bookId===bookId).sort((a,b)=>{
+    const an=parseInt(a.num)||0, bn=parseInt(b.num)||0;
+    return an-bn;
+  });
+  const first=b.firstNum||1, last=b.lastNum||(first+b.pages-1);
+  const used=checks.length, rem=Math.max(0,b.pages-used);
+  const totalAmt = checks.reduce((s,c)=>s+Number(c.amount||0),0);
+  const totalDone = checks.filter(c=>c.status==='done').reduce((s,c)=>s+Number(c.amount||0),0);
+  const totalPending = checks.filter(c=>c.status!=='done').reduce((s,c)=>s+Number(c.amount||0),0);
+  const overdueCount = checks.filter(c=>chkIsOverdue(c)).length;
+
+  const fmt = n => Number(n||0).toLocaleString('en-EG');
+
+  const ov = document.createElement('div');
+  ov.id = 'book-details-popup';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = `
+    <div style="background:var(--card);border-radius:16px;width:min(900px,96vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4);font-family:Cairo,sans-serif">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--accent-light)">
+        <div>
+          <div style="font-weight:800;font-size:16px">📚 ${b.name}${b.bank?' — '+b.bank:''}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">أرقام: ${first} → ${last} · مستخدم ${used} · متبقي ${rem}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="printBookReport('${bookId}')">🖨️ طباعة</button>
+          <button class="btn btn-ghost btn-sm" style="color:#16a34a;border-color:#16a34a" onclick="exportBookExcel('${bookId}')">📊 Excel</button>
+          <button onclick="document.getElementById('book-details-popup').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0 4px">✕</button>
+        </div>
+      </div>
+
+      <div style="padding:14px 20px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;border-bottom:1px solid var(--border)">
+        <div style="background:#eff6ff;padding:10px;border-radius:8px;text-align:center">
+          <div style="font-size:11px;color:#1e3a5f">إجمالي القيمة</div>
+          <div style="font-size:18px;font-weight:800;color:#1e3a5f">${fmt(totalAmt)} ج</div>
+        </div>
+        <div style="background:#fef3c7;padding:10px;border-radius:8px;text-align:center">
+          <div style="font-size:11px;color:#92400e">غير مصروف</div>
+          <div style="font-size:18px;font-weight:800;color:#92400e">${fmt(totalPending)} ج</div>
+        </div>
+        <div style="background:#dcfce7;padding:10px;border-radius:8px;text-align:center">
+          <div style="font-size:11px;color:#065f46">تم صرفه</div>
+          <div style="font-size:18px;font-weight:800;color:#065f46">${fmt(totalDone)} ج</div>
+        </div>
+        <div style="background:${overdueCount>0?'#fee2e2':'#f3f4f6'};padding:10px;border-radius:8px;text-align:center">
+          <div style="font-size:11px;color:${overdueCount>0?'#991b1b':'#6b7280'}">متأخرة</div>
+          <div style="font-size:18px;font-weight:800;color:${overdueCount>0?'#991b1b':'#6b7280'}">${overdueCount}</div>
+        </div>
+      </div>
+
+      <div style="overflow:auto;flex:1;padding:0 4px">
+        ${checks.length ? `
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead style="position:sticky;top:0;background:var(--card);z-index:5">
+              <tr style="border-bottom:2px solid var(--border)">
+                <th style="padding:10px 8px;text-align:right">رقم</th>
+                <th style="padding:10px 8px;text-align:right">لصالح</th>
+                <th style="padding:10px 8px;text-align:right">القيمة</th>
+                <th style="padding:10px 8px;text-align:right">الاستحقاق</th>
+                <th style="padding:10px 8px;text-align:right">فاتورة</th>
+                <th style="padding:10px 8px;text-align:right">الحالة</th>
+                <th style="padding:10px 8px;text-align:right">صورة</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${checks.map(c=>{
+                const overdue=chkIsOverdue(c);
+                return `<tr style="border-bottom:1px solid var(--border);${overdue?'background:#fff5f5':''}">
+                  <td style="padding:8px"><strong>${c.num||'—'}</strong></td>
+                  <td style="padding:8px"><strong>${c.payee||'—'}</strong>${c.note?`<br><span style="font-size:10px;color:var(--muted)">${c.note}</span>`:''}</td>
+                  <td style="padding:8px;font-weight:700">${fmt(c.amount)} ج</td>
+                  <td style="padding:8px">${chkFmtDate(c.date)}</td>
+                  <td style="padding:8px;color:var(--muted);font-size:11px">${c.invoice||'—'}</td>
+                  <td style="padding:8px">${chkGetBadge(c)}</td>
+                  <td style="padding:8px;text-align:center">${c.img?`<button class="btn btn-ghost btn-xs" onclick="viewChkImg('${c.id}')">🖼️</button>`:'—'}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        ` : '<div style="text-align:center;padding:40px;color:var(--muted)">📭 لا توجد شيكات في هذا الدفتر بعد</div>'}
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.onclick = (e) => { if(e.target===ov) ov.remove(); };
+}
+
+// طباعة تقرير دفتر واحد
+function printBookReport(bookId){
+  const b = chkBooks.find(x=>x.id===bookId);
+  if(!b) return;
+  const checks = chkList.filter(c=>c.bookId===bookId).sort((a,b)=>(parseInt(a.num)||0)-(parseInt(b.num)||0));
+  const fmt = n => Number(n||0).toLocaleString('en-EG');
+  const fmtDate = d=>d?new Date(d).toLocaleDateString('ar-EG',{year:'numeric',month:'short',day:'numeric'}):'—';
+  const totalAmt = checks.reduce((s,c)=>s+Number(c.amount||0),0);
+  const totalDone = checks.filter(c=>c.status==='done').reduce((s,c)=>s+Number(c.amount||0),0);
+  const totalPending = totalAmt - totalDone;
+  const today = new Date().toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'});
+
+  const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>تقرير دفتر ${b.name}</title>
+<style>
+@page{size:A4;margin:12mm}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Cairo','Segoe UI',Tahoma,sans-serif;font-size:12px;color:#000}
+.hdr{border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start}
+.hdr h1{font-size:18px;margin-bottom:4px}
+.meta{font-size:11px;color:#555}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.box{padding:10px;border:1px solid #ccc;border-radius:6px;text-align:center}
+.box .lbl{font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.5px}
+.box .val{font-size:16px;font-weight:800;margin-top:3px}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{background:#f3f4f6;padding:8px;text-align:right;border:1px solid #ccc;font-weight:700}
+td{padding:6px 8px;border:1px solid #ddd}
+tr.overdue td{background:#fef2f2}
+tr.done td{background:#f0fdf4;color:#666;text-decoration:line-through}
+.totals{margin-top:14px;padding:10px;border-top:2px solid #000;display:flex;justify-content:space-between;font-weight:700}
+.btn-print{position:fixed;top:10px;left:10px;padding:8px 16px;background:#000;color:#fff;border:none;border-radius:6px;cursor:pointer}
+@media print{.btn-print{display:none}}
+</style></head><body>
+<button class="btn-print" onclick="window.print()">🖨️ طباعة</button>
+<div class="hdr">
+  <div>
+    <h1>📚 تقرير دفتر شيكات: ${b.name}</h1>
+    <div class="meta">${b.bank?b.bank+' · ':''}أرقام: ${b.firstNum||1} → ${b.lastNum||((b.firstNum||1)+b.pages-1)} · ${checks.length} شيك من ${b.pages}</div>
+  </div>
+  <div class="meta">${today}<br>CAFELAX</div>
+</div>
+<div class="summary">
+  <div class="box"><div class="lbl">إجمالي القيمة</div><div class="val">${fmt(totalAmt)} ج</div></div>
+  <div class="box"><div class="lbl">غير مصروف</div><div class="val" style="color:#92400e">${fmt(totalPending)} ج</div></div>
+  <div class="box"><div class="lbl">تم صرفه</div><div class="val" style="color:#065f46">${fmt(totalDone)} ج</div></div>
+</div>
+${checks.length ? `<table>
+  <thead><tr><th>#</th><th>رقم الشيك</th><th>لصالح</th><th>القيمة</th><th>الاستحقاق</th><th>فاتورة</th><th>الحالة</th><th>ملاحظات</th></tr></thead>
+  <tbody>${checks.map((c,i)=>{
+    const overdue = c.status!=='done' && c.date && new Date(c.date)<new Date(new Date().toDateString());
+    const cls = c.status==='done'?'done':overdue?'overdue':'';
+    const status = c.status==='done'?'✅ مصروف':overdue?'⚠️ متأخر':'⏳ لم يُصرف';
+    return `<tr class="${cls}"><td>${i+1}</td><td><strong>${c.num||'—'}</strong></td><td><strong>${c.payee||'—'}</strong></td><td>${fmt(c.amount)} ج</td><td>${fmtDate(c.date)}</td><td>${c.invoice||'—'}</td><td>${status}</td><td style="font-size:10px;color:#666">${c.note||''}</td></tr>`;
+  }).join('')}</tbody>
+</table>
+<div class="totals"><span>الإجمالي · ${checks.length} شيك</span><span>${fmt(totalAmt)} ج</span></div>` : '<div style="text-align:center;padding:40px;color:#666">📭 لا توجد شيكات في هذا الدفتر</div>'}
+</body></html>`;
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
+// تصدير شيكات الدفتر لـ Excel
+function exportBookExcel(bookId){
+  const b = chkBooks.find(x=>x.id===bookId);
+  if(!b) return;
+  const checks = chkList.filter(c=>c.bookId===bookId).sort((a,b)=>(parseInt(a.num)||0)-(parseInt(b.num)||0));
+  if(!checks.length){ toast('❗ لا توجد شيكات للتصدير'); return; }
+
+  const rows = [
+    ['دفتر:', b.name + (b.bank?' — '+b.bank:'')],
+    ['عدد الشيكات:', checks.length],
+    [],
+    ['#','رقم الشيك','لصالح','القيمة','الاستحقاق','فاتورة','الحالة','ملاحظات'],
+    ...checks.map((c,i)=>[
+      i+1,
+      c.num||'',
+      c.payee||'',
+      Number(c.amount||0),
+      c.date||'',
+      c.invoice||'',
+      c.status==='done'?'مصروف':(chkIsOverdue(c)?'متأخر':'لم يُصرف'),
+      c.note||''
+    ])
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:5},{wch:14},{wch:25},{wch:14},{wch:14},{wch:18},{wch:14},{wch:30}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, b.name.slice(0,30));
+  XLSX.writeFile(wb, 'دفتر_'+b.name.replace(/[^\u0600-\u06FFa-zA-Z0-9_]/g,'_')+'.xlsx');
+  toast('✅ تم التصدير');
 }
 
 function openEditChkBook(id){
@@ -6274,7 +6482,28 @@ function saveEditChkBook(id){
   b.lastNum = lastNum;
 
   saveChks(true);
-  if(API_URL) apiFetch('/api/check-books','POST',b).catch(()=>{});
+
+  // 🛡️ احفظ على السيرفر مع retry + verification (نفس منطق الـ create)
+  if(API_URL){
+    (async () => {
+      console.log('📤 Sending edited book to server:', b.id);
+      for(let attempt = 1; attempt <= 3; attempt++){
+        try{
+          console.log(`Edit attempt ${attempt}/3 for book ${b.id}`);
+          const r = await apiFetch('/api/check-books','POST',b);
+          if(r){
+            console.log('✅ Book edit saved to DB:', b.id, r);
+            return;
+          }
+        }catch(e){
+          console.error(`❌ Edit attempt ${attempt} failed:`, e.message);
+        }
+        if(attempt < 3) await new Promise(r => setTimeout(r, 500 * attempt));
+      }
+      // كل المحاولات فشلت
+      toast('⚠️ تحذير: التعديل محفوظ محلياً لكن فشل حفظه في السيرفر — حاول تاني', 'error');
+    })();
+  }
 
   document.getElementById('edit-book-popup')?.remove();
   renderChkBooks();
@@ -8678,10 +8907,23 @@ async function batchAssign(courierId){
   const ship=c?(isSameDay(o)?c.shipExpress||80:c.ship||50):50;
   const assignedZone=getOrderZoneForCourier(o,c||{zone:''});
   const isBosta=courierId==='bosta';
+  const isShop = !isBosta && SHOP_COURIER_ID && Number(courierId) === Number(SHOP_COURIER_ID);
   const courierName = c ? c.name : 'بوسطة';
-  const upd=isBosta
-    ?{courierId:null,isBosta:true,ship,status:'جاري التوصيل',assignedZone,batchCode:_currentBatchCode}
-    :{courierId,isBosta:false,ship,status:'جاري التوصيل',assignedZone,batchCode:_currentBatchCode};
+
+  // 🆕 v191: لو التوزيع للمحل، حوّل delivery_type لـ 'pickup' عشان Stars يشوف الطلب
+  // وإذا مش للمحل (مندوب أو بوسطة) ولسه pickup، رجّعه لـ normal/express
+  let upd;
+  if(isBosta){
+    upd = {courierId:null,isBosta:true,ship,status:'جاري التوصيل',assignedZone,batchCode:_currentBatchCode};
+    // لو كان pickup قبل كده، رجّعه لـ normal
+    if(o.deliveryType==='pickup') upd.deliveryType = isSameDay(o)?'express':'normal';
+  } else if(isShop){
+    upd = {courierId,isBosta:false,ship,status:'جاري التوصيل',assignedZone,batchCode:_currentBatchCode,deliveryType:'pickup'};
+  } else {
+    upd = {courierId,isBosta:false,ship,status:'جاري التوصيل',assignedZone,batchCode:_currentBatchCode};
+    // لو كان pickup ودلوقتي مندوب عادي، رجّعه لـ normal/express
+    if(o.deliveryType==='pickup') upd.deliveryType = isSameDay(o)?'express':'normal';
+  }
 
   // طبّق محلياً فوراً (optimistic) — عشان الـ wizard يتحرك
   Object.assign(o,upd);
