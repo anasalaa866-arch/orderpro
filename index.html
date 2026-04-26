@@ -4828,12 +4828,14 @@ async function openBostaAWB(id){
   if(API_URL&&o.bostaId){
     toast('⏳ جاري جلب البوليصة...');
     try{
-      const r=await apiFetch('/api/bosta/awb/'+id);
+      // v192: ابعت apiKey و env عشان السيرفر يقدر يجيبها من بوسطة لو مش محفوظة
+      const params = bostaApiKey ? '?apiKey='+encodeURIComponent(bostaApiKey)+'&env=production' : '';
+      const r=await apiFetch('/api/bosta/awb/'+id+params);
       if(r&&r.success&&r.awbBase64){
         o.bostaAwbBase64=r.awbBase64;
         const w=window.open('','_blank');
         w.document.write('<html><body style="margin:0"><embed width="100%" height="100%" src="data:application/pdf;base64,'+r.awbBase64+'" type="application/pdf"><\/body><\/html>');
-        toast('✅ تم فتح البوليصة');
+        toast(r.fetchedNow ? '✅ تم جلب البوليصة من بوسطة' : '✅ تم فتح البوليصة');
         return;
       }
     }catch(e){}
@@ -8910,7 +8912,7 @@ async function batchAssign(courierId){
   const isShop = !isBosta && SHOP_COURIER_ID && Number(courierId) === Number(SHOP_COURIER_ID);
   const courierName = c ? c.name : 'بوسطة';
 
-  // 🆕 v191: لو التوزيع للمحل، حوّل delivery_type لـ 'pickup' عشان Stars يشوف الطلب
+  // 🆕 v192: لو التوزيع للمحل، حوّل delivery_type لـ 'pickup' عشان Stars يشوف الطلب
   // وإذا مش للمحل (مندوب أو بوسطة) ولسه pickup، رجّعه لـ normal/express
   let upd;
   if(isBosta){
