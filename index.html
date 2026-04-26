@@ -4837,11 +4837,27 @@ async function openBostaAWB(id){
         w.document.write('<html><body style="margin:0"><embed width="100%" height="100%" src="data:application/pdf;base64,'+r.awbBase64+'" type="application/pdf"><\/body><\/html>');
         toast(r.fetchedNow ? '✅ تم جلب البوليصة من بوسطة' : '✅ تم فتح البوليصة');
         return;
+      } else if(r && !r.success){
+        // 🆕 v193: عرض السبب بدل ما نفتح صفحة 404
+        if(!bostaApiKey){
+          toast('❗ ضيف Bosta API key في الإعدادات الأول');
+        } else {
+          toast('❗ البوليصة مش متاحة بعد. حاول تاني بعد دقيقة.');
+        }
+        return;
       }
-    }catch(e){}
+    }catch(e){
+      console.error('AWB fetch error:', e);
+      toast('❗ خطأ في جلب البوليصة: '+e.message);
+      return;
+    }
   }
-  if(o.bostaId) window.open('https://business.bosta.co/deliveries/'+o.bostaId,'_blank');
-  else toast('❗ الطلب مش مرفوع على بوسطة بعد');
+  // 🆕 v193: استخدم tracking URL (شغال) بدل dashboard URL (404)
+  if(o.bostaTrackingNo){
+    window.open('https://app.bosta.co/tracking/'+o.bostaTrackingNo,'_blank');
+  } else {
+    toast('❗ الطلب مش مرفوع على بوسطة بعد');
+  }
 }
 
 async function bostaTrackOne(id){
