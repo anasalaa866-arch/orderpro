@@ -8102,6 +8102,17 @@ async function doBatchPrint(){
           html = await buildPackingSlipHtml(o);
         }
 
+        // 🆕 v185: استخرج الـ body content فقط، عشان الـ CSS مايتسربش بين الفواتير
+        // وعشان مايبقاش <html><head><body>... جوه <div>
+        if(html && typeof html === 'string'){
+          const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+          if(bodyMatch) html = bodyMatch[1];
+          // شيل أي <script> blocks (مفيش لزمتها في الطباعة)
+          html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+          // شيل زرار الطباعة بتاع كل فاتورة (مش هنحتاجه لأن في زرار global)
+          html = html.replace(/<button[^>]*no-print-btn[^>]*>[\s\S]*?<\/button>/gi, '');
+        }
+
         allPages.push(html);
       }
     }
@@ -8121,9 +8132,53 @@ async function doBatchPrint(){
         src:local('Cairo');
       }
       *{box-sizing:border-box}
-      body{font-family:'Cairo','Segoe UI',Tahoma,sans-serif;margin:0;padding:0}
-      .page{page-break-after:always;padding:30px;min-height:100vh;position:relative}
+      body{font-family:'Cairo','Segoe UI',Tahoma,sans-serif;margin:0;padding:0;color:#000}
+      .page{page-break-after:always;padding:0;position:relative}
       .page:last-child{page-break-after:auto}
+      .page > *{margin:0}
+
+      /* Invoice styles (shared for all invoice pages) */
+      .wrapper{max-width:780px;margin:0 auto;padding:24px;font-size:13px}
+      .header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:14px}
+      .header-left{flex:1}
+      .brand{font-size:24px;font-weight:800;letter-spacing:0.5px}
+      .order-meta{font-size:12px;color:#444;margin-top:2px;line-height:1.5}
+      .order-num{font-weight:700;color:#000;font-size:14px}
+      .header-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+      .qr-box{width:70px;height:70px;flex-shrink:0;border:1px solid #ccc;padding:2px;background:#fff}
+      .qr-box img{width:100%;height:100%;display:block}
+      .order-id-display{font-size:11px;font-weight:700;text-align:center;line-height:1.3}
+      .ship-to{margin-bottom:14px;padding:8px 0}
+      .ship-label{font-size:10px;font-weight:700;text-transform:uppercase;color:#666;margin-bottom:4px;letter-spacing:0.5px}
+      .ship-name{font-size:15px;font-weight:700;margin-bottom:3px}
+      .ship-addr{font-size:12px;line-height:1.5;color:#222}
+      .ship-phone{direction:ltr;unicode-bidi:plaintext;font-weight:600;font-size:13px;margin-top:3px}
+      .items-header{display:flex;font-size:10px;font-weight:700;text-transform:uppercase;color:#666;letter-spacing:0.5px;padding:6px 0;border-bottom:1px solid #ccc;margin-bottom:4px}
+      .items-header .h-qty{width:60px}
+      .items-header .h-items{flex:1;padding:0 8px}
+      .items-header .h-total{width:90px;text-align:right}
+      .item-row{display:flex;align-items:center;padding:8px 0;border-bottom:1px solid #eee;page-break-inside:avoid;break-inside:avoid}
+      .item-qty{width:60px;font-size:13px;font-weight:600}
+      .item-img{width:50px;height:50px;flex-shrink:0;margin-right:8px;background:#f5f5f5;border:1px solid #e5e5e5;display:flex;align-items:center;justify-content:center;overflow:hidden}
+      .item-img img{width:100%;height:100%;object-fit:cover;display:block}
+      .item-img-placeholder{font-size:18px;color:#bbb}
+      .item-info{flex:1;min-width:0;padding:0 4px}
+      .item-name{font-size:12.5px;font-weight:600;line-height:1.3}
+      .item-meta{font-size:10px;color:#666;margin-top:2px;line-height:1.3}
+      .item-total{width:90px;text-align:right;font-weight:700;font-size:13px}
+      .totals{margin-top:12px;padding:10px 0;border-top:2px solid #000;display:flex;justify-content:space-between;font-size:14px;font-weight:700;page-break-inside:avoid}
+      .totals-row{display:flex;justify-content:space-between;padding:3px 0;font-size:13px;font-weight:500}
+      .totals-row.grand{font-size:16px;font-weight:800;border-top:1px solid #000;margin-top:4px;padding-top:6px}
+      .totals-block{width:280px;margin-left:auto}
+      .summary-box{margin-top:12px;border:1px solid #000;border-radius:4px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:10px 24px;page-break-inside:avoid}
+      .summary-cell{min-width:80px}
+      .summary-label{text-transform:uppercase;font-size:9px;font-weight:700;letter-spacing:0.5px;color:#555;margin-bottom:2px}
+      .summary-value{font-size:13px;font-weight:700}
+      .summary-cell.highlight{border-right:2px solid #000;padding-right:14px}
+      .summary-cell.highlight .summary-value{font-size:18px}
+      .footer{text-align:center;margin-top:18px;padding-top:10px;border-top:1px solid #ccc;font-size:11px;color:#555}
+      .footer h3{font-size:14px;color:#000;margin-bottom:4px}
+
       .print-all-btn{position:fixed;bottom:20px;left:20px;background:#000;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.3)}
       .loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;font-size:16px}
       .loading-overlay .spinner{width:40px;height:40px;border:4px solid #eee;border-top-color:#000;border-radius:50%;animation:sp 0.8s linear infinite;margin-bottom:14px}
@@ -8135,10 +8190,13 @@ async function doBatchPrint(){
       .pg-arrow-break .arrow{font-size:100px;line-height:0.9;font-weight:900;color:#000}
       .pg-arrow-break .arrow-text{font-size:14px;font-weight:700;letter-spacing:3px;margin-top:5px}
 
+      @page{size:A4;margin:10mm}
       @media print {
         .no-print{display:none!important}
         .loading-overlay{display:none!important}
-        .page{padding:20px}
+        .page{padding:0}
+        .wrapper{padding:8px;max-width:none}
+        body{font-size:12px}
       }
     </style>
   </head>
@@ -9635,7 +9693,7 @@ function exportBostaExcel(){
       orderRef,
       shipVal,
       '','','','','','','',
-      'Parcel',
+      'small',
     ];
   });
 
@@ -9643,7 +9701,7 @@ function exportBostaExcel(){
   const templateUrl = (API_URL||BACKEND_URL||'').replace(/\/$/,'') + '/bosta-template.xlsx';
   const fallbackExport = () => {
     // fallback — تصدير بسيط
-    const headerRow2=['* اسم العميل','* تليفون','تليفون ثاني','* المدينة','المنطقة','* العنوان','علامة مميزة','عنوان عمل؟','رابط المكان','ملاحظات','','قيمة التحصيل النقدي','عدد القطع','وصف الشحنة','مرجع الطلب','قيمة الشحنة','الدفع بواسطة نقاط بوسطة؟','تطبيق رسوم Flexship','هل تسمح بفتح الشحنة؟','','عدد قطع المرتجع','وصف الشحنة المرتجعة','','نوع الشحنة'];
+    const headerRow2=['العميل','* تليفون','تليفون ثاني','* المدينة','المنطقة','* العنوان','علامة مميزة','عنوان عمل؟','رابط المكان','ملاحظات','','قيمة التحصيل النقدي','عدد القطع','وصف الشحنة','مرجع الطلب','قيمة الشحنة','الدفع بواسطة نقاط بوسطة؟','تطبيق رسوم Flexship','هل تسمح بفتح الشحنة؟','','عدد قطع المرتجع','وصف الشحنة المرتجعة','','نوع الشحنة'];
     const wsData=[headerRow2,...dataRows];
     const ws=XLSX.utils.aoa_to_sheet(wsData);
     ws['!cols']=[{wch:25},{wch:15},{wch:15},{wch:20},{wch:20},{wch:40},{wch:15},{wch:10},{wch:15},{wch:40},{wch:5},{wch:18},{wch:10},{wch:60},{wch:15},{wch:12},{wch:12},{wch:12},{wch:12},{wch:5},{wch:12},{wch:20},{wch:5},{wch:15}];
@@ -9668,6 +9726,16 @@ function exportBostaExcel(){
         return fallbackExport();
       }
       const ws = wb.Sheets[sheetName];
+
+      // 🆕 v187: عدّل header اسم العميل من "* اسم العميل" لـ "العميل"
+      // الـ header موجود في A2 في الـ template الأصلي
+      try {
+        if(ws['A2']) {
+          // احتفظ بالـ style لو موجود، غيّر القيمة بس
+          ws['A2'].v = 'العميل';
+          if(ws['A2'].t === 's') ws['A2'].w = 'العميل';
+        }
+      } catch(e) { console.warn('header rename failed:', e); }
 
       // اكتب البيانات ابتداءً من الصف 3 (A3)
       XLSX.utils.sheet_add_aoa(ws, dataRows, {origin: 'A3'});
@@ -10026,7 +10094,7 @@ async function doImport() {
   }
 }
 function inviteUser(){const email=$('u-email').value.trim();if(!email){toast('❗ أدخل البريد');return}users.push({email,role:$('u-role').value,name:email.split('@')[0]});$('u-email').value='';renderUsers();toast(`📨 تم إرسال دعوة لـ ${email}`)}
-function renderUsers(){$('users-list').innerHTML=users.map((u,i)=>`<div class="uitem"><div class="uav" style="background:${COLORS[i%COLORS.length]}">${u.name[0].toUpperCase()}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${u.name}</div><div style="font-size:10px;color:var(--muted)">${u.email}</div></div><span class="badge b-new">${ROLE_L[u.role]||u.role}</span></div>`).join('')}
+function renderUsers(){const el=$('users-list');if(!el)return;el.innerHTML=users.map((u,i)=>`<div class="uitem"><div class="uav" style="background:${COLORS[i%COLORS.length]}">${u.name[0].toUpperCase()}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${u.name}</div><div style="font-size:10px;color:var(--muted)">${u.email}</div></div><span class="badge b-new">${ROLE_L[u.role]||u.role}</span></div>`).join('')}
 
 function downloadBackend(){
   const pkg=JSON.stringify({name:"orderpro-backend",version:"1.0.0",main:"server.js",scripts:{start:"node server.js"},dependencies:{cors:"^2.8.5",express:"^4.18.2"},engines:{node:">=18.0.0"}},null,2);
