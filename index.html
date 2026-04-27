@@ -2926,12 +2926,16 @@ async function openOrderHistory(orderId){
   const iconMap = {
     'إنشاء الطلب':'🆕', 'تغيير الحالة':'🔄', 'تعيين مندوب':'🚴',
     'تعديل البيانات':'✏️', 'تغيير حالة الدفع':'💳', 'إلغاء':'❌',
-    'مكتمل':'✅', 'default':'📌'
+    'مكتمل':'✅', 'تسوية':'💰', 'default':'📌'
   };
 
   if(content) content.innerHTML = all.map(h=>{
     const icon = iconMap[h.action] || iconMap.default;
     const hasChange = h.oldValue && h.newValue && h.oldValue !== h.newValue;
+    // 🆕 v195: زر "اعرض التسوية" لو الحدث تسوية
+    const settleBtn = h.action === 'تسوية' && h.settlementId
+      ? `<button class="btn btn-ghost btn-xs" onclick="goToSettlement('${h.settlementId}')" style="margin-top:6px;font-size:11px">📜 اعرض التسوية</button>`
+      : '';
     return `<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
       <div style="font-size:18px;min-width:28px;text-align:center;margin-top:2px">${icon}</div>
       <div style="flex:1">
@@ -2939,9 +2943,30 @@ async function openOrderHistory(orderId){
         ${hasChange?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${h.field||''}: <span style="text-decoration:line-through;color:var(--danger)">${h.oldValue}</span> → <span style="color:var(--success);font-weight:700">${h.newValue}</span></div>`:''}
         ${h.newValue&&!hasChange?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${h.newValue}</div>`:''}
         <div style="font-size:10px;color:var(--muted);margin-top:3px">👤 ${h.userName||'system'} · ${fmtTs(h.ts)}</div>
+        ${settleBtn}
       </div>
     </div>`;
   }).join('');
+}
+
+// 🆕 v195: روح للتسوية في صفحة سجل التسويات
+function goToSettlement(settlementId){
+  closeM('m-order-history');
+  // افتح صفحة سجل التسويات + اعمل highlight للتسوية
+  const navItem = document.querySelector('[data-p="settle-history"]');
+  if(navItem) goPage(navItem, 'settle-history');
+  // بعد التحميل، ابحث عن العنصر و scroll إليه
+  setTimeout(() => {
+    const el = document.querySelector(`[data-settlement-id="${settlementId}"]`);
+    if(el){
+      el.scrollIntoView({behavior:'smooth', block:'center'});
+      el.style.outline = '3px solid var(--accent)';
+      el.style.outlineOffset = '4px';
+      setTimeout(() => { el.style.outline = ''; el.style.outlineOffset = ''; }, 3000);
+    } else {
+      toast('💡 التسوية #'+settlementId+' في صفحة سجل التسويات');
+    }
+  }, 600);
 }
 
 let _mergeIds = [];
@@ -7648,7 +7673,7 @@ function renderSettleHistory(){
     const adjBadge = adjTotal!==0
       ? '<span style="background:'+(adjTotal>0?'#dcfce7':'#fee2e2')+';color:'+(adjTotal>0?'#166534':'#991b1b')+';padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">'+(adjTotal>0?'+':'')+adjTotal.toLocaleString()+' ج</span>'
       : '';
-    html+='<div style="border:1px solid var(--border);border-radius:9px;padding:12px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;background:var(--card)">'
+    html+='<div data-settlement-id="'+s.id+'" style="border:1px solid var(--border);border-radius:9px;padding:12px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;background:var(--card);transition:outline 0.3s">'
       +'<div><div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap"><strong>'+courierName+'</strong>'
       +'<span style="background:var(--accent-light);color:var(--accent);padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700">تسوية #'+sessNum+'</span>'
       +'<span style="font-size:11px;color:var(--muted)">'+timeStr+'</span>'
