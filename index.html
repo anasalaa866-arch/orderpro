@@ -7596,8 +7596,28 @@ function printHistorySettle(settlementId){
   if(!s) return;
   const c = couriers.find(x=>String(x.id)===String(s.courierId));
   if(!c) return;
-  const done = oByC(s.courierId,'مكتمل').filter(o=>s.orderIds.includes(o.id));
-  _doPrintSettle(c, done, false, s.ts, {adj: s.adj||[], adjTotal: s.adjTotal||0});
+  // 🆕 v196: استخدم الـ orderIds المحفوظ في التسوية مباشرة، مش الـ status الحالي
+  // لأن الـ status ممكن يتغير بعد التسوية (طلب يبقى مرتجع بدل مكتمل)
+  // وده كان بيخلي عدد الطلبات في الـ PDF أقل من الفعلي
+  const orderIdsInSettle = s.orderIds || [];
+
+  // ابحث عن الطلبات المعرّفة في التسوية، حتى لو status اتغيّر دلوقتي
+  const ordersFromSettle = orderIdsInSettle.map(id => orders.find(o => o.id === id)).filter(Boolean);
+
+  // لو فيه طلبات مفقودة (مش في الـ orders array)، عرّف placeholder خفيف
+  const foundIds = new Set(ordersFromSettle.map(o=>o.id));
+  const missingIds = orderIdsInSettle.filter(id => !foundIds.has(id));
+  if(missingIds.length){
+    console.warn('Settlement', settlementId, '- missing orders:', missingIds);
+    // أضف placeholder للطلبات المفقودة (بحد أدنى من البيانات)
+    missingIds.forEach(id => {
+      ordersFromSettle.push({
+        id, name:'(بيانات غير متاحة)', area:'—', total:0, paid:false, ship:0, _missing:true
+      });
+    });
+  }
+
+  _doPrintSettle(c, ordersFromSettle, false, s.ts, {adj: s.adj||[], adjTotal: s.adjTotal||0});
 }
 
 function _doPrintSettle(c, done, isDraft, settleDate, settlement){
