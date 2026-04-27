@@ -7780,38 +7780,83 @@ function selectTreasury(tId){
 function renderTreasuryTx(tId){
   const el=document.getElementById('treasury-tx-list');
   if(!el) return;
-  const txs = _treasuryTx.filter(x=>x.treasuryId===tId).sort((a,b)=>new Date(b.date)-new Date(a.date)||b.id.localeCompare(a.id));
   const t = _treasuries.find(x=>x.id===tId);
-  if(!txs.length && !(t&&t.opening)){
+  // 🆕 v198: نسورت ascending لحساب الرصيد التراكمي (running balance)
+  const txsAsc = _treasuryTx.filter(x=>x.treasuryId===tId).sort((a,b)=>{
+    const dt = new Date(a.date) - new Date(b.date);
+    if(dt !== 0) return dt;
+    return String(a.id).localeCompare(String(b.id));
+  });
+
+  if(!txsAsc.length && !(t&&t.opening)){
     el.innerHTML='<div style="text-align:center;padding:30px;color:var(--muted)">لا توجد حركات بعد</div>';
     return;
   }
-  let html = '';
-  if(t&&t.opening){
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:8px;background:#f0fdf4;border:1px solid #86efac;margin-bottom:6px">'
-      +'<div><div style="font-size:12px;font-weight:700">رصيد أول المدة</div></div>'
-      +'<strong style="color:var(--success);font-size:15px">'+t.opening.toLocaleString()+' ج</strong>'
-      +'</div>';
-  }
-  txs.forEach(tx=>{
-    const isIn = tx.type==='in';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:8px;border:1px solid var(--border);margin-bottom:6px;background:var(--card)">'
-      +'<div>'
-      +'<div style="display:flex;align-items:center;gap:6px">'
-      +'<span style="font-size:16px">'+(isIn?'📥':'📤')+'</span>'
-      +'<div>'
-      +'<div style="font-size:13px;font-weight:600">'+tx.reason+'</div>'
-      +'<div style="font-size:11px;color:var(--muted)">'+new Date(tx.date).toLocaleDateString('ar-EG',{year:'numeric',month:'short',day:'numeric'})+'</div>'
-      +'</div>'
-      +'</div>'
-      +'</div>'
-      +'<div style="display:flex;align-items:center;gap:8px">'
-      +'<strong style="font-size:15px;color:'+(isIn?'var(--success)':'var(--danger)')+'">'+(isIn?'+':'-')+tx.amount.toLocaleString()+' ج</strong>'
-      +'<button onclick="editTreasuryTx(this.dataset.txid)" data-txid="'+tx.id+'" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px" title="تعديل">✏️</button>'
-      +'<button onclick="deleteTreasuryTx(this.dataset.txid)" data-txid="'+tx.id+'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px" title="حذف">✕</button>'
-      +'</div>'
-      +'</div>';
+
+  // احسب الرصيد التراكمي لكل حركة
+  let runningBal = (t && t.opening) ? parseFloat(t.opening) || 0 : 0;
+  const txsWithBal = txsAsc.map(tx => {
+    const amt = parseFloat(tx.amount) || 0;
+    if(tx.type === 'in') runningBal += amt;
+    else runningBal -= amt;
+    return { ...tx, _balance: runningBal };
   });
+
+  // اعرض الأحدث في الأول (descending)
+  const txsDesc = [...txsWithBal].reverse();
+
+  const fmtDate = d => new Date(d).toLocaleDateString('ar-EG',{year:'numeric',month:'short',day:'numeric'});
+
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+    + '<thead style="background:#f1f5f9;position:sticky;top:0;z-index:5">'
+    + '<tr>'
+    + '<th style="padding:8px 6px;text-align:center;width:40px;font-weight:700">#</th>'
+    + '<th style="padding:8px 6px;text-align:right;width:90px;font-weight:700">التاريخ</th>'
+    + '<th style="padding:8px 6px;text-align:right;font-weight:700">البيان</th>'
+    + '<th style="padding:8px 6px;text-align:center;width:80px;font-weight:700">النوع</th>'
+    + '<th style="padding:8px 6px;text-align:center;width:90px;font-weight:700;color:#16a34a">وارد</th>'
+    + '<th style="padding:8px 6px;text-align:center;width:90px;font-weight:700;color:#dc2626">منصرف</th>'
+    + '<th style="padding:8px 6px;text-align:center;width:100px;font-weight:700">الرصيد</th>'
+    + '<th style="padding:8px 6px;text-align:center;width:60px"></th>'
+    + '</tr></thead><tbody>';
+
+  txsDesc.forEach((tx, idx) => {
+    const num = txsDesc.length - idx; // ترقيم من القديم للجديد
+    const isIn = tx.type === 'in';
+    const amt = parseFloat(tx.amount) || 0;
+    const bal = tx._balance;
+    html += '<tr style="border-bottom:1px solid var(--border)">'
+      + '<td style="padding:6px;text-align:center;color:var(--muted)">'+num+'</td>'
+      + '<td style="padding:6px;font-size:11px">'+fmtDate(tx.date)+'</td>'
+      + '<td style="padding:6px"><span style="font-weight:500">'+escapeHtml(tx.reason||'—')+'</span></td>'
+      + '<td style="padding:6px;text-align:center">'
+      + '<span style="background:'+(isIn?'#dcfce7':'#fee2e2')+';color:'+(isIn?'#166534':'#991b1b')+';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">'
+      + (isIn?'📥 وارد':'📤 منصرف')+'</span></td>'
+      + '<td style="padding:6px;text-align:center;font-weight:700;color:#16a34a">'+(isIn?amt.toLocaleString()+' ج':'—')+'</td>'
+      + '<td style="padding:6px;text-align:center;font-weight:700;color:#dc2626">'+(isIn?'—':amt.toLocaleString()+' ج')+'</td>'
+      + '<td style="padding:6px;text-align:center;font-weight:700;color:'+(bal>=0?'#16a34a':'#dc2626')+'">'+bal.toLocaleString()+' ج</td>'
+      + '<td style="padding:6px;text-align:center">'
+      + '<button onclick="editTreasuryTx(this.dataset.txid)" data-txid="'+tx.id+'" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;padding:2px 4px" title="تعديل">✏️</button>'
+      + '<button onclick="deleteTreasuryTx(this.dataset.txid)" data-txid="'+tx.id+'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 4px" title="حذف">✕</button>'
+      + '</td>'
+      + '</tr>';
+  });
+
+  // صف رصيد أول المدة في الآخر (لأنه الـ baseline)
+  if(t && t.opening){
+    html += '<tr style="background:#f0fdf4;border-top:2px solid #86efac">'
+      + '<td style="padding:8px 6px;text-align:center;color:#166534">0</td>'
+      + '<td style="padding:8px 6px;font-size:11px;color:#166534">—</td>'
+      + '<td style="padding:8px 6px;color:#166534"><strong>رصيد أول المدة</strong></td>'
+      + '<td style="padding:8px 6px;text-align:center"><span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">افتتاحي</span></td>'
+      + '<td style="padding:8px 6px;text-align:center;font-weight:700;color:#16a34a">'+parseFloat(t.opening).toLocaleString()+' ج</td>'
+      + '<td style="padding:8px 6px;text-align:center;color:var(--muted)">—</td>'
+      + '<td style="padding:8px 6px;text-align:center;font-weight:700;color:#16a34a">'+parseFloat(t.opening).toLocaleString()+' ج</td>'
+      + '<td></td>'
+      + '</tr>';
+  }
+
+  html += '</tbody></table>';
   el.innerHTML = html;
 }
 
