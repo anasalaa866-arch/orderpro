@@ -306,6 +306,7 @@ tr:hover td{background:#fafbff}
     <div class="ni" data-p="treasury" onclick="goPage(this,'treasury')"><span class="ni-icon">🏦</span><span class="ni-label">الخزنة</span></div>
     <div class="ni" data-p="shop-accounting" onclick="goPage(this,'shop-accounting')"><span class="ni-icon">🏪</span><span class="ni-label">محاسبة المحل</span></div>
     <div class="ni" data-p="checks" onclick="goPage(this,'checks')"><span class="ni-icon">📋</span><span class="ni-label">الشيكات</span><span class="nbadge" id="nb-checks" style="background:var(--danger)"></span></div>
+    <div class="ni" data-p="vendors" onclick="goPage(this,'vendors')"><span class="ni-icon">🏢</span><span class="ni-label">الموردين</span></div>
     <div class="ni" data-p="reports" onclick="goPage(this,'reports')"><span class="ni-icon">📊</span><span class="ni-label">التقارير</span></div>
     <div class="nav-label">المخزون</div>
     <div class="ni" data-p="expiry" onclick="goPage(this,'expiry')"><span class="ni-icon">⏳</span><span class="ni-label">تواريخ الصلاحية</span><span class="nbadge" id="nb-expiry" style="background:var(--danger)"></span></div>
@@ -740,6 +741,37 @@ tr:hover td{background:#fafbff}
     </div>
   </div>
 
+  <!-- VENDORS / SUPPLIERS -->
+  <div class="page" id="page-vendors">
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-body" style="padding:12px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <h2 style="margin:0;font-size:18px;flex:1">🏢 الموردين</h2>
+        <input id="vendor-search" placeholder="🔍 ابحث..." oninput="renderVendorsPage()" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;width:200px">
+        <button class="btn btn-primary btn-sm" onclick="openAddVendor()">+ إضافة مورد</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body" style="padding:0">
+        <table style="width:100%;border-collapse:collapse">
+          <thead style="background:var(--bg2)">
+            <tr>
+              <th style="padding:10px;text-align:right;font-size:13px;font-weight:600">الاسم</th>
+              <th style="padding:10px;text-align:right;font-size:13px;font-weight:600">التليفون</th>
+              <th style="padding:10px;text-align:right;font-size:13px;font-weight:600">ملاحظات</th>
+              <th style="padding:10px;text-align:center;font-size:13px;font-weight:600;width:80px">الشيكات</th>
+              <th style="padding:10px;text-align:center;font-size:13px;font-weight:600;width:120px">إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="vendors-tbody"></tbody>
+        </table>
+        <div id="vendors-empty" style="padding:40px;text-align:center;color:var(--muted);display:none">
+          مفيش موردين. اضغط "+ إضافة مورد" للبدء.
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- SHOP ACCOUNTING -->
   <div class="page" id="page-shop-accounting">
     <div class="card" style="margin-bottom:14px">
@@ -802,7 +834,7 @@ tr:hover td{background:#fafbff}
             </select>
             <button class="btn btn-ghost btn-sm" onclick="openAddSupplier()" title="إضافة مورد جديد" style="white-space:nowrap">+ مورد</button>
           </div>
-          <input id="chk-payee" placeholder="أو اكتب يدوياً..." style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;margin-top:6px;color:var(--muted)">
+          <input id="chk-payee" type="hidden">
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="fg"><label>القيمة *</label><input id="chk-amount" type="number" placeholder="0" step="0.01"></div>
@@ -854,6 +886,22 @@ tr:hover td{background:#fafbff}
   <div class="overlay" id="m-chk-img" onclick="closeM('m-chk-img')">
     <div style="background:#000;border-radius:12px;overflow:hidden;max-width:90vw;max-height:90vh">
       <img id="chk-img-full" style="max-width:90vw;max-height:90vh;display:block">
+    </div>
+  </div>
+
+  <!-- MODAL: إضافة/تعديل مورد -->
+  <div class="overlay" id="m-add-supplier">
+    <div class="modal">
+      <div class="mhd"><h3 id="vendor-modal-title">🏢 إضافة مورد</h3><button class="xbtn" onclick="closeM('m-add-supplier')">✕</button></div>
+      <div class="mbody">
+        <div class="fg"><label>اسم المورد *</label><input id="supplier-name-input" placeholder="اسم المورد"></div>
+        <div class="fg"><label>التليفون</label><input id="supplier-phone-input" placeholder="01xxxxxxxxx" type="tel"></div>
+        <div class="fg"><label>ملاحظات</label><textarea id="supplier-note-input" rows="2" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px" placeholder="اختياري"></textarea></div>
+      </div>
+      <div class="mft">
+        <button class="btn btn-ghost" onclick="closeM('m-add-supplier')">إلغاء</button>
+        <button class="btn btn-primary" id="vendor-save-btn" onclick="saveSupplier()">حفظ</button>
+      </div>
     </div>
   </div>
 
@@ -5641,7 +5689,7 @@ async function loadChks(){
     const results = await Promise.allSettled([
       apiFetch('/api/check-books'),
       apiFetch('/api/checks'),
-      apiFetch('/api/check-suppliers')
+      apiFetch('/api/vendors')   // 🆕 v194: vendors جديدة
     ]);
 
     const r1 = results[0].status === 'fulfilled' ? results[0].value : null;
@@ -5663,7 +5711,8 @@ async function loadChks(){
 
     const dbBooks = r1?.books || [];
     const dbChecks = r2?.checks || [];
-    const dbSuppliers = r3?.suppliers || [];
+    // 🆕 v194: vendors بدل suppliers — استجابة فيها {vendors:[{id,name,phone,note}]}
+    const dbVendors = r3?.vendors || r3?.suppliers || [];
 
     // ⚠️ Safety net: لو الـ DB فيه شيكات بس مفيش دفاتر → ممكن يكون API شغال مع response ناقص
     // نفحص أول لو الـ localStorage عنده دفاتر لنفس الشيكات — لو نعم، ما نمسحش
@@ -5710,7 +5759,12 @@ async function loadChks(){
         doneAt:c.doneAt||c.done_at||null,
         createdAt:c.createdAt||c.created_at||null,
       }));
-      if(dbSuppliers.length) chkSuppliers = dbSuppliers.map(s=>s.name?s:{name:String(s)});
+      if(dbVendors.length) chkSuppliers = dbVendors.map(s=>({
+        id: s.id || ('v_'+Date.now()),
+        name: s.name || String(s),
+        phone: s.phone || '',
+        note: s.note || ''
+      }));
       // احفظ في localStorage
       try{
         localStorage.setItem('chk_books',JSON.stringify(chkBooks));
@@ -6055,10 +6109,11 @@ function fillChkBookSel(){
 }
 function saveChk(){
   const num=($('chk-num-sel')?.value)||($('chk-num')?.value?.trim())||'';
-  const payee=($('chk-payee-sel')?.value&&$('chk-payee-sel').value!=='__other__'?$('chk-payee-sel').value:$('chk-payee')?.value?.trim())||'';
+  // 🆕 v194: لازم اختيار من الـ dropdown — مفيش إدخال يدوي
+  const payee=$('chk-payee-sel')?.value?.trim()||'';
   const amount=parseFloat($('chk-amount').value),date=$('chk-date').value;
   if(!num){toast('❗ اختر رقم الشيك');return;}
-  if(!payee){toast('❗ اختر المورد أو اكتب الاسم');return;}
+  if(!payee){toast('❗ اختر المورد من القائمة');return;}
   if(!amount||!date){toast('❗ يرجى ملء الحقول المطلوبة');return;}
   const data={id:editingChkId||(Date.now()+'_'+Math.random().toString(36).slice(2,5)),
     num,payee,amount,date,bookId:$('chk-book-sel').value||'',
@@ -9377,42 +9432,205 @@ function onChkBookChange(){
 }
 
 function onChkPayeeChange(){
+  // 🆕 v194: dropdown بس — الإدخال اليدوي مش متاح
   const sel=$('chk-payee-sel');
   const input=$('chk-payee');
-  if(sel&&input&&sel.value){
-    input.value=sel.value;
-    input.style.display='none';
-  } else if(input){
-    input.style.display='block';
+  if(input){
+    input.value=sel?.value||'';
+    input.style.display='none'; // مخفي دايماً
   }
 }
 
 function openAddSupplier(){
+  // alias للـ openAddVendor (للتوافق مع الكود القديم)
+  if(typeof openAddVendor==='function') return openAddVendor();
   if($('supplier-name-input'))$('supplier-name-input').value='';
+  if($('supplier-phone-input'))$('supplier-phone-input').value='';
   if($('supplier-note-input'))$('supplier-note-input').value='';
   openM('m-add-supplier');
 }
 
-function saveSupplier(){
-  const name=$('supplier-name-input')?.value.trim();
-  if(!name){toast('❗ أدخل اسم المورد');return;}
-  if(chkSuppliers.find(s=>s.name===name)){toast('⚠️ المورد موجود مسبقاً');return;}
-  const sup={id:Date.now()+'_sup',name,note:$('supplier-note-input')?.value.trim()||''};
-  chkSuppliers.push(sup);
-  saveChks(true);
-  // ارفع فوراً كمان بدون الـ debounce
-  if(API_URL) apiFetch('/api/check-suppliers','POST',{id:sup.id,name:sup.name}).catch(()=>{});
-  closeM('m-add-supplier');
-  fillSupplierSel();
-  toast('✅ تم إضافة المورد: '+name);
-}
+// تنادي الدالة الفعلية
+function saveSupplier(){ return saveSupplierActual(); }
 
 function fillSupplierSel(){
   const sel=$('chk-payee-sel');
   if(!sel)return;
+  // 🆕 v194: dropdown بس — مفيش "أخرى (يدوياً)" لأن لازم اختيار من الموردين
+  const sortedSuppliers=[...chkSuppliers].sort((a,b)=>(a.name||'').localeCompare(b.name||'','ar'));
   sel.innerHTML='<option value="">— اختر المورد —</option>'+
-    chkSuppliers.map(s=>`<option value="${s.name}">${s.name}</option>`).join('')+
-    '<option value="__other__">أخرى (اكتب يدوياً)</option>';
+    sortedSuppliers.map(s=>`<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}${s.phone?` · ${s.phone}`:''}</option>`).join('');
+}
+
+// 🆕 v194: صفحة الموردين الكاملة
+let editingVendorId=null;
+
+function openAddVendor(){
+  editingVendorId=null;
+  $('vendor-modal-title').textContent='🏢 إضافة مورد';
+  $('vendor-save-btn').textContent='حفظ';
+  if($('supplier-name-input'))$('supplier-name-input').value='';
+  if($('supplier-phone-input'))$('supplier-phone-input').value='';
+  if($('supplier-note-input'))$('supplier-note-input').value='';
+  openM('m-add-supplier');
+  setTimeout(()=>$('supplier-name-input')?.focus(),100);
+}
+
+function openEditVendor(id){
+  const v=chkSuppliers.find(s=>s.id===id);
+  if(!v){toast('❗ المورد غير موجود');return;}
+  editingVendorId=id;
+  $('vendor-modal-title').textContent='✏️ تعديل مورد';
+  $('vendor-save-btn').textContent='حفظ التغييرات';
+  if($('supplier-name-input'))$('supplier-name-input').value=v.name||'';
+  if($('supplier-phone-input'))$('supplier-phone-input').value=v.phone||'';
+  if($('supplier-note-input'))$('supplier-note-input').value=v.note||'';
+  openM('m-add-supplier');
+  setTimeout(()=>$('supplier-name-input')?.focus(),100);
+}
+
+async function deleteVendor(id){
+  const v=chkSuppliers.find(s=>s.id===id);
+  if(!v)return;
+  // كم شيك للمورد ده
+  const checksCount=chkList.filter(c=>c.payee===v.name).length;
+  let msg=`حذف المورد "${v.name}"؟`;
+  if(checksCount>0) msg+=`\n\n⚠️ هذا المورد له ${checksCount} شيك. الشيكات هتفضل بنفس الاسم لكن المورد هيتشال من القائمة.`;
+  if(!confirm(msg))return;
+
+  if(API_URL){
+    try{
+      const url='/api/vendors/'+encodeURIComponent(id)+(checksCount>0?'?force=1':'');
+      await apiFetch(url,'DELETE');
+    }catch(e){
+      console.warn('Delete vendor failed:',e);
+      toast('⚠️ مشكلة في الحذف من السيرفر');
+      return;
+    }
+  }
+
+  chkSuppliers=chkSuppliers.filter(s=>s.id!==id);
+  try{ localStorage.setItem('chk_suppliers',JSON.stringify(chkSuppliers)); }catch(e){}
+  renderVendorsPage();
+  fillSupplierSel();
+  toast('✅ تم حذف المورد');
+}
+
+function renderVendorsPage(){
+  const tbody=$('vendors-tbody');
+  const empty=$('vendors-empty');
+  if(!tbody)return;
+
+  const search=($('vendor-search')?.value||'').trim().toLowerCase();
+  let list=[...chkSuppliers].sort((a,b)=>(a.name||'').localeCompare(b.name||'','ar'));
+  if(search){
+    list=list.filter(v=>
+      (v.name||'').toLowerCase().includes(search) ||
+      (v.phone||'').includes(search) ||
+      (v.note||'').toLowerCase().includes(search)
+    );
+  }
+
+  if(!list.length){
+    tbody.innerHTML='';
+    if(empty){
+      empty.style.display='block';
+      empty.textContent=search?'مفيش نتائج للبحث':'مفيش موردين. اضغط "+ إضافة مورد" للبدء.';
+    }
+    return;
+  }
+  if(empty)empty.style.display='none';
+
+  tbody.innerHTML=list.map(v=>{
+    const checksCount=chkList.filter(c=>c.payee===v.name).length;
+    const totalAmount=chkList.filter(c=>c.payee===v.name).reduce((s,c)=>s+(parseFloat(c.amount)||0),0);
+    return `
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:10px"><b>${escapeHtml(v.name)}</b></td>
+        <td style="padding:10px;direction:ltr;text-align:right">${escapeHtml(v.phone||'—')}</td>
+        <td style="padding:10px;color:var(--muted);font-size:12px">${escapeHtml(v.note||'—')}</td>
+        <td style="padding:10px;text-align:center">
+          ${checksCount>0?`<span style="background:var(--bg2);padding:2px 8px;border-radius:10px;font-size:12px" title="إجمالي: ${totalAmount.toLocaleString()} ج">${checksCount}</span>`:'—'}
+        </td>
+        <td style="padding:10px;text-align:center">
+          <button class="btn btn-ghost btn-xs" onclick="openEditVendor('${v.id}')" title="تعديل">✏️</button>
+          <button class="btn btn-ghost btn-xs" onclick="deleteVendor('${v.id}')" title="حذف" style="color:#dc2626">🗑️</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// تعديل saveSupplier ليدعم edit
+async function saveSupplierActual(){
+  const name=$('supplier-name-input')?.value.trim();
+  if(!name){toast('❗ أدخل اسم المورد');return;}
+
+  // لو في تعديل، نسمح بالاسم الموجود (لأنه نفس المورد)
+  if(!editingVendorId && chkSuppliers.find(s=>s.name===name)){
+    toast('⚠️ المورد موجود مسبقاً');return;
+  }
+
+  const phone=$('supplier-phone-input')?.value.trim()||'';
+  const note=$('supplier-note-input')?.value.trim()||'';
+
+  if(editingVendorId){
+    // تعديل
+    const oldVendor=chkSuppliers.find(s=>s.id===editingVendorId);
+    const oldName=oldVendor?.name;
+    if(API_URL){
+      try{
+        const r=await apiFetch('/api/vendors/'+encodeURIComponent(editingVendorId),'PATCH',{name,phone,note});
+        if(r&&r.vendor){
+          const idx=chkSuppliers.findIndex(s=>s.id===editingVendorId);
+          if(idx>=0)chkSuppliers[idx]={id:r.vendor.id,name:r.vendor.name,phone:r.vendor.phone,note:r.vendor.note};
+        }
+      }catch(e){
+        console.warn('Edit vendor failed:',e);
+        toast('⚠️ مشكلة في الحفظ على السيرفر');
+        return;
+      }
+    } else {
+      const idx=chkSuppliers.findIndex(s=>s.id===editingVendorId);
+      if(idx>=0){chkSuppliers[idx].name=name;chkSuppliers[idx].phone=phone;chkSuppliers[idx].note=note;}
+    }
+
+    // لو الاسم اتغير، حدّث كل الشيكات
+    if(oldName && oldName!==name){
+      let updated=0;
+      chkList.forEach(c=>{ if(c.payee===oldName){c.payee=name;updated++;} });
+      if(updated>0){
+        try{ localStorage.setItem('chk_list',JSON.stringify(chkList)); }catch(e){}
+        // synced via PATCH already at server level... but we need to update each check
+        // ملاحظة: السيرفر لازم يعدل الشيكات كمان (سنضيف ده لو محتاج)
+      }
+    }
+
+    toast('✅ تم تحديث المورد');
+  } else {
+    // إضافة
+    const sup={
+      id:'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),
+      name,phone,note
+    };
+    if(API_URL){
+      try{
+        const r=await apiFetch('/api/vendors','POST',sup);
+        if(r&&r.vendor)sup.id=r.vendor.id;
+      }catch(e){
+        console.warn('Save vendor failed:',e);
+        toast('⚠️ مشكلة في الحفظ، تم الإضافة محلياً');
+      }
+    }
+    chkSuppliers.push(sup);
+    toast('✅ تم إضافة المورد: '+name);
+  }
+
+  try{ localStorage.setItem('chk_suppliers',JSON.stringify(chkSuppliers)); }catch(e){}
+  closeM('m-add-supplier');
+  fillSupplierSel();
+  if(typeof renderVendorsPage==='function') renderVendorsPage();
+  editingVendorId=null;
 }
 
 function renderWeeklyReport(){
@@ -10373,6 +10591,7 @@ function goPage(el,page){
   if(page==='bosta')renderBostaPage();
   if(page==='shop-accounting')renderShopAccounting();
   if(page==='checks')renderChecksPage();
+  if(page==='vendors')renderVendorsPage();
   if(page==='courier-orders')renderCourierOrdersPage();
   if(page==='problems')renderProblemsPage();
   if(page==='import-excel')renderImportExcelPage();
