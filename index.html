@@ -243,21 +243,23 @@ tr:hover td{background:#fafbff}
 .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:998;opacity:0;transition:opacity .25s}
 .sidebar-backdrop.show{display:block;opacity:1}
 
-/* Tablet (≤1024px) */
+/* Tablet (≤1024px) — الـ sidebar تبقى drawer */
 @media(max-width:1024px){
   .stats-row{grid-template-columns:repeat(2,1fr)}
   .cgrid{grid-template-columns:repeat(2,1fr)}
   .content{padding:14px}
   .search-wrap input{width:140px;font-size:12px}
+  /* 🔧 v210: على الـ tablet/laptop العادي، السايدبار تفضل ظاهرة بس أصغر */
+  :root{--sidebar-w:200px}
 }
 
-/* Mobile (≤768px) - الأهم */
+/* Mobile (≤768px) - drawer mode + تعديلات إضافية */
 @media(max-width:768px){
   :root{--sidebar-w:280px;--topbar-h:54px}
   body{font-size:13px}
-  .app{position:relative}
 
-  /* Sidebar — hidden by default, shows as drawer when toggled */
+  /* Sidebar — drawer mode فقط على الموبايل */
+  .app{position:relative}
   .sidebar{
     position:fixed;top:0;right:0;bottom:0;
     width:var(--sidebar-w);max-width:80vw;
@@ -265,13 +267,20 @@ tr:hover td{background:#fafbff}
     z-index:999;box-shadow:-10px 0 30px rgba(0,0,0,.3);
   }
   .sidebar.open{transform:translateX(0)}
-  .sb-logo h2,.sb-logo p,.ni-label,.nbadge,.nav-label,.sb-status-text{display:''}
+  .mobile-menu-btn{display:block}
+  .main-area{width:100%}
+
+  /* 🔧 v210: على الموبايل، الـ sidebar drawer كاملة — كل العناصر ظاهرة */
+  .sidebar .sb-logo h2,
+  .sidebar .sb-logo p,
+  .sidebar .ni-label,
+  .sidebar .nbadge,
+  .sidebar .nav-label,
+  .sidebar .sb-status-text{display:revert !important}
   .sb-logo-inner{justify-content:flex-start}
   .ni{justify-content:flex-start;padding:12px 16px;font-size:14px}
   .ni-icon{font-size:18px}
   .sb-status{justify-content:flex-start}
-  .mobile-menu-btn{display:block}
-  .main-area{width:100%}
 
   /* Topbar */
   .topbar{padding:0 10px;gap:6px}
@@ -7440,9 +7449,11 @@ async function doLogin(){
     return;
   }
 
-  // 🆕 v206: لو السيرفر متصل ومفيش token، يبقى الـ admin المحلي محاول من غير سيرفر
-  if(API_URL && !serverToken && username !== ADMIN_USER.username){
-    err.textContent = '⚠️ السيرفر مش رد بـ token. حاول تاني.';
+  // 🆕 v208: لو السيرفر متاح بس مفيش token، يبقى فيه مشكلة — متخش
+  // (قبل كده كان admin محلي يدخل بدون token ويعمل 401 loop)
+  if(API_URL && !serverToken){
+    err.textContent = '⚠️ السيرفر مش رد بـ token. تأكد إنه شغال وحاول تاني.';
+    document.getElementById('login-password').value = '';
     return;
   }
 
@@ -11454,7 +11465,7 @@ function goPage(el,page){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));$('page-'+page).classList.add('active');
   currentPage=page;$('ptitle').textContent=PAGE_T[page]||'';
   // 🆕 v202: اقفل الـ sidebar على الموبايل لما تختار صفحة
-  if(window.innerWidth <= 768) toggleSidebar(false);
+  if(window.innerWidth <= 1024) toggleSidebar(false);
   if(page==='couriers')renderCouriers();if(page==='assign')renderAssignPage();
   if(page==='couriers-dashboard')openCouriersDashboard();
   if(page==='pickup')renderPickupPage();if(page==='transit')renderTransitPage();
