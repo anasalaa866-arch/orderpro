@@ -1716,6 +1716,11 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
+// ===== OrderPro v214 — CUSTOMER RISK FIX =====
+// 2026-04-29: إصلاح صفحة تقييم العملاء
+// - إصلاح العداد في العنوان ليعرض العدد الحقيقي
+// - تحديث تلقائي للداتا من Shopify عند فتح الصفحة لأول مرة
+// - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
 // ===== Shop Pickup Variables =====
@@ -11930,11 +11935,54 @@ async function saveRiskSettings(){
 
 async function loadRiskList(){
   if(!API_URL) return;
+  
+  // 🆕 v214: عرض loading state
+  const tbody = document.getElementById('risk-list-tbody');
+  const cnt = document.getElementById('risk-list-count');
+  if(tbody) tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:40px">
+    <div style="font-size:24px;margin-bottom:8px">⏳</div>
+    <div style="color:var(--muted)">جاري تحميل البيانات...</div>
+  </td></tr>`;
+  
   try{
     const list = await apiFetch('/api/customers-risk-list?limit=500', 'GET');
     _riskList = list || [];
+    
+    // 🆕 v214: لو الداتا فاضية، نجيبها من Shopify تلقائياً
+    if(_riskList.length === 0 && orders.length > 0){
+      if(tbody) tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:40px">
+        <div style="font-size:24px;margin-bottom:8px">🔄</div>
+        <div style="color:var(--muted);margin-bottom:8px">لم يتم تحميل بيانات العملاء من قبل</div>
+        <div style="color:var(--muted);font-size:11px">جاري الجلب من Shopify... قد يستغرق دقيقة</div>
+      </td></tr>`;
+      
+      // جيب كل التليفونات من الطلبات
+      const phones = [...new Set(orders.map(o => o.phone).filter(p => p && p !== '—'))];
+      if(phones.length > 0){
+        try{
+          const r = await apiFetch('/api/customer-risk/batch', 'POST', { phones, forceRefresh: true });
+          if(r && r.results){
+            // أعد تحميل القائمة بعد الجلب
+            const newList = await apiFetch('/api/customers-risk-list?limit=500', 'GET');
+            _riskList = newList || [];
+            toast(`✅ تم تحميل ${Object.keys(r.results).length} عميل من Shopify`);
+          }
+        }catch(autoFetchErr){
+          console.warn('Auto-fetch failed:', autoFetchErr.message);
+          toast('⚠️ فشل التحميل التلقائي - اضغط "تحديث الكل من Shopify"');
+        }
+      }
+    }
+    
     filterRiskList();
-  }catch(e){ console.warn('loadRiskList:', e.message); }
+  }catch(e){ 
+    console.warn('loadRiskList:', e.message);
+    // عرض رسالة خطأ
+    if(tbody) tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:40px">
+      <div style="font-size:24px;margin-bottom:8px">❌</div>
+      <div style="color:var(--danger)">فشل تحميل البيانات: ${e.message}</div>
+    </td></tr>`;
+  }
 }
 
 function filterRiskList(){
@@ -11954,11 +12002,24 @@ function renderRiskList(){
   const tbody = document.getElementById('risk-list-tbody');
   const cnt = document.getElementById('risk-list-count');
   if(!tbody) return;
+  
+  // 🆕 v214: تحديث العداد بالعدد الحقيقي (مش رقم ثابت)
   if(cnt) cnt.textContent = `${_riskFiltered.length} عميل`;
 
   if(!_riskFiltered.length){
-    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--muted)">
-      مفيش بيانات. اضغط "تحديث الكل من Shopify" عشان النظام يجيب بيانات العملاء.
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:40px">
+      <div style="font-size:32px;margin-bottom:12px">📋</div>
+      <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">لا توجد بيانات</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">
+        ${_riskList.length === 0 
+          ? 'لم يتم تحميل بيانات العملاء بعد'
+          : 'لا توجد نتائج تطابق البحث'}
+      </div>
+      ${_riskList.length === 0 ? `
+        <button class="btn btn-primary" onclick="bulkRefreshRisk()" style="margin-top:8px">
+          🔄 تحديث الكل من Shopify
+        </button>
+      ` : ''}
     </td></tr>`;
     return;
   }
