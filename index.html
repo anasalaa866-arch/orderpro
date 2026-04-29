@@ -469,6 +469,7 @@ tr:hover td{background:#fafbff}
     <div class="ni" data-p="stars-reviews" onclick="goPage(this,'stars-reviews')"><span class="ni-icon">⭐</span><span class="ni-label">مراجعات Stars</span><span class="nbadge" id="nb-stars-reviews" style="background:var(--warn)">0</span></div>
     <div class="ni" data-p="shop-transfers" onclick="goPage(this,'shop-transfers')"><span class="ni-icon">🔄</span><span class="ni-label">تحويلات من المحل</span><span class="nbadge" id="nb-shop-transfers" style="background:var(--danger)">0</span></div>
     <div class="ni" data-p="shipping-transfers" onclick="goPage(this,'shipping-transfers')"><span class="ni-icon">🚚</span><span class="ni-label">تحويل الشحن</span><span class="nbadge" id="nb-shipping-transfers" style="background:var(--warn)">0</span></div>
+    <div class="ni" data-p="customer-risk" onclick="goPage(this,'customer-risk')"><span class="ni-icon">🚨</span><span class="ni-label">تقييم العملاء</span></div>
     <div class="ni" data-p="field-cancels" onclick="goPage(this,'field-cancels')"><span class="ni-icon">🚫</span><span class="ni-label">إلغاءات بانتظار الاستلام</span><span class="nbadge" id="nb-field-cancels" style="background:var(--danger)">0</span></div>
     <div class="ni" data-p="settle-history" onclick="goPage(this,'settle-history')"><span class="ni-icon">📚</span><span class="ni-label">سجل التسويات</span></div>
     <div class="ni" data-p="treasury" onclick="goPage(this,'treasury')"><span class="ni-icon">🏦</span><span class="ni-label">الخزنة</span></div>
@@ -1264,6 +1265,72 @@ tr:hover td{background:#fafbff}
           ⚠️ المندوب طلب تحويل الطلب لمندوب آخر أو لبوسطة. راجع وأكد أو ارفض.
         </div>
         <div id="shipping-transfers-list" style="padding:12px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🆕 v213: CUSTOMER RISK ASSESSMENT PAGE -->
+  <div class="page" id="page-customer-risk">
+    <!-- إعدادات سريعة -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-hd">
+        <h3>⚙️ إعدادات تقييم العملاء</h3>
+        <button class="btn btn-primary btn-sm" onclick="saveRiskSettings()">💾 حفظ</button>
+      </div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+          <div class="fg">
+            <label>حد الخطر (نسبة الإلغاء/الرفض)</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="number" id="risk-threshold" min="1" max="100" value="30" style="flex:1">
+              <span style="color:var(--muted)">%</span>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">العميل اللي نسبته أعلى من ده يبقى "سيئ"</div>
+          </div>
+          <div class="fg">
+            <label>الحد الأدنى للطلبات قبل التقييم</label>
+            <input type="number" id="risk-min-orders" min="1" max="50" value="3">
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">عميل عنده طلبات أقل من ده مش بيتقيم</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- قايمة العملاء -->
+    <div class="card">
+      <div class="card-hd">
+        <h3>🚨 قائمة العملاء المُقيَّمين</h3>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--muted)" id="risk-list-count">0 عميل</span>
+          <input type="text" id="risk-search" placeholder="بحث بالتليفون/الاسم" oninput="filterRiskList()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px">
+          <button class="btn btn-ghost btn-sm" onclick="loadRiskList()">🔄 تحديث</button>
+          <button class="btn btn-primary btn-sm" onclick="bulkRefreshRisk()">🔁 تحديث الكل من Shopify</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0">
+        <div style="background:#fef3c7;border-bottom:1px solid #fde047;padding:10px 16px;font-size:12px;color:#78350f">
+          ⚠️ البيانات بتتجاب من Shopify وبتتحدّث كل 24 ساعة. تقدر تـ refresh عميل معيّن من زر "🔄" بجانبه.
+        </div>
+        <div class="tw mobile-cards">
+          <table>
+            <thead>
+              <tr>
+                <th>الحالة</th>
+                <th>اسم العميل</th>
+                <th>التليفون</th>
+                <th>إجمالي الطلبات</th>
+                <th>الناجحة ✅</th>
+                <th>الملغية ❌</th>
+                <th>المرتجعة ↩️</th>
+                <th>نسبة الخطر</th>
+                <th>إجمالي الإنفاق</th>
+                <th>آخر طلب</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="risk-list-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -4594,6 +4661,18 @@ async function assignBulkCourier(){
   const ids=[...document.querySelectorAll('.assign-chk:checked')].map(c=>c.value);
   if(!ids.length)return;
   const c=couriers.find(x=>x.id===cId);
+
+  // 🆕 v213: تحقق من تقييم العملاء قبل التوزيع
+  const ordersToAssign = ids.map(id => orders.find(o => o.id === id)).filter(Boolean);
+  if(API_URL && _riskSettings){
+    toast('🔍 جاري فحص العملاء...');
+    const { risky } = await _checkBatchRisks(ordersToAssign);
+    if(risky.length > 0){
+      const proceed = await _showRiskWarning(risky, c.name, ordersToAssign.length);
+      if(!proceed) return; // المستخدم لغى
+    }
+  }
+
   for(const id of ids){
     const o=orders.find(x=>x.id===id);
     if(!o)continue;
@@ -4610,6 +4689,80 @@ async function assignBulkCourier(){
   pushNotif('🚴',`تم توزيع ${ids.length} طلب على ${c.name}`,ids.join('، '));
   refreshAll();
   toast(`✅ تم توزيع ${ids.length} طلب على ${c.name}`);
+}
+
+// 🆕 v213: عرض warning modal للعملاء السيئين
+function _showRiskWarning(riskyList, courierName, totalCount){
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .15s';
+
+    const riskyHtml = riskyList.map(({order, risk}) => `
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+          <div>
+            <strong style="font-size:13px">${escapeHtml(order.id)}</strong> · ${escapeHtml(order.name || '—')}
+            <div style="font-size:11px;color:var(--muted);direction:ltr;text-align:right">${escapeHtml(order.phone || '')}</div>
+          </div>
+          <div style="background:#dc2626;color:white;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:700">
+            ${risk.riskPercentage}% خطر
+          </div>
+        </div>
+        <div style="font-size:11px;color:#7f1d1d;display:flex;gap:10px;flex-wrap:wrap">
+          <span>📊 ${risk.totalOrders} طلب</span>
+          <span>✅ ${risk.successfulOrders} ناجح</span>
+          <span>❌ ${risk.cancelledOrders} ملغي</span>
+          <span>↩️ ${risk.refundedOrders} مرتجع</span>
+        </div>
+        ${risk.notes ? `<div style="margin-top:6px;padding:6px 8px;background:#fef9c3;border-radius:4px;font-size:11px;color:#713f12">📝 ${escapeHtml(risk.notes)}</div>` : ''}
+      </div>
+    `).join('');
+
+    overlay.innerHTML = `
+      <div style="background:var(--card);border-radius:12px;max-width:600px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 25px 60px rgba(0,0,0,.4)">
+        <div style="background:linear-gradient(135deg,#dc2626,#ef4444);color:white;padding:16px 20px;border-radius:12px 12px 0 0">
+          <h3 style="margin:0;font-size:17px;display:flex;align-items:center;gap:8px">
+            🚨 تحذير: عملاء بنسبة رفض عالية
+          </h3>
+          <div style="font-size:12px;opacity:.9;margin-top:4px">
+            وجدنا <strong>${riskyList.length}</strong> عميل سيئ من إجمالي ${totalCount} طلب — هتوزع على <strong>${escapeHtml(courierName)}</strong>
+          </div>
+        </div>
+        <div style="padding:14px 20px;overflow-y:auto;flex:1">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:12px">
+            العملاء التاليين عندهم نسبة إلغاء/رفض أعلى من <strong>${_riskSettings.threshold}%</strong>:
+          </div>
+          ${riskyHtml}
+        </div>
+        <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+          <button class="btn btn-ghost btn-sm" id="risk-cancel-btn">❌ إلغاء التوزيع</button>
+          <button class="btn btn-sm" style="background:#fbbf24;color:#78350f;font-weight:700" id="risk-exclude-btn">⚠️ استبعد السيئين، وزع الباقي</button>
+          <button class="btn btn-sm" style="background:#dc2626;color:white;font-weight:700" id="risk-proceed-btn">⚡ وزع الكل بمسئوليتي</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const cleanup = () => overlay.remove();
+
+    overlay.querySelector('#risk-cancel-btn').onclick = () => { cleanup(); resolve(false); };
+    overlay.querySelector('#risk-proceed-btn').onclick = () => { cleanup(); resolve(true); };
+    overlay.querySelector('#risk-exclude-btn').onclick = () => {
+      // امسح الـ checkboxes للعملاء السيئين
+      const riskyIds = new Set(riskyList.map(r => r.order.id));
+      document.querySelectorAll('.assign-chk:checked').forEach(chk => {
+        if(riskyIds.has(chk.value)) chk.checked = false;
+      });
+      cleanup();
+      toast(`⚠️ تم استبعاد ${riskyList.length} عميل — اضغط توزيع تاني`);
+      resolve(false); // لا توزع، خليه يضغط تاني
+    };
+
+    overlay.onclick = (e) => {
+      if(e.target === overlay){ cleanup(); resolve(false); }
+    };
+  });
 }
 
 async function toggleProblem(id){
@@ -7486,6 +7639,7 @@ async function doLogin(){
   loadTreasury();
   checkExpiryAlerts();
   requestNotifPermission();
+  loadRiskSettings(); // 🆕 v213: تحميل إعدادات تقييم العملاء
   
   // روح لأول صفحة متاحة للمستخدم
   const firstPage = getFirstAvailablePage(user);
@@ -11493,6 +11647,7 @@ function goPage(el,page){
   if(page==='stars-reviews')loadStarsReviews();
   if(page==='shop-transfers')loadShopTransfers();
   if(page==='shipping-transfers')loadShippingTransfers();
+  if(page==='customer-risk'){ loadRiskSettings(); loadRiskList(); }
   if(page==='field-cancels')loadFieldCancels();
 }
 
@@ -11739,6 +11894,203 @@ let _shopTransfersHistory = [];
 
 // 🆕 v205: SHIPPING TRANSFER REQUESTS — طلبات المناديب لتحويل الشحن
 let _shippingTransfers = [];
+
+// 🆕 v213: CUSTOMER RISK ASSESSMENT
+let _riskList = [];
+let _riskFiltered = [];
+let _riskSettings = { threshold: 30, minOrders: 3 };
+const _riskCache = {}; // phone -> risk object (للـ batch lookups)
+
+async function loadRiskSettings(){
+  if(!API_URL) return;
+  try{
+    const r = await apiFetch('/api/risk-settings', 'GET');
+    if(r){
+      _riskSettings = r;
+      const t = document.getElementById('risk-threshold');
+      const m = document.getElementById('risk-min-orders');
+      if(t) t.value = r.threshold;
+      if(m) m.value = r.minOrders;
+    }
+  }catch(e){ console.warn('loadRiskSettings:', e.message); }
+}
+
+async function saveRiskSettings(){
+  const threshold = parseInt(document.getElementById('risk-threshold').value) || 30;
+  const minOrders = parseInt(document.getElementById('risk-min-orders').value) || 3;
+  try{
+    const r = await apiFetch('/api/risk-settings', 'POST', { threshold, minOrders });
+    if(r && r.success){
+      _riskSettings = { threshold, minOrders };
+      toast('✅ تم حفظ الإعدادات');
+      loadRiskList();
+    }
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function loadRiskList(){
+  if(!API_URL) return;
+  try{
+    const list = await apiFetch('/api/customers-risk-list?limit=500', 'GET');
+    _riskList = list || [];
+    filterRiskList();
+  }catch(e){ console.warn('loadRiskList:', e.message); }
+}
+
+function filterRiskList(){
+  const q = (document.getElementById('risk-search')?.value || '').trim().toLowerCase();
+  if(!q){
+    _riskFiltered = _riskList.slice();
+  } else {
+    _riskFiltered = _riskList.filter(c =>
+      (c.phone || '').toLowerCase().includes(q) ||
+      (c.customerName || '').toLowerCase().includes(q)
+    );
+  }
+  renderRiskList();
+}
+
+function renderRiskList(){
+  const tbody = document.getElementById('risk-list-tbody');
+  const cnt = document.getElementById('risk-list-count');
+  if(!tbody) return;
+  if(cnt) cnt.textContent = `${_riskFiltered.length} عميل`;
+
+  if(!_riskFiltered.length){
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--muted)">
+      مفيش بيانات. اضغط "تحديث الكل من Shopify" عشان النظام يجيب بيانات العملاء.
+    </td></tr>`;
+    return;
+  }
+
+  const threshold = _riskSettings.threshold;
+  const minOrders = _riskSettings.minOrders;
+
+  tbody.innerHTML = _riskFiltered.map(c => {
+    const isRisky = c.totalOrders >= minOrders && c.riskPercentage >= threshold;
+    const isNew = c.totalOrders < minOrders;
+    const statusBadge = isRisky
+      ? '<span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">🚨 سيئ</span>'
+      : isNew
+        ? '<span style="background:#e0e7ff;color:#3730a3;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">🆕 جديد</span>'
+        : '<span style="background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">✅ كويس</span>';
+
+    const riskColor = c.riskPercentage >= 50 ? '#ef4444' : c.riskPercentage >= 30 ? '#f59e0b' : '#10b981';
+
+    return `<tr ${isRisky ? 'style="background:#fef2f2"' : ''}>
+      <td data-label="الحالة">${statusBadge}</td>
+      <td data-label="اسم العميل"><strong>${escapeHtml(c.customerName || '—')}</strong></td>
+      <td data-label="التليفون" style="direction:ltr;font-size:12px">${escapeHtml(c.phone)}</td>
+      <td data-label="إجمالي الطلبات"><strong>${c.totalOrders}</strong></td>
+      <td data-label="الناجحة" style="color:#059669">${c.successfulOrders}</td>
+      <td data-label="الملغية" style="color:#dc2626">${c.cancelledOrders}</td>
+      <td data-label="المرتجعة" style="color:#d97706">${c.refundedOrders}</td>
+      <td data-label="نسبة الخطر">
+        <strong style="color:${riskColor};font-size:13px">${c.riskPercentage}%</strong>
+      </td>
+      <td data-label="إجمالي الإنفاق">${(c.totalSpent || 0).toLocaleString()} ج</td>
+      <td data-label="آخر طلب" style="font-size:11px;color:var(--muted)">${c.lastOrderAt ? fmtRelative(c.lastOrderAt) : '—'}</td>
+      <td data-label="إجراءات">
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-ghost btn-xs" onclick="refreshSingleRisk('${escapeAttr(c.phone)}')" title="تحديث من Shopify">🔄</button>
+          <button class="btn btn-ghost btn-xs" onclick="openRiskNote('${escapeAttr(c.phone)}')" title="ملاحظة">📝</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function refreshSingleRisk(phone){
+  toast('🔄 جاري الجلب من Shopify...');
+  try{
+    const r = await apiFetch(`/api/customer-risk/${encodeURIComponent(phone)}?refresh=1`, 'GET');
+    if(r){
+      // عدل في الـ list الموجودة
+      const idx = _riskList.findIndex(c => c.phone === r.phone);
+      if(idx >= 0) _riskList[idx] = {...r, cachedAt: new Date().toISOString()};
+      else _riskList.unshift({...r, cachedAt: new Date().toISOString()});
+      filterRiskList();
+      toast('✅ اتحدث');
+    }
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function bulkRefreshRisk(){
+  // جيب كل التليفونات الفريدة من الطلبات
+  const phones = [...new Set(orders.map(o => o.phone).filter(p => p && p !== '—'))];
+  if(!phones.length){ toast('مفيش طلبات تحت التحديث'); return; }
+  if(!confirm(`هيتم تحديث ${phones.length} عميل من Shopify. ده ممكن ياخد دقيقة. متأكد؟`)) return;
+
+  toast(`🔄 جاري تحديث ${phones.length} عميل...`);
+  try{
+    const r = await apiFetch('/api/customer-risk/batch', 'POST', { phones, forceRefresh: true });
+    if(r && r.results){
+      const count = Object.keys(r.results).length;
+      toast(`✅ تم تحديث ${count} عميل`);
+      loadRiskList();
+    }
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function openRiskNote(phone){
+  const customer = _riskList.find(c => c.phone === phone);
+  const current = customer?.notes || '';
+  const note = prompt('ملاحظة عن العميل:', current);
+  if(note === null) return;
+  try{
+    const r = await apiFetch(`/api/customer-risk/${encodeURIComponent(phone)}/notes`, 'PATCH', { notes: note });
+    if(r && r.success){
+      if(customer) customer.notes = note;
+      toast('✅ تم الحفظ');
+      filterRiskList();
+    }
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// 🆕 v213: Helper للحصول على مخاطر عميل (مع cache)
+async function _getRiskForPhone(phone){
+  if(!phone || phone === '—') return null;
+  if(_riskCache[phone]) return _riskCache[phone];
+  try{
+    const r = await apiFetch(`/api/customer-risk/${encodeURIComponent(phone)}`, 'GET');
+    if(r){ _riskCache[phone] = r; return r; }
+  }catch(e){}
+  return null;
+}
+
+// 🆕 v213: حسب مخاطر مجموعة طلبات قبل التوزيع
+async function _checkBatchRisks(orderList){
+  const phones = [...new Set(orderList.map(o => o.phone).filter(p => p && p !== '—'))];
+  if(!phones.length) return { risky: [], safe: [] };
+
+  const cached = phones.filter(p => _riskCache[p]);
+  const needFetch = phones.filter(p => !_riskCache[p]);
+
+  if(needFetch.length > 0){
+    try{
+      const r = await apiFetch('/api/customer-risk/batch', 'POST', { phones: needFetch });
+      if(r && r.results){
+        Object.entries(r.results).forEach(([p, risk]) => {
+          if(risk && !risk.error) _riskCache[p] = risk;
+        });
+      }
+    }catch(e){ console.warn('batch risk fetch failed:', e.message); }
+  }
+
+  const threshold = _riskSettings.threshold || 30;
+  const minOrders = _riskSettings.minOrders || 3;
+
+  const risky = [], safe = [];
+  for(const o of orderList){
+    const risk = _riskCache[o.phone];
+    if(risk && risk.totalOrders >= minOrders && risk.riskPercentage >= threshold){
+      risky.push({ order: o, risk });
+    } else {
+      safe.push(o);
+    }
+  }
+  return { risky, safe };
+}
 
 async function loadShippingTransfers(){
   if(!API_URL) return;
