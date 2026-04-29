@@ -1716,11 +1716,13 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v214 — CUSTOMER RISK FIX =====
-// 2026-04-29: إصلاح صفحة تقييم العملاء
-// - إصلاح العداد في العنوان ليعرض العدد الحقيقي
-// - تحديث تلقائي للداتا من Shopify عند فتح الصفحة لأول مرة
-// - تحسين رسائل Loading و Empty State
+// ===== OrderPro v216 — PARTIAL DELIVERY + PROOF FIX =====
+// 2026-04-29: 
+// 1. دعم نظام التسليم الجزئي (badge جديد للطلبات المرتجعة)
+// 2. إصلاح زرار "عرض الصورة" في مراجعات Stars
+//    - كان بيفتح URL مباشرة بدون token → "No admin token"
+//    - دلوقتي بيستخدم fetch مع Bearer token + يعرض في modal
+//    - ميزة إضافية: زرار تنزيل الصورة
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
 // ===== Shop Pickup Variables =====
@@ -2013,6 +2015,8 @@ function srcBadge(s){
   if(s==='pos')    return '<span class="badge" style="background:#f0fdf4;color:#15803d">🏪 POS</span>';
   if(s==='manual') return '<span class="badge b-manual">✍️ Draft</span>';
   if(s==='shopify')return '<span class="badge b-shopify">🛍 Shopify</span>';
+  // 🆕 v216: badge جديد للطلبات المرتجعة من تسليم جزئي
+  if(s==='partial_return') return '<span class="badge" style="background:#fef3c7;color:#92400e">📦 إرجاع جزئي</span>';
   return '<span class="badge b-manual">✍️ يدوي</span>';
 }
 // 🆕 v203: Global error handlers — يلتقط أي خطأ مش متعالج
@@ -11780,10 +11784,72 @@ function _escapeHtml(s){
   return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 
-function viewStarsProof(kind, id){
-  const url = API_URL.replace(/\/$/,'') +
-    (kind === 'payment' ? '/api/pending-reviews/'+id+'/proof' : '/api/courier-adjustments/'+id+'/proof');
-  window.open(url, '_blank', 'width=600,height=800');
+// 🆕 v216: إصلاح عرض الصورة - استخدام fetch مع token بدل window.open
+async function viewStarsProof(kind, id){
+  const path = kind === 'payment' 
+    ? '/api/pending-reviews/' + id + '/proof' 
+    : '/api/courier-adjustments/' + id + '/proof';
+  const url = API_URL.replace(/\/$/, '') + path;
+  
+  try{
+    // جيب الصورة بـ token authentication
+    const token = localStorage.getItem('admin_token') || '';
+    if(!token){
+      toast('❌ لازم تسجل دخول أولاً');
+      return;
+    }
+    
+    toast('⏳ جاري تحميل الصورة...');
+    const res = await fetch(url, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    
+    if(!res.ok){
+      if(res.status === 401){
+        toast('❌ انتهت صلاحية الجلسة - سجل دخول تاني');
+        return;
+      }
+      const errData = await res.json().catch(() => ({}));
+      toast('❌ ' + (errData.error || 'فشل تحميل الصورة'));
+      return;
+    }
+    
+    // اعمل blob من الصورة
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    
+    // اعرض الصورة في modal
+    let modal = document.getElementById('m-proof-viewer');
+    if(!modal){
+      modal = document.createElement('div');
+      modal.id = 'm-proof-viewer';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out';
+      modal.onclick = (e) => {
+        if(e.target === modal){
+          URL.revokeObjectURL(blobUrl);
+          modal.remove();
+        }
+      };
+      document.body.appendChild(modal);
+    }
+    
+    modal.innerHTML = `
+      <div style="position:relative;max-width:90vw;max-height:90vh;cursor:default" onclick="event.stopPropagation()">
+        <button onclick="document.getElementById('m-proof-viewer').remove()" 
+                style="position:absolute;top:-40px;right:0;background:#fff;border:none;width:36px;height:36px;border-radius:18px;font-size:18px;cursor:pointer;font-weight:700;display:flex;align-items:center;justify-content:center">
+          ✕
+        </button>
+        <a href="${blobUrl}" download="proof-${kind}-${id}.jpg" 
+           style="position:absolute;top:-40px;left:0;background:#10b981;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:6px">
+          ⬇️ تنزيل
+        </a>
+        <img src="${blobUrl}" 
+             style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,0.5);background:#fff">
+      </div>
+    `;
+  }catch(e){
+    toast('❌ ' + (e.message || 'فشل تحميل الصورة'));
+  }
 }
 
 async function approvePaymentReview(id){
@@ -12034,33 +12100,52 @@ function renderRiskList(){
   const minOrders = _riskSettings.minOrders;
 
   tbody.innerHTML = _riskFiltered.map(c => {
-    const isRisky = c.totalOrders >= minOrders && c.riskPercentage >= threshold;
-    const isNew = c.totalOrders < minOrders;
-    const statusBadge = isRisky
-      ? '<span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">🚨 سيئ</span>'
-      : isNew
-        ? '<span style="background:#e0e7ff;color:#3730a3;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">🆕 جديد</span>'
-        : '<span style="background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">✅ كويس</span>';
+    // 🆕 v215: fallback values لكل الـ fields - منع undefined
+    const totalOrders = c.totalOrders || 0;
+    const cancelledOrders = c.cancelledOrders || 0;
+    const refundedOrders = c.refundedOrders || 0;
+    const successfulOrders = c.successfulOrders || 0;
+    const totalSpent = c.totalSpent || 0;
+    const riskPercentage = c.riskPercentage || 0;
+    const customerName = c.customerName || '—';
+    const isNotFound = c.notFound === true;
+    
+    const isRisky = totalOrders >= minOrders && riskPercentage >= threshold;
+    const isNew = totalOrders < minOrders && totalOrders > 0;
+    
+    // 🆕 v215: حالة "غير موجود في Shopify"
+    let statusBadge;
+    if(isNotFound){
+      statusBadge = '<span style="background:#f3f4f6;color:#6b7280;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">❓ غير موجود</span>';
+    } else if(isRisky){
+      statusBadge = '<span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">🚨 سيئ</span>';
+    } else if(isNew){
+      statusBadge = '<span style="background:#e0e7ff;color:#3730a3;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">🆕 جديد</span>';
+    } else if(totalOrders === 0){
+      statusBadge = '<span style="background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">⏳ بدون طلبات</span>';
+    } else {
+      statusBadge = '<span style="background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">✅ كويس</span>';
+    }
 
-    const riskColor = c.riskPercentage >= 50 ? '#ef4444' : c.riskPercentage >= 30 ? '#f59e0b' : '#10b981';
+    const riskColor = riskPercentage >= 50 ? '#ef4444' : riskPercentage >= 30 ? '#f59e0b' : '#10b981';
 
-    return `<tr ${isRisky ? 'style="background:#fef2f2"' : ''}>
+    return `<tr ${isRisky ? 'style="background:#fef2f2"' : (isNotFound ? 'style="background:#fafafa"' : '')}>
       <td data-label="الحالة">${statusBadge}</td>
-      <td data-label="اسم العميل"><strong>${escapeHtml(c.customerName || '—')}</strong></td>
-      <td data-label="التليفون" style="direction:ltr;font-size:12px">${escapeHtml(c.phone)}</td>
-      <td data-label="إجمالي الطلبات"><strong>${c.totalOrders}</strong></td>
-      <td data-label="الناجحة" style="color:#059669">${c.successfulOrders}</td>
-      <td data-label="الملغية" style="color:#dc2626">${c.cancelledOrders}</td>
-      <td data-label="المرتجعة" style="color:#d97706">${c.refundedOrders}</td>
+      <td data-label="اسم العميل"><strong>${escapeHtml(customerName)}</strong></td>
+      <td data-label="التليفون" style="direction:ltr;font-size:12px">${escapeHtml(c.phone || '—')}</td>
+      <td data-label="إجمالي الطلبات"><strong>${totalOrders}</strong></td>
+      <td data-label="الناجحة" style="color:#059669">${successfulOrders}</td>
+      <td data-label="الملغية" style="color:#dc2626">${cancelledOrders}</td>
+      <td data-label="المرتجعة" style="color:#d97706">${refundedOrders}</td>
       <td data-label="نسبة الخطر">
-        <strong style="color:${riskColor};font-size:13px">${c.riskPercentage}%</strong>
+        <strong style="color:${riskColor};font-size:13px">${riskPercentage}%</strong>
       </td>
-      <td data-label="إجمالي الإنفاق">${(c.totalSpent || 0).toLocaleString()} ج</td>
+      <td data-label="إجمالي الإنفاق">${totalSpent.toLocaleString()} ج</td>
       <td data-label="آخر طلب" style="font-size:11px;color:var(--muted)">${c.lastOrderAt ? fmtRelative(c.lastOrderAt) : '—'}</td>
       <td data-label="إجراءات">
         <div style="display:flex;gap:4px">
-          <button class="btn btn-ghost btn-xs" onclick="refreshSingleRisk('${escapeAttr(c.phone)}')" title="تحديث من Shopify">🔄</button>
-          <button class="btn btn-ghost btn-xs" onclick="openRiskNote('${escapeAttr(c.phone)}')" title="ملاحظة">📝</button>
+          <button class="btn btn-ghost btn-xs" onclick="refreshSingleRisk('${escapeAttr(c.phone || '')}')" title="تحديث من Shopify">🔄</button>
+          <button class="btn btn-ghost btn-xs" onclick="openRiskNote('${escapeAttr(c.phone || '')}')" title="ملاحظة">📝</button>
         </div>
       </td>
     </tr>`;
