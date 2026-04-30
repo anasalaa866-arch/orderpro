@@ -1716,27 +1716,53 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v217 — ZERO SHIP FIX =====
-// 2026-04-30: إصلاح مشكلة الشحن = 0 (للمحل والاستلام من المحل)
-// المشكلة: `o.ship || 50` بتعامل 0 كـ falsy وبتحطه 50
-// الحل: helper functions تتعامل مع 0 كقيمة صحيحة
+// ===== OrderPro v218 — SHOP FREE SHIPPING =====
+// 2026-04-30: المحل (SHOP_COURIER_ID) دايماً شحنه = 0 تلقائياً
+// أي طلب عند المحل = شحنه 0 بغض النظر عن قيمة ship المسجلة
+// أي مندوب دوره "shop" = شحنه 0 تلقائياً
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
-// 🆕 v217: helpers للشحن - تتعامل مع 0 كقيمة صحيحة (للمحل اللي مفيش شحن)
-// بدل `o.ship || 50` نستخدم `getOrderShip(o)`
+// 🆕 v218: helper للتحقق من إن المندوب هو المحل
+// المحل بيتعرف عليه بـ id (SHOP_COURIER_ID) أو role/phone
+function isShopCourier(c){
+  if(!c) return false;
+  // 1) لو الـ id يطابق SHOP_COURIER_ID
+  if(typeof SHOP_COURIER_ID !== 'undefined' && String(c.id) === String(SHOP_COURIER_ID)) return true;
+  // 2) لو الـ role = 'shop'
+  if(c.role === 'shop') return true;
+  // 3) لو الـ phone = 'shop' (طريقة قديمة)
+  if(c.phone === 'shop') return true;
+  // 4) fallback: لو الاسم فيه "محل" أو "Trivium"
+  const name = (c.name || '').toLowerCase();
+  if(name.includes('محل') || name.includes('trivium') || name.includes('shop')) return true;
+  return false;
+}
+
+// 🆕 v217+v218: helpers للشحن - تتعامل مع 0 كقيمة صحيحة + المحل = 0 تلقائياً
 function getOrderShip(o, fallback = 50){
   if(!o) return fallback;
+  // 🆕 v218: لو الطلب عند المحل، الشحن دايماً 0
+  if(o.courierId != null){
+    const c = (typeof couriers !== 'undefined') ? couriers.find(x => String(x.id) === String(o.courierId)) : null;
+    if(c && isShopCourier(c)) return 0;
+  }
+  // طلب pickup أو transit = شحن 0
+  if(o.deliveryType === 'pickup' || o.deliveryType === 'transit') return 0;
   // 0 valid! استخدم null/undefined check بدل falsy
   const v = o.ship;
   return (v != null && v !== '') ? parseFloat(v) : fallback;
 }
 function getCourierShip(c, fallback = 50){
   if(!c) return fallback;
+  // 🆕 v218: المحل دايماً شحنه 0
+  if(isShopCourier(c)) return 0;
   const v = c.ship;
   return (v != null && v !== '') ? parseFloat(v) : fallback;
 }
 function getCourierShipExpress(c, fallback = 80){
   if(!c) return fallback;
+  // 🆕 v218: المحل دايماً شحنه 0 (حتى للمستعجل)
+  if(isShopCourier(c)) return 0;
   const v = c.shipExpress;
   return (v != null && v !== '') ? parseFloat(v) : fallback;
 }
