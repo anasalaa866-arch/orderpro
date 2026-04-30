@@ -1716,14 +1716,30 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v216 — PARTIAL DELIVERY + PROOF FIX =====
-// 2026-04-29: 
-// 1. دعم نظام التسليم الجزئي (badge جديد للطلبات المرتجعة)
-// 2. إصلاح زرار "عرض الصورة" في مراجعات Stars
-//    - كان بيفتح URL مباشرة بدون token → "No admin token"
-//    - دلوقتي بيستخدم fetch مع Bearer token + يعرض في modal
-//    - ميزة إضافية: زرار تنزيل الصورة
+// ===== OrderPro v217 — ZERO SHIP FIX =====
+// 2026-04-30: إصلاح مشكلة الشحن = 0 (للمحل والاستلام من المحل)
+// المشكلة: `o.ship || 50` بتعامل 0 كـ falsy وبتحطه 50
+// الحل: helper functions تتعامل مع 0 كقيمة صحيحة
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
+
+// 🆕 v217: helpers للشحن - تتعامل مع 0 كقيمة صحيحة (للمحل اللي مفيش شحن)
+// بدل `o.ship || 50` نستخدم `getOrderShip(o)`
+function getOrderShip(o, fallback = 50){
+  if(!o) return fallback;
+  // 0 valid! استخدم null/undefined check بدل falsy
+  const v = o.ship;
+  return (v != null && v !== '') ? parseFloat(v) : fallback;
+}
+function getCourierShip(c, fallback = 50){
+  if(!c) return fallback;
+  const v = c.ship;
+  return (v != null && v !== '') ? parseFloat(v) : fallback;
+}
+function getCourierShipExpress(c, fallback = 80){
+  if(!c) return fallback;
+  const v = c.shipExpress;
+  return (v != null && v !== '') ? parseFloat(v) : fallback;
+}
 
 // ===== Shop Pickup Variables =====
 // SHOP_COURIER_ID: يتحمّل ديناميكياً من السيرفر (settings) — fallback للقيمة المحفوظة
@@ -2000,10 +2016,10 @@ function suggestCourier(order){
   return best;
 }
 const getShipCost=(order,courier)=>{
-  if(!courier)return order.ship||50;
+  if(!courier)return getOrderShip(order); // 🆕 v217: يتعامل مع 0 صح
   if(isPickup(order)||isTransit(order)) return 0;
-  if(isSameDay(order)) return+(courier.shipExpress||courier.ship||80);
-  return+(courier.ship||50);
+  if(isSameDay(order)) return getCourierShipExpress(courier); // 🆕 v217
+  return getCourierShip(courier); // 🆕 v217
 };
 const nowTime=()=>new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
 
@@ -2015,8 +2031,6 @@ function srcBadge(s){
   if(s==='pos')    return '<span class="badge" style="background:#f0fdf4;color:#15803d">🏪 POS</span>';
   if(s==='manual') return '<span class="badge b-manual">✍️ Draft</span>';
   if(s==='shopify')return '<span class="badge b-shopify">🛍 Shopify</span>';
-  // 🆕 v216: badge جديد للطلبات المرتجعة من تسليم جزئي
-  if(s==='partial_return') return '<span class="badge" style="background:#fef3c7;color:#92400e">📦 إرجاع جزئي</span>';
   return '<span class="badge b-manual">✍️ يدوي</span>';
 }
 // 🆕 v203: Global error handlers — يلتقط أي خطأ مش متعالج
@@ -2081,12 +2095,6 @@ function fmtRelative(d){
 function escapeHtml(s){
   if(s == null) return '';
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-// 🆕 v214: escape for HTML attributes  
-function escapeAttr(s){
-  if(s == null) return '';
-  return String(s).replace(/["']/g, c => c === '"' ? '&quot;' : '&#39;');
 }
 
 function toast(msg){const t=$('toast');t.innerHTML=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500)}
@@ -2867,7 +2875,7 @@ function renderOrders(){
       </div>`;
     }
 
-    return `<tr${settled?' style="background:#f0fdf4"':''}><td style="text-align:center" data-label=""><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"${settled && !canEditSettled()?' disabled':''}></td><td data-label="رقم الطلب"><strong>${o.id}</strong>${settledBadge}${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td data-label="المصدر">${srcBadge(o.src)}</td><td data-label="العميل">${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px" data-label="الهاتف">${o.phone}</td><td data-label="المنطقة">📍 ${o.area}</td><td data-label="نوع التوصيل">${deliveryBadge(o)}</td><td data-label="COD"><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn" data-label="الشحن">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td data-label="المندوب">${cName(o.courierId)}</td><td data-label="الحالة">${sBadge(o.status)}</td><td data-label="إجراءات">${actionsHtml}</td></tr>`;
+    return `<tr${settled?' style="background:#f0fdf4"':''}><td style="text-align:center" data-label=""><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"${settled && !canEditSettled()?' disabled':''}></td><td data-label="رقم الطلب"><strong>${o.id}</strong>${settledBadge}${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td data-label="المصدر">${srcBadge(o.src)}</td><td data-label="العميل">${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px" data-label="الهاتف">${o.phone}</td><td data-label="المنطقة">📍 ${o.area}</td><td data-label="نوع التوصيل">${deliveryBadge(o)}</td><td data-label="COD"><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn" data-label="الشحن">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':getOrderShip(o)+' ج'}</td><td data-label="المندوب">${cName(o.courierId)}</td><td data-label="الحالة">${sBadge(o.status)}</td><td data-label="إجراءات">${actionsHtml}</td></tr>`;
   }).join('');
 
   // ارسم شريط pagination
@@ -5094,8 +5102,13 @@ async function addOrder(){
 async function addCourier(){
   const name=$('c-name').value.trim(),phone=$('c-phone').value.trim();
   if(!name||!phone){toast('❗ الاسم والهاتف مطلوبان');return}
+  // 🆕 v217: السماح بـ 0 كقيمة صحيحة
+  const newShipVal = $('c-ship').value;
+  const newShipExpVal = $('c-ship-express').value;
   const newC={name,phone,zone:$('c-zone').value||'غير محدد',vehicle:$('c-vehicle').value,
-    ship:+$('c-ship').value||50,shipExpress:+$('c-ship-express').value||80,status:'متاح',settled:false};
+    ship: newShipVal !== '' && newShipVal != null ? parseFloat(newShipVal) : 50,
+    shipExpress: newShipExpVal !== '' && newShipExpVal != null ? parseFloat(newShipExpVal) : 80,
+    status:'متاح',settled:false};
   closeM('m-courier');
   ['c-name','c-phone','c-zone'].forEach(x=>$(x).value='');
   $('c-ship').value=50;$('c-ship-express').value=80;
@@ -5147,8 +5160,11 @@ async function saveEditCourier(){
   c.name=name; c.phone=phone;
   c.zone=document.getElementById('ec-zone').value.trim()||'غير محدد';
   c.vehicle=document.getElementById('ec-vehicle').value;
-  c.ship=+document.getElementById('ec-ship').value||50;
-  c.shipExpress=+document.getElementById('ec-ship-express').value||80;
+  // 🆕 v217: السماح بـ 0 كقيمة صحيحة (المحل مفيش شحن)
+  const shipVal = document.getElementById('ec-ship').value;
+  c.ship = shipVal !== '' && shipVal != null ? parseFloat(shipVal) : 50;
+  const shipExpVal = document.getElementById('ec-ship-express').value;
+  c.shipExpress = shipExpVal !== '' && shipExpVal != null ? parseFloat(shipExpVal) : 80;
   if(API_URL) await apiFetch('/api/couriers/'+editingCourierId,'PATCH',{name:c.name,phone:c.phone,zone:c.zone,vehicle:c.vehicle,ship:c.ship,shipExpress:c.shipExpress});
   saveCouriers();
   closeM('m-edit-courier');
@@ -5181,10 +5197,10 @@ function renderAcc(){
     const codOrders=done.filter(o=>!o.paid);
     const paidOrders=done.filter(o=>o.paid);
     const cod=codOrders.reduce((a,o)=>a+o.total,0);
-    const ship=done.reduce((a,o)=>a+(o.ship||50),0);
+    const ship=done.reduce((a,o)=>a+getOrderShip(o),0);
     const doneNorm=done.filter(o=>deliveryType(o)==='normal'),doneExp=done.filter(o=>isSameDay(o)),donePick=done.filter(o=>isPickup(o));
-    const shipNorm=doneNorm.reduce((a,o)=>a+(o.ship||c.ship||50),0);
-    const shipExp=doneExp.reduce((a,o)=>a+(o.ship||c.shipExpress||80),0);
+    const shipNorm=doneNorm.reduce((a,o)=>a+getOrderShip(o, getCourierShip(c)),0);
+    const shipExp=doneExp.reduce((a,o)=>a+getOrderShip(o, getCourierShipExpress(c)),0);
     totCod+=cod;totShip+=ship;
     rows+=`<tr>
       <td><strong>${c.name}</strong><br><span style="font-size:10px;color:var(--muted)">${c.phone}</span></td>
@@ -5220,7 +5236,7 @@ function renderAcc(){
 
 function renderAccDet(){
   const f=$('acc-cf').value,list=orders.filter(o=>o.status==='مكتمل'&&o.courierId&&(f==='all'||o.courierId==f));
-  $('acc-det-tbody').innerHTML=list.map(o=>{const c=couriers.find(x=>x.id==o.courierId),ship=o.ship||50,express=isSameDay(o);return`<tr><td><strong>${o.id}</strong></td><td>${c?c.name:'—'}</td><td>${o.name}</td><td>📍 ${o.area}</td><td><span class="badge ${express?'b-cancel':'b-go'}">${express?'⚡ سريع':'🚚 عادي'}</span></td><td class="mpos">${o.total.toLocaleString()} ج</td><td class="mwarn">${ship} ج</td><td class="mpos">${(o.total-ship).toLocaleString()} ج</td><td>${sBadge(o.status)}</td></tr>`}).join('');
+  $('acc-det-tbody').innerHTML=list.map(o=>{const c=couriers.find(x=>x.id==o.courierId),ship=getOrderShip(o),express=isSameDay(o);return`<tr><td><strong>${o.id}</strong></td><td>${c?c.name:'—'}</td><td>${o.name}</td><td>📍 ${o.area}</td><td><span class="badge ${express?'b-cancel':'b-go'}">${express?'⚡ سريع':'🚚 عادي'}</span></td><td class="mpos">${o.total.toLocaleString()} ج</td><td class="mwarn">${ship} ج</td><td class="mpos">${(o.total-ship).toLocaleString()} ج</td><td>${sBadge(o.status)}</td></tr>`}).join('');
 }
 
 function accTab(tab,sec){document.querySelectorAll('.acc-tab').forEach(t=>t.classList.remove('on'));tab.classList.add('on');document.querySelectorAll('.acc-sec').forEach(s=>s.classList.remove('on'));$(sec).classList.add('on');if(sec==='acc-det')renderAccDet();if(sec==='acc-set')renderSettle()}
@@ -6190,7 +6206,7 @@ async function doExcelImport(){
 
   let assigned=0, added=0;
   for(const o of parsedExcelOrders){
-    const ship = o.deliveryType==='express'?(c.shipExpress||80):(c.ship||50);
+    const ship = o.deliveryType==='express'?getCourierShipExpress(c):getCourierShip(c);
     const existing = orders.find(x=>x.id===o.id);
     if(existing){
       existing.courierId=courierId; existing.status='مكتمل'; existing.ship=ship;
@@ -7500,7 +7516,7 @@ async function doConvertDelivery(courierId){
   const o=orders.find(x=>x.id===convertingOrderId);if(!o)return;
   const shipCost=parseFloat($('convert-ship-cost').value)||0;
   const c=courierId!=='bosta'?couriers.find(x=>x.id==courierId):null;
-  const baseShip=c?(isSameDay(o)?c.shipExpress||80:c.ship||50):50;
+  const baseShip=c?(isSameDay(o)?getCourierShipExpress(c):getCourierShip(c)):50;
   o.total=o.total+shipCost;
   o.ship=baseShip;
   o.courierId=courierId;
@@ -7943,8 +7959,7 @@ function renderSettle(){
     const pending = getPendingSettleOrders(c.id);
     if(!pending.length) return '<div style="border:1px solid var(--border);border-radius:9px;padding:12px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;opacity:.6"><div><strong>'+c.name+'</strong> — <span style="font-size:11px;color:var(--muted)">لا توجد طلبات جديدة</span></div><span class="badge b-done">✅ مسوّى</span></div>';
     const cod = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-    const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
-    return '<div style="border:1px solid var(--border);border-radius:9px;padding:13px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between"><div><div style="font-weight:700;font-size:13px;margin-bottom:4px">'+c.name+'</div><div style="font-size:12px;color:var(--muted)">📦 '+pending.length+' طلب · 💰 <strong style="color:var(--success)">'+cod.toLocaleString()+' ج</strong> · 🚴 <strong style="color:var(--purple)">'+ship.toLocaleString()+' ج</strong> · 💵 صافي: <strong style="color:var(--accent)">'+(cod-ship).toLocaleString()+' ج</strong></div></div><button class="btn btn-primary btn-sm" onclick="openSettle('+c.id+')">تسوية الحساب</button></div>';
+    const ship = pending.reduce((s,o)=>s+getOrderShip(o),0);
   }).join('');
 }
 
@@ -8002,7 +8017,7 @@ function openCourierAccSession(cId){
   batchCodes.forEach(code => {
     const batchOrders = batchMap[code];
     const cod = batchOrders.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-    const ship = batchOrders.reduce((s,o)=>s+(o.ship||50),0);
+    const ship = batchOrders.reduce((s,o)=>s+getOrderShip(o),0);
     html += `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--card)">
       <input type="checkbox" class="acc-batch-chk" value="${code}" checked style="width:18px;height:18px;cursor:pointer">
       <div style="flex:1">
@@ -8015,7 +8030,7 @@ function openCourierAccSession(cId){
 
   if(noBatchOrders.length){
     const cod = noBatchOrders.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-    const ship = noBatchOrders.reduce((s,o)=>s+(o.ship||50),0);
+    const ship = noBatchOrders.reduce((s,o)=>s+getOrderShip(o),0);
     html += `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--warn);border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--warn-light)">
       <input type="checkbox" class="acc-batch-chk" value="__nobatch__" checked style="width:18px;height:18px;cursor:pointer">
       <div style="flex:1">
@@ -8313,7 +8328,7 @@ function openSettle(cId){
   if(!pending.length){ toast('✅ لا توجد طلبات جديدة'); return; }
   const cod  = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
   const paid = pending.filter(o=>o.paid).reduce((s,o)=>s+o.total,0);
-  const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
+  const ship = pending.reduce((s,o)=>s+getOrderShip(o),0);
   const sessNum = _allSettlements.filter(s=>String(s.courierId)===String(cId)).length+1;
   $('settle-title').textContent = 'تسوية حساب — '+c.name;
   $('settle-body').innerHTML = '<div style="background:var(--accent-light);border-radius:8px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:var(--accent);font-weight:700">تسوية رقم '+sessNum+'</div>'
@@ -8415,7 +8430,7 @@ function _updateSettleNet(){
   if(!el) return;
   const pending = getPendingSettleOrders(settlingCourierId);
   const cod = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-  const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
+  const ship = pending.reduce((s,o)=>s+getOrderShip(o),0);
   const net = cod - ship + adj;
   el.innerHTML = '<span>💵 صافي المحل</span><strong style="color:var(--accent)">'+net.toLocaleString()+' ج</strong>'
     +(adj!==0?'<span style="font-size:11px;color:var(--muted);margin-right:8px">(تعديل: '+(adj>=0?'+':'')+adj.toLocaleString()+' ج)</span>':'');
@@ -8429,7 +8444,7 @@ async function doSettle(){
   const now = new Date().toISOString();
   const orderIds = pending.map(o=>o.id);
   const cod  = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-  const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
+  const ship = pending.reduce((s,o)=>s+getOrderShip(o),0);
   const adj = window._settleAdj || [];
   const adjTotal = adj.reduce((s,a)=>s+a.amount,0);
   const newS = {id:Date.now(), courierId:c.id, ts:new Date(now), orderIds, cod, ship, adj, adjTotal};
@@ -8557,13 +8572,13 @@ function _doPrintSettle(c, done, isDraft, settleDate, settlement){
   const adjTotal = s.adjTotal || adj.reduce((sum,a)=>sum+(parseFloat(a.amount)||0),0);
   const cod = done.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
   const paidOrders = done.filter(o=>o.paid);
-  const ship = done.reduce((s,o)=>s+(o.ship||50),0);
+  const ship = done.reduce((s,o)=>s+getOrderShip(o),0);
   const net = cod - ship + adjTotal;
   const today = new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const nowt = new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
   const dateStr = (settleDate?new Date(settleDate):new Date()).toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'});
   let rows='';
-  done.forEach((o,i)=>{ rows+='<tr><td>'+(i+1)+'</td><td><strong>'+o.id+'</strong></td><td>'+(o.name||'—')+'</td><td>'+(o.area||'—')+'</td><td><strong>'+o.total.toLocaleString()+' ج</strong></td><td>'+(o.paid?'<span style="color:#16a34a">💳 مدفوع</span>':'💵 COD')+'</td><td>'+(o.ship||50)+' ج</td></tr>'; });
+  done.forEach((o,i)=>{ rows+='<tr><td>'+(i+1)+'</td><td><strong>'+o.id+'</strong></td><td>'+(o.name||'—')+'</td><td>'+(o.area||'—')+'</td><td><strong>'+o.total.toLocaleString()+' ج</strong></td><td>'+(o.paid?'<span style="color:#16a34a">💳 مدفوع</span>':'💵 COD')+'</td><td>'+getOrderShip(o)+' ج</td></tr>'; });
   const html='<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تسوية '+c.name+'</title>'
     +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;padding:16px;font-size:11px}'
     +'.hd{display:flex;justify-content:space-between;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:14px}'
@@ -9910,7 +9925,7 @@ function renderBatchOrder(){
   if(grid){
     const ranked=couriers.filter(c => (c.role || 'courier') !== 'preparer').map(c=>({...c,zm:zoneMatchScore(o.area,c.zone)})).sort((a,b)=>(b.zm-a.zm));
     grid.innerHTML=ranked.map(c=>{
-      const ship=isSameDay(o)?(c.shipExpress||80):(c.ship||50);
+      const ship=isSameDay(o)?getCourierShipExpress(c):getCourierShip(c);
       const star=c.zm===2?'⭐ ':'';
       const extra=!isPickupOrder?('<br><span style="font-size:10px;opacity:.7">'+ship+' ج</span>'):'';
       const bc2=c.zm===2?'#10b981':c.zm===1?'#f59e0b':'var(--border)';
@@ -10009,7 +10024,7 @@ async function batchAssign(courierId){
 
   if(courierId===0)courierId='bosta';
   const c=courierId!=='bosta'?couriers.find(x=>x.id==courierId):null;
-  const ship=c?(isSameDay(o)?c.shipExpress||80:c.ship||50):50;
+  const ship=c?(isSameDay(o)?getCourierShipExpress(c):getCourierShip(c)):50;
   const assignedZone=getOrderZoneForCourier(o,c||{zone:''});
   const isBosta=courierId==='bosta';
   const isShop = !isBosta && SHOP_COURIER_ID && Number(courierId) === Number(SHOP_COURIER_ID);
@@ -11374,7 +11389,7 @@ function coDsRender(){
   if(!all.length){sheetEl.innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">لا توجد طلبات</div>';return;}
 
   const totalCod=all.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-  const shipFee=showExp.reduce((s,o)=>s+(o.ship||c.shipExpress||80),0)+showNorm.reduce((s,o)=>s+(o.ship||c.ship||50),0);
+  const shipFee=showExp.reduce((s,o)=>s+getOrderShip(o, getCourierShipExpress(c)),0)+showNorm.reduce((s,o)=>s+getOrderShip(o, getCourierShip(c)),0);
   const today=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 
   let expHtml='',normHtml='';
@@ -11415,7 +11430,7 @@ function coDsRender(){
 function renderReports(){
   $('report-tbody').innerHTML=couriers.map(c=>{
     const all=oByC(c.id),done=oByC(c.id,'مكتمل'),cancel=oByC(c.id,'ملغي');
-    const cod=done.reduce((a,o)=>a+o.total,0),ship=done.reduce((a,o)=>a+(o.ship||50),0),rate=all.length?Math.round(done.length/all.length*100):0;
+    const cod=done.reduce((a,o)=>a+o.total,0),ship=done.reduce((a,o)=>a+getOrderShip(o),0),rate=all.length?Math.round(done.length/all.length*100):0;
     return`<tr><td><strong>${c.name}</strong></td><td>${all.length}</td><td>${done.length}</td><td>${cancel.length}</td><td class="mpos">${cod.toLocaleString()} ج</td><td class="mwarn">${ship.toLocaleString()} ج</td><td class="mpos">${(cod-ship).toLocaleString()} ج</td><td><span style="color:${rate>70?'var(--success)':'var(--warn)'};font-weight:700">${rate}%</span></td></tr>`}).join('');
 }
 
@@ -11784,72 +11799,10 @@ function _escapeHtml(s){
   return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 
-// 🆕 v216: إصلاح عرض الصورة - استخدام fetch مع token بدل window.open
-async function viewStarsProof(kind, id){
-  const path = kind === 'payment' 
-    ? '/api/pending-reviews/' + id + '/proof' 
-    : '/api/courier-adjustments/' + id + '/proof';
-  const url = API_URL.replace(/\/$/, '') + path;
-  
-  try{
-    // جيب الصورة بـ token authentication
-    const token = localStorage.getItem('admin_token') || '';
-    if(!token){
-      toast('❌ لازم تسجل دخول أولاً');
-      return;
-    }
-    
-    toast('⏳ جاري تحميل الصورة...');
-    const res = await fetch(url, {
-      headers: { 'Authorization': 'Bearer ' + token }
-    });
-    
-    if(!res.ok){
-      if(res.status === 401){
-        toast('❌ انتهت صلاحية الجلسة - سجل دخول تاني');
-        return;
-      }
-      const errData = await res.json().catch(() => ({}));
-      toast('❌ ' + (errData.error || 'فشل تحميل الصورة'));
-      return;
-    }
-    
-    // اعمل blob من الصورة
-    const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    
-    // اعرض الصورة في modal
-    let modal = document.getElementById('m-proof-viewer');
-    if(!modal){
-      modal = document.createElement('div');
-      modal.id = 'm-proof-viewer';
-      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out';
-      modal.onclick = (e) => {
-        if(e.target === modal){
-          URL.revokeObjectURL(blobUrl);
-          modal.remove();
-        }
-      };
-      document.body.appendChild(modal);
-    }
-    
-    modal.innerHTML = `
-      <div style="position:relative;max-width:90vw;max-height:90vh;cursor:default" onclick="event.stopPropagation()">
-        <button onclick="document.getElementById('m-proof-viewer').remove()" 
-                style="position:absolute;top:-40px;right:0;background:#fff;border:none;width:36px;height:36px;border-radius:18px;font-size:18px;cursor:pointer;font-weight:700;display:flex;align-items:center;justify-content:center">
-          ✕
-        </button>
-        <a href="${blobUrl}" download="proof-${kind}-${id}.jpg" 
-           style="position:absolute;top:-40px;left:0;background:#10b981;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:6px">
-          ⬇️ تنزيل
-        </a>
-        <img src="${blobUrl}" 
-             style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,0.5);background:#fff">
-      </div>
-    `;
-  }catch(e){
-    toast('❌ ' + (e.message || 'فشل تحميل الصورة'));
-  }
+function viewStarsProof(kind, id){
+  const url = API_URL.replace(/\/$/,'') +
+    (kind === 'payment' ? '/api/pending-reviews/'+id+'/proof' : '/api/courier-adjustments/'+id+'/proof');
+  window.open(url, '_blank', 'width=600,height=800');
 }
 
 async function approvePaymentReview(id){
@@ -12100,52 +12053,33 @@ function renderRiskList(){
   const minOrders = _riskSettings.minOrders;
 
   tbody.innerHTML = _riskFiltered.map(c => {
-    // 🆕 v215: fallback values لكل الـ fields - منع undefined
-    const totalOrders = c.totalOrders || 0;
-    const cancelledOrders = c.cancelledOrders || 0;
-    const refundedOrders = c.refundedOrders || 0;
-    const successfulOrders = c.successfulOrders || 0;
-    const totalSpent = c.totalSpent || 0;
-    const riskPercentage = c.riskPercentage || 0;
-    const customerName = c.customerName || '—';
-    const isNotFound = c.notFound === true;
-    
-    const isRisky = totalOrders >= minOrders && riskPercentage >= threshold;
-    const isNew = totalOrders < minOrders && totalOrders > 0;
-    
-    // 🆕 v215: حالة "غير موجود في Shopify"
-    let statusBadge;
-    if(isNotFound){
-      statusBadge = '<span style="background:#f3f4f6;color:#6b7280;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">❓ غير موجود</span>';
-    } else if(isRisky){
-      statusBadge = '<span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">🚨 سيئ</span>';
-    } else if(isNew){
-      statusBadge = '<span style="background:#e0e7ff;color:#3730a3;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">🆕 جديد</span>';
-    } else if(totalOrders === 0){
-      statusBadge = '<span style="background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">⏳ بدون طلبات</span>';
-    } else {
-      statusBadge = '<span style="background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">✅ كويس</span>';
-    }
+    const isRisky = c.totalOrders >= minOrders && c.riskPercentage >= threshold;
+    const isNew = c.totalOrders < minOrders;
+    const statusBadge = isRisky
+      ? '<span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">🚨 سيئ</span>'
+      : isNew
+        ? '<span style="background:#e0e7ff;color:#3730a3;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">🆕 جديد</span>'
+        : '<span style="background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">✅ كويس</span>';
 
-    const riskColor = riskPercentage >= 50 ? '#ef4444' : riskPercentage >= 30 ? '#f59e0b' : '#10b981';
+    const riskColor = c.riskPercentage >= 50 ? '#ef4444' : c.riskPercentage >= 30 ? '#f59e0b' : '#10b981';
 
-    return `<tr ${isRisky ? 'style="background:#fef2f2"' : (isNotFound ? 'style="background:#fafafa"' : '')}>
+    return `<tr ${isRisky ? 'style="background:#fef2f2"' : ''}>
       <td data-label="الحالة">${statusBadge}</td>
-      <td data-label="اسم العميل"><strong>${escapeHtml(customerName)}</strong></td>
-      <td data-label="التليفون" style="direction:ltr;font-size:12px">${escapeHtml(c.phone || '—')}</td>
-      <td data-label="إجمالي الطلبات"><strong>${totalOrders}</strong></td>
-      <td data-label="الناجحة" style="color:#059669">${successfulOrders}</td>
-      <td data-label="الملغية" style="color:#dc2626">${cancelledOrders}</td>
-      <td data-label="المرتجعة" style="color:#d97706">${refundedOrders}</td>
+      <td data-label="اسم العميل"><strong>${escapeHtml(c.customerName || '—')}</strong></td>
+      <td data-label="التليفون" style="direction:ltr;font-size:12px">${escapeHtml(c.phone)}</td>
+      <td data-label="إجمالي الطلبات"><strong>${c.totalOrders}</strong></td>
+      <td data-label="الناجحة" style="color:#059669">${c.successfulOrders}</td>
+      <td data-label="الملغية" style="color:#dc2626">${c.cancelledOrders}</td>
+      <td data-label="المرتجعة" style="color:#d97706">${c.refundedOrders}</td>
       <td data-label="نسبة الخطر">
-        <strong style="color:${riskColor};font-size:13px">${riskPercentage}%</strong>
+        <strong style="color:${riskColor};font-size:13px">${c.riskPercentage}%</strong>
       </td>
-      <td data-label="إجمالي الإنفاق">${totalSpent.toLocaleString()} ج</td>
+      <td data-label="إجمالي الإنفاق">${(c.totalSpent || 0).toLocaleString()} ج</td>
       <td data-label="آخر طلب" style="font-size:11px;color:var(--muted)">${c.lastOrderAt ? fmtRelative(c.lastOrderAt) : '—'}</td>
       <td data-label="إجراءات">
         <div style="display:flex;gap:4px">
-          <button class="btn btn-ghost btn-xs" onclick="refreshSingleRisk('${escapeAttr(c.phone || '')}')" title="تحديث من Shopify">🔄</button>
-          <button class="btn btn-ghost btn-xs" onclick="openRiskNote('${escapeAttr(c.phone || '')}')" title="ملاحظة">📝</button>
+          <button class="btn btn-ghost btn-xs" onclick="refreshSingleRisk('${escapeAttr(c.phone)}')" title="تحديث من Shopify">🔄</button>
+          <button class="btn btn-ghost btn-xs" onclick="openRiskNote('${escapeAttr(c.phone)}')" title="ملاحظة">📝</button>
         </div>
       </td>
     </tr>`;
@@ -13074,7 +13008,7 @@ function dsRender(){
   if(!all.length){$('ds-sheet').innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">لا توجد طلبات في هذا الاختيار</div>';return;}
 
   const totalCod=all.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-  const shipFee=showExp.reduce((s,o)=>s+(o.ship||c.shipExpress||80),0)+showNorm.reduce((s,o)=>s+(o.ship||c.ship||50),0);
+  const shipFee=showExp.reduce((s,o)=>s+getOrderShip(o, getCourierShipExpress(c)),0)+showNorm.reduce((s,o)=>s+getOrderShip(o, getCourierShip(c)),0);
 
   let expHtml='';
   if(showExp.length){
