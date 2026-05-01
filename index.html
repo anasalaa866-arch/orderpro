@@ -485,6 +485,8 @@ tr:hover td{background:#fafbff}
     <div class="ni" data-p="order-types" onclick="goPage(this,'order-types')"><span class="ni-icon">🏷️</span><span class="ni-label">أنواع الطلبات</span></div>
     <div class="ni" data-p="shipping-mappings" onclick="goPage(this,'shipping-mappings')"><span class="ni-icon">🔗</span><span class="ni-label">ربط Shipping Methods</span><span class="nbadge" id="nb-shipping-unmapped" style="background:var(--warn)">0</span></div>
     <div class="ni" data-p="courier-rates" onclick="goPage(this,'courier-rates')"><span class="ni-icon">💰</span><span class="ni-label">تكلفة الشحن</span></div>
+    <!-- 🆕 v218: Audit Log -->
+    <div class="ni" data-p="order-type-audit" onclick="goPage(this,'order-type-audit')"><span class="ni-icon">📜</span><span class="ni-label">سجل تغيير الأنواع</span></div>
     <div class="ni" data-p="settings" onclick="goPage(this,'settings')"><span class="ni-icon">⚙️</span><span class="ni-label">الإعدادات</span></div>
   </nav>
   <div class="sb-foot"><div class="sb-status"><div class="sdot" id="sdot"></div><span class="sb-status-text" id="stxt">غير متصل</span></div></div>
@@ -1484,6 +1486,38 @@ tr:hover td{background:#fafbff}
     </div>
   </div>
 
+  <!-- 🆕 v218: ORDER TYPE AUDIT LOG -->
+  <div class="page" id="page-order-type-audit">
+    <div class="card">
+      <div class="card-hd">
+        <h3>📜 سجل تغيير أنواع الطلبات</h3>
+        <button class="btn btn-ghost btn-sm" onclick="loadOrderTypeAudit()" title="تحديث">🔄</button>
+      </div>
+      <div class="card-body">
+        <div style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text)">
+          <strong>💡 نظرة:</strong> هنا بتشوف كل التعديلات اليدوية على نوع الطلبات. كل تعديل بيتسجل بالتاريخ والوقت والسبب.
+        </div>
+        <div class="tw">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:160px">التاريخ</th>
+                <th style="width:140px">الطلب</th>
+                <th>من</th>
+                <th>إلى</th>
+                <th>السبب</th>
+                <th style="width:100px">المستخدم</th>
+              </tr>
+            </thead>
+            <tbody id="order-type-audit-tbody">
+              <tr><td colspan="6" style="text-align:center;padding:30px;color:var(--muted)">جاري التحميل...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- REPORTS -->
   <div class="page" id="page-reports">
     <div class="stats-row" style="grid-template-columns:repeat(4,1fr)">
@@ -1692,13 +1726,15 @@ tr:hover td{background:#fafbff}
       <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px">🚚 التوصيل</div>
       <div class="row2">
         <div class="fg">
-          <label>نوع التوصيل</label>
+          <label>نوع التوصيل (Legacy)</label>
           <select id="eo-delivery-type" style="width:100%">
             <option value="normal">🚚 عادي</option>
             <option value="express">⚡ مستعجل (Same Day)</option>
             <option value="pickup">🏪 استلام من المحل</option>
             <option value="transit">📦 عبور</option>
           </select>
+          <!-- 🆕 v218: زرار للنظام الجديد -->
+          <div id="eo-order-type-info" style="margin-top:6px;font-size:11px"></div>
         </div>
         <div class="fg">
           <label>الحالة</label>
@@ -1935,17 +1971,22 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v217 — WORKFLOW INTEGRATION =====
-// 2026-04-30: ربط الـ Dashboard settings بالـ workflow الفعلي
-// 1. 🏷️ Badges ملوّنة في صفحة التوزيع (الجدول + الـ pop-up)
-// 2. 💰 سعر الشحن تلقائي من courier_ship_rates (للطلبات الجديدة)
-// 3. 🔄 Dropdown سريع لتغيير نوع الطلب في الـ pop-up
-// 4. ✏️ زرار "تعديل نوع الطلب" مفصل (مع سبب وaudit)
-//
-// الطلبات القديمة (orderTypeId=null) تستخدم النظام القديم (delivery_type + ship)
+// ===== OrderPro v218 — FINAL DASHBOARD =====
+// 2026-04-30: المرحلة الأخيرة من الـ Dashboard
+// 1. 🐛 إصلاح زرار "عرض الصورة" في Stars (كان بيرجع No admin token)
+// 2. 📜 صفحة "سجل تغيير الأنواع" - audit log كامل
+// 3. ✏️ زرار "تعديل النوع" في modal تعديل الطلب
+// 4. 🛡️ تحسينات أمان وUX
 // =================================
-// السابق: v216 — DASHBOARD PAGES
-// 3 صفحات Dashboard: أنواع الطلبات + ربط Shipping Methods + تكلفة الشحن
+// السابق: v217 — WORKFLOW INTEGRATION
+// 2026-04-30: ربط الـ Dashboard settings بالـ workflow الفعلي
+// =================================
+// v216 — DASHBOARD PAGES — 3 صفحات للـ settings الجديدة
+// =================================
+// v215 — PICKUP IN ASSIGN — السماح للطلبات pickup بالظهور في صفحة التوزيع
+// =================================
+// v214 - CUSTOMER RISK FIX (2026-04-29)
+// إصلاح صفحة تقييم العملاء + تحديث تلقائي عند الفتح
 // - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
@@ -2033,7 +2074,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -5444,6 +5485,33 @@ function openEditOrder(id){
   set('eo-order-note', orderNote);
 
   set('eo-delivery-type', o.deliveryType||'normal');
+  
+  // 🆕 v218: عرض الـ orderType الجديد (لو متاح) + زرار للتعديل المفصل
+  const orderTypeInfo = document.getElementById('eo-order-type-info');
+  if(orderTypeInfo){
+    if(o.orderTypeId && Array.isArray(_orderTypes) && _orderTypes.length){
+      const t = _orderTypes.find(x => x.id == o.orderTypeId);
+      if(t){
+        orderTypeInfo.innerHTML = `
+          <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+            <span style="color:var(--muted);font-size:10px">النظام الجديد:</span>
+            <span style="display:inline-flex;align-items:center;gap:3px;background:${t.color}22;color:${t.color};padding:2px 8px;border-radius:5px;font-weight:700;font-size:10px">${t.emoji||'📦'} ${escapeHtml(t.label_ar)}</span>
+            <button type="button" class="btn btn-ghost btn-xs" style="padding:1px 8px;font-size:10px" onclick="closeM('m-edit-order');setTimeout(()=>openChangeOrderTypeModal('${escapeAttr(o.id)}'),100)" title="تعديل نوع الطلب مع سبب">🔄 تعديل</button>
+          </div>
+        `;
+      } else {
+        orderTypeInfo.innerHTML = '<span style="color:var(--muted);font-size:10px">النوع الجديد: غير معروف</span>';
+      }
+    } else {
+      orderTypeInfo.innerHTML = `
+        <div style="margin-top:4px;font-size:10px;color:var(--muted)">
+          النظام الجديد: <em>مش متعرّف</em>
+          <button type="button" class="btn btn-ghost btn-xs" style="padding:1px 8px;font-size:10px;margin-right:4px" onclick="closeM('m-edit-order');setTimeout(()=>openChangeOrderTypeModal('${escapeAttr(o.id)}'),100)">🔄 حدد النوع</button>
+        </div>
+      `;
+    }
+  }
+  
   set('eo-status', o.status||'في الانتظار');
   const sel = document.getElementById('eo-courier');
   sel.innerHTML = '<option value="">— بدون تعيين —</option>'
@@ -12131,6 +12199,8 @@ function goPage(el,page){
   if(page==='order-types') loadOrderTypes();
   if(page==='shipping-mappings') { loadShippingMappings(); loadUnmappedShippingMethods(); }
   if(page==='courier-rates') initCourierRatesPage();
+  // 🆕 v218: Audit Log
+  if(page==='order-type-audit') loadOrderTypeAudit();
 }
 
 // ============================================================================
@@ -12531,6 +12601,58 @@ async function saveCourierRates(){
 }
 
 // ============================================================================
+// 🆕 v218: ORDER TYPE AUDIT LOG
+// ============================================================================
+async function loadOrderTypeAudit(){
+  if(!API_URL) return;
+  const tbody = document.getElementById('order-type-audit-tbody');
+  if(tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</td></tr>';
+  try{
+    const changes = await apiFetch('/api/order-type-changes?limit=200');
+    
+    if(!changes || !changes.length){
+      if(tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted)">
+        <div style="font-size:32px;margin-bottom:8px">📭</div>
+        <div>مفيش تعديلات بعد. لما تغير نوع طلب، هيظهر هنا.</div>
+      </td></tr>`;
+      return;
+    }
+    
+    if(tbody) tbody.innerHTML = changes.map(c => {
+      const dt = new Date(c.changed_at);
+      const dateStr = dt.toLocaleDateString('ar-EG', {year:'numeric',month:'short',day:'numeric'});
+      const timeStr = dt.toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'});
+      
+      // ابحث عن الأنواع للألوان
+      const oldType = c.old_type_id ? _orderTypes.find(t => t.id === c.old_type_id) : null;
+      const newType = c.new_type_id ? _orderTypes.find(t => t.id === c.new_type_id) : null;
+      
+      const oldBadge = oldType 
+        ? `<span style="display:inline-flex;align-items:center;gap:3px;background:${oldType.color}22;color:${oldType.color};padding:3px 9px;border-radius:6px;font-weight:700;font-size:11px">${oldType.emoji||'📦'} ${escapeHtml(oldType.label_ar)}</span>`
+        : `<span style="color:var(--muted);font-size:11px">${escapeHtml(c.old_type_label || '—')}</span>`;
+      
+      const newBadge = newType
+        ? `<span style="display:inline-flex;align-items:center;gap:3px;background:${newType.color}22;color:${newType.color};padding:3px 9px;border-radius:6px;font-weight:700;font-size:11px">${newType.emoji||'📦'} ${escapeHtml(newType.label_ar)}</span>`
+        : `<span style="color:var(--muted);font-size:11px">${escapeHtml(c.new_type_label || '—')}</span>`;
+      
+      return `<tr>
+        <td style="font-size:11px">
+          <div style="font-weight:700">${dateStr}</div>
+          <div style="color:var(--muted)">${timeStr}</div>
+        </td>
+        <td><strong style="font-size:12px">${escapeHtml(c.order_id)}</strong></td>
+        <td>${oldBadge}</td>
+        <td>${newBadge}</td>
+        <td style="font-size:11px;color:var(--muted);max-width:300px">${escapeHtml(c.reason || '—')}</td>
+        <td><span style="background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700">${escapeHtml(c.changed_by || 'admin')}</span></td>
+      </tr>`;
+    }).join('');
+  }catch(e){
+    if(tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--danger)">❌ ${e.message}</td></tr>`;
+  }
+}
+
+// ============================================================================
 // نهاية v216: DASHBOARD PAGES
 // ============================================================================
 
@@ -12652,10 +12774,106 @@ function _escapeHtml(s){
   return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 
-function viewStarsProof(kind, id){
+// 🔧 v218 FIX: viewStarsProof - بنستخدم fetch مع token بدل window.open المباشر
+// المشكلة كانت: window.open بيفتح URL في tab جديد بدون authorization header
+// النتيجة: السيرفر بيرفض ويرجع "No admin token"
+// الحل: نـ fetch الصورة مع Bearer token، نحوّلها blob، ونعرضها في modal
+async function viewStarsProof(kind, id){
   const url = API_URL.replace(/\/$/,'') +
     (kind === 'payment' ? '/api/pending-reviews/'+id+'/proof' : '/api/courier-adjustments/'+id+'/proof');
-  window.open(url, '_blank', 'width=600,height=800');
+  
+  // اعرض loading toast
+  toast('⏳ جاري تحميل الصورة...');
+  
+  try{
+    const token = localStorage.getItem('admin_token');
+    if(!token){
+      toast('❌ لازم تسجل دخول من جديد');
+      return;
+    }
+    
+    const response = await fetch(url, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    
+    if(!response.ok){
+      if(response.status === 401){
+        toast('❌ session منتهية - سجل دخول من جديد');
+      } else if(response.status === 404){
+        toast('❌ الصورة غير موجودة');
+      } else {
+        toast(`❌ خطأ: ${response.status}`);
+      }
+      return;
+    }
+    
+    // هل الـ response صورة فعلاً؟
+    const contentType = response.headers.get('content-type') || '';
+    if(!contentType.startsWith('image/')){
+      // ممكن يكون JSON error
+      try{
+        const text = await response.text();
+        const json = JSON.parse(text);
+        toast('❌ ' + (json.error || 'حدث خطأ'));
+      }catch(e){
+        toast('❌ الـ response مش صورة');
+      }
+      return;
+    }
+    
+    // حول لـ blob ثم URL
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    
+    // اعرض في modal بدل tab جديد - أحسن user experience
+    showProofImageModal(blobUrl, kind, id);
+  }catch(e){
+    toast('❌ فشل تحميل الصورة: ' + (e.message || ''));
+  }
+}
+
+// 🆕 v218: Modal لعرض صورة الإثبات
+function showProofImageModal(blobUrl, kind, id){
+  // أزل أي modal سابق
+  const existing = document.getElementById('proof-img-modal');
+  if(existing) existing.remove();
+  
+  const overlay = document.createElement('div');
+  overlay.id = 'proof-img-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .15s';
+  
+  // اضغط خارج الصورة يقفل
+  overlay.onclick = (e) => {
+    if(e.target === overlay){
+      URL.revokeObjectURL(blobUrl);
+      overlay.remove();
+    }
+  };
+  
+  const title = kind === 'payment' ? 'إثبات الدفع' : 'إثبات التعديل';
+  
+  overlay.innerHTML = `
+    <div style="position:relative;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;gap:10px;align-items:center">
+      <div style="display:flex;justify-content:space-between;align-items:center;width:100%;color:#fff;padding:0 8px">
+        <div style="font-size:14px;font-weight:700">📄 ${title} #${id}</div>
+        <div style="display:flex;gap:8px">
+          <a href="${blobUrl}" download="proof-${kind}-${id}.jpg" 
+             style="background:var(--success);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;text-decoration:none;cursor:pointer">
+            ⬇️ تحميل
+          </a>
+          <button onclick="document.getElementById('proof-img-modal').remove();URL.revokeObjectURL('${blobUrl}')" 
+                  style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">
+            ✕ إغلاق
+          </button>
+        </div>
+      </div>
+      <img src="${blobUrl}" 
+           style="max-width:100%;max-height:80vh;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.5);background:#fff"
+           alt="${title}">
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
 }
 
 async function approvePaymentReview(id){
