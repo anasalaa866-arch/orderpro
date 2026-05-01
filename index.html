@@ -1315,7 +1315,9 @@ tr:hover td{background:#fafbff}
       </div>
       <div class="card-body" style="padding:0">
         <div style="background:#fef3c7;border-bottom:1px solid #fde047;padding:10px 16px;font-size:12px;color:#78350f">
-          ⚠️ البيانات بتتجاب من Shopify وبتتحدّث كل 24 ساعة. تقدر تـ refresh عميل معيّن من زر "🔄" بجانبه.
+          🆕 v224: البيانات بتتجاب من Shopify بـ <strong>Customer ID مباشرة</strong> (أدق طريقة).<br>
+          <strong>أول مرة:</strong> اضغط "🔁 تحديث الكل من Shopify" - النظام هيعمل backfill للطلبات القديمة وهيجيب التقييم تلقائي.<br>
+          <strong>بعدها:</strong> الـ cache بيتحدّث كل 30 دقيقة تلقائي.
         </div>
         <div class="tw mobile-cards">
           <table>
@@ -1971,15 +1973,15 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v220 — PROBLEMS & CHECKS FIXES =====
-// 2026-04-30: إصلاحان مهمان
-// 1. 👥 طلبات مشكلة (متكررون): فلتر 72 ساعة فقط
-//    (كان بيعرض كل الـ unassigned من بدري - دلوقتي بس الجديدة)
-// 2. 📋 شيكات لم يصرف: تشمل المتأخرين كمان
-//    (الفلتر القديم كان بيشيلهم - دلوقتي تظهر مع علامة "متأخر")
+// ===== OrderPro v224 — CUSTOMER ID FIX =====
+// 2026-04-30: إصلاحات مهمة لـ flow الـ customer_id
+// 1. ✅ Auto-backfill: الطلبات القديمة هتتحدث بـ customer_id تلقائي
+// 2. ✅ Workflow أذكى: زرار التحديث يعمل backfill + build معاً
+// 3. ✅ رسائل خطأ مفصلة (لتشخيص أي مشاكل)
+// 4. ✅ logging مفصل في الـ Backend
 // =================================
-// السابق: v219 — TIMEZONE FIX
-// إصلاح التوقيت + أسبوع الشيكات (الجمعة → الخميس)
+// السابق: v223 — CUSTOMER ID DIRECT
+// استخدام Shopify Customer ID مباشرة (مش phone search)
 // - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
@@ -5007,6 +5009,18 @@ async function selCAndConfirm(id){
   if(o.courierId && o.status==='جاري التوصيل' && String(o.courierId) === String(id)){
     toast('⚠️ الطلب '+currentOrderId+' موزع لنفس المندوب بالفعل');
     return;
+  }
+
+  // 🆕 v222: شاشة التنبيه قبل التوزيع - فحص العميل live من Shopify
+  // الـ Backend بيرجع تقييم محدّث (cache 30 دقيقة)
+  if(API_URL && _riskSettings && o.phone && o.phone !== '—'){
+    try{
+      const proceed = await _checkSingleOrderRisk(o, c.name);
+      if(!proceed) return; // المستخدم ضغط "إلغاء"
+    }catch(e){
+      console.warn('pre-assign risk check failed:', e.message);
+      // لو الفحص فشل، نكمل التوزيع عادي (مش نوقف الـ workflow)
+    }
   }
 
   const ship=getShipCost(o,c);
@@ -13202,18 +13216,74 @@ async function refreshSingleRisk(phone){
 }
 
 async function bulkRefreshRisk(){
-  // جيب كل التليفونات الفريدة من الطلبات
-  const phones = [...new Set(orders.map(o => o.phone).filter(p => p && p !== '—'))];
-  if(!phones.length){ toast('مفيش طلبات تحت التحديث'); return; }
-  if(!confirm(`هيتم تحديث ${phones.length} عميل من Shopify. ده ممكن ياخد دقيقة. متأكد؟`)) return;
+  // 🔧 v224: workflow أذكى - أول حاجة backfill، بعدين build
+  const ordersWithCustomerId = orders.filter(o => o.shopifyCustomerId);
+  const ordersWithoutCustomerId = orders.filter(o => !o.shopifyCustomerId);
+  const uniqueCustomerIds = new Set(ordersWithCustomerId.map(o => o.shopifyCustomerId)).size;
+  
+  // لو الأغلب من الطلبات مفيش customer_id → اعرض workflow الـ backfill الأول
+  if(uniqueCustomerIds < 10 && ordersWithoutCustomerId.length > 50){
+    const proceedBackfill = confirm(
+      `⚠️ في ${ordersWithoutCustomerId.length} طلب مفيهم Customer ID (طلبات قديمة).\n\n` +
+      `محتاج نعمل "backfill" أول الأول عشان نحدّث الطلبات دي بالـ Customer ID من Shopify.\n\n` +
+      `هل تريد أن نبدأ الآن؟ (هياخد دقيقة-اتنين)`
+    );
+    if(!proceedBackfill) return;
+    
+    toast('🔄 جاري تحديث الطلبات القديمة بالـ Customer ID...');
+    try{
+      const r = await apiFetch('/api/orders/backfill-customer-ids', 'POST', { limit: 200, onlyRecent: true });
+      if(r && r.success){
+        toast(`✅ تم تحديث ${r.updated} طلب بـ Customer ID`);
+        // ريفريش الطلبات
+        await loadOrders();
+        toast('🔄 جاري الآن جلب بيانات العملاء من Shopify...');
+        // كمل بالـ build
+        const buildR = await apiFetch('/api/customers-risk-list/build', 'POST', { limit: 200 });
+        if(buildR && buildR.success){
+          toast(`✅ تم جلب ${buildR.fetched} عميل من Shopify`);
+          loadRiskList();
+        }
+      } else {
+        toast('❌ فشل التحديث');
+      }
+    }catch(e){ toast('❌ ' + e.message); }
+    return;
+  }
+  
+  if(!uniqueCustomerIds){ 
+    toast('⚠️ مفيش طلبات بـ Customer ID. اعمل استيراد من Shopify الأول.'); 
+    return; 
+  }
+  
+  if(!confirm(`هيتم جلب بيانات ${uniqueCustomerIds} عميل من Shopify بـ Customer ID مباشرة. متأكد؟`)) return;
 
-  toast(`🔄 جاري تحديث ${phones.length} عميل...`);
+  toast(`🔄 جاري بناء القائمة من ${uniqueCustomerIds} عميل...`);
+  
   try{
-    const r = await apiFetch('/api/customer-risk/batch', 'POST', { phones, forceRefresh: true });
-    if(r && r.results){
-      const count = Object.keys(r.results).length;
-      toast(`✅ تم تحديث ${count} عميل`);
+    const r = await apiFetch('/api/customers-risk-list/build', 'POST', { limit: 200 });
+    
+    // 🆕 v224: عرض رسالة مفصلة لو في errors
+    if(r && r.success){
+      if(r.errors > 0 && r.errorSamples && r.errorSamples.length){
+        const sampleMsg = r.errorSamples.slice(0,3).map(e => 
+          `• Customer ${e.customerId}: ${e.reason}`
+        ).join('\n');
+        infoModal('نتيجة الجلب', 
+          `تم جلب ${r.fetched} عميل من Shopify\n\n` +
+          `❌ ${r.errors} فشلوا\n\n` +
+          `أمثلة على الأخطاء:\n${sampleMsg}\n\n` +
+          `📊 الإحصائيات:\n` +
+          `• إجمالي الطلبات: ${r.stats?.totalOrders || 0}\n` +
+          `• طلبات بـ Customer ID: ${r.stats?.ordersWithCustomerId || 0}\n` +
+          `• طلبات بدون Customer ID: ${r.stats?.ordersWithoutCustomerId || 0}`
+        );
+      } else {
+        toast(`✅ تم جلب ${r.fetched} عميل من Shopify`);
+      }
       loadRiskList();
+    } else {
+      toast('⚠️ فشل التحديث');
     }
   }catch(e){ toast('❌ ' + e.message); }
 }
@@ -13276,6 +13346,131 @@ async function _checkBatchRisks(orderList){
     }
   }
   return { risky, safe };
+}
+
+// 🆕 v222: فحص عميل واحد قبل التوزيع - يستخدم endpoint خاص بالطلب
+// يرجع true لو نكمل، false لو المستخدم لغى
+async function _checkSingleOrderRisk(order, courierName){
+  if(!order || !order.phone || order.phone === '—') return true;
+  
+  let risk;
+  try{
+    // استخدم الـ endpoint الجديد اللي بيجيب التقييم بناءً على الطلب
+    risk = await apiFetch('/api/orders/'+encodeURIComponent(order.id)+'/customer-risk', 'GET');
+  }catch(e){
+    // لو فشل، نسمح بالتوزيع
+    return true;
+  }
+  
+  if(!risk || !risk.isRisky) return true; // العميل آمن
+  
+  // العميل خطر - اعرض شاشة تنبيه
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .15s';
+    
+    const lastOrderDate = risk.lastOrderAt 
+      ? new Date(risk.lastOrderAt).toLocaleDateString('ar-EG', {day:'numeric',month:'short',year:'numeric',timeZone:'Africa/Cairo'})
+      : '—';
+    
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:14px;max-width:540px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;animation:slideUp .2s">
+        <div style="background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;padding:18px 22px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="font-size:32px">🚨</div>
+            <div>
+              <div style="font-size:18px;font-weight:800">عميل عالي الخطورة!</div>
+              <div style="font-size:12px;opacity:.9;margin-top:2px">قبل ما توزّع الطلب ده على ${escapeHtml(courierName)}، اقرأ التحذير</div>
+            </div>
+          </div>
+        </div>
+        
+        <div style="padding:20px 22px">
+          <!-- معلومات العميل -->
+          <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px;margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+              <div>
+                <div style="font-size:14px;font-weight:700;color:#991b1b">${escapeHtml(risk.customerName || order.name || '—')}</div>
+                <div style="font-size:12px;color:#7f1d1d;direction:ltr;margin-top:2px">${escapeHtml(order.phone)}</div>
+              </div>
+              <div style="background:#dc2626;color:#fff;padding:6px 14px;border-radius:8px;font-size:18px;font-weight:800">
+                ${risk.riskPercentage}%
+              </div>
+            </div>
+            <div style="font-size:11px;color:#7f1d1d;border-top:1px solid #fecaca;padding-top:8px">
+              نسبة خطر العميل (الإلغاء + الرفض من إجمالي الطلبات)
+            </div>
+          </div>
+          
+          <!-- إحصائيات -->
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px">
+            <div style="background:#f9fafb;border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:18px;font-weight:800;color:var(--text)">${risk.totalOrders}</div>
+              <div style="font-size:10px;color:var(--muted)">إجمالي طلباته</div>
+            </div>
+            <div style="background:#fef2f2;border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:18px;font-weight:800;color:#dc2626">${risk.cancelledOrders||0}</div>
+              <div style="font-size:10px;color:var(--muted)">ملغية ❌</div>
+            </div>
+            <div style="background:#fffbeb;border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:18px;font-weight:800;color:#d97706">${risk.refundedOrders||0}</div>
+              <div style="font-size:10px;color:var(--muted)">مرتجعة ↩️</div>
+            </div>
+            <div style="background:#f0fdf4;border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:18px;font-weight:800;color:#15803d">${risk.successfulOrders||0}</div>
+              <div style="font-size:10px;color:var(--muted)">ناجحة ✅</div>
+            </div>
+          </div>
+          
+          <!-- إنفاق وآخر طلب -->
+          <div style="background:#f9fafb;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <div>💰 إجمالي إنفاقه: <strong>${(risk.totalSpent||0).toLocaleString()} ج</strong></div>
+            <div>📅 آخر طلب: <strong>${lastOrderDate}</strong></div>
+          </div>
+          
+          ${risk.tags ? `<div style="margin-bottom:14px;font-size:11px;color:var(--muted)">🏷️ Tags: ${escapeHtml(risk.tags)}</div>` : ''}
+          
+          <!-- الطلب الحالي -->
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:14px">
+            <div style="font-size:11px;color:#1e40af;font-weight:700;margin-bottom:4px">📦 الطلب الحالي:</div>
+            <div style="font-size:13px"><strong>${escapeHtml(order.id)}</strong> · ${order.total.toLocaleString()} ج · ${escapeHtml(order.area || '—')}</div>
+          </div>
+          
+          <div style="background:#fef3c7;border-radius:6px;padding:8px 12px;font-size:11px;color:#78350f">
+            💡 <strong>التوصية:</strong> راجع الطلب مع العميل بالتلفون قبل ما توزعه عشان تتجنب رفض الاستلام.
+          </div>
+        </div>
+        
+        <div style="padding:14px 22px;background:#f9fafb;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--border)">
+          <button id="risk-cancel-btn" style="background:transparent;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:Cairo,sans-serif">
+            ✕ إلغاء التوزيع
+          </button>
+          <button id="risk-proceed-btn" style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:Cairo,sans-serif">
+            ⚠️ تابع رغم التحذير
+          </button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    document.getElementById('risk-cancel-btn').onclick = () => {
+      overlay.remove();
+      resolve(false);
+    };
+    document.getElementById('risk-proceed-btn').onclick = () => {
+      overlay.remove();
+      resolve(true);
+    };
+    
+    // اضغط خارج الـ modal = إلغاء
+    overlay.onclick = (e) => {
+      if(e.target === overlay){
+        overlay.remove();
+        resolve(false);
+      }
+    };
+  });
 }
 
 async function loadShippingTransfers(){
