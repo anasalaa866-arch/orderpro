@@ -1971,22 +1971,15 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v218 — FINAL DASHBOARD =====
-// 2026-04-30: المرحلة الأخيرة من الـ Dashboard
-// 1. 🐛 إصلاح زرار "عرض الصورة" في Stars (كان بيرجع No admin token)
-// 2. 📜 صفحة "سجل تغيير الأنواع" - audit log كامل
-// 3. ✏️ زرار "تعديل النوع" في modal تعديل الطلب
-// 4. 🛡️ تحسينات أمان وUX
+// ===== OrderPro v220 — PROBLEMS & CHECKS FIXES =====
+// 2026-04-30: إصلاحان مهمان
+// 1. 👥 طلبات مشكلة (متكررون): فلتر 72 ساعة فقط
+//    (كان بيعرض كل الـ unassigned من بدري - دلوقتي بس الجديدة)
+// 2. 📋 شيكات لم يصرف: تشمل المتأخرين كمان
+//    (الفلتر القديم كان بيشيلهم - دلوقتي تظهر مع علامة "متأخر")
 // =================================
-// السابق: v217 — WORKFLOW INTEGRATION
-// 2026-04-30: ربط الـ Dashboard settings بالـ workflow الفعلي
-// =================================
-// v216 — DASHBOARD PAGES — 3 صفحات للـ settings الجديدة
-// =================================
-// v215 — PICKUP IN ASSIGN — السماح للطلبات pickup بالظهور في صفحة التوزيع
-// =================================
-// v214 - CUSTOMER RISK FIX (2026-04-29)
-// إصلاح صفحة تقييم العملاء + تحديث تلقائي عند الفتح
+// السابق: v219 — TIMEZONE FIX
+// إصلاح التوقيت + أسبوع الشيكات (الجمعة → الخميس)
 // - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
@@ -2287,7 +2280,7 @@ const getShipCost=(order,courier)=>{
   if(isSameDay(order)) return+(courier.shipExpress||courier.ship||80);
   return+(courier.ship||50);
 };
-const nowTime=()=>new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+const nowTime=()=>new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
 
 function sBadge(s){const m={جديد:'b-new','في الانتظار':'b-wait','جاري التوصيل':'b-go','تحت التسوية':'b-settle',مكتمل:'b-done',ملغي:'b-cancel',مدمج:'b-cancel'};return'<span class="badge '+(m[s]||'b-wait')+'" style="'+(s==='مدمج'?'background:#e0e7ff;color:#4338ca':'')+'">'+(s==='مدمج'?'🔗 ':'')+s+'</span>';}
 function paidBadge(o){return o.paid?'<span class="badge" style="background:#dcfce7;color:#166534;margin-right:4px">💳 مدفوع</span>':'<span class="badge" style="background:#fef9c3;color:#854d0e;margin-right:4px">💵 COD</span>'}
@@ -2336,7 +2329,7 @@ function fmtTime(d){
   if(!d) return '—';
   const date = (d instanceof Date) ? d : new Date(d);
   if(isNaN(date)) return '—';
-  return date.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Cairo' });
 }
 function fmtDateTime(d){
   if(!d) return '—';
@@ -2971,7 +2964,7 @@ orders=data.orders.map(o=>{
     if(rn&&rn.notifications){
       notifications=rn.notifications.map(n=>({
         id:n.id,icon:n.icon,title:n.title,sub:n.sub,
-        read:n.read,time:new Date(n.created_at||Date.now()).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})
+        read:n.read,time:new Date(n.created_at||Date.now()).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'})
       }));
     }
   }catch(e){}
@@ -4113,7 +4106,7 @@ async function openOrderHistory(orderId){
   const fmtTs = ts => {
     const d = new Date(ts);
     return d.toLocaleDateString('ar-EG',{year:'numeric',month:'short',day:'numeric'})
-      + ' ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+      + ' ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
   };
 
   const iconMap = {
@@ -6767,7 +6760,14 @@ function probToggleAll(val){
 }
 
 function renderProblemsPage(){
-  const unassigned = orders.filter(o=>!o.courierId&&o.status!=='ملغي'&&o.status!=='مكتمل');
+  // 🔧 v220: عدد المتكررون - فقط طلبات الـ 72 ساعة الأخيرة (اللي مش متوزعة)
+  const cutoff = Date.now() - (72 * 60 * 60 * 1000); // 72 ساعة فاتت
+  const unassigned = orders.filter(o => 
+    !o.courierId && 
+    o.status !== 'ملغي' && 
+    o.status !== 'مكتمل' &&
+    new Date(o.createdAt || 0).getTime() >= cutoff
+  );
   const phones = unassigned.map(o=>o.phone).filter(p=>p&&p!=='—');
   const dupPhones = phones.filter((p,i)=>phones.indexOf(p)!==i);
   const dupCount = new Set(dupPhones).size;
@@ -6783,7 +6783,15 @@ function probFilter(f, btn){
   const manualCnt=orders.filter(o=>o.hasProblem).length;
   if($('prob-manual-count'))$('prob-manual-count').textContent=manualCnt?'('+manualCnt+')':'';
 
-  const unassigned = orders.filter(o=>!o.courierId&&o.status!=='ملغي'&&o.status!=='مكتمل');
+  // 🔧 v220: المتكررون = طلبات الـ 72 ساعة الأخيرة فقط (اللي مش متوزعة)
+  // الطلبات القديمة جداً غالباً مش related بالـ duplicate الحالي
+  const cutoff = Date.now() - (72 * 60 * 60 * 1000); // 72 ساعة
+  const unassigned = orders.filter(o => 
+    !o.courierId && 
+    o.status !== 'ملغي' && 
+    o.status !== 'مكتمل' &&
+    new Date(o.createdAt || 0).getTime() >= cutoff
+  );
   const cont = $('problems-content');
 
   if(f==='manual'){
@@ -6827,12 +6835,17 @@ function probFilter(f, btn){
     });
     const dups = Object.values(phoneMap).filter(arr=>arr.length>1);
 
+    // 🆕 v220: hint عن الـ 72 ساعة
+    const hintBar = `<div style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:var(--text)">
+      <strong>💡 ملاحظة:</strong> العرض ده لطلبات مش متوزعة فقط من آخر <strong>72 ساعة</strong> - عشان نتفادى التكرار من الطلبات القديمة جداً.
+    </div>`;
+
     if(!dups.length){
-      cont.innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">✅ لا يوجد عملاء بطلبات متكررة</div>';
+      cont.innerHTML = hintBar + '<div style="text-align:center;padding:40px;color:var(--muted)">✅ لا يوجد عملاء بطلبات متكررة في آخر 72 ساعة</div>';
       return;
     }
 
-    cont.innerHTML = dups.map(group=>`
+    cont.innerHTML = hintBar + dups.map(group=>`
       <div class="card" style="margin-bottom:12px">
         <div class="card-hd" style="background:var(--warn-light)">
           <h3 style="color:#92400e">👥 ${group[0].name} — ${group.length} طلبات | 📱 ${group[0].phone}</h3>
@@ -6988,7 +7001,7 @@ function printShopSettle(){
   tfoot td{background:#eef2ff;font-weight:700}
   @media print{body{padding:5px}}</style></head><body>
   <h2>🏪 تسوية محاسبة المحل</h2>
-  <p>${now.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'})} · ${now.toLocaleTimeString('ar-EG')} · ${list.length} طلب</p>
+  <p>${now.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric',timeZone:'Africa/Cairo'})} · ${now.toLocaleTimeString('ar-EG',{timeZone:'Africa/Cairo'})} · ${list.length} طلب</p>
   <div class="summary">
     <div class="sum-box"><div class="sum-num" style="color:#10b981">${total.toLocaleString()} ج</div><div class="sum-lbl">إجمالي</div></div>
     <div class="sum-box"><div class="sum-num" style="color:#f59e0b">${cod.toLocaleString()} ج</div><div class="sum-lbl">COD</div></div>
@@ -7251,12 +7264,27 @@ function chkSetFilter(f,btn){
 }
 function renderChecksPage(){
   const now=new Date(new Date().toDateString());
-  const weekEnd=new Date(now);weekEnd.setDate(now.getDate()+7);
+  
+  // 🔧 v219: حساب أسبوع الشيكات يبدأ من الجمعة لينتهي بالخميس
+  // JS: getDay() returns 0=Sunday, 1=Monday, ..., 5=Friday, 6=Saturday
+  // لو النهارده الجمعة (5) → بداية الأسبوع = النهارده
+  // لو النهارده السبت (6) → بداية الأسبوع = أمس (الجمعة)
+  // لو النهارده الأحد (0) → بداية الأسبوع = من 2 يوم (الجمعة الفايتة)
+  // ... وهكذا
+  const today = now.getDay(); // 0-6
+  const daysSinceFriday = (today + 2) % 7; // كم يوم فات من الجمعة الأخيرة
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - daysSinceFriday); // الجمعة الحالية
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6); // الخميس بعدها
+  weekEnd.setHours(23, 59, 59, 999);
+  
   const m0=new Date(now.getFullYear(),now.getMonth(),1);
   const m1=new Date(now.getFullYear(),now.getMonth()+1,0);
   const pending=chkList.filter(c=>c.status==='pending');
   const overdue=pending.filter(c=>new Date(c.date)<now);
-  const thisWeek=pending.filter(c=>{const d=new Date(c.date);return d>=now&&d<=weekEnd;});
+  // 🔧 v219: thisWeek = الشيكات اللي تاريخها داخل الأسبوع الحالي (جمعة → خميس)
+  const thisWeek=pending.filter(c=>{const d=new Date(c.date);return d>=weekStart&&d<=weekEnd;});
   if($('chk-total-val'))$('chk-total-val').textContent=chkFmtAmount(pending.reduce((s,c)=>s+Number(c.amount),0))+' ج';
   if($('chk-week-val'))$('chk-week-val').textContent=chkFmtAmount(thisWeek.reduce((s,c)=>s+Number(c.amount),0))+' ج';
   if($('chk-overdue-val'))$('chk-overdue-val').textContent=overdue.length;
@@ -7271,10 +7299,11 @@ function renderChecksPage(){
   if(dr) dr.style.display = period==='custom' ? 'flex' : 'none';
 
   let list=[...chkList];
-  if(chkStatusFilter==='pending')list=list.filter(c=>c.status==='pending'&&!chkIsOverdue(c));
+  if(chkStatusFilter==='pending')list=list.filter(c=>c.status==='pending'); /* 🔧 v220: شامل المتأخرين */
   if(chkStatusFilter==='done')list=list.filter(c=>c.status==='done');
   if(chkStatusFilter==='overdue')list=list.filter(c=>chkIsOverdue(c));
-  if(period==='week')list=list.filter(c=>{const d=new Date(c.date);return d>=now&&d<=weekEnd;});
+  // 🔧 v219: فلتر الأسبوع = من الجمعة للخميس
+  if(period==='week')list=list.filter(c=>{const d=new Date(c.date);return d>=weekStart&&d<=weekEnd;});
   if(period==='month')list=list.filter(c=>{const d=new Date(c.date);return d>=m0&&d<=m1;});
   if(period==='overdue')list=list.filter(c=>chkIsOverdue(c));
   if(period==='custom'){
@@ -7322,7 +7351,7 @@ function getFilteredChkList(){
   const period=$('chk-period-filter')?.value||'all';
   const q=($('chk-search')?.value||'').toLowerCase();
   let list=[...chkList];
-  if(chkStatusFilter==='pending')list=list.filter(c=>c.status==='pending'&&!chkIsOverdue(c));
+  if(chkStatusFilter==='pending')list=list.filter(c=>c.status==='pending'); /* 🔧 v220: شامل المتأخرين */
   if(chkStatusFilter==='done')list=list.filter(c=>c.status==='done');
   if(chkStatusFilter==='overdue')list=list.filter(c=>chkIsOverdue(c));
   if(period==='week')list=list.filter(c=>{const d=new Date(c.date);return d>=now&&d<=weekEnd;});
@@ -9091,7 +9120,7 @@ function _doPrintSettle(c, done, isDraft, settleDate, settlement){
   const ship = done.reduce((s,o)=>s+(o.ship||50),0);
   const net = cod - ship + adjTotal;
   const today = new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  const nowt = new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+  const nowt = new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
   const dateStr = (settleDate?new Date(settleDate):new Date()).toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'});
   let rows='';
   done.forEach((o,i)=>{ rows+='<tr><td>'+(i+1)+'</td><td><strong>'+o.id+'</strong></td><td>'+(o.name||'—')+'</td><td>'+(o.area||'—')+'</td><td><strong>'+o.total.toLocaleString()+' ج</strong></td><td>'+(o.paid?'<span style="color:#16a34a">💳 مدفوع</span>':'💵 COD')+'</td><td>'+(o.ship||50)+' ج</td></tr>'; });
@@ -9147,7 +9176,7 @@ function renderSettleHistory(){
     const ts=new Date(s.ts);
     const dateStr=ts.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
     if(dateStr!==lastDate){ html+='<div style="font-size:12px;font-weight:700;color:var(--muted);padding:10px 4px 4px;border-bottom:1px solid var(--border);margin-bottom:6px">'+dateStr+'</div>'; lastDate=dateStr; }
-    const timeStr=ts.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+    const timeStr=ts.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
     const sessNum=_allSettlements.filter(x=>String(x.courierId)===String(s.courierId)&&new Date(x.ts)<=ts).length;
     const adj = s.adj||[];
     const adjTotal = s.adjTotal || adj.reduce((sum,a)=>sum+(parseFloat(a.amount)||0),0);
@@ -10135,7 +10164,7 @@ function renderBatchSummaryPage(batchCode, groups, sortedKeys){
   const totalExpress = sortedKeys.reduce((s,k)=>s+groups[k].express.length, 0);
   const dateStr = batchCode.replace('B-','').split('-').slice(0,3).join('-');
   const now = new Date();
-  const timeStr = now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+  const timeStr = now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
 
   const rows = sortedKeys.map(key=>{
     const g = groups[key];
@@ -12621,7 +12650,7 @@ async function loadOrderTypeAudit(){
     if(tbody) tbody.innerHTML = changes.map(c => {
       const dt = new Date(c.changed_at);
       const dateStr = dt.toLocaleDateString('ar-EG', {year:'numeric',month:'short',day:'numeric'});
-      const timeStr = dt.toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'});
+      const timeStr = dt.toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
       
       // ابحث عن الأنواع للألوان
       const oldType = c.old_type_id ? _orderTypes.find(t => t.id === c.old_type_id) : null;
@@ -14128,7 +14157,7 @@ function dsRender(){
   }
 
   const today=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  const nowt=new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+  const nowt=new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
 
   $('ds-sheet').innerHTML=`
     <div class="ds-hd">
