@@ -1799,6 +1799,32 @@ tr:hover td{background:#fafbff}
   </div>
 </div></div>
 
+<!-- 🆕 v217: Modal مفصل لتغيير نوع الطلب مع سبب -->
+<div class="overlay" id="m-change-order-type"><div class="modal">
+  <div class="mhd"><h3>🔄 تعديل نوع الطلب</h3><button class="xbtn" onclick="closeM('m-change-order-type')">✕</button></div>
+  <div class="mbd">
+    <input type="hidden" id="cot-order-id">
+    <div id="cot-current" style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px"></div>
+    <div class="fg">
+      <label>النوع الجديد *</label>
+      <select id="cot-new-type" style="font-size:14px">
+        <option value="">— اختار النوع —</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label>سبب التعديل (اختياري لكن مفيد)</label>
+      <textarea id="cot-reason" placeholder="مثلاً: العميل اتصل وقال خليه عادي بدل مستعجل" rows="3" style="resize:vertical"></textarea>
+    </div>
+    <div style="background:rgba(99,102,241,.08);border-radius:6px;padding:10px;font-size:11px;color:var(--muted)">
+      <strong>💡 ملاحظة:</strong> التعديل هيتسجل في الـ audit log (سجل النشاطات) مع التاريخ والوقت والمستخدم.
+    </div>
+  </div>
+  <div class="mft">
+    <button class="btn btn-ghost" onclick="closeM('m-change-order-type')">إلغاء</button>
+    <button class="btn btn-primary" onclick="confirmChangeOrderType()">💾 حفظ التعديل</button>
+  </div>
+</div></div>
+
 <div class="overlay" id="m-courier"><div class="modal">
   <div class="mhd"><h3>🚴 إضافة مندوب جديد</h3><button class="xbtn" onclick="closeM('m-courier')">✕</button></div>
   <div class="mbd">
@@ -1909,19 +1935,17 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v216 — DASHBOARD PAGES =====
-// 2026-04-30: 3 صفحات Dashboard جديدة في الـ sidebar
-// 1. 🏷️ أنواع الطلبات - CRUD لأنواع الطلبات الديناميكية
-// 2. 🔗 ربط Shipping Methods - ربط Shopify methods بالأنواع
-// 3. 💰 تكلفة الشحن - مصفوفة مندوب × نوع طلب
+// ===== OrderPro v217 — WORKFLOW INTEGRATION =====
+// 2026-04-30: ربط الـ Dashboard settings بالـ workflow الفعلي
+// 1. 🏷️ Badges ملوّنة في صفحة التوزيع (الجدول + الـ pop-up)
+// 2. 💰 سعر الشحن تلقائي من courier_ship_rates (للطلبات الجديدة)
+// 3. 🔄 Dropdown سريع لتغيير نوع الطلب في الـ pop-up
+// 4. ✏️ زرار "تعديل نوع الطلب" مفصل (مع سبب وaudit)
 //
-// مفيش تأثير على الـ workflow الحالي - الصفحات دي بس للإعداد
+// الطلبات القديمة (orderTypeId=null) تستخدم النظام القديم (delivery_type + ship)
 // =================================
-// السابق: v215 — PICKUP IN ASSIGN
-// 2026-04-30: السماح للطلبات pickup بالظهور في صفحة التوزيع
-// =================================
-// v214 - CUSTOMER RISK FIX (2026-04-29)
-// إصلاح صفحة تقييم العملاء + تحديث تلقائي عند الفتح
+// السابق: v216 — DASHBOARD PAGES
+// 3 صفحات Dashboard: أنواع الطلبات + ربط Shipping Methods + تكلفة الشحن
 // - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
@@ -2098,6 +2122,14 @@ function deliveryType(o){
   return 'normal';
 }
 function deliveryBadge(o){
+  // 🆕 v217: استخدم Badge من النظام الجديد لو متاح
+  if(o && o.orderTypeId && Array.isArray(_orderTypes) && _orderTypes.length){
+    const t = _orderTypes.find(x => x.id == o.orderTypeId);
+    if(t){
+      return `<span style="display:inline-flex;align-items:center;gap:3px;background:${t.color}22;color:${t.color};padding:3px 9px;border-radius:6px;font-weight:700;font-size:10px;white-space:nowrap">${t.emoji || '📦'} ${escapeHtml(t.label_ar)}</span>`;
+    }
+  }
+  // fallback للنظام القديم
   const t=deliveryType(o);
   if(t==='pickup')  return '<span class="badge" style="background:#ede9fe;color:#5b21b6;white-space:nowrap;font-size:10px">🏪 استلام</span>';
   if(t==='transit') return '<span class="badge" style="background:#fef3c7;color:#92400e;white-space:nowrap;font-size:10px">🏭 عبور</span>';
@@ -2199,8 +2231,17 @@ function suggestCourier(order){
   
   return best;
 }
+// 🆕 v217: getShipCost - النظام الجديد له أولوية
+// لو الطلب عنده orderTypeId والمندوب عنده rate في DB → السعر يرجع تلقائي من Backend
+// الـ frontend بيستخدم القيمة الموجودة في o.ship (اللي الـ Backend بيحطها تلقائي)
+// fallback: النظام القديم
 const getShipCost=(order,courier)=>{
   if(!courier)return order.ship||50;
+  // 🆕 v217: لو الـ ship موجود من Backend بـ auto-rate (لما الطلب اتحدّث)، استخدمه
+  if(order.ship != null && order.ship !== '' && !isNaN(order.ship)){
+    return parseFloat(order.ship);
+  }
+  // fallback للنظام القديم
   if(isPickup(order)||isTransit(order)) return 0;
   if(isSameDay(order)) return+(courier.shipExpress||courier.ship||80);
   return+(courier.ship||50);
@@ -2285,6 +2326,62 @@ function escapeHtml(s){
 function escapeAttr(s){
   if(s == null) return '';
   return String(s).replace(/["']/g, c => c === '"' ? '&quot;' : '&#39;');
+}
+
+// 🆕 v217: Order Type helpers — قدم Badge ملوّن لكل نوع طلب
+// النظام يفضل بـ priority: orderTypeId الجديد > deliveryType القديم (legacy)
+function getOrderTypeById(typeId){
+  if(typeId == null) return null;
+  if(!Array.isArray(_orderTypes) || !_orderTypes.length) return null;
+  return _orderTypes.find(t => t.id == typeId) || null;
+}
+
+// جيب نوع الطلب من order: لو في orderTypeId → استخدمه، لو لأ fallback لـ deliveryType
+function getOrderTypeForOrder(o){
+  if(!o) return null;
+  // أولوية النظام الجديد
+  if(o.orderTypeId){
+    const t = getOrderTypeById(o.orderTypeId);
+    if(t) return t;
+  }
+  // fallback: حول deliveryType القديم لنوع
+  if(o.deliveryType && Array.isArray(_orderTypes)){
+    return _orderTypes.find(t => t.code === o.deliveryType) || null;
+  }
+  return null;
+}
+
+// رسم Badge ملوّن لنوع الطلب (للجدول)
+function renderOrderTypeBadge(o, opts = {}){
+  const t = getOrderTypeForOrder(o);
+  if(!t){
+    // fallback للنظام القديم
+    if(o && o.deliveryType === 'express') return '<span class="badge" style="background:#fef3c7;color:#92400e">⚡ مستعجل</span>';
+    if(o && o.deliveryType === 'pickup')  return '<span class="badge" style="background:#dcfce7;color:#166534">🏪 استلام</span>';
+    if(o && o.deliveryType === 'transit') return '<span class="badge" style="background:#fee2e2;color:#991b1b">🏭 عبور</span>';
+    return '<span class="badge" style="background:#dbeafe;color:#1e40af">🚚 عادي</span>';
+  }
+  const size = opts.size || 'sm';
+  const fontSize = size === 'lg' ? '13px' : '11px';
+  const padding = size === 'lg' ? '5px 12px' : '3px 9px';
+  return `<span style="display:inline-flex;align-items:center;gap:4px;background:${t.color}22;color:${t.color};padding:${padding};border-radius:6px;font-weight:700;font-size:${fontSize};white-space:nowrap">${t.emoji || '📦'} ${escapeHtml(t.label_ar)}</span>`;
+}
+
+// رسم frame ملوّن حول الـ pop-up حسب نوع الطلب
+function getOrderTypeBorderColor(o){
+  const t = getOrderTypeForOrder(o);
+  return t ? t.color : '#3b82f6';
+}
+
+// تحميل أنواع الطلبات تلقائياً (يحتفظ بالـ cache في _orderTypes)
+async function ensureOrderTypesLoaded(){
+  if(Array.isArray(_orderTypes) && _orderTypes.length > 0) return _orderTypes;
+  try{
+    if(API_URL){
+      _orderTypes = await apiFetch('/api/order-types');
+    }
+  }catch(e){ console.warn('ensureOrderTypesLoaded:', e.message); }
+  return _orderTypes;
 }
 
 function toast(msg){const t=$('toast');t.innerHTML=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500)}
@@ -3741,14 +3838,42 @@ function openAssign(id){
   $('assign-title').textContent=`تعيين مندوب للطلب ${id}`;
   const isExpress=isSameDay(o);
   const suggested=suggestCourier(o);
+  
+  // 🆕 v217: Badge ملوّن + dropdown سريع لتغيير النوع
+  const orderType = getOrderTypeForOrder(o);
+  const borderColor = orderType ? orderType.color : (isExpress ? '#f59e0b' : '#3b82f6');
+  
+  // طبّق border ملوّن على الـ modal كله
+  const modalEl = document.querySelector('#m-assign .modal');
+  if(modalEl){
+    modalEl.style.borderTop = `4px solid ${borderColor}`;
+  }
+  
+  // dropdown لأنواع الطلبات (لتغيير سريع)
+  let typeDropdown = '';
+  if(Array.isArray(_orderTypes) && _orderTypes.length){
+    const opts = _orderTypes.filter(t => t.active).map(t => 
+      `<option value="${t.id}" ${orderType && t.id === orderType.id ? 'selected' : ''}>${t.emoji || '📦'} ${escapeHtml(t.label_ar)}</option>`
+    ).join('');
+    typeDropdown = `
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--muted);font-weight:600">نوع الطلب:</span>
+        <select id="quick-order-type" onchange="quickChangeOrderType('${escapeAttr(o.id)}', this.value)" 
+                style="border:1.5px solid ${borderColor};border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;background:${borderColor}11;color:${borderColor};cursor:pointer">
+          ${opts}
+        </select>
+      </div>`;
+  }
+  
   $('assign-info').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
       <div>
         <strong style="font-size:13px">${o.name}</strong> · 📱 ${o.phone}<br>
         📍 <strong>${[o.addr||o.area, o.province].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(' — ')}</strong><br>
         💰 ${o.total.toLocaleString()} ج &nbsp;·&nbsp;
-        <span style="font-weight:700;color:${isExpress?'var(--danger)':'var(--info)'}">${isExpress?'⚡ Same Day Delivery':'🚚 توصيل عادي'}</span>
+        ${renderOrderTypeBadge(o, {size:'lg'})}
         ${o.paid?'&nbsp;<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">💳 مدفوع - لا تحصيل</span>':''}
+        <div style="margin-top:8px">${typeDropdown}</div>
       </div>
       ${suggested?`<div style="background:#eef2ff;border:1.5px solid #a5b4fc;border-radius:9px;padding:10px 14px;font-size:12px;min-width:190px">
         <div style="font-size:10px;color:#6366f1;font-weight:700;margin-bottom:4px">🤖 مقترح بناءً على المنطقة</div>
@@ -3764,6 +3889,111 @@ function openAssign(id){
     </div>`;
   $('assign-ship').value=o.ship||defaultShip;$('assign-note').value=o.note||'';
   renderAssignGrid();$('m-assign').classList.add('open');
+}
+
+// 🆕 v217: تغيير سريع لنوع الطلب من الـ pop-up (Hybrid - بدون سبب)
+async function quickChangeOrderType(orderId, newTypeId){
+  if(!newTypeId) return;
+  const o = orders.find(x => x.id === orderId);
+  if(!o) return;
+  const newType = getOrderTypeById(parseInt(newTypeId));
+  if(!newType){ toast('⚠️ نوع غير معروف'); return; }
+  
+  try{
+    if(API_URL){
+      await apiFetch('/api/orders/'+encodeURIComponent(orderId)+'/change-type', 'POST', {
+        order_type_id: parseInt(newTypeId),
+        reason: 'تعديل سريع من pop-up التوزيع'
+      });
+    }
+    // حدّث محلياً
+    o.orderTypeId = parseInt(newTypeId);
+    
+    // طبّق اللون الجديد على الـ modal
+    const modalEl = document.querySelector('#m-assign .modal');
+    if(modalEl) modalEl.style.borderTop = `4px solid ${newType.color}`;
+    
+    // طبّق على الـ dropdown نفسه
+    const sel = document.getElementById('quick-order-type');
+    if(sel){
+      sel.style.borderColor = newType.color;
+      sel.style.background = newType.color + '11';
+      sel.style.color = newType.color;
+    }
+    
+    // أعد رسم الـ Badge في الـ assign-info
+    const badgeContainer = $('assign-info');
+    if(badgeContainer){
+      // ابحث عن الـ badge الحالي وحدّثه
+      const oldBadge = badgeContainer.querySelector('span[style*="border-radius:6px"]');
+      // مش مهم نعدله - الفلوس هتتحدث في الـ grid
+    }
+    
+    // أعد رسم الـ grid عشان الأسعار تتحدث
+    renderAssignGrid();
+    toast(`✅ النوع: ${newType.label_ar}`);
+  }catch(e){
+    toast('❌ ' + (e.message || 'فشل التحديث'));
+  }
+}
+
+// 🆕 v217: زرار "تعديل نوع الطلب" المفصل (مع سبب وaudit)
+async function openChangeOrderTypeModal(orderId){
+  const o = orders.find(x => x.id === orderId);
+  if(!o){ toast('❌ الطلب غير موجود'); return; }
+  
+  // تأكد إن الأنواع متحملة
+  await ensureOrderTypesLoaded();
+  
+  document.getElementById('cot-order-id').value = orderId;
+  
+  const currentType = getOrderTypeForOrder(o);
+  document.getElementById('cot-current').innerHTML = `
+    <div style="margin-bottom:6px"><strong>الطلب:</strong> ${escapeHtml(o.id)} — ${escapeHtml(o.name)}</div>
+    <div><strong>النوع الحالي:</strong> ${renderOrderTypeBadge(o, {size:'lg'})}</div>
+    ${o.shippingMethod ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">📦 Shipping Method: ${escapeHtml(o.shippingMethod)}</div>` : ''}
+  `;
+  
+  // املأ dropdown
+  const sel = document.getElementById('cot-new-type');
+  sel.innerHTML = '<option value="">— اختار النوع —</option>' + 
+    _orderTypes.filter(t => t.active).map(t => 
+      `<option value="${t.id}" ${currentType && t.id === currentType.id ? 'disabled' : ''}>${t.emoji || '📦'} ${escapeHtml(t.label_ar)}${currentType && t.id === currentType.id ? ' (الحالي)' : ''}</option>`
+    ).join('');
+  
+  document.getElementById('cot-reason').value = '';
+  openM('m-change-order-type');
+}
+
+async function confirmChangeOrderType(){
+  const orderId = document.getElementById('cot-order-id').value;
+  const newTypeId = document.getElementById('cot-new-type').value;
+  const reason = document.getElementById('cot-reason').value.trim();
+  
+  if(!orderId){ toast('❌ خطأ في تحديد الطلب'); return; }
+  if(!newTypeId){ toast('⚠️ اختار النوع الجديد'); return; }
+  
+  const o = orders.find(x => x.id === orderId);
+  if(!o){ toast('❌ الطلب غير موجود'); return; }
+  
+  try{
+    await apiFetch('/api/orders/'+encodeURIComponent(orderId)+'/change-type', 'POST', {
+      order_type_id: parseInt(newTypeId),
+      reason: reason || 'تعديل يدوي من تفاصيل الطلب'
+    });
+    
+    // حدّث محلياً
+    o.orderTypeId = parseInt(newTypeId);
+    
+    closeM('m-change-order-type');
+    toast('✅ تم تعديل نوع الطلب');
+    
+    // أعد رسم الصفحة الحالية
+    if(typeof renderAssignPage === 'function' && currentPage === 'assign') renderAssignPage();
+    refreshAll();
+  }catch(e){
+    toast('❌ ' + (e.message || 'فشل التحديث'));
+  }
 }
 
 function renderAssignGrid(){
@@ -4792,10 +5022,29 @@ async function confirmAssign(){
     return;
   }
 
-  const ship=+$('assign-ship').value||getShipCost(o,c),note=$('assign-note').value;
+  // 🆕 v217: لو الطلب عنده orderTypeId والمندوب عنده rate، خلي الـ Backend يحدد السعر تلقائي
+  // (بدون إرسال ship → الـ Backend يجيب السعر من courier_ship_rates)
+  // لو الـ user عدّل الـ assign-ship يدوي، نبعت القيمة المعدّلة
+  const shipInputVal = $('assign-ship').value;
+  const note=$('assign-note').value;
   const isBosta = String(currentCourierId)==='bosta';
   const batch = ensureCurrentBatch();
-  const upd={courierId:currentCourierId,ship,note,status:'جاري التوصيل',isBosta,batchCode:batch.code};
+  
+  // فحص: لو الطلب عنده orderTypeId والمندوب موجود، نسيب الـ Backend يحدد
+  // إلا لو الـ user عدّل القيمة في الـ input
+  const hasOrderType = o.orderTypeId && !isBosta;
+  const userEditedShip = shipInputVal !== '' && shipInputVal !== String(o.ship||defaultShip);
+  
+  const upd={courierId:currentCourierId, note, status:'جاري التوصيل', isBosta, batchCode:batch.code};
+  
+  if(hasOrderType && !userEditedShip){
+    // ما نبعتش ship - الـ Backend هيحسبه من courier_ship_rates
+    // (الـ getShipCost في الـ frontend هيقرأه من الـ response)
+  } else {
+    // النظام القديم: ابعت ship صراحةً
+    upd.ship = +shipInputVal || getShipCost(o, c);
+  }
+  
   if(isBosta){
     bostaIds[currentOrderId]=true;
     localStorage.setItem('bosta_ids',JSON.stringify(bostaIds));
@@ -4808,8 +5057,18 @@ async function confirmAssign(){
   // snapshot للـ shopify queue
   const orderSnapshot = { ...o, ...upd };
 
-  if(API_URL){const r=await apiFetch('/api/orders/'+currentOrderId,'PATCH',upd);if(r)Object.assign(o,r.order);else Object.assign(o,upd)}
-  else Object.assign(o,upd);
+  if(API_URL){
+    const r=await apiFetch('/api/orders/'+currentOrderId,'PATCH',upd);
+    if(r){
+      Object.assign(o,r.order);
+      // 🆕 v217: لو الـ Backend رجّع ship مختلف (auto-rate)، حدّث الـ UI
+      if(r.order && r.order.ship != null) o.ship = parseFloat(r.order.ship);
+    } else {
+      Object.assign(o,upd);
+    }
+  } else {
+    Object.assign(o,upd);
+  }
   if(!isBosta && c) c.status='نشط';
   // Shopify fulfill للمناديب و لبوسطة — الكل بياخد fulfill + tag
   if(isBosta) shopifyFulfill(orderSnapshot, 'Bosta');
@@ -7850,6 +8109,8 @@ async function doLogin(){
 
   await syncCouriersToDB();
   await syncUsersFromDB();
+  // 🆕 v217: حمّل أنواع الطلبات في الخلفية (مهم للـ badges في صفحة التوزيع)
+  ensureOrderTypesLoaded();
   loadOrders();
   loadSettlements();
   loadChks();
