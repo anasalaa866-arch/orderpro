@@ -481,6 +481,10 @@ tr:hover td{background:#fafbff}
     <div class="ni" data-p="expiry" onclick="goPage(this,'expiry')"><span class="ni-icon">⏳</span><span class="ni-label">تواريخ الصلاحية</span><span class="nbadge" id="nb-expiry" style="background:var(--danger)"></span></div>
     <div class="nav-label">النظام</div>
     <div class="ni" data-p="notifs" onclick="goPage(this,'notifs')"><span class="ni-icon">🔔</span><span class="ni-label">الإشعارات</span><span class="nbadge" id="nb-notifs">0</span></div>
+    <!-- 🆕 v216: Dashboard Pages -->
+    <div class="ni" data-p="order-types" onclick="goPage(this,'order-types')"><span class="ni-icon">🏷️</span><span class="ni-label">أنواع الطلبات</span></div>
+    <div class="ni" data-p="shipping-mappings" onclick="goPage(this,'shipping-mappings')"><span class="ni-icon">🔗</span><span class="ni-label">ربط Shipping Methods</span><span class="nbadge" id="nb-shipping-unmapped" style="background:var(--warn)">0</span></div>
+    <div class="ni" data-p="courier-rates" onclick="goPage(this,'courier-rates')"><span class="ni-icon">💰</span><span class="ni-label">تكلفة الشحن</span></div>
     <div class="ni" data-p="settings" onclick="goPage(this,'settings')"><span class="ni-icon">⚙️</span><span class="ni-label">الإعدادات</span></div>
   </nav>
   <div class="sb-foot"><div class="sb-status"><div class="sdot" id="sdot"></div><span class="sb-status-text" id="stxt">غير متصل</span></div></div>
@@ -1365,6 +1369,121 @@ tr:hover td{background:#fafbff}
     </div>
   </div>
 
+  <!-- 🆕 v216: ORDER TYPES PAGE -->
+  <div class="page" id="page-order-types">
+    <div class="card">
+      <div class="card-hd">
+        <h3>🏷️ أنواع الطلبات</h3>
+        <button class="btn btn-primary btn-sm" onclick="openOrderTypeModal()">+ إضافة نوع</button>
+      </div>
+      <div class="card-body">
+        <div style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text)">
+          <strong>💡 ملاحظة:</strong> أنواع الطلبات هي اللي بتحدد الـ workflow + اللون + سعر الشحن. النوع المعلّم بـ <strong>Default</strong> هو اللي بيستخدم لو الـ shipping method اللي جاي من Shopify مش متعرّف.
+        </div>
+        <div class="tw">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:60px">Emoji</th>
+                <th>الاسم</th>
+                <th>الكود</th>
+                <th style="width:80px">اللون</th>
+                <th style="width:100px">Default</th>
+                <th style="width:80px">الترتيب</th>
+                <th style="width:80px">نشط</th>
+                <th style="width:120px">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="order-types-tbody">
+              <tr><td colspan="8" style="text-align:center;padding:30px;color:var(--muted)">جاري التحميل...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🆕 v216: SHIPPING METHOD MAPPINGS PAGE -->
+  <div class="page" id="page-shipping-mappings">
+    <!-- Unmapped warning section -->
+    <div id="unmapped-warning" class="card" style="display:none;margin-bottom:14px;border:2px solid var(--warn);background:#fef3c7">
+      <div class="card-body">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <h3 style="margin:0;color:#92400e">⚠️ Shipping Methods غير مربوطة</h3>
+          <button class="btn btn-warn btn-sm" onclick="bulkMapToDefault()">🔗 ربط الكل بالـ Default</button>
+        </div>
+        <div style="font-size:12px;color:#92400e;margin-bottom:10px">
+          في <strong id="unmapped-count">0</strong> shipping method جايين من Shopify ومش متعرّفين. الطلبات بتاعتهم هتاخد الـ Default. اضغط على أي واحد لتربطه بنوع.
+        </div>
+        <div id="unmapped-list" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">
+        <h3>🔗 ربط Shipping Methods بأنواع الطلبات</h3>
+        <button class="btn btn-primary btn-sm" onclick="openShippingMappingModal()">+ إضافة ربط</button>
+      </div>
+      <div class="card-body">
+        <div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text)">
+          <strong>💡 طريقة العمل:</strong> لما طلب ييجي من Shopify بـ shipping method معينة، النظام يبص هنا ويلاقي نوعها. <strong>عدة shipping methods ممكن تربط بنوع واحد</strong> (مثلاً "Standard Delivery" + "Free Shipping" = "عادي").
+        </div>
+        <div class="tw">
+          <table>
+            <thead>
+              <tr>
+                <th>Shopify Shipping Method</th>
+                <th style="width:200px">نوع الطلب</th>
+                <th style="width:200px">ملاحظات</th>
+                <th style="width:120px">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="shipping-mappings-tbody">
+              <tr><td colspan="4" style="text-align:center;padding:30px;color:var(--muted)">جاري التحميل...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🆕 v216: COURIER SHIP RATES PAGE -->
+  <div class="page" id="page-courier-rates">
+    <div class="card">
+      <div class="card-hd">
+        <h3>💰 تكلفة الشحن لكل مندوب</h3>
+      </div>
+      <div class="card-body">
+        <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text)">
+          <strong>💡 ملاحظة:</strong> اختار المندوب من القائمة وحدد سعر الشحن لكل نوع طلب. <strong>السعر يقبل 0</strong> (مثلاً المحل: شحنه 0 لكل الأنواع). السعر بيتطبق تلقائياً لما توزّع طلب.
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">اختار المندوب:</label>
+          <select id="rates-courier-select" class="form-input" onchange="loadCourierRates()" style="max-width:400px">
+            <option value="">— اختار المندوب —</option>
+          </select>
+        </div>
+        <div id="rates-content" style="display:none">
+          <div class="tw">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:60px">Emoji</th>
+                  <th>نوع الطلب</th>
+                  <th style="width:200px">تكلفة الشحن (ج)</th>
+                </tr>
+              </thead>
+              <tbody id="courier-rates-tbody"></tbody>
+            </table>
+          </div>
+          <div style="text-align:left;margin-top:14px">
+            <button class="btn btn-primary" onclick="saveCourierRates()">💾 حفظ الأسعار</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- REPORTS -->
   <div class="page" id="page-reports">
     <div class="stats-row" style="grid-template-columns:repeat(4,1fr)">
@@ -1606,6 +1725,80 @@ tr:hover td{background:#fafbff}
   </div>
 </div></div>
 
+<!-- 🆕 v216: Order Type Modal -->
+<div class="overlay" id="m-order-type"><div class="modal">
+  <div class="mhd"><h3 id="ot-modal-title">🏷️ إضافة نوع طلب</h3><button class="xbtn" onclick="closeM('m-order-type')">✕</button></div>
+  <div class="mbd">
+    <input type="hidden" id="ot-id">
+    <div class="row2">
+      <div class="fg">
+        <label>الكود (English) *</label>
+        <input type="text" id="ot-code" placeholder="normal, express, ..." pattern="[a-z_]+" maxlength="30">
+        <small style="color:var(--muted);font-size:11px">حروف صغيرة فقط (مفيش مسافات)</small>
+      </div>
+      <div class="fg">
+        <label>الاسم بالعربي *</label>
+        <input type="text" id="ot-label" placeholder="عادي، مستعجل، استلام..." maxlength="50">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="fg">
+        <label>Emoji</label>
+        <input type="text" id="ot-emoji" placeholder="🚚" maxlength="4" style="font-size:20px;text-align:center">
+        <small style="color:var(--muted);font-size:11px">مثال: 🚚 ⚡ 🏪 📦 🚴 ✈️</small>
+      </div>
+      <div class="fg">
+        <label>اللون</label>
+        <input type="color" id="ot-color" value="#3b82f6" style="height:42px;cursor:pointer">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="fg">
+        <label>الترتيب</label>
+        <input type="number" id="ot-sort" value="0" min="0">
+      </div>
+      <div class="fg">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:24px">
+          <input type="checkbox" id="ot-default" style="width:18px;height:18px">
+          <span>هو الـ Default</span>
+        </label>
+        <small style="color:var(--muted);font-size:11px">يستخدم لو الـ shipping method مش متعرّف</small>
+      </div>
+    </div>
+  </div>
+  <div class="mft">
+    <button class="btn btn-ghost" onclick="closeM('m-order-type')">إلغاء</button>
+    <button class="btn btn-primary" onclick="saveOrderType()">💾 حفظ</button>
+  </div>
+</div></div>
+
+<!-- 🆕 v216: Shipping Mapping Modal -->
+<div class="overlay" id="m-shipping-mapping"><div class="modal">
+  <div class="mhd"><h3 id="sm-modal-title">🔗 ربط Shipping Method</h3><button class="xbtn" onclick="closeM('m-shipping-mapping')">✕</button></div>
+  <div class="mbd">
+    <input type="hidden" id="sm-id">
+    <div class="fg">
+      <label>Shopify Shipping Method *</label>
+      <input type="text" id="sm-method" placeholder="Standard Delivery" maxlength="200">
+      <small style="color:var(--muted);font-size:11px">الاسم بالظبط زي ما بييجي من Shopify</small>
+    </div>
+    <div class="fg">
+      <label>نوع الطلب *</label>
+      <select id="sm-type">
+        <option value="">— اختار النوع —</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label>ملاحظات (اختياري)</label>
+      <input type="text" id="sm-notes" placeholder="..." maxlength="200">
+    </div>
+  </div>
+  <div class="mft">
+    <button class="btn btn-ghost" onclick="closeM('m-shipping-mapping')">إلغاء</button>
+    <button class="btn btn-primary" onclick="saveShippingMapping()">💾 حفظ</button>
+  </div>
+</div></div>
+
 <div class="overlay" id="m-courier"><div class="modal">
   <div class="mhd"><h3>🚴 إضافة مندوب جديد</h3><button class="xbtn" onclick="closeM('m-courier')">✕</button></div>
   <div class="mbd">
@@ -1716,56 +1909,21 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v218 — SHOP FREE SHIPPING =====
-// 2026-04-30: المحل (SHOP_COURIER_ID) دايماً شحنه = 0 تلقائياً
-// أي طلب عند المحل = شحنه 0 بغض النظر عن قيمة ship المسجلة
-// أي مندوب دوره "shop" = شحنه 0 تلقائياً
+// ===== OrderPro v216 — DASHBOARD PAGES =====
+// 2026-04-30: 3 صفحات Dashboard جديدة في الـ sidebar
+// 1. 🏷️ أنواع الطلبات - CRUD لأنواع الطلبات الديناميكية
+// 2. 🔗 ربط Shipping Methods - ربط Shopify methods بالأنواع
+// 3. 💰 تكلفة الشحن - مصفوفة مندوب × نوع طلب
+//
+// مفيش تأثير على الـ workflow الحالي - الصفحات دي بس للإعداد
+// =================================
+// السابق: v215 — PICKUP IN ASSIGN
+// 2026-04-30: السماح للطلبات pickup بالظهور في صفحة التوزيع
+// =================================
+// v214 - CUSTOMER RISK FIX (2026-04-29)
+// إصلاح صفحة تقييم العملاء + تحديث تلقائي عند الفتح
+// - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
-
-// 🆕 v218: helper للتحقق من إن المندوب هو المحل
-// المحل بيتعرف عليه بـ id (SHOP_COURIER_ID) أو role/phone
-function isShopCourier(c){
-  if(!c) return false;
-  // 1) لو الـ id يطابق SHOP_COURIER_ID
-  if(typeof SHOP_COURIER_ID !== 'undefined' && String(c.id) === String(SHOP_COURIER_ID)) return true;
-  // 2) لو الـ role = 'shop'
-  if(c.role === 'shop') return true;
-  // 3) لو الـ phone = 'shop' (طريقة قديمة)
-  if(c.phone === 'shop') return true;
-  // 4) fallback: لو الاسم فيه "محل" أو "Trivium"
-  const name = (c.name || '').toLowerCase();
-  if(name.includes('محل') || name.includes('trivium') || name.includes('shop')) return true;
-  return false;
-}
-
-// 🆕 v217+v218: helpers للشحن - تتعامل مع 0 كقيمة صحيحة + المحل = 0 تلقائياً
-function getOrderShip(o, fallback = 50){
-  if(!o) return fallback;
-  // 🆕 v218: لو الطلب عند المحل، الشحن دايماً 0
-  if(o.courierId != null){
-    const c = (typeof couriers !== 'undefined') ? couriers.find(x => String(x.id) === String(o.courierId)) : null;
-    if(c && isShopCourier(c)) return 0;
-  }
-  // طلب pickup أو transit = شحن 0
-  if(o.deliveryType === 'pickup' || o.deliveryType === 'transit') return 0;
-  // 0 valid! استخدم null/undefined check بدل falsy
-  const v = o.ship;
-  return (v != null && v !== '') ? parseFloat(v) : fallback;
-}
-function getCourierShip(c, fallback = 50){
-  if(!c) return fallback;
-  // 🆕 v218: المحل دايماً شحنه 0
-  if(isShopCourier(c)) return 0;
-  const v = c.ship;
-  return (v != null && v !== '') ? parseFloat(v) : fallback;
-}
-function getCourierShipExpress(c, fallback = 80){
-  if(!c) return fallback;
-  // 🆕 v218: المحل دايماً شحنه 0 (حتى للمستعجل)
-  if(isShopCourier(c)) return 0;
-  const v = c.shipExpress;
-  return (v != null && v !== '') ? parseFloat(v) : fallback;
-}
 
 // ===== Shop Pickup Variables =====
 // SHOP_COURIER_ID: يتحمّل ديناميكياً من السيرفر (settings) — fallback للقيمة المحفوظة
@@ -1851,7 +2009,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -2042,10 +2200,10 @@ function suggestCourier(order){
   return best;
 }
 const getShipCost=(order,courier)=>{
-  if(!courier)return getOrderShip(order); // 🆕 v217: يتعامل مع 0 صح
+  if(!courier)return order.ship||50;
   if(isPickup(order)||isTransit(order)) return 0;
-  if(isSameDay(order)) return getCourierShipExpress(courier); // 🆕 v217
-  return getCourierShip(courier); // 🆕 v217
+  if(isSameDay(order)) return+(courier.shipExpress||courier.ship||80);
+  return+(courier.ship||50);
 };
 const nowTime=()=>new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
 
@@ -2121,6 +2279,12 @@ function fmtRelative(d){
 function escapeHtml(s){
   if(s == null) return '';
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// 🆕 v216: escape for HTML attributes (for onclick, value, etc.)
+function escapeAttr(s){
+  if(s == null) return '';
+  return String(s).replace(/["']/g, c => c === '"' ? '&quot;' : '&#39;');
 }
 
 function toast(msg){const t=$('toast');t.innerHTML=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500)}
@@ -2901,7 +3065,7 @@ function renderOrders(){
       </div>`;
     }
 
-    return `<tr${settled?' style="background:#f0fdf4"':''}><td style="text-align:center" data-label=""><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"${settled && !canEditSettled()?' disabled':''}></td><td data-label="رقم الطلب"><strong>${o.id}</strong>${settledBadge}${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td data-label="المصدر">${srcBadge(o.src)}</td><td data-label="العميل">${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px" data-label="الهاتف">${o.phone}</td><td data-label="المنطقة">📍 ${o.area}</td><td data-label="نوع التوصيل">${deliveryBadge(o)}</td><td data-label="COD"><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn" data-label="الشحن">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':getOrderShip(o)+' ج'}</td><td data-label="المندوب">${cName(o.courierId)}</td><td data-label="الحالة">${sBadge(o.status)}</td><td data-label="إجراءات">${actionsHtml}</td></tr>`;
+    return `<tr${settled?' style="background:#f0fdf4"':''}><td style="text-align:center" data-label=""><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"${settled && !canEditSettled()?' disabled':''}></td><td data-label="رقم الطلب"><strong>${o.id}</strong>${settledBadge}${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td data-label="المصدر">${srcBadge(o.src)}</td><td data-label="العميل">${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px" data-label="الهاتف">${o.phone}</td><td data-label="المنطقة">📍 ${o.area}</td><td data-label="نوع التوصيل">${deliveryBadge(o)}</td><td data-label="COD"><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn" data-label="الشحن">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td data-label="المندوب">${cName(o.courierId)}</td><td data-label="الحالة">${sBadge(o.status)}</td><td data-label="إجراءات">${actionsHtml}</td></tr>`;
   }).join('');
 
   // ارسم شريط pagination
@@ -3518,7 +3682,11 @@ async function resetShopUserPassword(username){
 
 function renderAssignPage(){
   updateBatchIndicator();
-  const u=orders.filter(o=>!o.courierId&&!o.isBosta&&o.status!=='مكتمل'&&o.status!=='ملغي'&&!isPickup(o)&&!isTransit(o));
+  // 🔧 v215 FIX: السماح للطلبات pickup بالظهور في صفحة التوزيع
+  // طلبات Shopify اللي shipping method فيها "Pick up" بتيجي بـ delivery_type='pickup'
+  // ولازم تظهر في التوزيع عشان يتم توزيعها للمحل
+  // (الفلتر القديم: !isPickup(o) كان بيخفيها)
+  const u=orders.filter(o=>!o.courierId&&!o.isBosta&&o.status!=='مكتمل'&&o.status!=='ملغي'&&!isTransit(o));
   $('assign-count').textContent=u.length+' طلب';
   const probCount=u.filter(o=>o.hasProblem).length;
   const probBtn=$('assign-prob-btn');
@@ -5128,13 +5296,8 @@ async function addOrder(){
 async function addCourier(){
   const name=$('c-name').value.trim(),phone=$('c-phone').value.trim();
   if(!name||!phone){toast('❗ الاسم والهاتف مطلوبان');return}
-  // 🆕 v217: السماح بـ 0 كقيمة صحيحة
-  const newShipVal = $('c-ship').value;
-  const newShipExpVal = $('c-ship-express').value;
   const newC={name,phone,zone:$('c-zone').value||'غير محدد',vehicle:$('c-vehicle').value,
-    ship: newShipVal !== '' && newShipVal != null ? parseFloat(newShipVal) : 50,
-    shipExpress: newShipExpVal !== '' && newShipExpVal != null ? parseFloat(newShipExpVal) : 80,
-    status:'متاح',settled:false};
+    ship:+$('c-ship').value||50,shipExpress:+$('c-ship-express').value||80,status:'متاح',settled:false};
   closeM('m-courier');
   ['c-name','c-phone','c-zone'].forEach(x=>$(x).value='');
   $('c-ship').value=50;$('c-ship-express').value=80;
@@ -5186,11 +5349,8 @@ async function saveEditCourier(){
   c.name=name; c.phone=phone;
   c.zone=document.getElementById('ec-zone').value.trim()||'غير محدد';
   c.vehicle=document.getElementById('ec-vehicle').value;
-  // 🆕 v217: السماح بـ 0 كقيمة صحيحة (المحل مفيش شحن)
-  const shipVal = document.getElementById('ec-ship').value;
-  c.ship = shipVal !== '' && shipVal != null ? parseFloat(shipVal) : 50;
-  const shipExpVal = document.getElementById('ec-ship-express').value;
-  c.shipExpress = shipExpVal !== '' && shipExpVal != null ? parseFloat(shipExpVal) : 80;
+  c.ship=+document.getElementById('ec-ship').value||50;
+  c.shipExpress=+document.getElementById('ec-ship-express').value||80;
   if(API_URL) await apiFetch('/api/couriers/'+editingCourierId,'PATCH',{name:c.name,phone:c.phone,zone:c.zone,vehicle:c.vehicle,ship:c.ship,shipExpress:c.shipExpress});
   saveCouriers();
   closeM('m-edit-courier');
@@ -5223,10 +5383,10 @@ function renderAcc(){
     const codOrders=done.filter(o=>!o.paid);
     const paidOrders=done.filter(o=>o.paid);
     const cod=codOrders.reduce((a,o)=>a+o.total,0);
-    const ship=done.reduce((a,o)=>a+getOrderShip(o),0);
+    const ship=done.reduce((a,o)=>a+(o.ship||50),0);
     const doneNorm=done.filter(o=>deliveryType(o)==='normal'),doneExp=done.filter(o=>isSameDay(o)),donePick=done.filter(o=>isPickup(o));
-    const shipNorm=doneNorm.reduce((a,o)=>a+getOrderShip(o, getCourierShip(c)),0);
-    const shipExp=doneExp.reduce((a,o)=>a+getOrderShip(o, getCourierShipExpress(c)),0);
+    const shipNorm=doneNorm.reduce((a,o)=>a+(o.ship||c.ship||50),0);
+    const shipExp=doneExp.reduce((a,o)=>a+(o.ship||c.shipExpress||80),0);
     totCod+=cod;totShip+=ship;
     rows+=`<tr>
       <td><strong>${c.name}</strong><br><span style="font-size:10px;color:var(--muted)">${c.phone}</span></td>
@@ -5262,7 +5422,7 @@ function renderAcc(){
 
 function renderAccDet(){
   const f=$('acc-cf').value,list=orders.filter(o=>o.status==='مكتمل'&&o.courierId&&(f==='all'||o.courierId==f));
-  $('acc-det-tbody').innerHTML=list.map(o=>{const c=couriers.find(x=>x.id==o.courierId),ship=getOrderShip(o),express=isSameDay(o);return`<tr><td><strong>${o.id}</strong></td><td>${c?c.name:'—'}</td><td>${o.name}</td><td>📍 ${o.area}</td><td><span class="badge ${express?'b-cancel':'b-go'}">${express?'⚡ سريع':'🚚 عادي'}</span></td><td class="mpos">${o.total.toLocaleString()} ج</td><td class="mwarn">${ship} ج</td><td class="mpos">${(o.total-ship).toLocaleString()} ج</td><td>${sBadge(o.status)}</td></tr>`}).join('');
+  $('acc-det-tbody').innerHTML=list.map(o=>{const c=couriers.find(x=>x.id==o.courierId),ship=o.ship||50,express=isSameDay(o);return`<tr><td><strong>${o.id}</strong></td><td>${c?c.name:'—'}</td><td>${o.name}</td><td>📍 ${o.area}</td><td><span class="badge ${express?'b-cancel':'b-go'}">${express?'⚡ سريع':'🚚 عادي'}</span></td><td class="mpos">${o.total.toLocaleString()} ج</td><td class="mwarn">${ship} ج</td><td class="mpos">${(o.total-ship).toLocaleString()} ج</td><td>${sBadge(o.status)}</td></tr>`}).join('');
 }
 
 function accTab(tab,sec){document.querySelectorAll('.acc-tab').forEach(t=>t.classList.remove('on'));tab.classList.add('on');document.querySelectorAll('.acc-sec').forEach(s=>s.classList.remove('on'));$(sec).classList.add('on');if(sec==='acc-det')renderAccDet();if(sec==='acc-set')renderSettle()}
@@ -6232,7 +6392,7 @@ async function doExcelImport(){
 
   let assigned=0, added=0;
   for(const o of parsedExcelOrders){
-    const ship = o.deliveryType==='express'?getCourierShipExpress(c):getCourierShip(c);
+    const ship = o.deliveryType==='express'?(c.shipExpress||80):(c.ship||50);
     const existing = orders.find(x=>x.id===o.id);
     if(existing){
       existing.courierId=courierId; existing.status='مكتمل'; existing.ship=ship;
@@ -7542,7 +7702,7 @@ async function doConvertDelivery(courierId){
   const o=orders.find(x=>x.id===convertingOrderId);if(!o)return;
   const shipCost=parseFloat($('convert-ship-cost').value)||0;
   const c=courierId!=='bosta'?couriers.find(x=>x.id==courierId):null;
-  const baseShip=c?(isSameDay(o)?getCourierShipExpress(c):getCourierShip(c)):50;
+  const baseShip=c?(isSameDay(o)?c.shipExpress||80:c.ship||50):50;
   o.total=o.total+shipCost;
   o.ship=baseShip;
   o.courierId=courierId;
@@ -7985,7 +8145,8 @@ function renderSettle(){
     const pending = getPendingSettleOrders(c.id);
     if(!pending.length) return '<div style="border:1px solid var(--border);border-radius:9px;padding:12px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;opacity:.6"><div><strong>'+c.name+'</strong> — <span style="font-size:11px;color:var(--muted)">لا توجد طلبات جديدة</span></div><span class="badge b-done">✅ مسوّى</span></div>';
     const cod = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-    const ship = pending.reduce((s,o)=>s+getOrderShip(o),0);
+    const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
+    return '<div style="border:1px solid var(--border);border-radius:9px;padding:13px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between"><div><div style="font-weight:700;font-size:13px;margin-bottom:4px">'+c.name+'</div><div style="font-size:12px;color:var(--muted)">📦 '+pending.length+' طلب · 💰 <strong style="color:var(--success)">'+cod.toLocaleString()+' ج</strong> · 🚴 <strong style="color:var(--purple)">'+ship.toLocaleString()+' ج</strong> · 💵 صافي: <strong style="color:var(--accent)">'+(cod-ship).toLocaleString()+' ج</strong></div></div><button class="btn btn-primary btn-sm" onclick="openSettle('+c.id+')">تسوية الحساب</button></div>';
   }).join('');
 }
 
@@ -8043,7 +8204,7 @@ function openCourierAccSession(cId){
   batchCodes.forEach(code => {
     const batchOrders = batchMap[code];
     const cod = batchOrders.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-    const ship = batchOrders.reduce((s,o)=>s+getOrderShip(o),0);
+    const ship = batchOrders.reduce((s,o)=>s+(o.ship||50),0);
     html += `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--card)">
       <input type="checkbox" class="acc-batch-chk" value="${code}" checked style="width:18px;height:18px;cursor:pointer">
       <div style="flex:1">
@@ -8056,7 +8217,7 @@ function openCourierAccSession(cId){
 
   if(noBatchOrders.length){
     const cod = noBatchOrders.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-    const ship = noBatchOrders.reduce((s,o)=>s+getOrderShip(o),0);
+    const ship = noBatchOrders.reduce((s,o)=>s+(o.ship||50),0);
     html += `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--warn);border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--warn-light)">
       <input type="checkbox" class="acc-batch-chk" value="__nobatch__" checked style="width:18px;height:18px;cursor:pointer">
       <div style="flex:1">
@@ -8354,7 +8515,7 @@ function openSettle(cId){
   if(!pending.length){ toast('✅ لا توجد طلبات جديدة'); return; }
   const cod  = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
   const paid = pending.filter(o=>o.paid).reduce((s,o)=>s+o.total,0);
-  const ship = pending.reduce((s,o)=>s+getOrderShip(o),0);
+  const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
   const sessNum = _allSettlements.filter(s=>String(s.courierId)===String(cId)).length+1;
   $('settle-title').textContent = 'تسوية حساب — '+c.name;
   $('settle-body').innerHTML = '<div style="background:var(--accent-light);border-radius:8px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:var(--accent);font-weight:700">تسوية رقم '+sessNum+'</div>'
@@ -8456,7 +8617,7 @@ function _updateSettleNet(){
   if(!el) return;
   const pending = getPendingSettleOrders(settlingCourierId);
   const cod = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-  const ship = pending.reduce((s,o)=>s+getOrderShip(o),0);
+  const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
   const net = cod - ship + adj;
   el.innerHTML = '<span>💵 صافي المحل</span><strong style="color:var(--accent)">'+net.toLocaleString()+' ج</strong>'
     +(adj!==0?'<span style="font-size:11px;color:var(--muted);margin-right:8px">(تعديل: '+(adj>=0?'+':'')+adj.toLocaleString()+' ج)</span>':'');
@@ -8470,7 +8631,7 @@ async function doSettle(){
   const now = new Date().toISOString();
   const orderIds = pending.map(o=>o.id);
   const cod  = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-  const ship = pending.reduce((s,o)=>s+getOrderShip(o),0);
+  const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
   const adj = window._settleAdj || [];
   const adjTotal = adj.reduce((s,a)=>s+a.amount,0);
   const newS = {id:Date.now(), courierId:c.id, ts:new Date(now), orderIds, cod, ship, adj, adjTotal};
@@ -8598,13 +8759,13 @@ function _doPrintSettle(c, done, isDraft, settleDate, settlement){
   const adjTotal = s.adjTotal || adj.reduce((sum,a)=>sum+(parseFloat(a.amount)||0),0);
   const cod = done.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
   const paidOrders = done.filter(o=>o.paid);
-  const ship = done.reduce((s,o)=>s+getOrderShip(o),0);
+  const ship = done.reduce((s,o)=>s+(o.ship||50),0);
   const net = cod - ship + adjTotal;
   const today = new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const nowt = new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
   const dateStr = (settleDate?new Date(settleDate):new Date()).toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'});
   let rows='';
-  done.forEach((o,i)=>{ rows+='<tr><td>'+(i+1)+'</td><td><strong>'+o.id+'</strong></td><td>'+(o.name||'—')+'</td><td>'+(o.area||'—')+'</td><td><strong>'+o.total.toLocaleString()+' ج</strong></td><td>'+(o.paid?'<span style="color:#16a34a">💳 مدفوع</span>':'💵 COD')+'</td><td>'+getOrderShip(o)+' ج</td></tr>'; });
+  done.forEach((o,i)=>{ rows+='<tr><td>'+(i+1)+'</td><td><strong>'+o.id+'</strong></td><td>'+(o.name||'—')+'</td><td>'+(o.area||'—')+'</td><td><strong>'+o.total.toLocaleString()+' ج</strong></td><td>'+(o.paid?'<span style="color:#16a34a">💳 مدفوع</span>':'💵 COD')+'</td><td>'+(o.ship||50)+' ج</td></tr>'; });
   const html='<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تسوية '+c.name+'</title>'
     +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;padding:16px;font-size:11px}'
     +'.hd{display:flex;justify-content:space-between;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:14px}'
@@ -9951,7 +10112,7 @@ function renderBatchOrder(){
   if(grid){
     const ranked=couriers.filter(c => (c.role || 'courier') !== 'preparer').map(c=>({...c,zm:zoneMatchScore(o.area,c.zone)})).sort((a,b)=>(b.zm-a.zm));
     grid.innerHTML=ranked.map(c=>{
-      const ship=isSameDay(o)?getCourierShipExpress(c):getCourierShip(c);
+      const ship=isSameDay(o)?(c.shipExpress||80):(c.ship||50);
       const star=c.zm===2?'⭐ ':'';
       const extra=!isPickupOrder?('<br><span style="font-size:10px;opacity:.7">'+ship+' ج</span>'):'';
       const bc2=c.zm===2?'#10b981':c.zm===1?'#f59e0b':'var(--border)';
@@ -10050,7 +10211,7 @@ async function batchAssign(courierId){
 
   if(courierId===0)courierId='bosta';
   const c=courierId!=='bosta'?couriers.find(x=>x.id==courierId):null;
-  const ship=c?(isSameDay(o)?getCourierShipExpress(c):getCourierShip(c)):50;
+  const ship=c?(isSameDay(o)?c.shipExpress||80:c.ship||50):50;
   const assignedZone=getOrderZoneForCourier(o,c||{zone:''});
   const isBosta=courierId==='bosta';
   const isShop = !isBosta && SHOP_COURIER_ID && Number(courierId) === Number(SHOP_COURIER_ID);
@@ -11415,7 +11576,7 @@ function coDsRender(){
   if(!all.length){sheetEl.innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">لا توجد طلبات</div>';return;}
 
   const totalCod=all.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-  const shipFee=showExp.reduce((s,o)=>s+getOrderShip(o, getCourierShipExpress(c)),0)+showNorm.reduce((s,o)=>s+getOrderShip(o, getCourierShip(c)),0);
+  const shipFee=showExp.reduce((s,o)=>s+(o.ship||c.shipExpress||80),0)+showNorm.reduce((s,o)=>s+(o.ship||c.ship||50),0);
   const today=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 
   let expHtml='',normHtml='';
@@ -11456,7 +11617,7 @@ function coDsRender(){
 function renderReports(){
   $('report-tbody').innerHTML=couriers.map(c=>{
     const all=oByC(c.id),done=oByC(c.id,'مكتمل'),cancel=oByC(c.id,'ملغي');
-    const cod=done.reduce((a,o)=>a+o.total,0),ship=done.reduce((a,o)=>a+getOrderShip(o),0),rate=all.length?Math.round(done.length/all.length*100):0;
+    const cod=done.reduce((a,o)=>a+o.total,0),ship=done.reduce((a,o)=>a+(o.ship||50),0),rate=all.length?Math.round(done.length/all.length*100):0;
     return`<tr><td><strong>${c.name}</strong></td><td>${all.length}</td><td>${done.length}</td><td>${cancel.length}</td><td class="mpos">${cod.toLocaleString()} ج</td><td class="mwarn">${ship.toLocaleString()} ج</td><td class="mpos">${(cod-ship).toLocaleString()} ج</td><td><span style="color:${rate>70?'var(--success)':'var(--warn)'};font-weight:700">${rate}%</span></td></tr>`}).join('');
 }
 
@@ -11705,7 +11866,412 @@ function goPage(el,page){
   if(page==='shipping-transfers')loadShippingTransfers();
   if(page==='customer-risk'){ loadRiskSettings(); loadRiskList(); }
   if(page==='field-cancels')loadFieldCancels();
+  // 🆕 v216: Dashboard Pages
+  if(page==='order-types') loadOrderTypes();
+  if(page==='shipping-mappings') { loadShippingMappings(); loadUnmappedShippingMethods(); }
+  if(page==='courier-rates') initCourierRatesPage();
 }
+
+// ============================================================================
+// 🆕 v216: DASHBOARD PAGES (Order Types + Shipping Mappings + Courier Rates)
+// ============================================================================
+
+// ===== STATE =====
+let _orderTypes = [];
+let _shippingMappings = [];
+let _unmappedShippingMethods = [];
+let _currentCourierRates = [];
+let _currentRatesCourierId = null;
+
+// ===== ORDER TYPES =====
+async function loadOrderTypes(){
+  if(!API_URL) return;
+  const tbody = document.getElementById('order-types-tbody');
+  if(tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</td></tr>';
+  try{
+    _orderTypes = await apiFetch('/api/order-types');
+    renderOrderTypes();
+  }catch(e){
+    if(tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--danger)">❌ ${e.message}</td></tr>`;
+  }
+}
+
+function renderOrderTypes(){
+  const tbody = document.getElementById('order-types-tbody');
+  if(!tbody) return;
+  if(!_orderTypes.length){
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:8px">📭</div>
+      <div>مفيش أنواع بعد. اضغط "إضافة نوع" عشان تبدأ.</div>
+    </td></tr>`;
+    return;
+  }
+  tbody.innerHTML = _orderTypes.map(t => `
+    <tr ${t.is_default ? 'style="background:rgba(99,102,241,.05)"' : ''}>
+      <td style="font-size:24px;text-align:center">${t.emoji || '📦'}</td>
+      <td><strong>${escapeHtml(t.label_ar)}</strong></td>
+      <td style="font-family:monospace;font-size:11px;color:var(--muted)">${escapeHtml(t.code)}</td>
+      <td><div style="width:30px;height:30px;border-radius:6px;background:${t.color || '#3b82f6'};border:1px solid var(--border)"></div></td>
+      <td>${t.is_default 
+        ? '<span style="background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">⭐ Default</span>' 
+        : ''}</td>
+      <td style="text-align:center">${t.sort_order}</td>
+      <td>${t.active 
+        ? '<span style="color:var(--success)">✅</span>' 
+        : '<span style="color:var(--danger)">⏸️</span>'}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-ghost btn-xs" onclick="editOrderType(${t.id})" title="تعديل">✏️</button>
+          ${!t.is_default ? `<button class="btn btn-ghost btn-xs" onclick="deleteOrderType(${t.id})" title="حذف" style="color:var(--danger)">🗑️</button>` : ''}
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openOrderTypeModal(){
+  document.getElementById('ot-modal-title').textContent = '🏷️ إضافة نوع طلب';
+  document.getElementById('ot-id').value = '';
+  document.getElementById('ot-code').value = '';
+  document.getElementById('ot-code').disabled = false;
+  document.getElementById('ot-label').value = '';
+  document.getElementById('ot-emoji').value = '📦';
+  document.getElementById('ot-color').value = '#3b82f6';
+  document.getElementById('ot-sort').value = '0';
+  document.getElementById('ot-default').checked = false;
+  openM('m-order-type');
+}
+
+function editOrderType(id){
+  const t = _orderTypes.find(x => x.id === id);
+  if(!t) return;
+  document.getElementById('ot-modal-title').textContent = '🏷️ تعديل نوع طلب';
+  document.getElementById('ot-id').value = t.id;
+  document.getElementById('ot-code').value = t.code;
+  document.getElementById('ot-code').disabled = true; // الكود مش بيتعدل
+  document.getElementById('ot-label').value = t.label_ar;
+  document.getElementById('ot-emoji').value = t.emoji || '📦';
+  document.getElementById('ot-color').value = t.color || '#3b82f6';
+  document.getElementById('ot-sort').value = t.sort_order || 0;
+  document.getElementById('ot-default').checked = !!t.is_default;
+  openM('m-order-type');
+}
+
+async function saveOrderType(){
+  const id = document.getElementById('ot-id').value;
+  const code = document.getElementById('ot-code').value.trim().toLowerCase().replace(/\s+/g, '_');
+  const label_ar = document.getElementById('ot-label').value.trim();
+  const emoji = document.getElementById('ot-emoji').value.trim() || '📦';
+  const color = document.getElementById('ot-color').value;
+  const sort_order = parseInt(document.getElementById('ot-sort').value) || 0;
+  const is_default = document.getElementById('ot-default').checked;
+  
+  if(!code || !label_ar){ toast('⚠️ الكود والاسم مطلوبين'); return; }
+  if(!/^[a-z_]+$/.test(code)){ toast('⚠️ الكود حروف صغيرة فقط بدون مسافات'); return; }
+  
+  try{
+    if(id){
+      await apiFetch('/api/order-types/'+id, 'PATCH', { label_ar, emoji, color, sort_order, is_default });
+      toast('✅ تم التعديل');
+    } else {
+      await apiFetch('/api/order-types', 'POST', { code, label_ar, emoji, color, sort_order, is_default });
+      toast('✅ تم الإضافة');
+    }
+    closeM('m-order-type');
+    loadOrderTypes();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function deleteOrderType(id){
+  const t = _orderTypes.find(x => x.id === id);
+  if(!t) return;
+  if(!confirm(`متأكد من حذف نوع "${t.label_ar}"؟\n\nملاحظة: الطلبات اللي عليه نوعه هتفضل، بس هيبقى order_type_id = null.`)) return;
+  try{
+    await apiFetch('/api/order-types/'+id, 'DELETE');
+    toast('✅ تم الحذف');
+    loadOrderTypes();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+// ===== SHIPPING METHOD MAPPINGS =====
+async function loadShippingMappings(){
+  if(!API_URL) return;
+  const tbody = document.getElementById('shipping-mappings-tbody');
+  if(tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</td></tr>';
+  try{
+    _shippingMappings = await apiFetch('/api/shipping-mappings');
+    // تأكد إن الأنواع متحملة (للـ dropdown)
+    if(!_orderTypes.length) _orderTypes = await apiFetch('/api/order-types');
+    renderShippingMappings();
+  }catch(e){
+    if(tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--danger)">❌ ${e.message}</td></tr>`;
+  }
+}
+
+function renderShippingMappings(){
+  const tbody = document.getElementById('shipping-mappings-tbody');
+  if(!tbody) return;
+  if(!_shippingMappings.length){
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:8px">🔗</div>
+      <div>مفيش روابط بعد. اضغط "إضافة ربط" أو ربط الـ unmapped.</div>
+    </td></tr>`;
+    return;
+  }
+  tbody.innerHTML = _shippingMappings.map(m => `
+    <tr>
+      <td><strong>${escapeHtml(m.shipping_method)}</strong></td>
+      <td>
+        ${m.order_type_id ? 
+          `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:${m.type_color || '#3b82f6'}22;color:${m.type_color || '#3b82f6'};border-radius:6px;font-weight:700;font-size:12px">
+            ${m.type_emoji || '📦'} ${escapeHtml(m.type_label || '—')}
+          </span>` 
+          : '<span style="color:var(--muted)">— غير محدد —</span>'}
+      </td>
+      <td style="font-size:11px;color:var(--muted)">${escapeHtml(m.notes || '')}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-ghost btn-xs" onclick="editShippingMapping(${m.id})" title="تعديل">✏️</button>
+          <button class="btn btn-ghost btn-xs" onclick="deleteShippingMapping(${m.id})" title="حذف" style="color:var(--danger)">🗑️</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function loadUnmappedShippingMethods(){
+  if(!API_URL) return;
+  try{
+    _unmappedShippingMethods = await apiFetch('/api/shipping-mappings/unmapped');
+    renderUnmappedWarning();
+  }catch(e){ /* silent */ }
+}
+
+function renderUnmappedWarning(){
+  const warning = document.getElementById('unmapped-warning');
+  const list = document.getElementById('unmapped-list');
+  const cnt = document.getElementById('unmapped-count');
+  const sidebarBadge = document.getElementById('nb-shipping-unmapped');
+  
+  if(!_unmappedShippingMethods.length){
+    if(warning) warning.style.display = 'none';
+    if(sidebarBadge){ sidebarBadge.textContent = '0'; sidebarBadge.style.display = 'none'; }
+    return;
+  }
+  
+  if(warning) warning.style.display = '';
+  if(cnt) cnt.textContent = _unmappedShippingMethods.length;
+  if(sidebarBadge){ 
+    sidebarBadge.textContent = _unmappedShippingMethods.length; 
+    sidebarBadge.style.display = ''; 
+  }
+  
+  if(list){
+    list.innerHTML = _unmappedShippingMethods.map(u => `
+      <button class="btn btn-warn btn-sm" onclick="quickMapShippingMethod('${escapeAttr(u.shipping_method)}')">
+        ${escapeHtml(u.shipping_method)} <span style="opacity:.7">(${u.count})</span>
+      </button>
+    `).join('');
+  }
+}
+
+function quickMapShippingMethod(method){
+  document.getElementById('sm-modal-title').textContent = '🔗 ربط Shipping Method';
+  document.getElementById('sm-id').value = '';
+  document.getElementById('sm-method').value = method;
+  document.getElementById('sm-method').readOnly = true;
+  document.getElementById('sm-notes').value = '';
+  populateShippingMappingTypeSelect();
+  openM('m-shipping-mapping');
+}
+
+async function bulkMapToDefault(){
+  if(!_unmappedShippingMethods.length) return;
+  const def = _orderTypes.find(t => t.is_default);
+  if(!def){ toast('⚠️ لازم تحدد نوع Default الأول'); return; }
+  if(!confirm(`هتربط ${_unmappedShippingMethods.length} shipping method بالنوع الـ Default (${def.label_ar})؟`)) return;
+  
+  try{
+    let success = 0;
+    for(const u of _unmappedShippingMethods){
+      try{
+        await apiFetch('/api/shipping-mappings', 'POST', {
+          shipping_method: u.shipping_method,
+          order_type_id: def.id,
+          notes: 'ربط تلقائي بالـ Default'
+        });
+        success++;
+      }catch(e){ /* skip duplicates */ }
+    }
+    toast(`✅ تم ربط ${success} shipping method`);
+    loadShippingMappings();
+    loadUnmappedShippingMethods();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+function openShippingMappingModal(){
+  document.getElementById('sm-modal-title').textContent = '🔗 إضافة ربط Shipping Method';
+  document.getElementById('sm-id').value = '';
+  document.getElementById('sm-method').value = '';
+  document.getElementById('sm-method').readOnly = false;
+  document.getElementById('sm-notes').value = '';
+  populateShippingMappingTypeSelect();
+  openM('m-shipping-mapping');
+}
+
+function editShippingMapping(id){
+  const m = _shippingMappings.find(x => x.id === id);
+  if(!m) return;
+  document.getElementById('sm-modal-title').textContent = '🔗 تعديل ربط';
+  document.getElementById('sm-id').value = m.id;
+  document.getElementById('sm-method').value = m.shipping_method;
+  document.getElementById('sm-method').readOnly = true;
+  document.getElementById('sm-notes').value = m.notes || '';
+  populateShippingMappingTypeSelect(m.order_type_id);
+  openM('m-shipping-mapping');
+}
+
+function populateShippingMappingTypeSelect(selectedId){
+  const sel = document.getElementById('sm-type');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">— اختار النوع —</option>' + 
+    _orderTypes.filter(t => t.active).map(t => 
+      `<option value="${t.id}" ${selectedId == t.id ? 'selected' : ''}>${t.emoji || '📦'} ${escapeHtml(t.label_ar)}${t.is_default ? ' ⭐' : ''}</option>`
+    ).join('');
+}
+
+async function saveShippingMapping(){
+  const id = document.getElementById('sm-id').value;
+  const shipping_method = document.getElementById('sm-method').value.trim();
+  const order_type_id = document.getElementById('sm-type').value || null;
+  const notes = document.getElementById('sm-notes').value.trim() || null;
+  
+  if(!shipping_method){ toast('⚠️ Shipping method مطلوب'); return; }
+  if(!order_type_id){ toast('⚠️ اختار نوع الطلب'); return; }
+  
+  try{
+    if(id){
+      await apiFetch('/api/shipping-mappings/'+id, 'PATCH', { order_type_id: parseInt(order_type_id), notes });
+      toast('✅ تم التعديل');
+    } else {
+      await apiFetch('/api/shipping-mappings', 'POST', { shipping_method, order_type_id: parseInt(order_type_id), notes });
+      toast('✅ تم الإضافة');
+    }
+    closeM('m-shipping-mapping');
+    loadShippingMappings();
+    loadUnmappedShippingMethods();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function deleteShippingMapping(id){
+  const m = _shippingMappings.find(x => x.id === id);
+  if(!m) return;
+  if(!confirm(`متأكد من حذف ربط "${m.shipping_method}"؟`)) return;
+  try{
+    await apiFetch('/api/shipping-mappings/'+id, 'DELETE');
+    toast('✅ تم الحذف');
+    loadShippingMappings();
+    loadUnmappedShippingMethods();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+// ===== COURIER SHIP RATES =====
+function initCourierRatesPage(){
+  const sel = document.getElementById('rates-courier-select');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">— اختار المندوب —</option>' +
+    couriers.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  document.getElementById('rates-content').style.display = 'none';
+  _currentRatesCourierId = null;
+}
+
+async function loadCourierRates(){
+  const sel = document.getElementById('rates-courier-select');
+  const courierId = sel.value;
+  if(!courierId){
+    document.getElementById('rates-content').style.display = 'none';
+    _currentRatesCourierId = null;
+    return;
+  }
+  _currentRatesCourierId = courierId;
+  
+  try{
+    _currentCourierRates = await apiFetch('/api/couriers/'+courierId+'/ship-rates');
+    renderCourierRates();
+    document.getElementById('rates-content').style.display = '';
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+function renderCourierRates(){
+  const tbody = document.getElementById('courier-rates-tbody');
+  if(!tbody) return;
+  if(!_currentCourierRates.length){
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:30px;color:var(--muted)">مفيش أنواع طلبات. اضف أنواع الأول من صفحة "أنواع الطلبات".</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _currentCourierRates.map((r, idx) => `
+    <tr>
+      <td style="font-size:24px;text-align:center">${r.emoji || '📦'}</td>
+      <td><strong>${escapeHtml(r.label_ar)}</strong></td>
+      <td>
+        <input type="number" 
+               id="rate-input-${r.order_type_id}" 
+               value="${r.ship_cost}" 
+               min="0" 
+               step="0.5"
+               class="form-input"
+               style="max-width:150px"
+               onchange="updateRateInState(${r.order_type_id}, this.value)">
+      </td>
+    </tr>
+  `).join('');
+}
+
+function updateRateInState(orderTypeId, value){
+  const rate = _currentCourierRates.find(r => r.order_type_id === orderTypeId);
+  if(rate){
+    const cost = (value !== '' && value != null) ? parseFloat(value) : 0;
+    rate.ship_cost = isNaN(cost) ? 0 : cost;
+  }
+}
+
+async function saveCourierRates(){
+  if(!_currentRatesCourierId){ toast('⚠️ اختار مندوب'); return; }
+  
+  // اجمع الأسعار من الـ inputs (احتياطاً)
+  const rates = _currentCourierRates.map(r => {
+    const input = document.getElementById('rate-input-'+r.order_type_id);
+    const val = input ? input.value : r.ship_cost;
+    const cost = (val !== '' && val != null) ? parseFloat(val) : 0;
+    return {
+      order_type_id: r.order_type_id,
+      ship_cost: isNaN(cost) ? 0 : cost
+    };
+  });
+  
+  try{
+    await apiFetch('/api/couriers/'+_currentRatesCourierId+'/ship-rates', 'PUT', rates);
+    toast('✅ تم حفظ الأسعار');
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+// ============================================================================
+// نهاية v216: DASHBOARD PAGES
+// ============================================================================
 
 // ===== CAFELAX STARS — Reviews Page =====
 let _starsPendingPayment = [];
@@ -13034,7 +13600,7 @@ function dsRender(){
   if(!all.length){$('ds-sheet').innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">لا توجد طلبات في هذا الاختيار</div>';return;}
 
   const totalCod=all.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-  const shipFee=showExp.reduce((s,o)=>s+getOrderShip(o, getCourierShipExpress(c)),0)+showNorm.reduce((s,o)=>s+getOrderShip(o, getCourierShip(c)),0);
+  const shipFee=showExp.reduce((s,o)=>s+(o.ship||c.shipExpress||80),0)+showNorm.reduce((s,o)=>s+(o.ship||c.ship||50),0);
 
   let expHtml='';
   if(showExp.length){
