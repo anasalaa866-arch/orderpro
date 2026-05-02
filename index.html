@@ -2162,17 +2162,14 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v229 — SHOPIFY REPORTS =====
-// 2026-04-30: تقارير مباشرة من Shopify Analytics API
-// 1. ✅ صفحة جديدة "🛍️ تقارير Shopify"
-// 2. ✅ بيستخدم ShopifyQL (Advanced/Plus plans)
-// 3. ✅ 7 تقارير: مبيعات، منتجات، عملاء، مخزون، مصادر، سلوك، marketing
-// 4. ✅ فلتر فترات: 7/30/90 يوم/سنة
-// 5. ✅ تحميل CSV
-// 6. ✅ زرار اختبار الاتصال
+// ===== OrderPro v230 — DEBUG MODE =====
+// 2026-04-30: تشخيص مفصل لمشاكل Shopify Reports
+// 1. ✅ اختبار الاتصال يعرض كل خطوة بالتفصيل
+// 2. ✅ Modal كبير بـ debug info واضحة
+// 3. ✅ زرار نسخ الـ debug info للـ clipboard
+// 4. ✅ خطوات إصلاح مقترحة (scopes, plan, token)
 // =================================
-// السابق: v228 — SMART DASHBOARD
-// لوحة تحكم ذكية
+// السابق: v229 — SHOPIFY REPORTS
 // - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
@@ -13639,24 +13636,107 @@ function renderMarketingReport(data, container){
 // اختبار الاتصال بـ Shopify
 async function testShopifyReportsConnection(){
   toast('🔍 جاري اختبار الاتصال...');
+  
   try{
-    const r = await apiFetch('/api/shopify-reports/test');
-    if(r && r.success){
+    // استخدم raw fetch عشان نقدر نقرأ الـ error response حتى لو 500
+    const baseUrl = API_URL || BACKEND_URL;
+    const response = await fetch(baseUrl.replace(/\/$/,'') + '/api/shopify-reports/test', {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + window._adminToken,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const r = await response.json();
+    
+    // ابني الـ debug content
+    let debugHtml = '';
+    if(r.debug){
+      debugHtml = `
+        <div style="background:#1e293b;color:#e2e8f0;padding:14px;border-radius:8px;font-family:monospace;font-size:11px;text-align:left;max-height:300px;overflow-y:auto;direction:ltr">
+          <div style="margin-bottom:10px;color:#94a3b8;font-weight:700">📋 Debug Steps:</div>
+          ${(r.debug.steps || []).map(s => `<div style="margin-bottom:4px">${escapeHtml(s)}</div>`).join('')}
+          ${r.debug.shopName ? `<div style="margin-top:8px;color:#86efac">🏪 Shop: ${escapeHtml(r.debug.shopName)}</div>` : ''}
+          ${r.debug.planName ? `<div style="color:#fcd34d">📋 Plan: ${escapeHtml(r.debug.planName)}</div>` : ''}
+        </div>
+      `;
+    }
+    
+    if(response.ok && r.success){
+      // نجاح
       toast('✅ ' + r.message);
-      console.log('✅ ShopifyQL test result:', r.tableData);
-    } else {
-      const errMsg = r?.error || 'فشل غير معروف';
-      const hint = r?.hint || '';
-      infoModal('❌ فشل اختبار الاتصال', 
-        `الخطأ: ${errMsg}\n\n${hint}\n\n` +
-        `💡 الحلول الممكنة:\n` +
-        `1. اعمل re-install للـ App على Shopify بـ scopes: read_reports, read_analytics\n` +
-        `2. تأكد إن Plan = Advanced أو Plus\n` +
-        `3. تحقق من الـ Access Token`
+      const rowCount = r.tableData?.rowData?.length || 0;
+      infoModal('✅ الاتصال شغال!',
+        `🎉 ${r.message}\n\n` +
+        `📊 جلبنا ${rowCount} صف من Shopify\n` +
+        (r.debug?.shopName ? `🏪 Shop: ${r.debug.shopName}\n` : '') +
+        (r.debug?.planName ? `📋 Plan: ${r.debug.planName}\n` : '') +
+        `\nتقدر دلوقتي تستخدم التقارير من الـ tabs.`
       );
+    } else {
+      // فشل - اعرض الـ debug info كامل
+      const errMsg = r.error || `HTTP ${response.status}`;
+      const hint = r.hint || '';
+      
+      // اعرض في modal كبير
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+      overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
+      
+      const parseErrors = r.parseErrors ? `<div style="background:#fef2f2;padding:10px;border-radius:6px;margin-bottom:10px;font-size:11px;text-align:right"><strong>Parse Errors:</strong><br>${r.parseErrors.map(e => '• ' + escapeHtml(e.message)).join('<br>')}</div>` : '';
+      const graphqlErrors = r.graphqlErrors ? `<div style="background:#fef2f2;padding:10px;border-radius:6px;margin-bottom:10px;font-size:11px;text-align:right;direction:ltr"><strong>GraphQL Errors:</strong><br>${r.graphqlErrors.map(e => '• ' + escapeHtml(e.message)).join('<br>')}</div>` : '';
+      
+      overlay.innerHTML = `
+        <div style="background:#fff;border-radius:14px;max-width:700px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+          <div style="background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;padding:18px 22px;border-radius:14px 14px 0 0">
+            <div style="font-size:18px;font-weight:800">❌ فشل اختبار الاتصال</div>
+          </div>
+          <div style="padding:20px 22px">
+            <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-bottom:14px">
+              <div style="font-size:13px;font-weight:700;color:#991b1b;margin-bottom:4px">الخطأ:</div>
+              <div style="font-size:12px;color:#7f1d1d;direction:ltr">${escapeHtml(errMsg)}</div>
+            </div>
+            
+            ${hint ? `<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:14px">
+              <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:4px">💡 الحل:</div>
+              <div style="font-size:12px;color:#78350f">${escapeHtml(hint)}</div>
+            </div>` : ''}
+            
+            ${parseErrors}
+            ${graphqlErrors}
+            ${debugHtml}
+            
+            <div style="background:rgba(99,102,241,.08);border-radius:8px;padding:12px;margin-top:14px;font-size:11px;color:var(--text)">
+              <strong>📋 خطوات الإصلاح المقترحة:</strong>
+              <ol style="margin:8px 0 0;padding-right:20px">
+                <li>روح <strong>Shopify Admin</strong></li>
+                <li>اضغط <strong>Apps and sales channels</strong></li>
+                <li>افتح الـ <strong>Custom App</strong> بتاعك</li>
+                <li>روح <strong>Configuration</strong></li>
+                <li>تأكد إن الـ scopes دي موجودة:<br>
+                  <code style="background:#fff;padding:2px 6px;border-radius:3px;font-size:10px;direction:ltr;display:inline-block;margin-top:4px">read_reports, read_analytics, read_orders, read_products, read_customers, read_inventory</code>
+                </li>
+                <li>اضغط <strong>Save</strong></li>
+                <li><strong>Reinstall</strong> الـ App (مهم جداً)</li>
+                <li>انسخ الـ <strong>Access Token الجديد</strong> وحطه في إعدادات النظام</li>
+                <li>جرب الاختبار تاني</li>
+              </ol>
+            </div>
+          </div>
+          <div style="padding:14px 22px;background:#f9fafb;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--border);border-radius:0 0 14px 14px">
+            <button onclick="navigator.clipboard.writeText(JSON.stringify(window._lastShopifyTestResult,null,2));toast('📋 تم نسخ الـ debug info')" style="background:transparent;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12px;cursor:pointer;font-family:Cairo">📋 انسخ Debug Info</button>
+            <button onclick="this.closest('div[style*=fixed]').remove()" style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;font-family:Cairo">إغلاق</button>
+          </div>
+        </div>
+      `;
+      
+      window._lastShopifyTestResult = r;
+      document.body.appendChild(overlay);
     }
   }catch(e){
     toast('❌ ' + e.message);
+    console.error('test connection error:', e);
   }
 }
 
