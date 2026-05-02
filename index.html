@@ -451,6 +451,10 @@ tr:hover td{background:#fafbff}
   <nav class="sb-nav">
     <div class="nav-label">الرئيسية</div>
     <div class="ni active" data-p="dashboard" onclick="goPage(this,'dashboard')"><span class="ni-icon">🏠</span><span class="ni-label">لوحة التحكم</span></div>
+    <!-- 🆕 v228: لوحة التحكم الذكية -->
+    <div class="ni" data-p="smart-dashboard" onclick="goPage(this,'smart-dashboard')"><span class="ni-icon">📊</span><span class="ni-label">التقارير الذكية</span></div>
+    <!-- 🆕 v229: Shopify Reports (مباشرة من Shopify) -->
+    <div class="ni" data-p="shopify-reports" onclick="goPage(this,'shopify-reports')"><span class="ni-icon">🛍️</span><span class="ni-label">تقارير Shopify</span></div>
     <div class="ni" data-p="orders" onclick="goPage(this,'orders')"><span class="ni-icon">📋</span><span class="ni-label">الطلبات</span><span class="nbadge" id="nb-orders">0</span></div>
     <div class="nav-label">التوصيل</div>
     <div class="ni" data-p="couriers" onclick="goPage(this,'couriers')"><span class="ni-icon">🚴</span><span class="ni-label">المناديب</span></div>
@@ -533,6 +537,192 @@ tr:hover td{background:#fafbff}
       <div style="display:flex;flex-direction:column;gap:16px">
         <div class="card"><div class="card-hd"><h3>🚴 المناديب</h3></div><div class="tw"><table><thead><tr><th>المندوب</th><th>نشط</th><th>مكتمل</th></tr></thead><tbody id="dash-couriers"></tbody></table></div></div>
         <div class="card"><div class="card-hd"><h3>💵 تحصيلات مع المناديب</h3><span id="dash-cod-total" style="font-size:13px;font-weight:800;color:var(--danger)">0 ج</span></div><div id="dash-cod-list" style="padding:8px"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🆕 v228: SMART DASHBOARD -->
+  <div class="page" id="page-smart-dashboard">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="margin:0;font-size:20px">📊 التقارير الذكية</h2>
+        <div id="sd-last-updated" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="loadSmartDashboard()">🔄 تحديث</button>
+        <button class="btn btn-primary btn-sm" onclick="downloadDashboardPDF()">⬇️ تحميل PDF</button>
+        <button class="btn btn-primary btn-sm" onclick="downloadDashboardExcel()" style="background:#15803d">⬇️ تحميل Excel</button>
+      </div>
+    </div>
+
+    <!-- Loading state -->
+    <div id="sd-loading" style="text-align:center;padding:40px">
+      <div style="font-size:32px;margin-bottom:10px">⏳</div>
+      <div style="color:var(--muted)">جاري تحميل البيانات...</div>
+    </div>
+
+    <!-- Main content -->
+    <div id="sd-content" style="display:none">
+      <!-- KPIs Cards Row 1 -->
+      <div class="stats-row" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:14px">
+        <div class="sc green">
+          <div class="sc-icon">💰</div>
+          <div class="sc-label">مبيعات اليوم</div>
+          <div class="sc-val" id="sd-today-revenue">0 ج</div>
+          <div class="sc-trend" id="sd-revenue-growth" style="font-size:11px;margin-top:4px"></div>
+        </div>
+        <div class="sc blue">
+          <div class="sc-icon">🛒</div>
+          <div class="sc-label">طلبات اليوم</div>
+          <div class="sc-val" id="sd-today-orders">0</div>
+          <div class="sc-trend" id="sd-orders-growth" style="font-size:11px;margin-top:4px"></div>
+        </div>
+        <div class="sc orange">
+          <div class="sc-icon">📦</div>
+          <div class="sc-label">متوسط الطلب</div>
+          <div class="sc-val" id="sd-avg-order">0 ج</div>
+        </div>
+        <div class="sc purple">
+          <div class="sc-icon">✅</div>
+          <div class="sc-label">معدل الإتمام</div>
+          <div class="sc-val" id="sd-completion-rate">0%</div>
+        </div>
+        <div class="sc red">
+          <div class="sc-icon">❌</div>
+          <div class="sc-label">معدل الإلغاء</div>
+          <div class="sc-val" id="sd-cancel-rate">0%</div>
+        </div>
+      </div>
+
+      <!-- Active Orders Strip -->
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-hd">
+          <h3>⚡ الطلبات النشطة الآن</h3>
+        </div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+            <div style="background:#fef3c7;border-radius:8px;padding:12px;text-align:center;cursor:pointer" onclick="goPage(document.querySelector('[data-p=&quot;assign&quot;]'),'assign')">
+              <div style="font-size:24px;font-weight:800;color:#92400e" id="sd-unassigned">0</div>
+              <div style="font-size:11px;color:#92400e">⏳ تحتاج توزيع</div>
+            </div>
+            <div style="background:#dbeafe;border-radius:8px;padding:12px;text-align:center;cursor:pointer" onclick="goPage(document.querySelector('[data-p=&quot;courier-orders&quot;]'),'courier-orders')">
+              <div style="font-size:24px;font-weight:800;color:#1e40af" id="sd-in-progress">0</div>
+              <div style="font-size:11px;color:#1e40af">🚴 جاري التوصيل</div>
+            </div>
+            <div style="background:#dcfce7;border-radius:8px;padding:12px;text-align:center;cursor:pointer" onclick="goPage(document.querySelector('[data-p=&quot;accounting&quot;]'),'accounting')">
+              <div style="font-size:24px;font-weight:800;color:#166534" id="sd-pending-settle">0</div>
+              <div style="font-size:11px;color:#166534">💰 تحت التسوية</div>
+            </div>
+            <div style="background:#fee2e2;border-radius:8px;padding:12px;text-align:center;cursor:pointer" onclick="goPage(document.querySelector('[data-p=&quot;problems&quot;]'),'problems')">
+              <div style="font-size:24px;font-weight:800;color:#991b1b" id="sd-problems">0</div>
+              <div style="font-size:11px;color:#991b1b">⚠️ مشاكل</div>
+            </div>
+            <div style="background:#f3e8ff;border-radius:8px;padding:12px;text-align:center">
+              <div style="font-size:24px;font-weight:800;color:#7e22ce" id="sd-old-pending">0</div>
+              <div style="font-size:11px;color:#7e22ce">⏰ معلقة من أمس</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart 7 days -->
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-hd">
+          <h3>📈 مبيعات آخر 7 أيام</h3>
+        </div>
+        <div class="card-body">
+          <div id="sd-chart-7days" style="height:240px;position:relative"></div>
+        </div>
+      </div>
+
+      <!-- Two columns: Top Products + Top Areas -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-bottom:14px">
+        <div class="card">
+          <div class="card-hd">
+            <h3>🏆 أكثر 5 منتجات مبيعاً</h3>
+            <span style="font-size:10px;color:var(--muted)">آخر 30 يوم</span>
+          </div>
+          <div class="card-body" id="sd-top-products"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-hd">
+            <h3>📍 أكثر 5 مناطق طلباً</h3>
+            <span style="font-size:10px;color:var(--muted)">آخر 30 يوم</span>
+          </div>
+          <div class="card-body" id="sd-top-areas"></div>
+        </div>
+      </div>
+
+      <!-- Monthly Comparison -->
+      <div class="card">
+        <div class="card-hd">
+          <h3>📅 مقارنة شهرية</h3>
+        </div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+            <div style="text-align:center;padding:14px;background:rgba(99,102,241,.08);border-radius:8px">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:6px">الشهر الحالي</div>
+              <div style="font-size:22px;font-weight:800" id="sd-this-month-rev">0 ج</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px"><span id="sd-this-month-orders">0</span> طلب</div>
+            </div>
+            <div style="text-align:center;padding:14px;background:#f9fafb;border-radius:8px">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:6px">الشهر السابق</div>
+              <div style="font-size:22px;font-weight:800" id="sd-last-month-rev">0 ج</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px"><span id="sd-last-month-orders">0</span> طلب</div>
+            </div>
+            <div style="text-align:center;padding:14px;border-radius:8px" id="sd-monthly-growth-card">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:6px">معدل النمو</div>
+              <div style="font-size:22px;font-weight:800" id="sd-monthly-growth">0%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🆕 v229: SHOPIFY REPORTS PAGE -->
+  <div class="page" id="page-shopify-reports">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="margin:0;font-size:20px">🛍️ تقارير Shopify</h2>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">البيانات مباشرة من Shopify Analytics</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="testShopifyReportsConnection()">🔍 اختبار الاتصال</button>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-body" style="padding:12px 14px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <span style="font-size:12px;font-weight:700;color:var(--muted)">📅 الفترة:</span>
+          <button class="chip" id="sr-period-7" onclick="setReportPeriod('-7d', this)">آخر 7 أيام</button>
+          <button class="chip on" id="sr-period-30" onclick="setReportPeriod('-30d', this)">آخر 30 يوم</button>
+          <button class="chip" id="sr-period-90" onclick="setReportPeriod('-90d', this)">آخر 90 يوم</button>
+          <button class="chip" id="sr-period-365" onclick="setReportPeriod('-1y', this)">آخر سنة</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-hd">
+        <div class="chips" id="sr-tabs" style="flex-wrap:wrap">
+          <button class="chip on" onclick="switchShopifyReport('sales',this)">💰 المبيعات</button>
+          <button class="chip" onclick="switchShopifyReport('products',this)">📦 المنتجات</button>
+          <button class="chip" onclick="switchShopifyReport('customers',this)">👥 العملاء</button>
+          <button class="chip" onclick="switchShopifyReport('inventory',this)">📊 المخزون</button>
+          <button class="chip" onclick="switchShopifyReport('acquisition',this)">🎯 المصادر</button>
+          <button class="chip" onclick="switchShopifyReport('behavior',this)">🔍 السلوك</button>
+          <button class="chip" onclick="switchShopifyReport('marketing',this)">📢 Marketing</button>
+        </div>
+      </div>
+      <div class="card-body" id="sr-content">
+        <div style="text-align:center;padding:40px;color:var(--muted)">
+          اختار تقرير من فوق للبدء
+        </div>
       </div>
     </div>
   </div>
@@ -1315,9 +1505,8 @@ tr:hover td{background:#fafbff}
       </div>
       <div class="card-body" style="padding:0">
         <div style="background:#fef3c7;border-bottom:1px solid #fde047;padding:10px 16px;font-size:12px;color:#78350f">
-          🆕 v224: البيانات بتتجاب من Shopify بـ <strong>Customer ID مباشرة</strong> (أدق طريقة).<br>
-          <strong>أول مرة:</strong> اضغط "🔁 تحديث الكل من Shopify" - النظام هيعمل backfill للطلبات القديمة وهيجيب التقييم تلقائي.<br>
-          <strong>بعدها:</strong> الـ cache بيتحدّث كل 30 دقيقة تلقائي.
+          🆕 v226: البيانات من Shopify بـ <strong>Customer ID مباشرة</strong>. الـ cache بيتمسح أوتوماتيك من القمامة.<br>
+          <strong>للبدء:</strong> اضغط "🔁 تحديث الكل من Shopify". لو القائمة فاضية، النظام هيعمل backfill أوتوماتيك.
         </div>
         <div class="tw mobile-cards">
           <table>
@@ -1973,15 +2162,17 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v224 — CUSTOMER ID FIX =====
-// 2026-04-30: إصلاحات مهمة لـ flow الـ customer_id
-// 1. ✅ Auto-backfill: الطلبات القديمة هتتحدث بـ customer_id تلقائي
-// 2. ✅ Workflow أذكى: زرار التحديث يعمل backfill + build معاً
-// 3. ✅ رسائل خطأ مفصلة (لتشخيص أي مشاكل)
-// 4. ✅ logging مفصل في الـ Backend
+// ===== OrderPro v229 — SHOPIFY REPORTS =====
+// 2026-04-30: تقارير مباشرة من Shopify Analytics API
+// 1. ✅ صفحة جديدة "🛍️ تقارير Shopify"
+// 2. ✅ بيستخدم ShopifyQL (Advanced/Plus plans)
+// 3. ✅ 7 تقارير: مبيعات، منتجات، عملاء، مخزون، مصادر، سلوك، marketing
+// 4. ✅ فلتر فترات: 7/30/90 يوم/سنة
+// 5. ✅ تحميل CSV
+// 6. ✅ زرار اختبار الاتصال
 // =================================
-// السابق: v223 — CUSTOMER ID DIRECT
-// استخدام Shopify Customer ID مباشرة (مش phone search)
+// السابق: v228 — SMART DASHBOARD
+// لوحة تحكم ذكية
 // - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
@@ -2069,7 +2260,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -11246,12 +11437,38 @@ function renderWeeklyReport(){
   const now=new Date();
   const year=now.getFullYear();
 
+  // 🔧 v227: حساب أسابيع الجمعة → الخميس
+  // JS getDay(): Sunday=0, Monday=1, ..., Friday=5, Saturday=6
+  // المعادلة: (today + 2) % 7 = كم يوم فات من الجمعة الأخيرة
+  // مثال: لو النهارده الأحد (0) → (0+2)%7 = 2 → الجمعة من 2 يوم
+  
+  // ابدأ من أول جمعة في السنة (أو قبلها لو 1 يناير مش جمعة)
+  // وامشي بـ 7 أيام لكل أسبوع
+  
+  // جيب أول جمعة في السنة
+  const yearStart = new Date(year, 0, 1);
+  const yearStartDay = yearStart.getDay();
+  // كم يوم لازم نمشي عشان نوصل لأول جمعة
+  // الجمعة = 5، فلو النهارده Sunday (0) لازم +5 أيام
+  // لو Monday (1) → +4 أيام، Saturday (6) → -1 (الجمعة الفايتة)
+  let daysToFirstFriday = (5 - yearStartDay + 7) % 7;
+  // لو 1 يناير نفسه جمعة (daysToFirstFriday=0)، يبدأ منه
+  // لو لأ، نبدأ من الجمعة الفايتة عشان نشمل الأيام اللي قبل أول جمعة كاملة
+  let firstFriday = new Date(year, 0, 1 + daysToFirstFriday - 7); // الجمعة قبل أول يوم في السنة
+  
   const weeks=[];
-  for(let w=1;w<=52;w++){
-    const start=new Date(year,0,1+(w-1)*7);
-    start.setDate(start.getDate()-start.getDay()+1);
-    const end=new Date(start);
-    end.setDate(start.getDate()+6);
+  // 53 أسبوع لتغطية كل السنة
+  for(let w=1;w<=53;w++){
+    const start = new Date(firstFriday);
+    start.setDate(firstFriday.getDate() + (w-1)*7);
+    start.setHours(0,0,0,0);
+    const end = new Date(start);
+    end.setDate(start.getDate()+6); // الخميس بعدها
+    end.setHours(23,59,59,999);
+    
+    // وقف لو خرجنا من السنة
+    if(start.getFullYear() > year) break;
+    
     const weekChecks=chkList.filter(c=>{
       const d=new Date(c.date);
       return d>=start&&d<=end;
@@ -12244,6 +12461,10 @@ function goPage(el,page){
   if(page==='courier-rates') initCourierRatesPage();
   // 🆕 v218: Audit Log
   if(page==='order-type-audit') loadOrderTypeAudit();
+  // 🆕 v228: Smart Dashboard
+  if(page==='smart-dashboard') loadSmartDashboard();
+  // 🆕 v229: Shopify Reports
+  if(page==='shopify-reports') initShopifyReports();
 }
 
 // ============================================================================
@@ -12696,6 +12917,789 @@ async function loadOrderTypeAudit(){
 }
 
 // ============================================================================
+// 🆕 v228: SMART DASHBOARD
+// ============================================================================
+let _smartDashboardData = null;
+
+async function loadSmartDashboard(){
+  if(!API_URL) return;
+  
+  // Show loading
+  const loading = document.getElementById('sd-loading');
+  const content = document.getElementById('sd-content');
+  if(loading) loading.style.display = '';
+  if(content) content.style.display = 'none';
+  
+  try{
+    const data = await apiFetch('/api/dashboard/smart-stats');
+    if(!data) throw new Error('No data');
+    
+    _smartDashboardData = data;
+    renderSmartDashboard(data);
+    
+    if(loading) loading.style.display = 'none';
+    if(content) content.style.display = '';
+  }catch(e){
+    if(loading) loading.innerHTML = `
+      <div style="font-size:32px;margin-bottom:10px">❌</div>
+      <div style="color:var(--danger);margin-bottom:8px">فشل تحميل البيانات</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px">${escapeHtml(e.message || '')}</div>
+      <button class="btn btn-primary btn-sm" onclick="loadSmartDashboard()">🔄 إعادة المحاولة</button>
+    `;
+  }
+}
+
+function renderSmartDashboard(data){
+  // Last updated
+  const lastUpd = document.getElementById('sd-last-updated');
+  if(lastUpd){
+    const dt = new Date(data.generatedAt);
+    lastUpd.textContent = `🕐 آخر تحديث: ${dt.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'})} (${dt.toLocaleDateString('ar-EG',{day:'numeric',month:'short',timeZone:'Africa/Cairo'})})`;
+  }
+  
+  // Today KPIs
+  setText('sd-today-revenue', data.today.revenue.toLocaleString() + ' ج');
+  setText('sd-today-orders', data.today.count);
+  setText('sd-avg-order', Math.round(data.today.avgOrderValue).toLocaleString() + ' ج');
+  setText('sd-completion-rate', data.today.completionRate + '%');
+  setText('sd-cancel-rate', data.today.cancelledRate + '%');
+  
+  // Growth indicators
+  renderGrowthBadge('sd-revenue-growth', data.today.revenueGrowthPct);
+  renderGrowthBadge('sd-orders-growth', data.today.ordersGrowthPct);
+  
+  // Active orders
+  setText('sd-unassigned', data.active.unassigned);
+  setText('sd-in-progress', data.active.inProgress);
+  setText('sd-pending-settle', data.active.pendingSettlement);
+  setText('sd-problems', data.active.problems);
+  setText('sd-old-pending', data.active.oldPending);
+  
+  // Top products
+  const topProducts = document.getElementById('sd-top-products');
+  if(topProducts){
+    if(!data.topProducts.length){
+      topProducts.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">مفيش بيانات كافية</div>';
+    } else {
+      topProducts.innerHTML = data.topProducts.map((p, i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid var(--border)">
+          <div style="font-size:18px;font-weight:800;color:${i===0?'#f59e0b':i===1?'#94a3b8':i===2?'#a16207':'var(--muted)'}">#${i+1}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</div>
+            <div style="font-size:10px;color:var(--muted)">${p.count} مرة · ${Math.round(p.revenue).toLocaleString()} ج</div>
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+  
+  // Top areas
+  const topAreas = document.getElementById('sd-top-areas');
+  if(topAreas){
+    if(!data.topAreas.length){
+      topAreas.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">مفيش بيانات</div>';
+    } else {
+      topAreas.innerHTML = data.topAreas.map((a, i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid var(--border)">
+          <div style="font-size:18px">${['🥇','🥈','🥉','4️⃣','5️⃣'][i]||'📍'}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:13px">${escapeHtml(a.area)}</div>
+            <div style="font-size:10px;color:var(--muted)">${a.orders} طلب · ${Math.round(a.revenue).toLocaleString()} ج</div>
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+  
+  // Monthly comparison
+  setText('sd-this-month-rev', Math.round(data.monthly.thisMonthRevenue).toLocaleString() + ' ج');
+  setText('sd-this-month-orders', data.monthly.thisMonthOrders);
+  setText('sd-last-month-rev', Math.round(data.monthly.lastMonthRevenue).toLocaleString() + ' ج');
+  setText('sd-last-month-orders', data.monthly.lastMonthOrders);
+  
+  const growthEl = document.getElementById('sd-monthly-growth');
+  const growthCard = document.getElementById('sd-monthly-growth-card');
+  if(growthEl && growthCard){
+    const g = data.monthly.growthPct;
+    const isUp = g >= 0;
+    growthEl.textContent = (isUp ? '↑ +' : '↓ ') + Math.abs(g) + '%';
+    growthEl.style.color = isUp ? '#15803d' : '#dc2626';
+    growthCard.style.background = isUp ? '#dcfce7' : '#fee2e2';
+  }
+  
+  // Chart
+  renderChart7Days(data.chart7Days);
+}
+
+function renderGrowthBadge(elId, pct){
+  const el = document.getElementById(elId);
+  if(!el) return;
+  if(pct === 0 || isNaN(pct)){
+    el.innerHTML = '<span style="color:var(--muted)">— من أمس</span>';
+    return;
+  }
+  const isUp = pct > 0;
+  el.innerHTML = `<span style="color:${isUp?'#15803d':'#dc2626'};font-weight:700">${isUp?'↑':'↓'} ${Math.abs(pct)}%</span> <span style="color:var(--muted)">من أمس</span>`;
+}
+
+function setText(id, val){
+  const el = document.getElementById(id);
+  if(el) el.textContent = val;
+}
+
+// SVG Chart بسيط للـ 7 أيام
+function renderChart7Days(chartData){
+  const container = document.getElementById('sd-chart-7days');
+  if(!container) return;
+  
+  if(!chartData || !chartData.length){
+    container.innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted)">مفيش بيانات للعرض</div>';
+    return;
+  }
+  
+  // ملاحظة: الـ chart بيرسم كل اليوم اللي عندنا
+  const maxRev = Math.max(...chartData.map(d => d.revenue), 1);
+  const W = 800, H = 220, padX = 40, padY = 30;
+  const barW = (W - padX*2) / chartData.length;
+  
+  const days = ['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  
+  let bars = '';
+  let labels = '';
+  let valLabels = '';
+  
+  chartData.forEach((d, i) => {
+    const x = padX + i * barW + barW * 0.2;
+    const w = barW * 0.6;
+    const h = (d.revenue / maxRev) * (H - padY*2 - 20);
+    const y = H - padY - h;
+    
+    const dt = new Date(d.day);
+    const dayName = days[dt.getDay()];
+    const dayNum = dt.getDate();
+    const month = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'][dt.getMonth()];
+    
+    bars += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#6366f1" rx="4">
+      <title>${dayName} ${dayNum} ${month}: ${Math.round(d.revenue).toLocaleString()} ج · ${d.orders} طلب</title>
+    </rect>`;
+    
+    labels += `<text x="${x + w/2}" y="${H - padY + 16}" text-anchor="middle" font-size="10" fill="#64748b" font-family="Cairo">${dayNum}/${dt.getMonth()+1}</text>`;
+    
+    if(d.revenue > 0){
+      valLabels += `<text x="${x + w/2}" y="${y - 6}" text-anchor="middle" font-size="9" fill="#475569" font-family="Cairo" font-weight="700">${Math.round(d.revenue/1000)}K</text>`;
+    }
+  });
+  
+  // Y axis
+  const ySteps = 4;
+  let yLabels = '';
+  let gridLines = '';
+  for(let i = 0; i <= ySteps; i++){
+    const val = maxRev * i / ySteps;
+    const y = H - padY - (i / ySteps) * (H - padY*2 - 20);
+    gridLines += `<line x1="${padX}" y1="${y}" x2="${W - padX}" y2="${y}" stroke="#e5e7eb" stroke-dasharray="3,3"/>`;
+    yLabels += `<text x="${padX - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#94a3b8" font-family="Cairo">${Math.round(val/1000)}K</text>`;
+  }
+  
+  container.innerHTML = `
+    <svg width="100%" height="${H}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="overflow:visible">
+      ${gridLines}
+      ${yLabels}
+      ${bars}
+      ${labels}
+      ${valLabels}
+    </svg>
+  `;
+}
+
+// ===== Download Reports =====
+function downloadDashboardPDF(){
+  if(!_smartDashboardData){ toast('⚠️ لازم تحمّل الداتا الأول'); return; }
+  
+  // افتح نسخة قابلة للطباعة في نافذة جديدة
+  const data = _smartDashboardData;
+  const dt = new Date(data.generatedAt);
+  const dateStr = dt.toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric',weekday:'long',timeZone:'Africa/Cairo'});
+  
+  const html = `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<title>تقرير لوحة التحكم - ${dateStr}</title>
+<style>
+  body{font-family:'Cairo','Segoe UI',sans-serif;margin:25px;color:#1e293b;direction:rtl}
+  h1{margin:0 0 6px;color:#3730a3}
+  h2{color:#3730a3;margin-top:24px;border-bottom:2px solid #e0e7ff;padding-bottom:6px;font-size:16px}
+  .header{margin-bottom:20px;text-align:center}
+  .meta{color:#64748b;font-size:11px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:14px 0}
+  .card{background:#f8fafc;padding:12px 14px;border-radius:8px;border:1px solid #e2e8f0}
+  .card-label{font-size:10px;color:#64748b;margin-bottom:4px}
+  .card-val{font-size:18px;font-weight:800}
+  .green{background:#dcfce7;border-color:#86efac}
+  .blue{background:#dbeafe;border-color:#93c5fd}
+  .red{background:#fee2e2;border-color:#fca5a5}
+  .orange{background:#fed7aa;border-color:#fdba74}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:11px}
+  th,td{border:1px solid #e2e8f0;padding:6px 8px;text-align:right}
+  th{background:#f1f5f9;font-weight:700}
+  .footer{margin-top:30px;text-align:center;color:#94a3b8;font-size:10px}
+  @media print{
+    body{margin:15px}
+    .no-print{display:none}
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>📊 تقرير لوحة التحكم</h1>
+    <div class="meta">${dateStr}</div>
+    <div class="meta">CAFELAX - نظام إدارة الطلبات</div>
+  </div>
+  
+  <h2>📅 ملخص اليوم</h2>
+  <div class="grid">
+    <div class="card green"><div class="card-label">💰 إجمالي المبيعات</div><div class="card-val">${data.today.revenue.toLocaleString()} ج</div></div>
+    <div class="card blue"><div class="card-label">🛒 عدد الطلبات</div><div class="card-val">${data.today.count}</div></div>
+    <div class="card"><div class="card-label">📦 متوسط الطلب</div><div class="card-val">${Math.round(data.today.avgOrderValue).toLocaleString()} ج</div></div>
+    <div class="card green"><div class="card-label">✅ معدل الإتمام</div><div class="card-val">${data.today.completionRate}%</div></div>
+    <div class="card red"><div class="card-label">❌ معدل الإلغاء</div><div class="card-val">${data.today.cancelledRate}%</div></div>
+    <div class="card"><div class="card-label">💳 طلبات مدفوعة</div><div class="card-val">${data.today.paid}</div></div>
+  </div>
+  
+  <h2>⚡ الطلبات النشطة الآن</h2>
+  <div class="grid">
+    <div class="card orange"><div class="card-label">⏳ تحتاج توزيع</div><div class="card-val">${data.active.unassigned}</div></div>
+    <div class="card blue"><div class="card-label">🚴 جاري التوصيل</div><div class="card-val">${data.active.inProgress}</div></div>
+    <div class="card green"><div class="card-label">💰 تحت التسوية</div><div class="card-val">${data.active.pendingSettlement}</div></div>
+    <div class="card red"><div class="card-label">⚠️ مشاكل</div><div class="card-val">${data.active.problems}</div></div>
+  </div>
+  
+  <h2>📈 مبيعات آخر 7 أيام</h2>
+  <table>
+    <thead><tr><th>اليوم</th><th>الطلبات</th><th>الإيراد</th><th>الملغية</th></tr></thead>
+    <tbody>
+      ${data.chart7Days.map(d => {
+        const date = new Date(d.day);
+        return `<tr>
+          <td>${date.toLocaleDateString('ar-EG',{day:'numeric',month:'short',weekday:'short',timeZone:'Africa/Cairo'})}</td>
+          <td>${d.orders}</td>
+          <td>${Math.round(d.revenue).toLocaleString()} ج</td>
+          <td>${d.cancelled}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>
+  
+  <h2>🏆 أكثر 5 منتجات مبيعاً (آخر 30 يوم)</h2>
+  <table>
+    <thead><tr><th>#</th><th>المنتج</th><th>عدد المرات</th><th>الإيراد</th></tr></thead>
+    <tbody>
+      ${data.topProducts.map((p, i) => `
+        <tr>
+          <td>${i+1}</td>
+          <td>${escapeHtml(p.name)}</td>
+          <td>${p.count}</td>
+          <td>${Math.round(p.revenue).toLocaleString()} ج</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+  
+  <h2>📍 أكثر 5 مناطق طلباً (آخر 30 يوم)</h2>
+  <table>
+    <thead><tr><th>#</th><th>المنطقة</th><th>عدد الطلبات</th><th>الإيراد</th></tr></thead>
+    <tbody>
+      ${data.topAreas.map((a, i) => `
+        <tr>
+          <td>${i+1}</td>
+          <td>${escapeHtml(a.area)}</td>
+          <td>${a.orders}</td>
+          <td>${Math.round(a.revenue).toLocaleString()} ج</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+  
+  <h2>📅 مقارنة شهرية</h2>
+  <table>
+    <thead><tr><th>الفترة</th><th>عدد الطلبات</th><th>الإيراد</th></tr></thead>
+    <tbody>
+      <tr><td>الشهر الحالي</td><td>${data.monthly.thisMonthOrders}</td><td>${Math.round(data.monthly.thisMonthRevenue).toLocaleString()} ج</td></tr>
+      <tr><td>الشهر السابق</td><td>${data.monthly.lastMonthOrders}</td><td>${Math.round(data.monthly.lastMonthRevenue).toLocaleString()} ج</td></tr>
+      <tr style="font-weight:700;background:${data.monthly.growthPct >= 0 ? '#dcfce7' : '#fee2e2'}">
+        <td>معدل النمو</td>
+        <td colspan="2">${data.monthly.growthPct >= 0 ? '↑ +' : '↓ '}${Math.abs(data.monthly.growthPct)}%</td>
+      </tr>
+    </tbody>
+  </table>
+  
+  <div class="footer">
+    تم إنشاء هذا التقرير تلقائياً بواسطة نظام OrderPro - CAFELAX
+  </div>
+  
+  <div class="no-print" style="margin-top:30px;text-align:center">
+    <button onclick="window.print()" style="background:#6366f1;color:#fff;border:none;border-radius:6px;padding:10px 20px;font-size:14px;cursor:pointer;font-family:Cairo">🖨️ طباعة / حفظ PDF</button>
+  </div>
+</body>
+</html>`;
+  
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
+function downloadDashboardExcel(){
+  if(!_smartDashboardData){ toast('⚠️ لازم تحمّل الداتا الأول'); return; }
+  
+  const data = _smartDashboardData;
+  const dt = new Date(data.generatedAt);
+  const dateStr = dt.toLocaleDateString('ar-EG',{day:'numeric',month:'short',year:'numeric',timeZone:'Africa/Cairo'});
+  
+  // BOM للـ Arabic + UTF-8
+  const BOM = '\uFEFF';
+  let csv = BOM;
+  
+  csv += `تقرير لوحة التحكم - ${dateStr}\n\n`;
+  
+  csv += 'ملخص اليوم\n';
+  csv += 'البيان,القيمة\n';
+  csv += `إجمالي المبيعات,${data.today.revenue}\n`;
+  csv += `عدد الطلبات,${data.today.count}\n`;
+  csv += `متوسط الطلب,${Math.round(data.today.avgOrderValue)}\n`;
+  csv += `معدل الإتمام,${data.today.completionRate}%\n`;
+  csv += `معدل الإلغاء,${data.today.cancelledRate}%\n`;
+  csv += `طلبات مدفوعة,${data.today.paid}\n\n`;
+  
+  csv += 'الطلبات النشطة\n';
+  csv += 'النوع,العدد\n';
+  csv += `تحتاج توزيع,${data.active.unassigned}\n`;
+  csv += `جاري التوصيل,${data.active.inProgress}\n`;
+  csv += `تحت التسوية,${data.active.pendingSettlement}\n`;
+  csv += `مشاكل,${data.active.problems}\n\n`;
+  
+  csv += 'مبيعات آخر 7 أيام\n';
+  csv += 'اليوم,الطلبات,الإيراد,الملغية\n';
+  data.chart7Days.forEach(d => {
+    const date = new Date(d.day);
+    csv += `${date.toLocaleDateString('ar-EG',{day:'numeric',month:'short',timeZone:'Africa/Cairo'})},${d.orders},${Math.round(d.revenue)},${d.cancelled}\n`;
+  });
+  csv += '\n';
+  
+  csv += 'أكثر 5 منتجات مبيعاً\n';
+  csv += '#,المنتج,عدد المرات,الإيراد\n';
+  data.topProducts.forEach((p, i) => {
+    const safeName = (p.name || '').replace(/,/g, '،').replace(/"/g, '""');
+    csv += `${i+1},"${safeName}",${p.count},${Math.round(p.revenue)}\n`;
+  });
+  csv += '\n';
+  
+  csv += 'أكثر 5 مناطق طلباً\n';
+  csv += '#,المنطقة,الطلبات,الإيراد\n';
+  data.topAreas.forEach((a, i) => {
+    csv += `${i+1},"${(a.area||'').replace(/,/g,'،')}",${a.orders},${Math.round(a.revenue)}\n`;
+  });
+  csv += '\n';
+  
+  csv += 'مقارنة شهرية\n';
+  csv += 'الفترة,عدد الطلبات,الإيراد\n';
+  csv += `الشهر الحالي,${data.monthly.thisMonthOrders},${Math.round(data.monthly.thisMonthRevenue)}\n`;
+  csv += `الشهر السابق,${data.monthly.lastMonthOrders},${Math.round(data.monthly.lastMonthRevenue)}\n`;
+  csv += `معدل النمو,${data.monthly.growthPct}%\n`;
+  
+  // Download
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `dashboard-report-${dateStr.replace(/\s/g,'-')}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('✅ تم تحميل التقرير');
+}
+
+// ============================================================================
+// 🆕 v229: SHOPIFY REPORTS (Direct from Shopify Analytics API)
+// ============================================================================
+let _shopifyReportsState = {
+  period: '-30d',
+  currentReport: 'sales'
+};
+
+function initShopifyReports(){
+  // ابدأ بـ Sales report
+  switchShopifyReport('sales', document.querySelector('#sr-tabs .chip.on'));
+}
+
+function setReportPeriod(period, btn){
+  _shopifyReportsState.period = period;
+  document.querySelectorAll('#page-shopify-reports .chip').forEach(b => {
+    if(b.id && b.id.startsWith('sr-period-')) b.classList.remove('on');
+  });
+  if(btn) btn.classList.add('on');
+  // أعد تحميل التقرير الحالي
+  switchShopifyReport(_shopifyReportsState.currentReport, null);
+}
+
+function switchShopifyReport(report, btn){
+  _shopifyReportsState.currentReport = report;
+  document.querySelectorAll('#sr-tabs .chip').forEach(b => b.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  else {
+    // ابحث عن الزرار اللي بيمثل الـ report ده
+    const buttons = document.querySelectorAll('#sr-tabs .chip');
+    buttons.forEach(b => {
+      if(b.getAttribute('onclick') && b.getAttribute('onclick').includes(`'${report}'`)){
+        b.classList.add('on');
+      }
+    });
+  }
+  
+  loadShopifyReport(report);
+}
+
+async function loadShopifyReport(report){
+  const content = document.getElementById('sr-content');
+  if(!content) return;
+  
+  content.innerHTML = `
+    <div style="text-align:center;padding:40px">
+      <div style="font-size:32px;margin-bottom:10px">⏳</div>
+      <div style="color:var(--muted)">جاري تحميل التقرير من Shopify...</div>
+    </div>
+  `;
+  
+  try{
+    const period = _shopifyReportsState.period;
+    let endpoint = '';
+    let renderFn = null;
+    
+    switch(report){
+      case 'sales':
+        endpoint = `/api/shopify-reports/sales?since=${period}&groupBy=day`;
+        renderFn = renderSalesReport;
+        break;
+      case 'products':
+        endpoint = `/api/shopify-reports/products-sold?since=${period}&limit=50`;
+        renderFn = renderProductsReport;
+        break;
+      case 'customers':
+        endpoint = `/api/shopify-reports/customers?since=${period}`;
+        renderFn = renderCustomersReport;
+        break;
+      case 'inventory':
+        endpoint = `/api/shopify-reports/inventory?limit=250`;
+        renderFn = renderInventoryReport;
+        break;
+      case 'acquisition':
+        endpoint = `/api/shopify-reports/acquisition?since=${period}`;
+        renderFn = renderAcquisitionReport;
+        break;
+      case 'behavior':
+        endpoint = `/api/shopify-reports/behavior?since=${period}`;
+        renderFn = renderBehaviorReport;
+        break;
+      case 'marketing':
+        endpoint = `/api/shopify-reports/marketing?since=${period}`;
+        renderFn = renderMarketingReport;
+        break;
+      default:
+        content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">تقرير غير معروف</div>';
+        return;
+    }
+    
+    const data = await apiFetch(endpoint);
+    if(!data || !data.success){
+      throw new Error(data?.error || 'فشل التحميل');
+    }
+    
+    if(renderFn) renderFn(data, content);
+    
+  }catch(e){
+    content.innerHTML = `
+      <div style="text-align:center;padding:40px">
+        <div style="font-size:32px;margin-bottom:10px">❌</div>
+        <div style="color:var(--danger);margin-bottom:8px;font-weight:700">فشل تحميل التقرير</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:14px;max-width:600px;margin-left:auto;margin-right:auto">${escapeHtml(e.message)}</div>
+        <div style="background:#fef3c7;border-radius:8px;padding:12px 14px;font-size:11px;color:#78350f;max-width:600px;margin:0 auto;text-align:right">
+          <strong>💡 تأكد:</strong>
+          <ul style="margin:6px 0 0;padding-right:20px">
+            <li>الـ App على Shopify عنده <code>read_reports</code> + <code>read_analytics</code> scopes</li>
+            <li>أنت على Plan Advanced أو أعلى</li>
+            <li>الـ Access Token صالح</li>
+          </ul>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="testShopifyReportsConnection()" style="margin-top:14px">🔍 اختبار الاتصال</button>
+      </div>
+    `;
+  }
+}
+
+// ===== Render Functions =====
+
+// Helper: ارسم جدول من ShopifyQL tableData
+function _renderShopifyQLTable(tableData, container){
+  if(!tableData || !tableData.columns || !tableData.rowData){
+    container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">مفيش بيانات</div>';
+    return;
+  }
+  
+  const columns = tableData.columns || [];
+  const rows = tableData.rowData || [];
+  
+  if(!rows.length){
+    container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">📭 مفيش بيانات للفترة دي</div>';
+    return;
+  }
+  
+  let html = `
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--bg)">
+            ${columns.map(c => `<th style="padding:10px;text-align:right;border-bottom:2px solid var(--border);font-weight:700">${escapeHtml(c.displayName || c.name)}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(row => `
+            <tr style="border-bottom:1px solid var(--border)">
+              ${row.map((cell, i) => {
+                const col = columns[i];
+                let displayVal = cell;
+                if(col && col.dataType){
+                  if(col.dataType === 'Money' || col.dataType === 'NUMBER'){
+                    const num = parseFloat(cell);
+                    if(!isNaN(num)) displayVal = num.toLocaleString('ar-EG', {maximumFractionDigits: 2});
+                  }
+                }
+                return `<td style="padding:8px 10px">${escapeHtml(String(displayVal != null ? displayVal : '—'))}</td>`;
+              }).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted)">
+      <div>📊 ${rows.length} صف</div>
+      <button class="btn btn-ghost btn-xs" onclick="downloadShopifyReportCSV('${_shopifyReportsState.currentReport}')">⬇️ تحميل CSV</button>
+    </div>
+  `;
+  
+  container.innerHTML = html;
+}
+
+function renderSalesReport(data, container){
+  // ملخص علوي + جدول
+  const tableData = data.tableData;
+  if(!tableData || !tableData.rowData || !tableData.rowData.length){
+    container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">📭 مفيش مبيعات في الفترة دي</div>';
+    return;
+  }
+  
+  // احسب الإجماليات
+  const columns = tableData.columns || [];
+  const rows = tableData.rowData || [];
+  
+  // ابحث عن أعمدة مهمة
+  const totalSalesIdx = columns.findIndex(c => c.name === 'total_sales' || c.name === 'totalSales');
+  const ordersIdx = columns.findIndex(c => c.name === 'orders');
+  
+  let totalSalesSum = 0, ordersSum = 0;
+  if(totalSalesIdx >= 0){
+    rows.forEach(row => {
+      const v = parseFloat(row[totalSalesIdx]);
+      if(!isNaN(v)) totalSalesSum += v;
+    });
+  }
+  if(ordersIdx >= 0){
+    rows.forEach(row => {
+      const v = parseFloat(row[ordersIdx]);
+      if(!isNaN(v)) ordersSum += v;
+    });
+  }
+  
+  container.innerHTML = `
+    <div class="stats-row" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:14px">
+      <div class="sc green">
+        <div class="sc-icon">💰</div>
+        <div class="sc-label">إجمالي المبيعات</div>
+        <div class="sc-val">${totalSalesSum.toLocaleString('ar-EG', {maximumFractionDigits: 2})} ج</div>
+      </div>
+      <div class="sc blue">
+        <div class="sc-icon">🛒</div>
+        <div class="sc-label">عدد الطلبات</div>
+        <div class="sc-val">${ordersSum.toLocaleString('ar-EG')}</div>
+      </div>
+      <div class="sc purple">
+        <div class="sc-icon">📊</div>
+        <div class="sc-label">متوسط الطلب</div>
+        <div class="sc-val">${ordersSum > 0 ? Math.round(totalSalesSum/ordersSum).toLocaleString('ar-EG') : 0} ج</div>
+      </div>
+    </div>
+    <div id="sr-table-container"></div>
+  `;
+  
+  _renderShopifyQLTable(tableData, document.getElementById('sr-table-container'));
+}
+
+function renderProductsReport(data, container){
+  _renderShopifyQLTable(data.tableData, container);
+}
+
+function renderCustomersReport(data, container){
+  _renderShopifyQLTable(data.tableData, container);
+}
+
+function renderInventoryReport(data, container){
+  if(!data.rows || !data.rows.length){
+    container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">📭 مفيش منتجات</div>';
+    return;
+  }
+  
+  const lowStock = data.rows.filter(r => 
+    r.inventoryManagement === 'shopify' && 
+    r.inventoryQuantity != null && 
+    r.inventoryQuantity < 10
+  );
+  
+  container.innerHTML = `
+    <div class="stats-row" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:14px">
+      <div class="sc blue">
+        <div class="sc-icon">📦</div>
+        <div class="sc-label">إجمالي Variants</div>
+        <div class="sc-val">${data.rows.length}</div>
+      </div>
+      <div class="sc red">
+        <div class="sc-icon">⚠️</div>
+        <div class="sc-label">منتجات منخفضة (< 10)</div>
+        <div class="sc-val">${lowStock.length}</div>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--bg)">
+            <th style="padding:10px;text-align:right;border-bottom:2px solid var(--border)">المنتج</th>
+            <th style="padding:10px;text-align:right;border-bottom:2px solid var(--border)">Variant</th>
+            <th style="padding:10px;text-align:right;border-bottom:2px solid var(--border)">SKU</th>
+            <th style="padding:10px;text-align:right;border-bottom:2px solid var(--border)">المخزون</th>
+            <th style="padding:10px;text-align:right;border-bottom:2px solid var(--border)">السعر</th>
+            <th style="padding:10px;text-align:right;border-bottom:2px solid var(--border)">الحالة</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.rows.map(r => {
+            const qty = r.inventoryQuantity;
+            const tracked = r.inventoryManagement === 'shopify';
+            let stockBadge = '';
+            if(!tracked){
+              stockBadge = '<span style="color:var(--muted);font-size:10px">غير متابع</span>';
+            } else if(qty == null){
+              stockBadge = '<span style="color:var(--muted);font-size:10px">—</span>';
+            } else if(qty <= 0){
+              stockBadge = `<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:5px;font-weight:700">${qty} ⛔</span>`;
+            } else if(qty < 10){
+              stockBadge = `<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:5px;font-weight:700">${qty} ⚠️</span>`;
+            } else {
+              stockBadge = `<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:5px;font-weight:700">${qty} ✅</span>`;
+            }
+            return `<tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:8px 10px"><strong>${escapeHtml(r.productTitle)}</strong></td>
+              <td style="padding:8px 10px">${escapeHtml(r.variantTitle)}</td>
+              <td style="padding:8px 10px;font-family:monospace;font-size:11px">${escapeHtml(r.sku || '—')}</td>
+              <td style="padding:8px 10px">${stockBadge}</td>
+              <td style="padding:8px 10px">${r.price.toLocaleString('ar-EG')} ج</td>
+              <td style="padding:8px 10px"><span style="font-size:11px">${escapeHtml(r.status)}</span></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted)">
+      <div>📊 ${data.rows.length} variant</div>
+      <button class="btn btn-ghost btn-xs" onclick="downloadShopifyReportCSV('inventory')">⬇️ تحميل CSV</button>
+    </div>
+  `;
+}
+
+function renderAcquisitionReport(data, container){
+  _renderShopifyQLTable(data.tableData, container);
+}
+
+function renderBehaviorReport(data, container){
+  _renderShopifyQLTable(data.tableData, container);
+}
+
+function renderMarketingReport(data, container){
+  _renderShopifyQLTable(data.tableData, container);
+}
+
+// اختبار الاتصال بـ Shopify
+async function testShopifyReportsConnection(){
+  toast('🔍 جاري اختبار الاتصال...');
+  try{
+    const r = await apiFetch('/api/shopify-reports/test');
+    if(r && r.success){
+      toast('✅ ' + r.message);
+      console.log('✅ ShopifyQL test result:', r.tableData);
+    } else {
+      const errMsg = r?.error || 'فشل غير معروف';
+      const hint = r?.hint || '';
+      infoModal('❌ فشل اختبار الاتصال', 
+        `الخطأ: ${errMsg}\n\n${hint}\n\n` +
+        `💡 الحلول الممكنة:\n` +
+        `1. اعمل re-install للـ App على Shopify بـ scopes: read_reports, read_analytics\n` +
+        `2. تأكد إن Plan = Advanced أو Plus\n` +
+        `3. تحقق من الـ Access Token`
+      );
+    }
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+// تحميل CSV
+function downloadShopifyReportCSV(reportType){
+  const content = document.getElementById('sr-content');
+  const tables = content?.querySelectorAll('table');
+  if(!tables || !tables.length){ toast('⚠️ مفيش بيانات للتحميل'); return; }
+  
+  // BOM للـ Arabic
+  const BOM = '\uFEFF';
+  let csv = BOM;
+  
+  // جيب العناوين والصفوف من أول جدول
+  const table = tables[0];
+  const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
+  csv += headers.map(h => `"${h.replace(/"/g, '""')}"`).join(',') + '\n';
+  
+  table.querySelectorAll('tbody tr').forEach(tr => {
+    const cells = Array.from(tr.querySelectorAll('td')).map(td => {
+      const text = td.textContent.trim().replace(/"/g, '""');
+      return `"${text}"`;
+    });
+    csv += cells.join(',') + '\n';
+  });
+  
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `shopify-${reportType}-${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('✅ تم تحميل التقرير');
+}
+
+// ============================================================================
+// نهاية v229: SHOPIFY REPORTS
+// ============================================================================
+
+// ============================================================================
 // نهاية v216: DASHBOARD PAGES
 // ============================================================================
 
@@ -13087,30 +14091,19 @@ async function loadRiskList(){
     const list = await apiFetch('/api/customers-risk-list?limit=500', 'GET');
     _riskList = list || [];
     
-    // 🆕 v214: لو الداتا فاضية، نجيبها من Shopify تلقائياً
-    if(_riskList.length === 0 && orders.length > 0){
+    // 🔧 v225: شلنا الـ auto-fetch القديم (بـ phone search) لأنه:
+    // - بيستخدم endpoint قديم محتاج admin token خاص
+    // - الطريقة الجديدة (customer_id) أدق وأسرع
+    // المستخدم يضغط زر "🔁 تحديث الكل من Shopify" لو فاضي
+    if(_riskList.length === 0){
       if(tbody) tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:40px">
-        <div style="font-size:24px;margin-bottom:8px">🔄</div>
-        <div style="color:var(--muted);margin-bottom:8px">لم يتم تحميل بيانات العملاء من قبل</div>
-        <div style="color:var(--muted);font-size:11px">جاري الجلب من Shopify... قد يستغرق دقيقة</div>
+        <div style="font-size:32px;margin-bottom:8px">📭</div>
+        <div style="color:var(--muted);margin-bottom:12px;font-size:14px">القائمة فاضية!</div>
+        <div style="color:var(--muted);font-size:11px;margin-bottom:14px">اضغط الزرار التحت عشان نجلب بيانات العملاء من Shopify بـ Customer ID مباشرة</div>
+        <button class="btn btn-primary" onclick="bulkRefreshRisk()" style="margin-top:8px">
+          🔁 جلب البيانات من Shopify
+        </button>
       </td></tr>`;
-      
-      // جيب كل التليفونات من الطلبات
-      const phones = [...new Set(orders.map(o => o.phone).filter(p => p && p !== '—'))];
-      if(phones.length > 0){
-        try{
-          const r = await apiFetch('/api/customer-risk/batch', 'POST', { phones, forceRefresh: true });
-          if(r && r.results){
-            // أعد تحميل القائمة بعد الجلب
-            const newList = await apiFetch('/api/customers-risk-list?limit=500', 'GET');
-            _riskList = newList || [];
-            toast(`✅ تم تحميل ${Object.keys(r.results).length} عميل من Shopify`);
-          }
-        }catch(autoFetchErr){
-          console.warn('Auto-fetch failed:', autoFetchErr.message);
-          toast('⚠️ فشل التحميل التلقائي - اضغط "تحديث الكل من Shopify"');
-        }
-      }
     }
     
     filterRiskList();
@@ -13180,13 +14173,13 @@ function renderRiskList(){
     return `<tr ${isRisky ? 'style="background:#fef2f2"' : ''}>
       <td data-label="الحالة">${statusBadge}</td>
       <td data-label="اسم العميل"><strong>${escapeHtml(c.customerName || '—')}</strong></td>
-      <td data-label="التليفون" style="direction:ltr;font-size:12px">${escapeHtml(c.phone)}</td>
-      <td data-label="إجمالي الطلبات"><strong>${c.totalOrders}</strong></td>
-      <td data-label="الناجحة" style="color:#059669">${c.successfulOrders}</td>
-      <td data-label="الملغية" style="color:#dc2626">${c.cancelledOrders}</td>
-      <td data-label="المرتجعة" style="color:#d97706">${c.refundedOrders}</td>
+      <td data-label="التليفون" style="direction:ltr;font-size:12px">${escapeHtml(c.phone || '—')}</td>
+      <td data-label="إجمالي الطلبات"><strong>${c.totalOrders || 0}</strong></td>
+      <td data-label="الناجحة" style="color:#059669">${c.successfulOrders || 0}</td>
+      <td data-label="الملغية" style="color:#dc2626">${c.cancelledOrders || 0}</td>
+      <td data-label="المرتجعة" style="color:#d97706">${c.refundedOrders || 0}</td>
       <td data-label="نسبة الخطر">
-        <strong style="color:${riskColor};font-size:13px">${c.riskPercentage}%</strong>
+        <strong style="color:${riskColor};font-size:13px">${c.riskPercentage || 0}%</strong>
       </td>
       <td data-label="إجمالي الإنفاق">${(c.totalSpent || 0).toLocaleString()} ج</td>
       <td data-label="آخر طلب" style="font-size:11px;color:var(--muted)">${c.lastOrderAt ? fmtRelative(c.lastOrderAt) : '—'}</td>
@@ -13216,10 +14209,15 @@ async function refreshSingleRisk(phone){
 }
 
 async function bulkRefreshRisk(){
-  // 🔧 v224: workflow أذكى - أول حاجة backfill، بعدين build
+  // 🔧 v226: workflow محسّن - يمسح الـ cache القديم الأول
   const ordersWithCustomerId = orders.filter(o => o.shopifyCustomerId);
   const ordersWithoutCustomerId = orders.filter(o => !o.shopifyCustomerId);
   const uniqueCustomerIds = new Set(ordersWithCustomerId.map(o => o.shopifyCustomerId)).size;
+  
+  // الخطوة 1: امسح الـ cache القديم (silent - background)
+  try{
+    await apiFetch('/api/customers-risk-list/clear-old-cache', 'DELETE');
+  }catch(e){ /* silent */ }
   
   // لو الأغلب من الطلبات مفيش customer_id → اعرض workflow الـ backfill الأول
   if(uniqueCustomerIds < 10 && ordersWithoutCustomerId.length > 50){
@@ -13263,7 +14261,6 @@ async function bulkRefreshRisk(){
   try{
     const r = await apiFetch('/api/customers-risk-list/build', 'POST', { limit: 200 });
     
-    // 🆕 v224: عرض رسالة مفصلة لو في errors
     if(r && r.success){
       if(r.errors > 0 && r.errorSamples && r.errorSamples.length){
         const sampleMsg = r.errorSamples.slice(0,3).map(e => 
@@ -13316,25 +14313,35 @@ async function _getRiskForPhone(phone){
 
 // 🆕 v213: حسب مخاطر مجموعة طلبات قبل التوزيع
 async function _checkBatchRisks(orderList){
-  const phones = [...new Set(orderList.map(o => o.phone).filter(p => p && p !== '—'))];
-  if(!phones.length) return { risky: [], safe: [] };
-
-  const cached = phones.filter(p => _riskCache[p]);
-  const needFetch = phones.filter(p => !_riskCache[p]);
-
-  if(needFetch.length > 0){
-    try{
-      const r = await apiFetch('/api/customer-risk/batch', 'POST', { phones: needFetch });
-      if(r && r.results){
-        Object.entries(r.results).forEach(([p, risk]) => {
-          if(risk && !risk.error) _riskCache[p] = risk;
-        });
-      }
-    }catch(e){ console.warn('batch risk fetch failed:', e.message); }
-  }
-
+  // 🔧 v225: استخدم order endpoint (الجديد بـ customer_id) بدل الـ batch القديم
+  // ده بيحل مشكلة 401 على /api/customer-risk/batch
+  if(!orderList || !orderList.length) return { risky: [], safe: [] };
+  
   const threshold = _riskSettings.threshold || 30;
   const minOrders = _riskSettings.minOrders || 3;
+  
+  // جيب التقييم لكل طلب فيه phone
+  const ordersWithPhone = orderList.filter(o => o.phone && o.phone !== '—');
+  if(!ordersWithPhone.length) return { risky: [], safe: orderList };
+  
+  // parallel fetch بـ batches من 5
+  const BATCH_SIZE = 5;
+  for(let i = 0; i < ordersWithPhone.length; i += BATCH_SIZE){
+    const batch = ordersWithPhone.slice(i, i + BATCH_SIZE);
+    const promises = batch.map(async (o) => {
+      // استخدم cache لو متاح
+      if(_riskCache[o.phone]) return;
+      try{
+        const r = await apiFetch('/api/orders/'+encodeURIComponent(o.id)+'/customer-risk', 'GET');
+        if(r && !r.error){
+          _riskCache[o.phone] = r;
+        }
+      }catch(e){
+        // silent fail - الطلب هيعتبر آمن
+      }
+    });
+    await Promise.all(promises);
+  }
 
   const risky = [], safe = [];
   for(const o of orderList){
