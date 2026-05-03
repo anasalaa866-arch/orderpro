@@ -2162,14 +2162,14 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v235 — COURIER RATES FIX =====
-// 2026-04-30: إصلاح bug في حسابات المناديب
-// 1. ✅ getShipCost دلوقتي يستخدم courier_ship_rates table
-// 2. ✅ Cache _courierRatesMap بـ {courierId: {orderTypeId: cost}}
-// 3. ✅ يتحدث وقت login + لما تحفظ أسعار جديدة
-// 4. ✅ Backend (v126): endpoint /api/courier-ship-rates/all
+// ===== OrderPro v236 — RATES DEBUG =====
+// 2026-04-30: تشخيص لـ courier_ship_rates
+// 1. ✅ Logging واضح لما _courierRatesMap يتحمل
+// 2. ✅ window.debugRates() helper للتشخيص
+// 3. ✅ window.toggleShipCostDebug() لتشغيل logging في getShipCost
+// 4. ✅ Backend (v127): endpoint /debug يرجع كل المعلومات
 // =================================
-// السابق: v234 — REPORTS DEBUG
+// السابق: v235 — COURIER RATES FIX
 // - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
@@ -2470,37 +2470,83 @@ async function loadCourierRatesMap(){
     const r = await apiFetch('/api/courier-ship-rates/all');
     if(r && typeof r === 'object'){
       _courierRatesMap = r;
+      const courierCount = Object.keys(r).length;
+      let totalRates = 0;
+      Object.values(r).forEach(rates => totalRates += Object.keys(rates).length);
+      console.log(`✅ v236: loaded courier rates - ${courierCount} couriers, ${totalRates} rates total`);
+      if(courierCount === 0){
+        console.warn(`⚠️ v236: _courierRatesMap is EMPTY! اعمل debug من /api/courier-ship-rates/debug`);
+      }
     }
   }catch(e){ 
-    console.warn('Failed to load courier rates map:', e.message);
+    console.error('❌ v236: Failed to load courier rates map:', e.message);
   }
 }
 
-// 🔧 v235: getShipCost - يستخدم courier_ship_rates (الجديد) قبل النظام القديم
+// 🆕 v236: helper للـ debugging - يطبع كل الـ rates
+window.debugRates = async function(){
+  console.log('🔍 Current _courierRatesMap:', _courierRatesMap);
+  try{
+    const r = await apiFetch('/api/courier-ship-rates/debug');
+    console.log('🔍 Backend debug info:', r);
+    return r;
+  }catch(e){
+    console.error('❌ debug failed:', e.message);
+  }
+};
+
+// 🆕 v236: شغّل/طفّي الـ logging في getShipCost
+window.toggleShipCostDebug = function(){
+  window._debugShipCost = !window._debugShipCost;
+  console.log(`🚚 Ship cost debug: ${window._debugShipCost ? 'ON' : 'OFF'}`);
+};
+
+// 🔧 v236: getShipCost - يستخدم courier_ship_rates (الجديد) قبل النظام القديم
+// + logging مؤقت للـ debugging (حذفه بعد ما تتأكد إن شغال)
 // Priority:
-// 1. order.ship لو الـ Backend حدد سعر تلقائي
-// 2. courier_ship_rates table بـ order_type_id
+// 1. order.ship لو الـ Backend حدد سعر تلقائي (للطلبات اللي اتعملها update يدوي)
+// 2. courier_ship_rates table بـ order_type_id (✅ الـ rates اللي إنت محددها)
 // 3. fallback القديم: courier.shipExpress/courier.ship حسب delivery_type
 const getShipCost=(order,courier)=>{
   if(!courier)return order.ship||50;
   
   // Priority 1: لو الـ ship موجود من Backend بـ auto-rate (لما الطلب اتحدّث)، استخدمه
   if(order.ship != null && order.ship !== '' && !isNaN(order.ship)){
-    return parseFloat(order.ship);
+    const v = parseFloat(order.ship);
+    if(window._debugShipCost) console.log(`🚚 [P1] order.ship=${v} for ${order.id}`);
+    return v;
   }
   
   // Priority 2 (🆕 v235): جيب من courier_ship_rates لو الطلب عنده orderTypeId
+  // مهم: 0 قيمة صحيحة (للمحل) - متخلطش بين 0 و null
   if(order.orderTypeId && _courierRatesMap[courier.id]){
     const rate = _courierRatesMap[courier.id][order.orderTypeId];
     if(rate != null && !isNaN(rate)){
+      if(window._debugShipCost) console.log(`🚚 [P2] rates[${courier.id}][${order.orderTypeId}]=${rate} for ${order.id} (${courier.name})`);
       return parseFloat(rate);
+    } else {
+      if(window._debugShipCost) console.log(`🚚 [P2-MISS] no rate for courier=${courier.id}, type=${order.orderTypeId}`);
+    }
+  } else {
+    if(window._debugShipCost) {
+      const reason = !order.orderTypeId ? 'order.orderTypeId is null' : `_courierRatesMap[${courier.id}] not found`;
+      console.log(`🚚 [P2-SKIP] ${reason} for ${order.id}`);
     }
   }
   
   // Priority 3 (fallback للنظام القديم)
-  if(isPickup(order)||isTransit(order)) return 0;
-  if(isSameDay(order)) return+(courier.shipExpress||courier.ship||80);
-  return+(courier.ship||50);
+  if(isPickup(order)||isTransit(order)) {
+    if(window._debugShipCost) console.log(`🚚 [P3-PICKUP] returning 0 for ${order.id}`);
+    return 0;
+  }
+  if(isSameDay(order)) {
+    const v = +(courier.shipExpress||courier.ship||80);
+    if(window._debugShipCost) console.log(`🚚 [P3-EXPRESS] using courier.shipExpress=${v} for ${order.id}`);
+    return v;
+  }
+  const v = +(courier.ship||50);
+  if(window._debugShipCost) console.log(`🚚 [P3-NORMAL] using courier.ship=${v} for ${order.id}`);
+  return v;
 };
 const nowTime=()=>new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
 
