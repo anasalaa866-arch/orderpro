@@ -2162,14 +2162,14 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v230 — DEBUG MODE =====
-// 2026-04-30: تشخيص مفصل لمشاكل Shopify Reports
-// 1. ✅ اختبار الاتصال يعرض كل خطوة بالتفصيل
-// 2. ✅ Modal كبير بـ debug info واضحة
-// 3. ✅ زرار نسخ الـ debug info للـ clipboard
-// 4. ✅ خطوات إصلاح مقترحة (scopes, plan, token)
+// ===== OrderPro v235 — COURIER RATES FIX =====
+// 2026-04-30: إصلاح bug في حسابات المناديب
+// 1. ✅ getShipCost دلوقتي يستخدم courier_ship_rates table
+// 2. ✅ Cache _courierRatesMap بـ {courierId: {orderTypeId: cost}}
+// 3. ✅ يتحدث وقت login + لما تحفظ أسعار جديدة
+// 4. ✅ Backend (v126): endpoint /api/courier-ship-rates/all
 // =================================
-// السابق: v229 — SHOPIFY REPORTS
+// السابق: v234 — REPORTS DEBUG
 // - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
@@ -2459,13 +2459,45 @@ function suggestCourier(order){
 // لو الطلب عنده orderTypeId والمندوب عنده rate في DB → السعر يرجع تلقائي من Backend
 // الـ frontend بيستخدم القيمة الموجودة في o.ship (اللي الـ Backend بيحطها تلقائي)
 // fallback: النظام القديم
+// 🆕 v235: Cache لـ courier ship rates من DB
+// Map structure: { courierId: { orderTypeId: shipCost } }
+let _courierRatesMap = {};
+
+// تحميل الـ rates من Backend (نستدعيه مع loadCouriers)
+async function loadCourierRatesMap(){
+  if(!API_URL) return;
+  try{
+    const r = await apiFetch('/api/courier-ship-rates/all');
+    if(r && typeof r === 'object'){
+      _courierRatesMap = r;
+    }
+  }catch(e){ 
+    console.warn('Failed to load courier rates map:', e.message);
+  }
+}
+
+// 🔧 v235: getShipCost - يستخدم courier_ship_rates (الجديد) قبل النظام القديم
+// Priority:
+// 1. order.ship لو الـ Backend حدد سعر تلقائي
+// 2. courier_ship_rates table بـ order_type_id
+// 3. fallback القديم: courier.shipExpress/courier.ship حسب delivery_type
 const getShipCost=(order,courier)=>{
   if(!courier)return order.ship||50;
-  // 🆕 v217: لو الـ ship موجود من Backend بـ auto-rate (لما الطلب اتحدّث)، استخدمه
+  
+  // Priority 1: لو الـ ship موجود من Backend بـ auto-rate (لما الطلب اتحدّث)، استخدمه
   if(order.ship != null && order.ship !== '' && !isNaN(order.ship)){
     return parseFloat(order.ship);
   }
-  // fallback للنظام القديم
+  
+  // Priority 2 (🆕 v235): جيب من courier_ship_rates لو الطلب عنده orderTypeId
+  if(order.orderTypeId && _courierRatesMap[courier.id]){
+    const rate = _courierRatesMap[courier.id][order.orderTypeId];
+    if(rate != null && !isNaN(rate)){
+      return parseFloat(rate);
+    }
+  }
+  
+  // Priority 3 (fallback للنظام القديم)
   if(isPickup(order)||isTransit(order)) return 0;
   if(isSameDay(order)) return+(courier.shipExpress||courier.ship||80);
   return+(courier.ship||50);
@@ -8417,6 +8449,7 @@ async function doLogin(){
   checkExpiryAlerts();
   requestNotifPermission();
   loadRiskSettings(); // 🆕 v213: تحميل إعدادات تقييم العملاء
+  loadCourierRatesMap(); // 🆕 v235: تحميل أسعار المناديب الجديدة (courier_ship_rates)
   
   // روح لأول صفحة متاحة للمستخدم
   const firstPage = getFirstAvailablePage(user);
@@ -12856,6 +12889,8 @@ async function saveCourierRates(){
   try{
     await apiFetch('/api/couriers/'+_currentRatesCourierId+'/ship-rates', 'PUT', rates);
     toast('✅ تم حفظ الأسعار');
+    // 🆕 v235: حدّث الـ cache المحلي عشان الأسعار الجديدة تطبّق فوراً
+    await loadCourierRatesMap();
   }catch(e){
     toast('❌ ' + e.message);
   }
@@ -13407,28 +13442,56 @@ async function loadShopifyReport(report){
         return;
     }
     
-    const data = await apiFetch(endpoint);
-    if(!data || !data.success){
-      throw new Error(data?.error || 'فشل التحميل');
+    // 🔧 v234: استخدم raw fetch عشان نقدر نقرأ الـ error response details حتى لو 500
+    const baseUrl = API_URL || BACKEND_URL;
+    const response = await fetch(baseUrl.replace(/\/$/,'') + endpoint, {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + window._adminToken,
+        'Content-Type': 'application/json'
+      }
+    });
+    const data = await response.json();
+    
+    if(!response.ok || !data || !data.success){
+      // اعرض details من الـ response
+      const err = new Error(data?.error || `HTTP ${response.status}`);
+      err.attemptedQuery = data?.attemptedQuery || data?.query || '';
+      err.parseErrors = data?.parseErrors || [];
+      throw err;
     }
     
     if(renderFn) renderFn(data, content);
     
   }catch(e){
+    const queryDisplay = e.attemptedQuery ? `
+      <div style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:8px;margin:14px auto;max-width:600px;font-family:monospace;font-size:11px;direction:ltr;text-align:left;white-space:pre-wrap">
+        <div style="color:#94a3b8;margin-bottom:6px;font-weight:700">📝 Query:</div>
+        ${escapeHtml(e.attemptedQuery)}
+      </div>` : '';
+    
+    const parseErrorsDisplay = (e.parseErrors && e.parseErrors.length) ? `
+      <div style="background:#fef2f2;padding:10px 12px;border-radius:6px;margin:14px auto;max-width:600px;font-size:11px;text-align:right">
+        <strong>Parse Errors:</strong>
+        ${e.parseErrors.map(err => '<div>• ' + escapeHtml(typeof err === 'string' ? err : JSON.stringify(err)) + '</div>').join('')}
+      </div>` : '';
+    
     content.innerHTML = `
       <div style="text-align:center;padding:40px">
         <div style="font-size:32px;margin-bottom:10px">❌</div>
         <div style="color:var(--danger);margin-bottom:8px;font-weight:700">فشل تحميل التقرير</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:14px;max-width:600px;margin-left:auto;margin-right:auto">${escapeHtml(e.message)}</div>
-        <div style="background:#fef3c7;border-radius:8px;padding:12px 14px;font-size:11px;color:#78350f;max-width:600px;margin:0 auto;text-align:right">
-          <strong>💡 تأكد:</strong>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px;max-width:600px;margin-left:auto;margin-right:auto;direction:ltr">${escapeHtml(e.message)}</div>
+        ${parseErrorsDisplay}
+        ${queryDisplay}
+        <div style="background:#fef3c7;border-radius:8px;padding:12px 14px;font-size:11px;color:#78350f;max-width:600px;margin:14px auto 0;text-align:right">
+          <strong>💡 معلومات:</strong>
           <ul style="margin:6px 0 0;padding-right:20px">
-            <li>الـ App على Shopify عنده <code>read_reports</code> + <code>read_analytics</code> scopes</li>
-            <li>أنت على Plan Advanced أو أعلى</li>
-            <li>الـ Access Token صالح</li>
+            <li>المشكلة في الـ ShopifyQL syntax الخاص بالتقرير ده</li>
+            <li>التقارير الأخرى ممكن تكون شغالة</li>
+            <li>راجع الـ query في الـ console للـ debugging</li>
           </ul>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="testShopifyReportsConnection()" style="margin-top:14px">🔍 اختبار الاتصال</button>
+        <button class="btn btn-primary btn-sm" onclick="loadShopifyReport('${report}')" style="margin-top:14px">🔄 إعادة المحاولة</button>
       </div>
     `;
   }
@@ -13438,13 +13501,13 @@ async function loadShopifyReport(report){
 
 // Helper: ارسم جدول من ShopifyQL tableData
 function _renderShopifyQLTable(tableData, container){
-  if(!tableData || !tableData.columns || !tableData.rowData){
+  if(!tableData || !tableData.columns || !tableData.rows){
     container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">مفيش بيانات</div>';
     return;
   }
   
   const columns = tableData.columns || [];
-  const rows = tableData.rowData || [];
+  const rows = tableData.rows || [];
   
   if(!rows.length){
     container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">📭 مفيش بيانات للفترة دي</div>';
@@ -13460,21 +13523,50 @@ function _renderShopifyQLTable(tableData, container){
           </tr>
         </thead>
         <tbody>
-          ${rows.map(row => `
-            <tr style="border-bottom:1px solid var(--border)">
-              ${row.map((cell, i) => {
+          ${rows.map(row => {
+            // 🔧 v233: في schema الـ ShopifyQL الجديد، الـ row ممكن يكون:
+            // 1. Array (الشكل القديم) ← row.map شغّال
+            // 2. String JSON (الشكل الجديد) ← لازم نـ parse
+            // 3. Object (نادر) ← نحوّله لـ array من القيم
+            let cells = [];
+            if(Array.isArray(row)){
+              cells = row;
+            } else if(typeof row === 'string'){
+              try{ 
+                const parsed = JSON.parse(row); 
+                cells = Array.isArray(parsed) ? parsed : [parsed]; 
+              } catch{ 
+                cells = [row]; 
+              }
+            } else if(row && typeof row === 'object'){
+              cells = Object.values(row);
+            } else {
+              cells = [row];
+            }
+            
+            return `<tr style="border-bottom:1px solid var(--border)">
+              ${cells.map((cell, i) => {
                 const col = columns[i];
                 let displayVal = cell;
                 if(col && col.dataType){
-                  if(col.dataType === 'Money' || col.dataType === 'NUMBER'){
+                  if(col.dataType === 'Money' || col.dataType === 'NUMBER' || col.dataType === 'Decimal'){
                     const num = parseFloat(cell);
                     if(!isNaN(num)) displayVal = num.toLocaleString('ar-EG', {maximumFractionDigits: 2});
+                  } else if(col.dataType === 'DateTime' || col.dataType === 'Date'){
+                    if(cell){
+                      try{
+                        const dt = new Date(cell);
+                        if(!isNaN(dt.getTime())){
+                          displayVal = dt.toLocaleDateString('ar-EG', {day:'numeric', month:'short', year:'numeric'});
+                        }
+                      }catch(e){}
+                    }
                   }
                 }
                 return `<td style="padding:8px 10px">${escapeHtml(String(displayVal != null ? displayVal : '—'))}</td>`;
               }).join('')}
-            </tr>
-          `).join('')}
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
     </div>
@@ -13490,14 +13582,25 @@ function _renderShopifyQLTable(tableData, container){
 function renderSalesReport(data, container){
   // ملخص علوي + جدول
   const tableData = data.tableData;
-  if(!tableData || !tableData.rowData || !tableData.rowData.length){
+  if(!tableData || !tableData.rows || !tableData.rows.length){
     container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">📭 مفيش مبيعات في الفترة دي</div>';
     return;
   }
   
   // احسب الإجماليات
   const columns = tableData.columns || [];
-  const rows = tableData.rowData || [];
+  const rawRows = tableData.rows || [];
+  
+  // 🔧 v233: parse الـ rows لو كانوا strings
+  const rows = rawRows.map(row => {
+    if(Array.isArray(row)) return row;
+    if(typeof row === 'string'){
+      try{ const p = JSON.parse(row); return Array.isArray(p) ? p : [p]; }
+      catch{ return [row]; }
+    }
+    if(row && typeof row === 'object') return Object.values(row);
+    return [row];
+  });
   
   // ابحث عن أعمدة مهمة
   const totalSalesIdx = columns.findIndex(c => c.name === 'total_sales' || c.name === 'totalSales');
@@ -13666,7 +13769,7 @@ async function testShopifyReportsConnection(){
     if(response.ok && r.success){
       // نجاح
       toast('✅ ' + r.message);
-      const rowCount = r.tableData?.rowData?.length || 0;
+      const rowCount = r.tableData?.rows?.length || 0;
       infoModal('✅ الاتصال شغال!',
         `🎉 ${r.message}\n\n` +
         `📊 جلبنا ${rowCount} صف من Shopify\n` +
@@ -13684,7 +13787,7 @@ async function testShopifyReportsConnection(){
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
       overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
       
-      const parseErrors = r.parseErrors ? `<div style="background:#fef2f2;padding:10px;border-radius:6px;margin-bottom:10px;font-size:11px;text-align:right"><strong>Parse Errors:</strong><br>${r.parseErrors.map(e => '• ' + escapeHtml(e.message)).join('<br>')}</div>` : '';
+      const parseErrors = r.parseErrors && r.parseErrors.length ? `<div style="background:#fef2f2;padding:10px;border-radius:6px;margin-bottom:10px;font-size:11px;text-align:right"><strong>Parse Errors:</strong><br>${r.parseErrors.map(e => '• ' + escapeHtml(typeof e === 'string' ? e : (e.message || JSON.stringify(e)))).join('<br>')}${r.attemptedQuery ? `<div style="margin-top:8px;padding:6px;background:#1e293b;color:#e2e8f0;border-radius:4px;font-family:monospace;direction:ltr;text-align:left">Query: ${escapeHtml(r.attemptedQuery)}</div>` : ''}</div>` : '';
       const graphqlErrors = r.graphqlErrors ? `<div style="background:#fef2f2;padding:10px;border-radius:6px;margin-bottom:10px;font-size:11px;text-align:right;direction:ltr"><strong>GraphQL Errors:</strong><br>${r.graphqlErrors.map(e => '• ' + escapeHtml(e.message)).join('<br>')}</div>` : '';
       
       overlay.innerHTML = `
