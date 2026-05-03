@@ -2162,14 +2162,16 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v236 — RATES DEBUG =====
-// 2026-04-30: تشخيص لـ courier_ship_rates
-// 1. ✅ Logging واضح لما _courierRatesMap يتحمل
-// 2. ✅ window.debugRates() helper للتشخيص
-// 3. ✅ window.toggleShipCostDebug() لتشغيل logging في getShipCost
-// 4. ✅ Backend (v127): endpoint /debug يرجع كل المعلومات
+// ===== OrderPro v237 — USER MANAGEMENT FIX =====
+// 2026-04-30: إصلاحات شاملة لإدارة المستخدمين
+// 1. ✅ deleteUser يستدعي Backend API فعلاً (مش localStorage بس)
+// 2. ✅ تغيير الباسورد → force logout تلقائي للـ sessions المفتوحة
+// 3. ✅ تعطيل المستخدم → force logout للـ sessions
+// 4. ✅ منع حذف/تعطيل admin
+// 5. ✅ رسائل واضحة بعدد الـ sessions اللي اتقفلت
+// 6. ✅ Backend (v128): killing sessions في DELETE + UPDATE
 // =================================
-// السابق: v235 — COURIER RATES FIX
+// السابق: v236 — RATES DEBUG
 // - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
@@ -8684,8 +8686,14 @@ async function saveUser(){
   if(!pages.length){toast('❗ اختر صفحة واحدة على الأقل');return;}
 
   let passHash;
+  let passwordChanged = false;
   if(pass){
     passHash=await hashPass(pass);
+    // 🆕 v237: شيك إذا الباسورد فعلاً اتغير
+    if(editingUsername){
+      const oldUser = sysUsers.find(u => u.username === editingUsername);
+      passwordChanged = oldUser && oldUser.passHash !== passHash;
+    }
   } else if(editingUsername){
     passHash=sysUsers.find(u=>u.username===editingUsername)?.passHash;
     if(!passHash){toast('❗ أدخل كلمة المرور');return;}
@@ -8695,37 +8703,159 @@ async function saveUser(){
 
   const userData={username,name,passHash,role:'custom',pages,active:true};
 
-  if(editingUsername){
-    const idx=sysUsers.findIndex(u=>u.username===editingUsername);
-    if(idx>=0) sysUsers[idx]=userData;
-  } else {
-    sysUsers.push(userData);
-  }
-
-  localStorage.setItem('sys_users',JSON.stringify(sysUsers));
+  // 🆕 v237: استنى الـ Backend response قبل ما تحفظ في localStorage
   if(API_URL){
-    apiFetch('/api/users','POST',{username,name,passHash,pages,active:true}).catch(()=>{});
+    try{
+      const r = await apiFetch('/api/users','POST',{username,name,passHash,pages,active:true});
+      if(!r){
+        toast('❌ فشل الحفظ - شيك على الإنترنت');
+        return;
+      }
+      if(r.error){
+        toast('❌ ' + r.error);
+        return;
+      }
+      
+      // النجاح - حدّث الـ Frontend
+      if(editingUsername){
+        const idx=sysUsers.findIndex(u=>u.username===editingUsername);
+        if(idx>=0) sysUsers[idx]=userData;
+      } else {
+        sysUsers.push(userData);
+      }
+      localStorage.setItem('sys_users',JSON.stringify(sysUsers));
+      
+      closeM('m-add-user');
+      renderUsersAdmin();
+      
+      // رسالة مفصلة
+      const sessKilled = r.sessionsKilled || 0;
+      if(sessKilled > 0){
+        toast(`✅ تم حفظ ${name} + قطع ${sessKilled} session (الباسورد اتغير)`);
+      } else {
+        toast(`✅ تم حفظ ${name}`);
+      }
+    }catch(e){
+      toast('❌ ' + e.message);
+    }
+  } else {
+    // لو مفيش backend، احفظ محلياً
+    if(editingUsername){
+      const idx=sysUsers.findIndex(u=>u.username===editingUsername);
+      if(idx>=0) sysUsers[idx]=userData;
+    } else {
+      sysUsers.push(userData);
+    }
+    localStorage.setItem('sys_users',JSON.stringify(sysUsers));
+    closeM('m-add-user');
+    renderUsersAdmin();
+    toast('✅ تم حفظ المستخدم: '+name);
   }
-  closeM('m-add-user');
-  renderUsersAdmin();
-  toast('✅ تم حفظ المستخدم: '+name);
 }
 
-function toggleUserActive(username){
+// 🔧 v237: toggleUserActive - يستخدم Backend API
+async function toggleUserActive(username){
+  if(username === 'admin'){ toast('⛔ مش ممكن تعطّل المدير'); return; }
+  
   const u = sysUsers.find(x=>x.username===username);
   if(!u) return;
-  u.active = u.active===false ? true : false;
-  localStorage.setItem('sys_users', JSON.stringify(sysUsers));
-  renderUsersAdmin();
-  toast(u.active===false?'⛔ تم تعطيل '+u.name:'✅ تم تفعيل '+u.name);
+  
+  const newActive = u.active===false ? true : false;
+  
+  if(!newActive){
+    if(!confirm(`هتعطّل المستخدم "${u.name}"؟\n\n⚠️ كل الـ sessions المفتوحة بتاعته هتقفل فوراً`)) return;
+  }
+  
+  // 🆕 v237: استدعاء Backend
+  if(API_URL){
+    try{
+      const r = await apiFetch('/api/users','POST',{
+        username,
+        name: u.name,
+        passHash: u.passHash,
+        pages: u.pages,
+        active: newActive
+      });
+      
+      if(!r){
+        toast('❌ فشل التحديث - شيك على الإنترنت');
+        return;
+      }
+      if(r.error){
+        toast('❌ ' + r.error);
+        return;
+      }
+      
+      // حدّث الـ Frontend
+      u.active = newActive;
+      localStorage.setItem('sys_users', JSON.stringify(sysUsers));
+      renderUsersAdmin();
+      
+      const sessKilled = r.sessionsKilled || 0;
+      if(!newActive && sessKilled > 0){
+        toast(`⛔ تم تعطيل ${u.name} + قطع ${sessKilled} session`);
+      } else {
+        toast(newActive ? '✅ تم تفعيل '+u.name : '⛔ تم تعطيل '+u.name);
+      }
+    }catch(e){
+      toast('❌ ' + e.message);
+    }
+  } else {
+    u.active = newActive;
+    localStorage.setItem('sys_users', JSON.stringify(sysUsers));
+    renderUsersAdmin();
+    toast(newActive ? '✅ تم تفعيل '+u.name : '⛔ تم تعطيل '+u.name);
+  }
 }
 
-function deleteUser(username){
-  if(!confirm('هتحذف المستخدم ده؟')) return;
-  sysUsers = sysUsers.filter(u=>u.username!==username);
-  localStorage.setItem('sys_users', JSON.stringify(sysUsers));
-  renderUsersAdmin();
-  toast('🗑️ تم حذف المستخدم');
+// 🔧 v237: إصلاح deleteUser - يستدعي Backend API فعلاً
+async function deleteUser(username){
+  // ⛔ منع حذف admin
+  if(username === 'admin'){
+    toast('⛔ مش ممكن تحذف المدير');
+    return;
+  }
+  
+  const u = sysUsers.find(x => x.username === username);
+  const userName = u ? u.name : username;
+  
+  if(!confirm(`هتحذف المستخدم "${userName}"؟\n\n⚠️ كل الـ sessions المفتوحة بتاعته هتقفل فوراً (force logout)`)) return;
+  
+  // 🆕 v237: استدعاء الـ Backend API
+  if(API_URL){
+    try{
+      const r = await apiFetch('/api/users/'+encodeURIComponent(username), 'DELETE');
+      if(!r){
+        toast('❌ فشل حذف المستخدم - شيك على الإنترنت');
+        return;
+      }
+      if(r.error){
+        toast('❌ ' + r.error);
+        return;
+      }
+      
+      // النجاح - شيل من الـ Frontend
+      sysUsers = sysUsers.filter(u => u.username !== username);
+      localStorage.setItem('sys_users', JSON.stringify(sysUsers));
+      renderUsersAdmin();
+      
+      // رسالة مفصلة
+      const sessKilled = r.sessionsKilled || 0;
+      if(sessKilled > 0){
+        toast(`✅ تم حذف ${userName} + قطع ${sessKilled} session مفتوح`);
+      } else {
+        toast(`✅ تم حذف ${userName}`);
+      }
+    }catch(e){
+      toast('❌ ' + e.message);
+    }
+  } else {
+    // لو مفيش backend، شيل من localStorage بس
+    sysUsers = sysUsers.filter(u => u.username !== username);
+    localStorage.setItem('sys_users', JSON.stringify(sysUsers));
+    renderUsersAdmin();
+    toast('🗑️ تم حذف المستخدم محلياً');
+  }
 }
 
 var _allSettlements = [];
