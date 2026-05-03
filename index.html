@@ -2504,11 +2504,20 @@ window.toggleShipCostDebug = function(){
 // 🔧 v236: getShipCost - يستخدم courier_ship_rates (الجديد) قبل النظام القديم
 // + logging مؤقت للـ debugging (حذفه بعد ما تتأكد إن شغال)
 // Priority:
+// 0. المحل (SHOP_COURIER_ID) → دايماً 0 (المحل ما بياخدش رسوم شحن)
 // 1. order.ship لو الـ Backend حدد سعر تلقائي (للطلبات اللي اتعملها update يدوي)
 // 2. courier_ship_rates table بـ order_type_id (✅ الـ rates اللي إنت محددها)
 // 3. fallback القديم: courier.shipExpress/courier.ship حسب delivery_type
 const getShipCost=(order,courier)=>{
   if(!courier)return order.ship||50;
+  
+  // 🆕 v236 Priority 0: لو المندوب هو المحل، السعر دايماً 0
+  // ده بيحل bug إن الطلبات اللي راحت للمحل بـ shipping method "Trivium" (express)
+  // كانت بتاخد سعر express بدل 0
+  if(SHOP_COURIER_ID && Number(courier.id) === Number(SHOP_COURIER_ID)){
+    if(window._debugShipCost) console.log(`🚚 [P0-SHOP] returning 0 for ${order.id} (المحل)`);
+    return 0;
+  }
   
   // Priority 1: لو الـ ship موجود من Backend بـ auto-rate (لما الطلب اتحدّث)، استخدمه
   if(order.ship != null && order.ship !== '' && !isNaN(order.ship)){
@@ -9926,6 +9935,7 @@ window.addEventListener('load', function(){
       loadChks();
       loadTreasury();
       checkExpiryAlerts();
+      loadCourierRatesMap(); // 🆕 v236: حمّل أسعار المناديب (ضروري لحساب التسوية)
     });
   } else {
     document.getElementById('login-screen').classList.remove('hidden');
@@ -12503,7 +12513,11 @@ function goPage(el,page){
   currentPage=page;$('ptitle').textContent=PAGE_T[page]||'';
   // 🆕 v202: اقفل الـ sidebar على الموبايل لما تختار صفحة
   if(window.innerWidth <= 1024) toggleSidebar(false);
-  if(page==='couriers')renderCouriers();if(page==='assign')renderAssignPage();
+  if(page==='couriers')renderCouriers();
+  if(page==='assign'){
+    // 🆕 v236: تأكد إن الـ rates محملة قبل التوزيع
+    loadCourierRatesMap().then(() => renderAssignPage());
+  }
   if(page==='couriers-dashboard')openCouriersDashboard();
   if(page==='pickup')renderPickupPage();if(page==='transit')renderTransitPage();
   if(page==='bosta')renderBostaPage();
@@ -12513,7 +12527,14 @@ function goPage(el,page){
   if(page==='courier-orders')renderCourierOrdersPage();
   if(page==='problems')renderProblemsPage();
   if(page==='import-excel')renderImportExcelPage();
-  if(page==='accounting'){renderAcc();renderAccDet();}if(page==='reports')renderReports();
+  if(page==='accounting'){
+    // 🆕 v236: تأكد إن rates map محملة قبل العرض (مهم للتسعير الصح)
+    loadCourierRatesMap().then(() => {
+      renderAcc();
+      renderAccDet();
+    });
+  }
+  if(page==='reports')renderReports();
   if(page==='notifs')renderNotifs();
   if(page==='settings')renderUsersAdmin();
   if(page==='delivery-sheet')dsInit();
