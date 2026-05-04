@@ -2162,16 +2162,15 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v237 — USER MANAGEMENT FIX =====
-// 2026-04-30: إصلاحات شاملة لإدارة المستخدمين
-// 1. ✅ deleteUser يستدعي Backend API فعلاً (مش localStorage بس)
-// 2. ✅ تغيير الباسورد → force logout تلقائي للـ sessions المفتوحة
-// 3. ✅ تعطيل المستخدم → force logout للـ sessions
-// 4. ✅ منع حذف/تعطيل admin
-// 5. ✅ رسائل واضحة بعدد الـ sessions اللي اتقفلت
-// 6. ✅ Backend (v128): killing sessions في DELETE + UPDATE
+// ===== OrderPro v239 — PRIORITY FIX =====
+// 2026-04-30: إصلاح أولوية getShipCost
+// المشكلة: الطلبات القديمة عندها o.ship متخزن (مثلاً 50)
+// كان Priority 1 = o.ship → بيتجاهل الـ rates الجديدة
+// الحل: courier_ship_rates بقت Priority 1 (الأعلى)
+// 1. ✅ rates من DB أولى من o.ship القديم
+// 2. ✅ المستعجل دلوقتي يحسب السعر الصح من الـ rates
 // =================================
-// السابق: v236 — RATES DEBUG
+// السابق: v238 — ACCOUNTING ALL FIX
 // - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
@@ -2510,42 +2509,47 @@ window.toggleShipCostDebug = function(){
 // 1. order.ship لو الـ Backend حدد سعر تلقائي (للطلبات اللي اتعملها update يدوي)
 // 2. courier_ship_rates table بـ order_type_id (✅ الـ rates اللي إنت محددها)
 // 3. fallback القديم: courier.shipExpress/courier.ship حسب delivery_type
+// 🔧 v239: getShipCost - الـ courier_ship_rates لها الأولوية الأعلى
+// السبب: الطلبات القديمة عندها o.ship متخزن (مثلاً 50 ج)، لازم نـ override بالـ rates الجديدة
+// Priority:
+// 0. المحل (SHOP_COURIER_ID) → دايماً 0
+// 1. courier_ship_rates table بـ order_type_id (✅ مصدر الحقيقة الجديد)
+// 2. order.ship لو الـ Backend حدد سعر تلقائي (للطلبات اللي مفيهاش orderTypeId)
+// 3. fallback القديم: courier.shipExpress/courier.ship حسب delivery_type
 const getShipCost=(order,courier)=>{
   if(!courier)return order.ship||50;
   
-  // 🆕 v236 Priority 0: لو المندوب هو المحل، السعر دايماً 0
-  // ده بيحل bug إن الطلبات اللي راحت للمحل بـ shipping method "Trivium" (express)
-  // كانت بتاخد سعر express بدل 0
+  // Priority 0: لو المندوب هو المحل، السعر دايماً 0
   if(SHOP_COURIER_ID && Number(courier.id) === Number(SHOP_COURIER_ID)){
     if(window._debugShipCost) console.log(`🚚 [P0-SHOP] returning 0 for ${order.id} (المحل)`);
     return 0;
   }
   
-  // Priority 1: لو الـ ship موجود من Backend بـ auto-rate (لما الطلب اتحدّث)، استخدمه
-  if(order.ship != null && order.ship !== '' && !isNaN(order.ship)){
-    const v = parseFloat(order.ship);
-    if(window._debugShipCost) console.log(`🚚 [P1] order.ship=${v} for ${order.id}`);
-    return v;
-  }
-  
-  // Priority 2 (🆕 v235): جيب من courier_ship_rates لو الطلب عنده orderTypeId
-  // مهم: 0 قيمة صحيحة (للمحل) - متخلطش بين 0 و null
+  // 🔧 v239 Priority 1: courier_ship_rates (الأولوية الأعلى - يعدل أي قيمة قديمة في o.ship)
+  // مهم: 0 قيمة صحيحة - متخلطش بين 0 و null
   if(order.orderTypeId && _courierRatesMap[courier.id]){
     const rate = _courierRatesMap[courier.id][order.orderTypeId];
     if(rate != null && !isNaN(rate)){
-      if(window._debugShipCost) console.log(`🚚 [P2] rates[${courier.id}][${order.orderTypeId}]=${rate} for ${order.id} (${courier.name})`);
+      if(window._debugShipCost) console.log(`🚚 [P1-RATE] rates[${courier.id}][${order.orderTypeId}]=${rate} for ${order.id} (${courier.name})`);
       return parseFloat(rate);
     } else {
-      if(window._debugShipCost) console.log(`🚚 [P2-MISS] no rate for courier=${courier.id}, type=${order.orderTypeId}`);
+      if(window._debugShipCost) console.log(`🚚 [P1-MISS] no rate for courier=${courier.id}, type=${order.orderTypeId}`);
     }
   } else {
     if(window._debugShipCost) {
       const reason = !order.orderTypeId ? 'order.orderTypeId is null' : `_courierRatesMap[${courier.id}] not found`;
-      console.log(`🚚 [P2-SKIP] ${reason} for ${order.id}`);
+      console.log(`🚚 [P1-SKIP] ${reason} for ${order.id}`);
     }
   }
   
-  // Priority 3 (fallback للنظام القديم)
+  // Priority 2: لو الـ ship موجود من Backend (للطلبات بدون orderTypeId)
+  if(order.ship != null && order.ship !== '' && !isNaN(order.ship)){
+    const v = parseFloat(order.ship);
+    if(window._debugShipCost) console.log(`🚚 [P2-OSHIP] order.ship=${v} for ${order.id}`);
+    return v;
+  }
+  
+  // Priority 3 (fallback للنظام القديم - مفيش o.ship + مفيش rate)
   if(isPickup(order)||isTransit(order)) {
     if(window._debugShipCost) console.log(`🚚 [P3-PICKUP] returning 0 for ${order.id}`);
     return 0;
@@ -5994,10 +5998,12 @@ function renderAcc(){
     const codOrders=done.filter(o=>!o.paid);
     const paidOrders=done.filter(o=>o.paid);
     const cod=codOrders.reduce((a,o)=>a+o.total,0);
-    const ship=done.reduce((a,o)=>a+(o.ship||50),0);
+    // 🔧 v238: استخدم getShipCost (اللي بيستخدم courier_ship_rates) بدل o.ship||50
+    const ship=done.reduce((a,o)=>a+getShipCost(o,c),0);
     const doneNorm=done.filter(o=>deliveryType(o)==='normal'),doneExp=done.filter(o=>isSameDay(o)),donePick=done.filter(o=>isPickup(o));
-    const shipNorm=doneNorm.reduce((a,o)=>a+(o.ship||c.ship||50),0);
-    const shipExp=doneExp.reduce((a,o)=>a+(o.ship||c.shipExpress||80),0);
+    // 🔧 v238: نفس الإصلاح للعادي والمستعجل
+    const shipNorm=doneNorm.reduce((a,o)=>a+getShipCost(o,c),0);
+    const shipExp=doneExp.reduce((a,o)=>a+getShipCost(o,c),0);
     totCod+=cod;totShip+=ship;
     rows+=`<tr>
       <td><strong>${c.name}</strong><br><span style="font-size:10px;color:var(--muted)">${c.phone}</span></td>
@@ -6033,7 +6039,8 @@ function renderAcc(){
 
 function renderAccDet(){
   const f=$('acc-cf').value,list=orders.filter(o=>o.status==='مكتمل'&&o.courierId&&(f==='all'||o.courierId==f));
-  $('acc-det-tbody').innerHTML=list.map(o=>{const c=couriers.find(x=>x.id==o.courierId),ship=o.ship||50,express=isSameDay(o);return`<tr><td><strong>${o.id}</strong></td><td>${c?c.name:'—'}</td><td>${o.name}</td><td>📍 ${o.area}</td><td><span class="badge ${express?'b-cancel':'b-go'}">${express?'⚡ سريع':'🚚 عادي'}</span></td><td class="mpos">${o.total.toLocaleString()} ج</td><td class="mwarn">${ship} ج</td><td class="mpos">${(o.total-ship).toLocaleString()} ج</td><td>${sBadge(o.status)}</td></tr>`}).join('');
+  // 🔧 v238: استخدم getShipCost بدل o.ship||50
+  $('acc-det-tbody').innerHTML=list.map(o=>{const c=couriers.find(x=>x.id==o.courierId),ship=c?getShipCost(o,c):(o.ship||50),express=isSameDay(o);return`<tr><td><strong>${o.id}</strong></td><td>${c?c.name:'—'}</td><td>${o.name}</td><td>📍 ${o.area}</td><td><span class="badge ${express?'b-cancel':'b-go'}">${express?'⚡ سريع':'🚚 عادي'}</span></td><td class="mpos">${o.total.toLocaleString()} ج</td><td class="mwarn">${ship} ج</td><td class="mpos">${(o.total-ship).toLocaleString()} ج</td><td>${sBadge(o.status)}</td></tr>`}).join('');
 }
 
 function accTab(tab,sec){document.querySelectorAll('.acc-tab').forEach(t=>t.classList.remove('on'));tab.classList.add('on');document.querySelectorAll('.acc-sec').forEach(s=>s.classList.remove('on'));$(sec).classList.add('on');if(sec==='acc-det')renderAccDet();if(sec==='acc-set')renderSettle()}
@@ -7003,7 +7010,8 @@ async function doExcelImport(){
 
   let assigned=0, added=0;
   for(const o of parsedExcelOrders){
-    const ship = o.deliveryType==='express'?(c.shipExpress||80):(c.ship||50);
+    // 🔧 v238: استخدم getShipCost
+    const ship = getShipCost(o, c);
     const existing = orders.find(x=>x.id===o.id);
     if(existing){
       existing.courierId=courierId; existing.status='مكتمل'; existing.ship=ship;
@@ -8349,7 +8357,8 @@ async function doConvertDelivery(courierId){
   const o=orders.find(x=>x.id===convertingOrderId);if(!o)return;
   const shipCost=parseFloat($('convert-ship-cost').value)||0;
   const c=courierId!=='bosta'?couriers.find(x=>x.id==courierId):null;
-  const baseShip=c?(isSameDay(o)?c.shipExpress||80:c.ship||50):50;
+  // 🔧 v238: استخدم getShipCost
+  const baseShip=c?getShipCost(o,c):50;
   o.total=o.total+shipCost;
   o.ship=baseShip;
   o.courierId=courierId;
@@ -8923,7 +8932,8 @@ function renderSettle(){
     const pending = getPendingSettleOrders(c.id);
     if(!pending.length) return '<div style="border:1px solid var(--border);border-radius:9px;padding:12px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;opacity:.6"><div><strong>'+c.name+'</strong> — <span style="font-size:11px;color:var(--muted)">لا توجد طلبات جديدة</span></div><span class="badge b-done">✅ مسوّى</span></div>';
     const cod = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-    const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
+    // 🔧 v238: استخدم getShipCost
+    const ship = pending.reduce((s,o)=>s+getShipCost(o,c),0);
     return '<div style="border:1px solid var(--border);border-radius:9px;padding:13px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between"><div><div style="font-weight:700;font-size:13px;margin-bottom:4px">'+c.name+'</div><div style="font-size:12px;color:var(--muted)">📦 '+pending.length+' طلب · 💰 <strong style="color:var(--success)">'+cod.toLocaleString()+' ج</strong> · 🚴 <strong style="color:var(--purple)">'+ship.toLocaleString()+' ج</strong> · 💵 صافي: <strong style="color:var(--accent)">'+(cod-ship).toLocaleString()+' ج</strong></div></div><button class="btn btn-primary btn-sm" onclick="openSettle('+c.id+')">تسوية الحساب</button></div>';
   }).join('');
 }
@@ -8982,7 +8992,8 @@ function openCourierAccSession(cId){
   batchCodes.forEach(code => {
     const batchOrders = batchMap[code];
     const cod = batchOrders.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-    const ship = batchOrders.reduce((s,o)=>s+(o.ship||50),0);
+    // 🔧 v238: استخدم getShipCost
+    const ship = batchOrders.reduce((s,o)=>s+getShipCost(o,c),0);
     html += `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--card)">
       <input type="checkbox" class="acc-batch-chk" value="${code}" checked style="width:18px;height:18px;cursor:pointer">
       <div style="flex:1">
@@ -8995,7 +9006,8 @@ function openCourierAccSession(cId){
 
   if(noBatchOrders.length){
     const cod = noBatchOrders.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-    const ship = noBatchOrders.reduce((s,o)=>s+(o.ship||50),0);
+    // 🔧 v238: استخدم getShipCost
+    const ship = noBatchOrders.reduce((s,o)=>s+getShipCost(o,c),0);
     html += `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--warn);border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--warn-light)">
       <input type="checkbox" class="acc-batch-chk" value="__nobatch__" checked style="width:18px;height:18px;cursor:pointer">
       <div style="flex:1">
@@ -9293,7 +9305,8 @@ function openSettle(cId){
   if(!pending.length){ toast('✅ لا توجد طلبات جديدة'); return; }
   const cod  = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
   const paid = pending.filter(o=>o.paid).reduce((s,o)=>s+o.total,0);
-  const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
+  // 🔧 v238: استخدم getShipCost (يستخدم courier_ship_rates)
+  const ship = pending.reduce((s,o)=>s+getShipCost(o,c),0);
   const sessNum = _allSettlements.filter(s=>String(s.courierId)===String(cId)).length+1;
   $('settle-title').textContent = 'تسوية حساب — '+c.name;
   $('settle-body').innerHTML = '<div style="background:var(--accent-light);border-radius:8px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:var(--accent);font-weight:700">تسوية رقم '+sessNum+'</div>'
@@ -9394,8 +9407,10 @@ function _updateSettleNet(){
   const el = document.getElementById('settle-net-display');
   if(!el) return;
   const pending = getPendingSettleOrders(settlingCourierId);
+  const cour = couriers.find(x=>x.id==settlingCourierId);
   const cod = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-  const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
+  // 🔧 v238: استخدم getShipCost
+  const ship = pending.reduce((s,o)=>s+(cour?getShipCost(o,cour):(o.ship||50)),0);
   const net = cod - ship + adj;
   el.innerHTML = '<span>💵 صافي المحل</span><strong style="color:var(--accent)">'+net.toLocaleString()+' ج</strong>'
     +(adj!==0?'<span style="font-size:11px;color:var(--muted);margin-right:8px">(تعديل: '+(adj>=0?'+':'')+adj.toLocaleString()+' ج)</span>':'');
@@ -9409,7 +9424,8 @@ async function doSettle(){
   const now = new Date().toISOString();
   const orderIds = pending.map(o=>o.id);
   const cod  = pending.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-  const ship = pending.reduce((s,o)=>s+(o.ship||50),0);
+  // 🔧 v238: استخدم getShipCost
+  const ship = pending.reduce((s,o)=>s+getShipCost(o,c),0);
   const adj = window._settleAdj || [];
   const adjTotal = adj.reduce((s,a)=>s+a.amount,0);
   const newS = {id:Date.now(), courierId:c.id, ts:new Date(now), orderIds, cod, ship, adj, adjTotal};
@@ -9537,13 +9553,14 @@ function _doPrintSettle(c, done, isDraft, settleDate, settlement){
   const adjTotal = s.adjTotal || adj.reduce((sum,a)=>sum+(parseFloat(a.amount)||0),0);
   const cod = done.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
   const paidOrders = done.filter(o=>o.paid);
-  const ship = done.reduce((s,o)=>s+(o.ship||50),0);
+  // 🔧 v238: استخدم getShipCost
+  const ship = done.reduce((s,o)=>s+getShipCost(o,c),0);
   const net = cod - ship + adjTotal;
   const today = new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const nowt = new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
   const dateStr = (settleDate?new Date(settleDate):new Date()).toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'});
   let rows='';
-  done.forEach((o,i)=>{ rows+='<tr><td>'+(i+1)+'</td><td><strong>'+o.id+'</strong></td><td>'+(o.name||'—')+'</td><td>'+(o.area||'—')+'</td><td><strong>'+o.total.toLocaleString()+' ج</strong></td><td>'+(o.paid?'<span style="color:#16a34a">💳 مدفوع</span>':'💵 COD')+'</td><td>'+(o.ship||50)+' ج</td></tr>'; });
+  done.forEach((o,i)=>{ const oship=getShipCost(o,c); rows+='<tr><td>'+(i+1)+'</td><td><strong>'+o.id+'</strong></td><td>'+(o.name||'—')+'</td><td>'+(o.area||'—')+'</td><td><strong>'+o.total.toLocaleString()+' ج</strong></td><td>'+(o.paid?'<span style="color:#16a34a">💳 مدفوع</span>':'💵 COD')+'</td><td>'+oship+' ج</td></tr>'; });
   const html='<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تسوية '+c.name+'</title>'
     +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;padding:16px;font-size:11px}'
     +'.hd{display:flex;justify-content:space-between;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:14px}'
@@ -10891,7 +10908,8 @@ function renderBatchOrder(){
   if(grid){
     const ranked=couriers.filter(c => (c.role || 'courier') !== 'preparer').map(c=>({...c,zm:zoneMatchScore(o.area,c.zone)})).sort((a,b)=>(b.zm-a.zm));
     grid.innerHTML=ranked.map(c=>{
-      const ship=isSameDay(o)?(c.shipExpress||80):(c.ship||50);
+      // 🔧 v238: استخدم getShipCost
+      const ship=getShipCost(o,c);
       const star=c.zm===2?'⭐ ':'';
       const extra=!isPickupOrder?('<br><span style="font-size:10px;opacity:.7">'+ship+' ج</span>'):'';
       const bc2=c.zm===2?'#10b981':c.zm===1?'#f59e0b':'var(--border)';
@@ -10990,7 +11008,8 @@ async function batchAssign(courierId){
 
   if(courierId===0)courierId='bosta';
   const c=courierId!=='bosta'?couriers.find(x=>x.id==courierId):null;
-  const ship=c?(isSameDay(o)?c.shipExpress||80:c.ship||50):50;
+  // 🔧 v238: استخدم getShipCost
+  const ship=c?getShipCost(o,c):50;
   const assignedZone=getOrderZoneForCourier(o,c||{zone:''});
   const isBosta=courierId==='bosta';
   const isShop = !isBosta && SHOP_COURIER_ID && Number(courierId) === Number(SHOP_COURIER_ID);
@@ -12381,7 +12400,7 @@ function coDsRender(){
   if(!all.length){sheetEl.innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">لا توجد طلبات</div>';return;}
 
   const totalCod=all.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-  const shipFee=showExp.reduce((s,o)=>s+(o.ship||c.shipExpress||80),0)+showNorm.reduce((s,o)=>s+(o.ship||c.ship||50),0);
+  const shipFee=all.reduce((s,o)=>s+getShipCost(o,c),0); // 🔧 v238: getShipCost
   const today=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
 
   let expHtml='',normHtml='';
@@ -12422,7 +12441,8 @@ function coDsRender(){
 function renderReports(){
   $('report-tbody').innerHTML=couriers.map(c=>{
     const all=oByC(c.id),done=oByC(c.id,'مكتمل'),cancel=oByC(c.id,'ملغي');
-    const cod=done.reduce((a,o)=>a+o.total,0),ship=done.reduce((a,o)=>a+(o.ship||50),0),rate=all.length?Math.round(done.length/all.length*100):0;
+    // 🔧 v238: استخدم getShipCost
+    const cod=done.reduce((a,o)=>a+o.total,0),ship=done.reduce((a,o)=>a+getShipCost(o,c),0),rate=all.length?Math.round(done.length/all.length*100):0;
     return`<tr><td><strong>${c.name}</strong></td><td>${all.length}</td><td>${done.length}</td><td>${cancel.length}</td><td class="mpos">${cod.toLocaleString()} ج</td><td class="mwarn">${ship.toLocaleString()} ج</td><td class="mpos">${(cod-ship).toLocaleString()} ج</td><td><span style="color:${rate>70?'var(--success)':'var(--warn)'};font-weight:700">${rate}%</span></td></tr>`}).join('');
 }
 
@@ -15690,7 +15710,7 @@ function dsRender(){
   if(!all.length){$('ds-sheet').innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">لا توجد طلبات في هذا الاختيار</div>';return;}
 
   const totalCod=all.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
-  const shipFee=showExp.reduce((s,o)=>s+(o.ship||c.shipExpress||80),0)+showNorm.reduce((s,o)=>s+(o.ship||c.ship||50),0);
+  const shipFee=all.reduce((s,o)=>s+getShipCost(o,c),0); // 🔧 v238: getShipCost
 
   let expHtml='';
   if(showExp.length){
