@@ -485,6 +485,12 @@ tr:hover td{background:#fafbff}
     <div class="ni" data-p="inventory" onclick="goPage(this,'inventory')"><span class="ni-icon">📦</span><span class="ni-label">المخزون</span><span class="nbadge" id="nb-inv-low" style="background:var(--warn)">0</span></div>
     <div class="ni" data-p="stocktake" onclick="goPage(this,'stocktake')"><span class="ni-icon">🔍</span><span class="ni-label">الجرد</span></div>
     <div class="ni" data-p="expiry" onclick="goPage(this,'expiry')"><span class="ni-icon">⏳</span><span class="ni-label">تواريخ الصلاحية</span><span class="nbadge" id="nb-expiry" style="background:var(--danger)"></span></div>
+    <!-- 🆕 v242: HR System -->
+    <div class="nav-label">الموارد البشرية</div>
+    <div class="ni" data-p="hr-employees" onclick="goPage(this,'hr-employees')"><span class="ni-icon">👥</span><span class="ni-label">الموظفين</span></div>
+    <div class="ni" data-p="hr-payroll" onclick="goPage(this,'hr-payroll')"><span class="ni-icon">💰</span><span class="ni-label">كشف الرواتب</span></div>
+    <div class="ni" data-p="hr-advances" onclick="goPage(this,'hr-advances')"><span class="ni-icon">💵</span><span class="ni-label">السلف</span><span class="nbadge" id="nb-hr-pending" style="background:var(--warn)">0</span></div>
+    <div class="ni" data-p="hr-penalties" onclick="goPage(this,'hr-penalties')"><span class="ni-icon">⚠️</span><span class="ni-label">الجزاءات</span></div>
     <div class="nav-label">النظام</div>
     <div class="ni" data-p="notifs" onclick="goPage(this,'notifs')"><span class="ni-icon">🔔</span><span class="ni-label">الإشعارات</span><span class="nbadge" id="nb-notifs">0</span></div>
     <!-- 🆕 v216: Dashboard Pages -->
@@ -2164,18 +2170,17 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v240 — INVENTORY SYSTEM =====
-// 2026-04-30: نظام الجرد و إدارة المخازن
-// 1. ✅ صفحة 📦 المخزون - عرض الكميات لكل مخزن
-// 2. ✅ مزامنة من Shopify (full + levels-only)
-// 3. ✅ بحث + فلتر حسب الحالة + المخزن
-// 4. ✅ تنبيهات في الـ nav بالكميات المنخفضة
-// 5. ✅ تاريخ حركة كل منتج
-// 6. ✅ صفحة 🔍 الجرد - workflow كامل
-// 7. ✅ اعتماد الجرد → تحديث Shopify (الاتجاه الوحيد للكتابة)
-// 8. ✅ Backend (v130): جداول + APIs + Shopify integration
+// ===== OrderPro v242 — HR PHASE 1 =====
+// 2026-05-05: نظام HR متكامل - الموظفين + المرتبات + السلف + الجزاءات
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 1. ✅ صفحة 👥 الموظفين - CRUD + ربط بالمناديب + الراتب
+// 2. ✅ صفحة 💰 كشف الرواتب - حساب تلقائي شهري + اعتماد + خصم من الخزنة
+// 3. ✅ صفحة 💵 السلف - إصدار + موافقة + خصم تلقائي بالأقساط
+// 4. ✅ صفحة ⚠️ الجزاءات - تسجيل + خصم تلقائي في الكشف
+// 5. ✅ Backend (v133): 6 جداول + 25+ API endpoint
+// 6. ✅ ربط مع الخزنة (treasury) - السلف والمرتبات تخصم تلقائياً
 // =================================
-// السابق: v239 — PRIORITY FIX
+// السابق: v241 — BATCH CENTRAL SYNC
 // - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
@@ -2263,7 +2268,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','inventory':'📦 المخزون','stocktake':'🔍 الجرد','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -5311,7 +5316,18 @@ async function selCAndConfirm(id){
 
   const ship=getShipCost(o,c);
   const assignedZone = getOrderZoneForCourier(o, c);
-  const batch = ensureCurrentBatch();
+  // 🔧 v241: استخدم async عشان نتأكد من الـ batch الصح من الـ Backend
+  const batch = await ensureCurrentBatchAsync();
+  
+  // 🆕 v241: validation - لو الـ batch.code فاضي، نوقف ونعرض رسالة
+  if(!batch || !batch.code){
+    console.error('❌ assignOrderToCourier: batch.code is empty!', batch);
+    toast('❌ خطأ: مفيش دفعة مفتوحة - حاول تاني');
+    return;
+  }
+  
+  console.log(`📦 assignOrderToCourier: order=${currentOrderId}, courier=${c.name}, batch=${batch.code}`);
+  
   const upd={courierId:id,ship,note:'',status:'جاري التوصيل',assignedZone,batchCode:batch.code};
 
   // خد snapshot من الطلب للـ shopify queue (عشان ما يتأثرش بأي تعديل لاحق)
@@ -5362,7 +5378,17 @@ async function confirmAssign(){
   const shipInputVal = $('assign-ship').value;
   const note=$('assign-note').value;
   const isBosta = String(currentCourierId)==='bosta';
-  const batch = ensureCurrentBatch();
+  // 🔧 v241: استخدم async batch
+  const batch = await ensureCurrentBatchAsync();
+  
+  // 🆕 v241: validation
+  if(!batch || !batch.code){
+    console.error('❌ confirmAssign: batch.code is empty!', batch);
+    toast('❌ خطأ: مفيش دفعة مفتوحة - حاول تاني');
+    return;
+  }
+  
+  console.log(`📦 confirmAssign: order=${currentOrderId}, courier=${currentCourierId}, batch=${batch.code}`);
   
   // فحص: لو الطلب عنده orderTypeId والمندوب موجود، نسيب الـ Backend يحدد
   // إلا لو الـ user عدّل القيمة في الـ input
@@ -10088,6 +10114,12 @@ window.addEventListener('load', function(){
       loadTreasury();
       checkExpiryAlerts();
       loadCourierRatesMap(); // 🆕 v236: حمّل أسعار المناديب (ضروري لحساب التسوية)
+      
+      // 🆕 v241: periodic batch sync كل 90 ثانية للتأكد من إن كل الأجهزة عندها نفس الـ current batch
+      // ده بيحل bug الطلبات اللي كانت بتختفي من الـ batch print لما تتوزع من جهاز تاني
+      setInterval(() => {
+        loadCurrentBatchFromServer().catch(()=>{});
+      }, 90 * 1000);
     });
   } else {
     document.getElementById('login-screen').classList.remove('hidden');
@@ -10118,15 +10150,23 @@ async function loadCurrentBatchFromServer(){
       return;
     }
 
-    if(r.code){
+    // 🔧 v241: الـ Backend (v131+) بيرجّع { batch: {...} }
+    // الـ Backend القديم كان بيرجّع { code, date, ... } مباشرة
+    const batchData = r.batch || r;
+
+    if(batchData && batchData.code){
       // السيرفر عنده دفعة مفتوحة — استخدمها
-      const serverBatch = { code: r.code, date: r.date, status: r.status, startedAt: r.startedAt };
+      const serverBatch = { 
+        code: batchData.code, 
+        date: batchData.date, 
+        status: batchData.status, 
+        startedAt: batchData.startedAt 
+      };
       localStorage.setItem('current_batch', JSON.stringify(serverBatch));
-      _currentBatchCode = r.code;
-      console.log('✅ Loaded current batch from server:', r.code);
-    } else if(r.code === null || r.noBatch === true || (r && Object.keys(r).length === 0 && r.constructor === Object)) {
-      // السيرفر أكد إنه مفيش دفعة مفتوحة (response صريح بمفيش)
-      // لاحظ: نفضل الـ error side — لو response غامض، ما نمسحش
+      _currentBatchCode = batchData.code;
+      console.log('✅ Loaded current batch from server:', batchData.code);
+    } else if(r.batch === null || (r && Object.keys(r).length === 0 && r.constructor === Object)) {
+      // السيرفر أكد إنه مفيش دفعة مفتوحة
       const local = localStorage.getItem('current_batch');
       if(local){
         try{
@@ -10150,7 +10190,11 @@ async function loadCurrentBatchFromServer(){
   }
 }
 
+// 🔧 v241: ensureCurrentBatch - الـ batch دلوقتي مركزي على الـ Backend
+// كل الأجهزة بتشترك في نفس الـ current batch لتجنب inconsistency
+// ensureCurrentBatch sync (للـ logic القديم - بيقرأ من cache localStorage)
 function ensureCurrentBatch(){
+  // أولاً جرب من cache المحلي (للسرعة)
   const today = getTodayBatchDate();
   try{
     const stored = JSON.parse(localStorage.getItem('current_batch')||'null');
@@ -10160,7 +10204,7 @@ function ensureCurrentBatch(){
     }
   }catch(e){}
 
-  // لازم نبدأ دفعة جديدة — جيب رقم اليوم
+  // مفيش cache صالح → ابني واحد محلي مؤقت (هيتعدّل من loadCurrentBatchFromServer)
   let dayCounter = 1;
   try{
     const history = JSON.parse(localStorage.getItem('batch_history')||'[]');
@@ -10178,11 +10222,166 @@ function ensureCurrentBatch(){
     localStorage.setItem('batch_history', JSON.stringify(history));
   }catch(e){}
 
-  // sync to server
+  // sync to server (fire-and-forget - الـ ensureCurrentBatchAsync بيهندله)
   if(API_URL) apiFetch('/api/batches','POST',batch).catch(()=>{});
 
   return batch;
 }
+
+// 🆕 v241: ensureCurrentBatchAsync - النسخة الـ async اللي بتسأل الـ Backend الأول
+// لازم تتنادى قبل أي عملية توزيع عشان نضمن إن كل الأجهزة عندها نفس الـ batch
+async function ensureCurrentBatchAsync(){
+  if(!API_URL){
+    return ensureCurrentBatch(); // offline mode - استخدم localStorage
+  }
+  
+  try{
+    // اسأل الـ Backend الأول - هل في batch مفتوح؟
+    const r = await apiFetch('/api/batches/current');
+    
+    if(r && r.batch && r.batch.code){
+      // فيه batch مفتوح على الـ Backend - استخدمه + حدّث الـ localStorage
+      const batch = r.batch;
+      _currentBatchCode = batch.code;
+      try{
+        localStorage.setItem('current_batch', JSON.stringify(batch));
+        // حدّث الـ history لو مش موجود
+        const history = JSON.parse(localStorage.getItem('batch_history')||'[]');
+        if(!history.find(b => b.code === batch.code)){
+          history.push(batch);
+          localStorage.setItem('batch_history', JSON.stringify(history));
+        }
+      }catch(e){}
+      return batch;
+    }
+    
+    // مفيش batch مفتوح → ابني جديد على الـ Backend
+    const today = getTodayBatchDate();
+    let dayCounter = 1;
+    try{
+      // اسأل الـ Backend عن كل الـ batches بتاعت اليوم
+      const allR = await apiFetch('/api/batches');
+      if(allR && Array.isArray(allR)){
+        const todayBatches = allR.filter(b => (b.code || '').includes(today));
+        dayCounter = todayBatches.length + 1;
+      }
+    }catch(e){
+      // fallback للـ localStorage
+      const history = JSON.parse(localStorage.getItem('batch_history')||'[]');
+      const todayBatches = history.filter(b=>b.date===today);
+      dayCounter = todayBatches.length + 1;
+    }
+    
+    const code = 'B-'+today+'-'+String(dayCounter).padStart(2,'0');
+    const batch = { code, date: today, status: 'open', startedAt: new Date().toISOString() };
+    
+    // اعمل save على الـ Backend الأول (مهم!)
+    const saveR = await apiFetch('/api/batches','POST',batch);
+    if(saveR && saveR.batch){
+      // الـ Backend ممكن يرجع batch بكود مختلف لو في race condition
+      Object.assign(batch, saveR.batch);
+    }
+    
+    _currentBatchCode = batch.code;
+    try{
+      localStorage.setItem('current_batch', JSON.stringify(batch));
+      const history = JSON.parse(localStorage.getItem('batch_history')||'[]');
+      if(!history.find(b => b.code === batch.code)){
+        history.push(batch);
+        localStorage.setItem('batch_history', JSON.stringify(history));
+      }
+    }catch(e){}
+    
+    return batch;
+  }catch(e){
+    console.warn('ensureCurrentBatchAsync failed, falling back to local:', e.message);
+    return ensureCurrentBatch();
+  }
+}
+
+// 🆕 v241: تحدث الـ batch من الـ Backend عند الـ login + كل دقيقتين
+async function syncCurrentBatchFromServer(){
+  if(!API_URL) return;
+  try{
+    const r = await apiFetch('/api/batches/current');
+    if(r && r.batch && r.batch.code){
+      _currentBatchCode = r.batch.code;
+      localStorage.setItem('current_batch', JSON.stringify(r.batch));
+    }
+  }catch(e){}
+}
+
+// 🩺 v241: Diagnostic - شوف الطلبات اللي batchCode فاضي بس status=جاري التوصيل
+window.checkOrphanOrders = function(){
+  const orphans = orders.filter(o => 
+    (o.status === 'جاري التوصيل' || o.status === 'مكتمل') && 
+    o.courierId && 
+    (!o.batchCode || o.batchCode === '')
+  );
+  
+  if(!orphans.length){
+    console.log('✅ مفيش طلبات orphan');
+    toast('✅ كل الطلبات الموزّعة عندها batchCode');
+    return [];
+  }
+  
+  console.warn(`⚠️ لقيت ${orphans.length} طلب orphan (موزّع لكن مفيش batchCode):`);
+  console.table(orphans.map(o => ({
+    id: o.id,
+    name: o.name,
+    courier: cName(o.courierId),
+    status: o.status,
+    src: o.src
+  })));
+  
+  toast(`⚠️ ${orphans.length} طلب orphan - شوف console`);
+  return orphans;
+};
+
+// 🩺 v241: Diagnostic - أصلح الطلبات الـ orphan بإضافة الـ batchCode الحالي
+window.fixOrphanOrders = async function(){
+  const orphans = window.checkOrphanOrders();
+  if(!orphans.length) return;
+  
+  if(!confirm(`هتضيف batchCode للـ ${orphans.length} طلب orphan؟`)) return;
+  
+  const batch = await ensureCurrentBatchAsync();
+  if(!batch || !batch.code){
+    toast('❌ مفيش دفعة مفتوحة');
+    return;
+  }
+  
+  let fixed = 0;
+  for(const o of orphans){
+    try{
+      const r = await apiFetch('/api/orders/' + o.id, 'PATCH', { batchCode: batch.code });
+      if(r){
+        o.batchCode = batch.code;
+        fixed++;
+      }
+    }catch(e){
+      console.error('fix failed for', o.id, e.message);
+    }
+  }
+  
+  toast(`✅ تم إصلاح ${fixed}/${orphans.length} طلب`);
+  refreshAll && refreshAll();
+};
+
+// 🩺 v241: Diagnostic - شوف الـ batches الموجودة + عدد الطلبات في كل واحدة
+window.batchStats = function(){
+  const stats = {};
+  orders.forEach(o => {
+    if(o.status === 'جاري التوصيل' || o.status === 'مكتمل'){
+      const code = o.batchCode || '(no batch)';
+      if(!stats[code]) stats[code] = 0;
+      stats[code]++;
+    }
+  });
+  
+  console.table(stats);
+  return stats;
+};
 
 function closeBatch(){
   try{
@@ -12366,6 +12565,702 @@ async function cancelStocktake(){
   }
 }
 
+// ============================================================
+// 🆕 v242: HR System - Phase 1
+// ============================================================
+let _hrEmployees = [];
+let _hrDepartments = [];
+let _hrAdvancesFilter = 'all';
+
+// ─── Helpers ───
+function fmtMoney(v){
+  const n = parseFloat(v) || 0;
+  return n.toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' ج';
+}
+function fmtDate(d){
+  if(!d) return '—';
+  return new Date(d).toLocaleDateString('ar-EG');
+}
+function penaltyTypeLabel(t){
+  return ({late:'⏰ تأخير',absence:'❌ غياب',violation:'⚠️ مخالفة',performance:'📉 ضعف أداء',other:'📝 آخر'})[t] || t;
+}
+function advanceStatusLabel(s){
+  return ({pending:'<span class="badge" style="background:#fef3c7;color:#92400e">⏳ في الانتظار</span>',
+           active:'<span class="badge" style="background:#dbeafe;color:#1e40af">✅ نشطة</span>',
+           completed:'<span class="badge" style="background:#d1fae5;color:#065f46">🏁 مكتملة</span>',
+           cancelled:'<span class="badge" style="background:#fee2e2;color:#991b1b">❌ ملغاة</span>'})[s] || s;
+}
+function payrollStatusLabel(s){
+  return ({draft:'<span class="badge" style="background:#e5e7eb;color:#374151">📝 مسودة</span>',
+           approved:'<span class="badge" style="background:#dbeafe;color:#1e40af">✅ معتمد</span>',
+           paid:'<span class="badge" style="background:#d1fae5;color:#065f46">💰 مدفوع</span>'})[s] || s;
+}
+
+// ─── EMPLOYEES ───
+async function loadHrEmployees(){
+  try{
+    // جيب الـ departments
+    try{ _hrDepartments = await apiFetch('/api/hr/departments') || []; }catch(e){}
+    
+    // جيب الـ stats
+    try{
+      const stats = await apiFetch('/api/hr/stats');
+      if(stats){
+        document.getElementById('hr-stat-total').textContent = stats.totalEmployees;
+        document.getElementById('hr-stat-active').textContent = stats.activeEmployees;
+        document.getElementById('hr-stat-payroll').textContent = fmtMoney(stats.monthlyPayrollExpected);
+        document.getElementById('hr-stat-adv').textContent = fmtMoney(stats.activeAdvances?.total || 0);
+      }
+    }catch(e){}
+    
+    // جيب الموظفين
+    const showInactive = document.getElementById('hr-show-inactive')?.checked ? '?include_inactive=true' : '';
+    _hrEmployees = await apiFetch('/api/hr/employees' + showInactive) || [];
+    renderHrEmployeesTable();
+  }catch(e){
+    document.getElementById('hr-emp-table').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderHrEmployeesTable(){
+  const search = (document.getElementById('hr-search')?.value || '').trim().toLowerCase();
+  let list = [..._hrEmployees];
+  
+  if(search){
+    list = list.filter(e =>
+      (e.name_ar||'').toLowerCase().includes(search) ||
+      (e.name_en||'').toLowerCase().includes(search) ||
+      (e.code||'').toLowerCase().includes(search) ||
+      (e.phone||'').includes(search) ||
+      (e.national_id||'').includes(search)
+    );
+  }
+  
+  const container = document.getElementById('hr-emp-table');
+  if(!list.length){
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">مفيش موظفين</div>';
+    return;
+  }
+  
+  const rows = list.map(e => {
+    const initials = (e.name_ar||'?').split(' ').map(w=>w[0]).slice(0,2).join('');
+    const statusBadge = e.active 
+      ? '<span class="badge" style="background:#d1fae5;color:#065f46">✅ نشط</span>'
+      : '<span class="badge" style="background:#fee2e2;color:#991b1b">⛔ معطّل</span>';
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px 10px">
+        <div style="display:flex;gap:10px;align-items:center">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">${initials}</div>
+          <div>
+            <div style="font-weight:700;font-size:13px">${escapeHtml(e.name_ar)}</div>
+            <div style="font-size:10px;color:var(--muted)">${escapeHtml(e.code||'')} ${e.position?'· '+escapeHtml(e.position):''}</div>
+          </div>
+        </div>
+      </td>
+      <td style="font-size:12px">${escapeHtml(e.department_name||'—')}</td>
+      <td style="font-size:12px;direction:ltr">${escapeHtml(e.phone||'—')}</td>
+      <td style="font-size:12px">${fmtDate(e.hire_date)}</td>
+      <td style="font-weight:700;color:var(--accent)">${fmtMoney(e.current_gross || 0)}</td>
+      <td style="font-size:12px">${e.active_advances > 0 ? '<span style="color:var(--warn);font-weight:700">'+fmtMoney(e.active_advances)+'</span>' : '—'}</td>
+      <td>${statusBadge}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-ghost btn-xs" onclick="openEmployee(${e.id})" title="عرض">👁️</button>
+        <button class="btn btn-ghost btn-xs" onclick="editEmployee(${e.id})" title="تعديل">✏️</button>
+      </td>
+    </tr>`;
+  }).join('');
+  
+  container.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:800px">
+    <thead style="background:var(--bg)"><tr>
+      <th style="text-align:right;padding:10px">الموظف</th>
+      <th style="text-align:right;padding:10px">القسم</th>
+      <th style="text-align:right;padding:10px">التليفون</th>
+      <th style="text-align:right;padding:10px">تاريخ التعيين</th>
+      <th style="text-align:right;padding:10px">الراتب الإجمالي</th>
+      <th style="text-align:right;padding:10px">سلف نشطة</th>
+      <th style="text-align:right;padding:10px">الحالة</th>
+      <th style="text-align:center;padding:10px">إجراءات</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+async function openNewEmployee(){
+  // reset
+  document.getElementById('hr-emp-id').value = '';
+  document.getElementById('hr-emp-title').textContent = 'إضافة موظف';
+  ['hr-emp-name-ar','hr-emp-name-en','hr-emp-nid','hr-emp-phone','hr-emp-email','hr-emp-birth','hr-emp-position','hr-emp-address','hr-emp-bank','hr-emp-notes','hr-emp-base','hr-emp-transport','hr-emp-housing','hr-emp-meal','hr-emp-other-alw','hr-emp-insurance','hr-emp-tax']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  document.getElementById('hr-emp-hire').value = new Date().toISOString().slice(0,10);
+  
+  // املأ الـ depts
+  const deptSel = document.getElementById('hr-emp-dept');
+  deptSel.innerHTML = '<option value="">— بدون قسم —</option>' + 
+    _hrDepartments.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+  
+  // املأ الـ couriers
+  const courierSel = document.getElementById('hr-emp-courier');
+  courierSel.innerHTML = '<option value="">— بدون ربط —</option>' + 
+    couriers.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  
+  document.getElementById('m-hr-employee').style.display = 'flex';
+}
+
+async function editEmployee(id){
+  try{
+    const r = await apiFetch('/api/hr/employees/' + id);
+    if(!r || !r.employee) return;
+    const e = r.employee;
+    
+    document.getElementById('hr-emp-id').value = e.id;
+    document.getElementById('hr-emp-title').textContent = 'تعديل موظف: ' + e.name_ar;
+    document.getElementById('hr-emp-name-ar').value = e.name_ar || '';
+    document.getElementById('hr-emp-name-en').value = e.name_en || '';
+    document.getElementById('hr-emp-nid').value = e.national_id || '';
+    document.getElementById('hr-emp-phone').value = e.phone || '';
+    document.getElementById('hr-emp-email').value = e.email || '';
+    document.getElementById('hr-emp-birth').value = e.birth_date ? e.birth_date.slice(0,10) : '';
+    document.getElementById('hr-emp-hire').value = e.hire_date ? e.hire_date.slice(0,10) : '';
+    document.getElementById('hr-emp-position').value = e.position || '';
+    document.getElementById('hr-emp-address').value = e.address || '';
+    document.getElementById('hr-emp-bank').value = e.bank_account || '';
+    document.getElementById('hr-emp-notes').value = e.notes || '';
+    
+    // depts
+    const deptSel = document.getElementById('hr-emp-dept');
+    deptSel.innerHTML = '<option value="">— بدون قسم —</option>' + 
+      _hrDepartments.map(d => `<option value="${d.id}" ${d.id==e.department_id?'selected':''}>${escapeHtml(d.name)}</option>`).join('');
+    
+    const courierSel = document.getElementById('hr-emp-courier');
+    courierSel.innerHTML = '<option value="">— بدون ربط —</option>' + 
+      couriers.map(c => `<option value="${c.id}" ${c.id==e.courier_id?'selected':''}>${escapeHtml(c.name)}</option>`).join('');
+    
+    // الراتب الحالي
+    const currentSalary = (r.salaryHistory || []).find(s => !s.effective_to);
+    if(currentSalary){
+      document.getElementById('hr-emp-base').value = currentSalary.base_salary || '';
+      document.getElementById('hr-emp-transport').value = currentSalary.transport_allowance || '';
+      document.getElementById('hr-emp-housing').value = currentSalary.housing_allowance || '';
+      document.getElementById('hr-emp-meal').value = currentSalary.meal_allowance || '';
+      document.getElementById('hr-emp-other-alw').value = currentSalary.other_allowances || '';
+      document.getElementById('hr-emp-insurance').value = currentSalary.insurance_deduction || '';
+      document.getElementById('hr-emp-tax').value = currentSalary.tax_deduction || '';
+    }
+    
+    document.getElementById('m-hr-employee').style.display = 'flex';
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function saveEmployee(){
+  const id = document.getElementById('hr-emp-id').value;
+  const data = {
+    name_ar: document.getElementById('hr-emp-name-ar').value.trim(),
+    name_en: document.getElementById('hr-emp-name-en').value.trim(),
+    national_id: document.getElementById('hr-emp-nid').value.trim(),
+    phone: document.getElementById('hr-emp-phone').value.trim(),
+    email: document.getElementById('hr-emp-email').value.trim(),
+    birth_date: document.getElementById('hr-emp-birth').value || null,
+    hire_date: document.getElementById('hr-emp-hire').value,
+    department_id: document.getElementById('hr-emp-dept').value || null,
+    courier_id: document.getElementById('hr-emp-courier').value || null,
+    position: document.getElementById('hr-emp-position').value.trim(),
+    address: document.getElementById('hr-emp-address').value.trim(),
+    bank_account: document.getElementById('hr-emp-bank').value.trim(),
+    notes: document.getElementById('hr-emp-notes').value.trim(),
+    base_salary: document.getElementById('hr-emp-base').value || 0,
+    transport_allowance: document.getElementById('hr-emp-transport').value || 0,
+    housing_allowance: document.getElementById('hr-emp-housing').value || 0,
+    meal_allowance: document.getElementById('hr-emp-meal').value || 0,
+    other_allowances: document.getElementById('hr-emp-other-alw').value || 0,
+    insurance_deduction: document.getElementById('hr-emp-insurance').value || 0,
+    tax_deduction: document.getElementById('hr-emp-tax').value || 0
+  };
+  
+  if(!data.name_ar) { toast('❌ الاسم بالعربي مطلوب'); return; }
+  if(!data.hire_date) { toast('❌ تاريخ التعيين مطلوب'); return; }
+  
+  try{
+    if(id){
+      // تعديل
+      const updFields = {...data};
+      delete updFields.base_salary; delete updFields.transport_allowance;
+      delete updFields.housing_allowance; delete updFields.meal_allowance;
+      delete updFields.other_allowances; delete updFields.insurance_deduction; delete updFields.tax_deduction;
+      
+      await apiFetch('/api/hr/employees/' + id, 'PUT', updFields);
+      
+      // لو غيّر الراتب → اعمل structure جديد
+      if(parseFloat(data.base_salary) > 0){
+        await apiFetch('/api/hr/employees/' + id + '/salary', 'POST', {
+          base_salary: data.base_salary,
+          transport_allowance: data.transport_allowance,
+          housing_allowance: data.housing_allowance,
+          meal_allowance: data.meal_allowance,
+          other_allowances: data.other_allowances,
+          insurance_deduction: data.insurance_deduction,
+          tax_deduction: data.tax_deduction,
+          effective_from: new Date().toISOString().slice(0,10),
+          notes: 'تحديث من نموذج الموظف'
+        });
+      }
+      
+      toast('✅ تم التعديل');
+    } else {
+      // إضافة
+      await apiFetch('/api/hr/employees', 'POST', data);
+      toast('✅ تم الإضافة');
+    }
+    closeM('m-hr-employee');
+    loadHrEmployees();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function openEmployee(id){
+  try{
+    const r = await apiFetch('/api/hr/employees/' + id);
+    if(!r || !r.employee) return;
+    const e = r.employee;
+    
+    const advHtml = (r.advances || []).slice(0, 10).map(a => `
+      <div style="padding:8px;border-bottom:1px solid var(--border);font-size:12px">
+        <div style="display:flex;justify-content:space-between"><strong>${fmtMoney(a.amount)}</strong>${advanceStatusLabel(a.status)}</div>
+        <div style="color:var(--muted);font-size:11px">${escapeHtml(a.reason||'—')} · ${fmtDate(a.requested_at)}</div>
+        ${a.status === 'active' ? `<div style="font-size:11px;color:var(--accent)">المتبقي: ${fmtMoney(a.remaining_balance)} · القسط: ${fmtMoney(a.monthly_deduction)}/شهر</div>` : ''}
+      </div>
+    `).join('');
+    
+    const penHtml = (r.penalties || []).slice(0, 10).map(p => `
+      <div style="padding:8px;border-bottom:1px solid var(--border);font-size:12px">
+        <div style="display:flex;justify-content:space-between"><strong>${penaltyTypeLabel(p.type)} - ${fmtMoney(p.amount)}</strong></div>
+        <div style="color:var(--muted);font-size:11px">${escapeHtml(p.reason||'—')} · ${fmtDate(p.date)}</div>
+      </div>
+    `).join('');
+    
+    const html = `
+      <div style="background:var(--bg);padding:16px;border-radius:12px;margin-bottom:14px">
+        <div style="display:flex;gap:14px;align-items:center">
+          <div style="width:60px;height:60px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px">${(e.name_ar||'?').split(' ').map(w=>w[0]).slice(0,2).join('')}</div>
+          <div style="flex:1">
+            <div style="font-weight:800;font-size:18px">${escapeHtml(e.name_ar)}</div>
+            <div style="color:var(--muted);font-size:12px">${escapeHtml(e.code||'')} ${e.position?'· '+escapeHtml(e.position):''} ${e.department_name?'· '+escapeHtml(e.department_name):''}</div>
+            <div style="color:var(--muted);font-size:11px;direction:ltr;margin-top:4px">${escapeHtml(e.phone||'')} ${e.email?'· '+escapeHtml(e.email):''}</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="closeM('m-emp-view');editEmployee(${e.id})">✏️ تعديل</button>
+        </div>
+      </div>
+      
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="card" style="padding:14px">
+          <div style="font-weight:700;margin-bottom:10px">💵 السلف (${(r.advances||[]).length})</div>
+          <div style="max-height:300px;overflow-y:auto">${advHtml || '<div style="text-align:center;color:var(--muted);padding:20px">مفيش سلف</div>'}</div>
+        </div>
+        <div class="card" style="padding:14px">
+          <div style="font-weight:700;margin-bottom:10px">⚠️ الجزاءات (${(r.penalties||[]).length})</div>
+          <div style="max-height:300px;overflow-y:auto">${penHtml || '<div style="text-align:center;color:var(--muted);padding:20px">مفيش جزاءات</div>'}</div>
+        </div>
+      </div>
+    `;
+    
+    // open modal
+    let m = document.getElementById('m-emp-view');
+    if(!m){
+      m = document.createElement('div');
+      m.id = 'm-emp-view';
+      m.className = 'modal-overlay';
+      m.innerHTML = '<div class="modal" style="max-width:900px"><div class="modal-header"><h3 style="margin:0">بيانات الموظف</h3><button class="modal-close" onclick="closeM(\'m-emp-view\')">×</button></div><div class="modal-body" id="emp-view-body" style="max-height:75vh;overflow-y:auto"></div></div>';
+      document.body.appendChild(m);
+    }
+    document.getElementById('emp-view-body').innerHTML = html;
+    m.style.display = 'flex';
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+// ─── ADVANCES ───
+async function loadHrAdvances(){
+  try{
+    const status = _hrAdvancesFilter === 'all' ? '' : '?status=' + _hrAdvancesFilter;
+    const list = await apiFetch('/api/hr/advances' + status) || [];
+    
+    const container = document.getElementById('hr-adv-table');
+    if(!list.length){
+      container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">مفيش سلف</div>';
+      return;
+    }
+    
+    const rows = list.map(a => `
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:8px 10px"><strong>${escapeHtml(a.employee_name||'—')}</strong><div style="font-size:10px;color:var(--muted)">${escapeHtml(a.employee_code||'')}</div></td>
+        <td style="font-weight:700">${fmtMoney(a.amount)}</td>
+        <td style="font-size:12px">${escapeHtml(a.reason||'—')}</td>
+        <td style="font-size:12px">${a.installments_count} × ${fmtMoney(a.monthly_deduction)}</td>
+        <td style="font-weight:700;color:${a.remaining_balance>0?'var(--warn)':'var(--success)'}">${fmtMoney(a.remaining_balance)}</td>
+        <td>${advanceStatusLabel(a.status)}</td>
+        <td style="font-size:11px;color:var(--muted)">${fmtDate(a.requested_at)}</td>
+        <td style="white-space:nowrap">
+          ${a.status === 'pending' ? `<button class="btn btn-success btn-xs" onclick="approveAdvance(${a.id})">✅ اعتماد</button> <button class="btn btn-ghost btn-xs" onclick="cancelAdvance(${a.id})">❌</button>` : ''}
+        </td>
+      </tr>
+    `).join('');
+    
+    container.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:850px">
+      <thead style="background:var(--bg)"><tr>
+        <th style="text-align:right;padding:10px">الموظف</th>
+        <th style="text-align:right;padding:10px">المبلغ</th>
+        <th style="text-align:right;padding:10px">السبب</th>
+        <th style="text-align:right;padding:10px">الأقساط</th>
+        <th style="text-align:right;padding:10px">المتبقي</th>
+        <th style="text-align:right;padding:10px">الحالة</th>
+        <th style="text-align:right;padding:10px">التاريخ</th>
+        <th style="text-align:center;padding:10px">إجراءات</th>
+      </tr></thead><tbody>${rows}</tbody></table>`;
+    
+    // update badge
+    const pendingCount = list.filter(a => a.status === 'pending').length;
+    const nb = document.getElementById('nb-hr-pending');
+    if(nb){ nb.textContent = pendingCount > 0 ? pendingCount : ''; nb.style.display = pendingCount > 0 ? '' : 'none'; }
+  }catch(e){
+    document.getElementById('hr-adv-table').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function filterAdvances(status, btn){
+  _hrAdvancesFilter = status;
+  document.querySelectorAll('#hr-adv-tabs .chip').forEach(c => c.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  loadHrAdvances();
+}
+
+async function openNewAdvance(){
+  // املأ الموظفين
+  if(!_hrEmployees.length){
+    try{ _hrEmployees = await apiFetch('/api/hr/employees') || []; }catch(e){}
+  }
+  const sel = document.getElementById('adv-emp');
+  sel.innerHTML = '<option value="">-- اختر موظف --</option>' +
+    _hrEmployees.filter(e => e.active).map(e => `<option value="${e.id}">${escapeHtml(e.name_ar)} (${escapeHtml(e.code||'')})</option>`).join('');
+  
+  document.getElementById('adv-amount').value = '';
+  document.getElementById('adv-reason').value = '';
+  document.getElementById('adv-installments').value = '1';
+  document.getElementById('adv-monthly').value = '';
+  document.getElementById('adv-notes').value = '';
+  
+  // auto-update monthly when amount changes
+  document.getElementById('adv-amount').onchange = updateAdvMonthly;
+  
+  document.getElementById('m-hr-advance').style.display = 'flex';
+}
+
+function updateAdvMonthly(){
+  const amt = parseFloat(document.getElementById('adv-amount').value) || 0;
+  const inst = parseInt(document.getElementById('adv-installments').value) || 1;
+  if(amt > 0 && inst > 0){
+    document.getElementById('adv-monthly').value = (amt / inst).toFixed(2);
+  }
+}
+
+async function saveAdvance(){
+  const data = {
+    employee_id: document.getElementById('adv-emp').value,
+    amount: parseFloat(document.getElementById('adv-amount').value),
+    reason: document.getElementById('adv-reason').value.trim(),
+    installments_count: parseInt(document.getElementById('adv-installments').value) || 1,
+    monthly_deduction: parseFloat(document.getElementById('adv-monthly').value) || 0,
+    notes: document.getElementById('adv-notes').value.trim()
+  };
+  
+  if(!data.employee_id) { toast('❌ اختر موظف'); return; }
+  if(!data.amount || data.amount <= 0) { toast('❌ المبلغ مطلوب'); return; }
+  if(!data.monthly_deduction) data.monthly_deduction = data.amount / data.installments_count;
+  
+  try{
+    await apiFetch('/api/hr/advances', 'POST', data);
+    toast('✅ تم تسجيل السلفة - بانتظار الاعتماد');
+    closeM('m-hr-advance');
+    loadHrAdvances();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function approveAdvance(id){
+  if(!confirm('اعتماد السلفة وصرفها من الخزنة؟')) return;
+  try{
+    const r = await apiFetch('/api/hr/advances/' + id + '/approve', 'POST', {});
+    if(r && r.success){
+      toast('✅ تم الاعتماد - تم خصم المبلغ من الخزنة');
+      loadHrAdvances();
+    } else {
+      toast('❌ ' + (r?.error || 'فشل'));
+    }
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function cancelAdvance(id){
+  const reason = prompt('سبب الإلغاء (اختياري):');
+  if(reason === null) return;
+  try{
+    await apiFetch('/api/hr/advances/' + id + '/cancel', 'POST', { reason });
+    toast('✅ تم الإلغاء');
+    loadHrAdvances();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+// ─── PENALTIES ───
+async function loadHrPenalties(){
+  try{
+    const list = await apiFetch('/api/hr/penalties') || [];
+    
+    const container = document.getElementById('hr-pen-table');
+    if(!list.length){
+      container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">مفيش جزاءات</div>';
+      return;
+    }
+    
+    const rows = list.map(p => `
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:8px 10px"><strong>${escapeHtml(p.employee_name||'—')}</strong></td>
+        <td>${penaltyTypeLabel(p.type)}</td>
+        <td style="font-weight:700;color:var(--danger)">${fmtMoney(p.amount)}</td>
+        <td style="font-size:12px">${escapeHtml(p.reason||'—')}</td>
+        <td style="font-size:11px">${fmtDate(p.date)}</td>
+        <td>${p.status === 'applied' ? '<span class="badge" style="background:#d1fae5;color:#065f46">✅ مطبّق</span>' : '<span class="badge" style="background:#fef3c7;color:#92400e">⏳ معلّق</span>'}</td>
+        <td style="white-space:nowrap">
+          ${p.status === 'pending' ? `<button class="btn btn-ghost btn-xs" onclick="deletePenalty(${p.id})" style="color:var(--danger)">🗑️</button>` : ''}
+        </td>
+      </tr>
+    `).join('');
+    
+    container.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:750px">
+      <thead style="background:var(--bg)"><tr>
+        <th style="text-align:right;padding:10px">الموظف</th>
+        <th style="text-align:right;padding:10px">النوع</th>
+        <th style="text-align:right;padding:10px">المبلغ</th>
+        <th style="text-align:right;padding:10px">السبب</th>
+        <th style="text-align:right;padding:10px">التاريخ</th>
+        <th style="text-align:right;padding:10px">الحالة</th>
+        <th style="text-align:center;padding:10px"></th>
+      </tr></thead><tbody>${rows}</tbody></table>`;
+  }catch(e){
+    document.getElementById('hr-pen-table').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function openNewPenalty(){
+  if(!_hrEmployees.length){
+    try{ _hrEmployees = await apiFetch('/api/hr/employees') || []; }catch(e){}
+  }
+  const sel = document.getElementById('pen-emp');
+  sel.innerHTML = '<option value="">-- اختر موظف --</option>' +
+    _hrEmployees.filter(e => e.active).map(e => `<option value="${e.id}">${escapeHtml(e.name_ar)} (${escapeHtml(e.code||'')})</option>`).join('');
+  
+  document.getElementById('pen-amount').value = '';
+  document.getElementById('pen-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('pen-reason').value = '';
+  document.getElementById('pen-notes').value = '';
+  
+  document.getElementById('m-hr-penalty').style.display = 'flex';
+}
+
+async function savePenalty(){
+  const data = {
+    employee_id: document.getElementById('pen-emp').value,
+    type: document.getElementById('pen-type').value,
+    amount: parseFloat(document.getElementById('pen-amount').value),
+    date: document.getElementById('pen-date').value,
+    reason: document.getElementById('pen-reason').value.trim(),
+    notes: document.getElementById('pen-notes').value.trim()
+  };
+  
+  if(!data.employee_id) { toast('❌ اختر موظف'); return; }
+  if(!data.amount || data.amount <= 0) { toast('❌ المبلغ مطلوب'); return; }
+  if(!data.date) { toast('❌ التاريخ مطلوب'); return; }
+  
+  try{
+    await apiFetch('/api/hr/penalties', 'POST', data);
+    toast('✅ تم التسجيل - سيتم خصمه في كشف الرواتب القادم');
+    closeM('m-hr-penalty');
+    loadHrPenalties();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function deletePenalty(id){
+  if(!confirm('حذف الجزاء؟')) return;
+  try{
+    await apiFetch('/api/hr/penalties/' + id, 'DELETE');
+    toast('✅ تم الحذف');
+    loadHrPenalties();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+// ─── PAYROLL ───
+async function loadHrPayroll(){
+  try{
+    const list = await apiFetch('/api/hr/payroll-runs') || [];
+    
+    const container = document.getElementById('hr-payroll-list');
+    if(!list.length){
+      container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">مفيش كشوف رواتب. اضغط "إنشاء كشف جديد" للبدء.</div>';
+      return;
+    }
+    
+    container.innerHTML = list.map(r => `
+      <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <div style="font-weight:800;font-size:15px;margin-bottom:4px">${escapeHtml(r.title || `كشف ${r.month}/${r.year}`)}</div>
+          <div style="font-size:12px;color:var(--muted)">${r.employees_count || 0} موظف · إجمالي صافي: <strong style="color:var(--accent)">${fmtMoney(r.total_net)}</strong></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">${fmtDate(r.generated_at)}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          ${payrollStatusLabel(r.status)}
+          <button class="btn btn-ghost btn-sm" onclick="viewPayroll(${r.id})">🔍 عرض</button>
+          ${r.status === 'draft' ? `<button class="btn btn-ghost btn-sm" onclick="deletePayroll(${r.id})" style="color:var(--danger)">🗑️</button>` : ''}
+        </div>
+      </div>
+    `).join('');
+  }catch(e){
+    document.getElementById('hr-payroll-list').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function openGeneratePayroll(){
+  const now = new Date();
+  // الشهر الفائت كـ default
+  let year = now.getFullYear();
+  let month = now.getMonth(); // 0-indexed → الشهر السابق
+  if(month === 0){ year--; month = 12; }
+  
+  document.getElementById('pr-year').value = year;
+  document.getElementById('pr-month').value = month;
+  document.getElementById('m-hr-payroll-gen').style.display = 'flex';
+}
+
+async function generatePayroll(){
+  const year = parseInt(document.getElementById('pr-year').value);
+  const month = parseInt(document.getElementById('pr-month').value);
+  if(!year || !month) { toast('❌ السنة والشهر مطلوبين'); return; }
+  
+  toast('⏳ جاري الإنشاء...');
+  try{
+    const r = await apiFetch('/api/hr/payroll-runs/generate', 'POST', { year, month });
+    if(r && r.success){
+      toast(`✅ تم - ${r.employeesCount} موظف، إجمالي ${fmtMoney(r.totalNet)}`);
+      closeM('m-hr-payroll-gen');
+      loadHrPayroll();
+      viewPayroll(r.runId);
+    } else {
+      toast('❌ ' + (r?.error || 'فشل'));
+    }
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function viewPayroll(id){
+  try{
+    const r = await apiFetch('/api/hr/payroll-runs/' + id);
+    if(!r || !r.run) return;
+    
+    const run = r.run;
+    const items = r.items || [];
+    const isDraft = run.status === 'draft';
+    
+    document.getElementById('pr-detail-title').textContent = `${run.title} - ${payrollStatusLabel(run.status).replace(/<[^>]+>/g,'')}`;
+    
+    const itemsHtml = items.map(it => `
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 8px"><strong>${escapeHtml(it.employee_name)}</strong><div style="font-size:10px;color:var(--muted)">${escapeHtml(it.employee_code||'')}</div></td>
+        <td style="text-align:right">${fmtMoney(it.base_salary)}</td>
+        <td style="text-align:right">${fmtMoney((parseFloat(it.transport_allowance)||0)+(parseFloat(it.housing_allowance)||0)+(parseFloat(it.meal_allowance)||0)+(parseFloat(it.other_allowances)||0))}</td>
+        <td style="text-align:right;color:var(--success)">${fmtMoney(it.bonuses)}</td>
+        <td style="text-align:right;font-weight:700">${fmtMoney(it.gross_salary)}</td>
+        <td style="text-align:right;color:var(--danger)">${fmtMoney(it.advances_deduction)}</td>
+        <td style="text-align:right;color:var(--danger)">${fmtMoney(it.penalties_deduction)}</td>
+        <td style="text-align:right;color:var(--danger)">${fmtMoney((parseFloat(it.insurance_deduction)||0)+(parseFloat(it.tax_deduction)||0)+(parseFloat(it.other_deductions)||0)+(parseFloat(it.absence_deduction)||0))}</td>
+        <td style="text-align:right;font-weight:800;color:var(--accent)">${fmtMoney(it.net_salary)}</td>
+      </tr>
+    `).join('');
+    
+    document.getElementById('pr-detail-content').innerHTML = `
+      <div style="background:var(--bg);padding:14px;border-radius:10px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px;font-size:13px">
+          <div>👥 موظفين: <strong>${run.employees_count}</strong></div>
+          <div>💰 إجمالي: <strong>${fmtMoney(run.total_gross)}</strong></div>
+          <div style="color:var(--danger)">📉 خصومات: <strong>${fmtMoney(run.total_deductions)}</strong></div>
+          <div style="color:var(--accent);font-size:15px">💵 صافي: <strong>${fmtMoney(run.total_net)}</strong></div>
+        </div>
+      </div>
+      
+      ${isDraft ? `<div style="margin-bottom:14px;display:flex;gap:8px">
+        <button class="btn btn-success" onclick="approvePayroll(${run.id})">✅ اعتماد ودفع (خصم من الخزنة)</button>
+        <button class="btn btn-ghost" onclick="window.print()">🖨️ طباعة</button>
+      </div>` : `<div style="margin-bottom:14px"><button class="btn btn-ghost" onclick="window.print()">🖨️ طباعة</button></div>`}
+      
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead style="background:var(--bg);position:sticky;top:0">
+          <tr>
+            <th style="text-align:right;padding:8px">الموظف</th>
+            <th style="text-align:right;padding:8px">الأساسي</th>
+            <th style="text-align:right;padding:8px">البدلات</th>
+            <th style="text-align:right;padding:8px">مكافآت</th>
+            <th style="text-align:right;padding:8px">الإجمالي</th>
+            <th style="text-align:right;padding:8px">سلف</th>
+            <th style="text-align:right;padding:8px">جزاءات</th>
+            <th style="text-align:right;padding:8px">خصومات</th>
+            <th style="text-align:right;padding:8px;background:var(--accent);color:#fff">الصافي</th>
+          </tr>
+        </thead>
+        <tbody>${itemsHtml}</tbody>
+      </table>
+    `;
+    
+    document.getElementById('m-hr-payroll-detail').style.display = 'flex';
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function approvePayroll(id){
+  if(!confirm('اعتماد ودفع الكشف؟\n\n⚠️ سيتم:\n- خصم إجمالي الصافي من الخزنة\n- تطبيق الجزاءات المعلّقة\n- تحديث المتبقي من السلف')) return;
+  try{
+    const r = await apiFetch('/api/hr/payroll-runs/' + id + '/approve', 'POST', {});
+    if(r && r.success){
+      toast('✅ تم الاعتماد والدفع');
+      closeM('m-hr-payroll-detail');
+      loadHrPayroll();
+    } else {
+      toast('❌ ' + (r?.error || 'فشل'));
+    }
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function deletePayroll(id){
+  if(!confirm('حذف كشف الرواتب؟ (لازم يكون مسودة)')) return;
+  try{
+    await apiFetch('/api/hr/payroll-runs/' + id, 'DELETE');
+    toast('✅ تم الحذف');
+    loadHrPayroll();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
 function renderExpiryPage(){
   const alertDays = expSettings.alertDays || 30;
   if($('exp-alert-days')) $('exp-alert-days').value = alertDays;
@@ -13166,6 +14061,11 @@ function goPage(el,page){
   // 🆕 v240: Inventory pages
   if(page==='inventory') loadInventoryPage();
   if(page==='stocktake') loadStocktakePage();
+  // 🆕 v242: HR pages
+  if(page==='hr-employees') loadHrEmployees();
+  if(page==='hr-payroll') loadHrPayroll();
+  if(page==='hr-advances') loadHrAdvances();
+  if(page==='hr-penalties') loadHrPenalties();
   if(page==='stars-reviews')loadStarsReviews();
   if(page==='shop-transfers')loadShopTransfers();
   if(page==='shipping-transfers')loadShippingTransfers();
@@ -16492,6 +17392,196 @@ try{
     </div>
     <div class="modal-body" style="max-height:75vh;overflow-y:auto">
       <div id="stk-detail-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== HR EMPLOYEES PAGE (v242) ===== -->
+<div class="page" id="page-hr-employees">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">👥 الموظفين</h2>
+    <button class="btn btn-primary btn-sm" onclick="openNewEmployee()">➕ إضافة موظف</button>
+  </div>
+
+  <!-- Stats -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px" id="hr-stats-cards">
+    <div class="sc"><div class="sc-icon">👥</div><div class="sc-label">إجمالي الموظفين</div><div class="sc-val" id="hr-stat-total">0</div></div>
+    <div class="sc" style="border-right:4px solid var(--success)"><div class="sc-icon">✅</div><div class="sc-label">نشطين</div><div class="sc-val" id="hr-stat-active" style="color:var(--success)">0</div></div>
+    <div class="sc" style="border-right:4px solid var(--accent)"><div class="sc-icon">💰</div><div class="sc-label">إجمالي المرتبات الشهرية</div><div class="sc-val" id="hr-stat-payroll" style="color:var(--accent);font-size:18px">0 ج</div></div>
+    <div class="sc" style="border-right:4px solid var(--warn)"><div class="sc-icon">💵</div><div class="sc-label">سلف نشطة</div><div class="sc-val" id="hr-stat-adv" style="color:var(--warn);font-size:18px">0 ج</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;padding:12px 14px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input id="hr-search" type="text" placeholder="🔍 ابحث (اسم/كود/تليفون/رقم قومي)..." class="form-input" style="flex:1;min-width:200px;max-width:320px" oninput="renderHrEmployeesTable()">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="hr-show-inactive" onchange="loadHrEmployees()"> عرض المعطّلين</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="hr-emp-table" style="overflow-x:auto"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
+  </div>
+</div>
+
+<!-- ===== HR PAYROLL PAGE ===== -->
+<div class="page" id="page-hr-payroll">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">💰 كشف الرواتب</h2>
+    <button class="btn btn-primary btn-sm" onclick="openGeneratePayroll()">📄 إنشاء كشف جديد</button>
+  </div>
+  <div class="card">
+    <div id="hr-payroll-list" style="padding:14px"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
+  </div>
+</div>
+
+<!-- ===== HR ADVANCES PAGE ===== -->
+<div class="page" id="page-hr-advances">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">💵 السلف</h2>
+    <button class="btn btn-primary btn-sm" onclick="openNewAdvance()">➕ سلفة جديدة</button>
+  </div>
+  
+  <div class="card" style="margin-bottom:14px;padding:10px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap" id="hr-adv-tabs">
+      <button class="chip on" onclick="filterAdvances('all', this)">الكل</button>
+      <button class="chip" onclick="filterAdvances('pending', this)">⏳ في الانتظار</button>
+      <button class="chip" onclick="filterAdvances('active', this)">✅ نشطة</button>
+      <button class="chip" onclick="filterAdvances('completed', this)">🏁 مكتملة</button>
+    </div>
+  </div>
+  
+  <div class="card">
+    <div id="hr-adv-table" style="overflow-x:auto"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
+  </div>
+</div>
+
+<!-- ===== HR PENALTIES PAGE ===== -->
+<div class="page" id="page-hr-penalties">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">⚠️ الجزاءات والخصومات</h2>
+    <button class="btn btn-primary btn-sm" onclick="openNewPenalty()">➕ إضافة جزاء</button>
+  </div>
+  <div class="card">
+    <div id="hr-pen-table" style="overflow-x:auto"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
+  </div>
+</div>
+
+<!-- ===== HR MODALS ===== -->
+<div id="m-hr-employee" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:760px">
+    <div class="modal-header">
+      <h3 id="hr-emp-title" style="margin:0">إضافة موظف</h3>
+      <button class="modal-close" onclick="closeM('m-hr-employee')">×</button>
+    </div>
+    <div class="modal-body" style="max-height:75vh;overflow-y:auto">
+      <input type="hidden" id="hr-emp-id">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="form-group"><label>الاسم بالعربي *</label><input id="hr-emp-name-ar" class="form-input" required></div>
+        <div class="form-group"><label>الاسم بالإنجليزي</label><input id="hr-emp-name-en" class="form-input"></div>
+        <div class="form-group"><label>رقم قومي</label><input id="hr-emp-nid" class="form-input"></div>
+        <div class="form-group"><label>تليفون</label><input id="hr-emp-phone" class="form-input"></div>
+        <div class="form-group"><label>إيميل</label><input id="hr-emp-email" type="email" class="form-input"></div>
+        <div class="form-group"><label>تاريخ الميلاد</label><input id="hr-emp-birth" type="date" class="form-input"></div>
+        <div class="form-group"><label>تاريخ التعيين *</label><input id="hr-emp-hire" type="date" class="form-input" required></div>
+        <div class="form-group"><label>القسم</label><select id="hr-emp-dept" class="form-input"><option value="">— بدون قسم —</option></select></div>
+        <div class="form-group"><label>الوظيفة</label><input id="hr-emp-position" class="form-input"></div>
+        <div class="form-group"><label>ربط بمندوب</label><select id="hr-emp-courier" class="form-input"><option value="">— بدون ربط —</option></select></div>
+        <div class="form-group" style="grid-column:span 2"><label>العنوان</label><input id="hr-emp-address" class="form-input"></div>
+        <div class="form-group" style="grid-column:span 2"><label>رقم حساب بنكي</label><input id="hr-emp-bank" class="form-input"></div>
+      </div>
+      
+      <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px">
+        <div style="font-weight:700;margin-bottom:10px;color:var(--accent)">💰 الراتب</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+          <div class="form-group"><label>الأساسي *</label><input id="hr-emp-base" type="number" min="0" class="form-input" placeholder="0"></div>
+          <div class="form-group"><label>بدل مواصلات</label><input id="hr-emp-transport" type="number" min="0" class="form-input" placeholder="0"></div>
+          <div class="form-group"><label>بدل سكن</label><input id="hr-emp-housing" type="number" min="0" class="form-input" placeholder="0"></div>
+          <div class="form-group"><label>بدل وجبة</label><input id="hr-emp-meal" type="number" min="0" class="form-input" placeholder="0"></div>
+          <div class="form-group"><label>بدلات أخرى</label><input id="hr-emp-other-alw" type="number" min="0" class="form-input" placeholder="0"></div>
+          <div class="form-group"><label>تأمينات</label><input id="hr-emp-insurance" type="number" min="0" class="form-input" placeholder="0"></div>
+          <div class="form-group" style="grid-column:span 3"><label>ضرائب</label><input id="hr-emp-tax" type="number" min="0" class="form-input" placeholder="0"></div>
+        </div>
+      </div>
+      
+      <div class="form-group"><label>ملاحظات</label><textarea id="hr-emp-notes" class="form-input" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-hr-employee')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveEmployee()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<div id="m-hr-advance" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><h3 style="margin:0">💵 سلفة جديدة</h3><button class="modal-close" onclick="closeM('m-hr-advance')">×</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>الموظف *</label><select id="adv-emp" class="form-input"></select></div>
+      <div class="form-group"><label>المبلغ *</label><input id="adv-amount" type="number" min="0" step="0.01" class="form-input"></div>
+      <div class="form-group"><label>السبب</label><input id="adv-reason" class="form-input" placeholder="مثل: ظروف طارئة"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="form-group"><label>عدد الأقساط</label><input id="adv-installments" type="number" min="1" value="1" class="form-input" oninput="updateAdvMonthly()"></div>
+        <div class="form-group"><label>القسط الشهري</label><input id="adv-monthly" type="number" min="0" step="0.01" class="form-input"></div>
+      </div>
+      <div class="form-group"><label>ملاحظات</label><textarea id="adv-notes" class="form-input" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-hr-advance')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveAdvance()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<div id="m-hr-penalty" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><h3 style="margin:0">⚠️ إضافة جزاء</h3><button class="modal-close" onclick="closeM('m-hr-penalty')">×</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>الموظف *</label><select id="pen-emp" class="form-input"></select></div>
+      <div class="form-group"><label>نوع الجزاء *</label>
+        <select id="pen-type" class="form-input">
+          <option value="late">⏰ تأخير</option>
+          <option value="absence">❌ غياب</option>
+          <option value="violation">⚠️ مخالفة</option>
+          <option value="performance">📉 ضعف أداء</option>
+          <option value="other">📝 آخر</option>
+        </select>
+      </div>
+      <div class="form-group"><label>المبلغ *</label><input id="pen-amount" type="number" min="0" step="0.01" class="form-input"></div>
+      <div class="form-group"><label>التاريخ *</label><input id="pen-date" type="date" class="form-input"></div>
+      <div class="form-group"><label>السبب</label><input id="pen-reason" class="form-input"></div>
+      <div class="form-group"><label>ملاحظات</label><textarea id="pen-notes" class="form-input" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-hr-penalty')">إلغاء</button>
+      <button class="btn btn-primary" onclick="savePenalty()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<div id="m-hr-payroll-gen" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header"><h3 style="margin:0">📄 إنشاء كشف رواتب</h3><button class="modal-close" onclick="closeM('m-hr-payroll-gen')">×</button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="form-group"><label>السنة</label><input id="pr-year" type="number" class="form-input"></div>
+        <div class="form-group"><label>الشهر</label><select id="pr-month" class="form-input"><option value="1">1 - يناير</option><option value="2">2 - فبراير</option><option value="3">3 - مارس</option><option value="4">4 - أبريل</option><option value="5">5 - مايو</option><option value="6">6 - يونيو</option><option value="7">7 - يوليو</option><option value="8">8 - أغسطس</option><option value="9">9 - سبتمبر</option><option value="10">10 - أكتوبر</option><option value="11">11 - نوفمبر</option><option value="12">12 - ديسمبر</option></select></div>
+      </div>
+      <div style="background:#fef3c7;border-radius:8px;padding:10px;font-size:12px;color:#92400e">
+        ⚠️ سيتم حساب الراتب لكل موظف نشط بناءً على هيكل المرتب الحالي + خصم السلف النشطة + الجزاءات المعلّقة.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-hr-payroll-gen')">إلغاء</button>
+      <button class="btn btn-primary" onclick="generatePayroll()">🚀 إنشاء</button>
+    </div>
+  </div>
+</div>
+
+<div id="m-hr-payroll-detail" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:1200px">
+    <div class="modal-header"><h3 id="pr-detail-title" style="margin:0">كشف الرواتب</h3><button class="modal-close" onclick="closeM('m-hr-payroll-detail')">×</button></div>
+    <div class="modal-body" style="max-height:78vh;overflow-y:auto">
+      <div id="pr-detail-content"></div>
     </div>
   </div>
 </div>
