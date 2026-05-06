@@ -110,6 +110,21 @@ tr:hover td{background:#fafbff}
 .fg input,.fg select,.fg textarea{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:Cairo,sans-serif;color:var(--text);outline:none;background:var(--card);transition:border .15s}
 .fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--accent)}
 .fg textarea{resize:vertical;min-height:70px}
+
+/* 🆕 v243: aliases لـ CSS classes اللي ضيفتها لـ Inventory و HR pages */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px)}
+.modal-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--card);z-index:1}
+.modal-header h3{font-size:14px;font-weight:700;margin:0}
+.modal-body{padding:18px}
+.modal-footer{padding:13px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:0;background:var(--card)}
+.modal-close{width:28px;height:28px;border-radius:50%;background:var(--bg);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px}
+.modal-close:hover{background:var(--border)}
+.form-group{margin-bottom:13px}
+.form-group label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px}
+.form-input{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:Cairo,sans-serif;color:var(--text);outline:none;background:var(--card);transition:border .15s}
+.form-input:focus{border-color:var(--accent)}
+.card-header{padding:13px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.card-header h3{font-size:13px;font-weight:700;margin:0}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .acc-tabs{display:flex;gap:2px;background:var(--bg);border-radius:9px;padding:4px;margin-bottom:16px}
 .acc-tab{flex:1;text-align:center;padding:7px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);transition:all .15s}
@@ -491,6 +506,7 @@ tr:hover td{background:#fafbff}
     <div class="ni" data-p="hr-payroll" onclick="goPage(this,'hr-payroll')"><span class="ni-icon">💰</span><span class="ni-label">كشف الرواتب</span></div>
     <div class="ni" data-p="hr-advances" onclick="goPage(this,'hr-advances')"><span class="ni-icon">💵</span><span class="ni-label">السلف</span><span class="nbadge" id="nb-hr-pending" style="background:var(--warn)">0</span></div>
     <div class="ni" data-p="hr-penalties" onclick="goPage(this,'hr-penalties')"><span class="ni-icon">⚠️</span><span class="ni-label">الجزاءات</span></div>
+    <div class="ni" data-p="hr-purchases" onclick="goPage(this,'hr-purchases')"><span class="ni-icon">🛒</span><span class="ni-label">مشتريات الموظفين</span><span class="nbadge" id="nb-hr-purch" style="background:var(--danger)">0</span></div>
     <div class="nav-label">النظام</div>
     <div class="ni" data-p="notifs" onclick="goPage(this,'notifs')"><span class="ni-icon">🔔</span><span class="ni-label">الإشعارات</span><span class="nbadge" id="nb-notifs">0</span></div>
     <!-- 🆕 v216: Dashboard Pages -->
@@ -2170,17 +2186,17 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v242 — HR PHASE 1 =====
-// 2026-05-05: نظام HR متكامل - الموظفين + المرتبات + السلف + الجزاءات
+// ===== OrderPro v244 — EMPLOYEE PURCHASES =====
+// 2026-05-05: مشتريات الموظفين من Shopify
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 1. ✅ صفحة 👥 الموظفين - CRUD + ربط بالمناديب + الراتب
-// 2. ✅ صفحة 💰 كشف الرواتب - حساب تلقائي شهري + اعتماد + خصم من الخزنة
-// 3. ✅ صفحة 💵 السلف - إصدار + موافقة + خصم تلقائي بالأقساط
-// 4. ✅ صفحة ⚠️ الجزاءات - تسجيل + خصم تلقائي في الكشف
-// 5. ✅ Backend (v133): 6 جداول + 25+ API endpoint
-// 6. ✅ ربط مع الخزنة (treasury) - السلف والمرتبات تخصم تلقائياً
+// 1. ✅ حقل shopify_email في الموظف
+// 2. ✅ webhook يطابق الإيميل تلقائياً
+// 3. ✅ صفحة 🛒 مشتريات الموظفين (filter + cancel approval)
+// 4. ✅ تقرير شهري
+// 5. ✅ خصم تلقائي في كشف الرواتب (عمود مشتريات)
+// 6. ✅ موافقة يدوية على إلغاء (لو الطلب اتلغى في Shopify)
 // =================================
-// السابق: v241 — BATCH CENTRAL SYNC
+// السابق: v243 — HR + INVENTORY CSS FIX
 // - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
@@ -2268,7 +2284,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','inventory':'📦 المخزون','stocktake':'🔍 الجرد','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','inventory':'📦 المخزون','stocktake':'🔍 الجرد','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -12689,7 +12705,7 @@ async function openNewEmployee(){
   // reset
   document.getElementById('hr-emp-id').value = '';
   document.getElementById('hr-emp-title').textContent = 'إضافة موظف';
-  ['hr-emp-name-ar','hr-emp-name-en','hr-emp-nid','hr-emp-phone','hr-emp-email','hr-emp-birth','hr-emp-position','hr-emp-address','hr-emp-bank','hr-emp-notes','hr-emp-base','hr-emp-transport','hr-emp-housing','hr-emp-meal','hr-emp-other-alw','hr-emp-insurance','hr-emp-tax']
+  ['hr-emp-name-ar','hr-emp-name-en','hr-emp-nid','hr-emp-phone','hr-emp-email','hr-emp-birth','hr-emp-position','hr-emp-address','hr-emp-bank','hr-emp-shopify-email','hr-emp-notes','hr-emp-base','hr-emp-transport','hr-emp-housing','hr-emp-meal','hr-emp-other-alw','hr-emp-insurance','hr-emp-tax']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   document.getElementById('hr-emp-hire').value = new Date().toISOString().slice(0,10);
   
@@ -12724,6 +12740,7 @@ async function editEmployee(id){
     document.getElementById('hr-emp-position').value = e.position || '';
     document.getElementById('hr-emp-address').value = e.address || '';
     document.getElementById('hr-emp-bank').value = e.bank_account || '';
+    document.getElementById('hr-emp-shopify-email').value = e.shopify_email || '';
     document.getElementById('hr-emp-notes').value = e.notes || '';
     
     // depts
@@ -12768,6 +12785,7 @@ async function saveEmployee(){
     position: document.getElementById('hr-emp-position').value.trim(),
     address: document.getElementById('hr-emp-address').value.trim(),
     bank_account: document.getElementById('hr-emp-bank').value.trim(),
+    shopify_email: document.getElementById('hr-emp-shopify-email').value.trim().toLowerCase(),
     notes: document.getElementById('hr-emp-notes').value.trim(),
     base_salary: document.getElementById('hr-emp-base').value || 0,
     transport_allowance: document.getElementById('hr-emp-transport').value || 0,
@@ -13190,6 +13208,7 @@ async function viewPayroll(id){
         <td style="text-align:right;font-weight:700">${fmtMoney(it.gross_salary)}</td>
         <td style="text-align:right;color:var(--danger)">${fmtMoney(it.advances_deduction)}</td>
         <td style="text-align:right;color:var(--danger)">${fmtMoney(it.penalties_deduction)}</td>
+        <td style="text-align:right;color:var(--danger)">${fmtMoney(it.purchases_deduction || 0)}</td>
         <td style="text-align:right;color:var(--danger)">${fmtMoney((parseFloat(it.insurance_deduction)||0)+(parseFloat(it.tax_deduction)||0)+(parseFloat(it.other_deductions)||0)+(parseFloat(it.absence_deduction)||0))}</td>
         <td style="text-align:right;font-weight:800;color:var(--accent)">${fmtMoney(it.net_salary)}</td>
       </tr>
@@ -13220,6 +13239,7 @@ async function viewPayroll(id){
             <th style="text-align:right;padding:8px">الإجمالي</th>
             <th style="text-align:right;padding:8px">سلف</th>
             <th style="text-align:right;padding:8px">جزاءات</th>
+            <th style="text-align:right;padding:8px">🛒 مشتريات</th>
             <th style="text-align:right;padding:8px">خصومات</th>
             <th style="text-align:right;padding:8px;background:var(--accent);color:#fff">الصافي</th>
           </tr>
@@ -13258,6 +13278,249 @@ async function deletePayroll(id){
     loadHrPayroll();
   }catch(e){
     toast('❌ ' + e.message);
+  }
+}
+
+// ============================================================
+// 🆕 v244: Employee Purchases Page
+// ============================================================
+let _hrPurchasesFilter = 'all';
+let _hrPurchasesList = [];
+
+function purchaseStatusBadge(p){
+  if(p.cancellation_requested && p.status === 'pending'){
+    return '<span class="badge" style="background:#fef3c7;color:#92400e">⚠️ تحتاج موافقة إلغاء</span>';
+  }
+  return ({
+    pending: '<span class="badge" style="background:#dbeafe;color:#1e40af">⏳ معلّقة</span>',
+    applied: '<span class="badge" style="background:#d1fae5;color:#065f46">✅ متخصمة</span>',
+    cancelled: '<span class="badge" style="background:#fee2e2;color:#991b1b">❌ ملغاة</span>'
+  })[p.status] || p.status;
+}
+
+async function loadHrPurchases(){
+  try{
+    // جيب stats
+    try{
+      const stats = await apiFetch('/api/hr/employee-purchases/stats');
+      if(stats){
+        document.getElementById('hr-purch-pending-cnt').textContent = stats.pendingCount;
+        document.getElementById('hr-purch-pending-total').textContent = fmtMoney(stats.pendingTotal);
+        document.getElementById('hr-purch-cancel-cnt').textContent = stats.cancellationsCount;
+        
+        // update nav badge
+        const nb = document.getElementById('nb-hr-purch');
+        if(nb){
+          const total = stats.cancellationsCount;
+          nb.textContent = total > 0 ? total : '';
+          nb.style.display = total > 0 ? '' : 'none';
+        }
+      }
+    }catch(e){}
+    
+    // جيب القائمة بالفلتر
+    let url = '/api/hr/employee-purchases';
+    if(_hrPurchasesFilter === 'needs_approval'){
+      url += '?cancellation_requested=true';
+    } else if(_hrPurchasesFilter !== 'all'){
+      url += '?status=' + _hrPurchasesFilter;
+    }
+    
+    _hrPurchasesList = await apiFetch(url) || [];
+    renderPurchasesTable();
+  }catch(e){
+    document.getElementById('hr-purch-table').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderPurchasesTable(){
+  const list = _hrPurchasesList;
+  const container = document.getElementById('hr-purch-table');
+  
+  if(!list.length){
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">مفيش مشتريات في الفلتر ده</div>';
+    return;
+  }
+  
+  const rows = list.map(p => {
+    const isCancellable = p.cancellation_requested && p.status === 'pending';
+    return `
+    <tr style="border-bottom:1px solid var(--border)${isCancellable ? ';background:#fef3c7' : ''}">
+      <td style="padding:8px 10px">
+        <strong>${escapeHtml(p.employee_name||'—')}</strong>
+        <div style="font-size:10px;color:var(--muted)">${escapeHtml(p.employee_code||'')}</div>
+        <div style="font-size:10px;color:var(--muted);direction:ltr">${escapeHtml(p.shopify_email||'—')}</div>
+      </td>
+      <td style="font-size:12px">
+        ${p.order_id ? `<strong style="color:var(--accent)">${escapeHtml(p.order_id)}</strong>` : '<span style="color:var(--muted)">يدوي</span>'}
+        ${p.order_status ? `<div style="font-size:10px;color:var(--muted)">${escapeHtml(p.order_status)}</div>` : ''}
+        ${p.order_delivery_type ? `<div style="font-size:10px;color:var(--muted)">${p.order_delivery_type === 'pickup' ? '🏪 استلام' : '🚚 توصيل'}</div>` : ''}
+      </td>
+      <td style="font-weight:700;color:var(--danger);font-size:13px">${fmtMoney(p.amount)}</td>
+      <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis">${escapeHtml((p.items_summary||'').substring(0,80))}</td>
+      <td style="font-size:11px">${fmtDate(p.purchase_date)}</td>
+      <td>${purchaseStatusBadge(p)}</td>
+      <td style="white-space:nowrap">
+        ${isCancellable ? `
+          <button class="btn btn-success btn-xs" onclick="approveCancellation(${p.id})" title="اعتماد الإلغاء">✅ اعتماد</button>
+          <button class="btn btn-ghost btn-xs" onclick="rejectCancellation(${p.id})" title="رفض الإلغاء (يبقى معلّق)">❌</button>
+        ` : ''}
+        ${p.status === 'pending' && !isCancellable ? `<button class="btn btn-ghost btn-xs" onclick="deletePurchase(${p.id})" style="color:var(--danger)" title="حذف">🗑️</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+  
+  container.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:850px">
+    <thead style="background:var(--bg)"><tr>
+      <th style="text-align:right;padding:10px">الموظف</th>
+      <th style="text-align:right;padding:10px">الطلب</th>
+      <th style="text-align:right;padding:10px">المبلغ</th>
+      <th style="text-align:right;padding:10px">المنتجات</th>
+      <th style="text-align:right;padding:10px">التاريخ</th>
+      <th style="text-align:right;padding:10px">الحالة</th>
+      <th style="text-align:center;padding:10px">إجراءات</th>
+    </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function filterPurchases(filter, btn){
+  _hrPurchasesFilter = filter;
+  document.querySelectorAll('#hr-purch-tabs .chip').forEach(c => c.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  loadHrPurchases();
+}
+
+async function approveCancellation(id){
+  if(!confirm('اعتماد إلغاء المديونية؟\nالموظف مش هيتخصم منه المبلغ ده.')) return;
+  try{
+    const r = await apiFetch('/api/hr/employee-purchases/' + id + '/approve-cancellation', 'POST', {});
+    if(r && r.success){
+      toast('✅ تم الاعتماد - المديونية ملغاة');
+      loadHrPurchases();
+    } else {
+      toast('❌ ' + (r?.error || 'فشل'));
+    }
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function rejectCancellation(id){
+  if(!confirm('رفض الإلغاء؟\nالمديونية تفضل سارية وهتتخصم في كشف الرواتب.')) return;
+  try{
+    await apiFetch('/api/hr/employee-purchases/' + id + '/reject-cancellation', 'POST', {});
+    toast('✅ تم الرفض - المديونية سارية');
+    loadHrPurchases();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function deletePurchase(id){
+  if(!confirm('حذف المديونية نهائياً؟')) return;
+  try{
+    await apiFetch('/api/hr/employee-purchases/' + id, 'DELETE');
+    toast('✅ تم الحذف');
+    loadHrPurchases();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function openManualPurchase(){
+  if(!_hrEmployees.length){
+    try{ _hrEmployees = await apiFetch('/api/hr/employees') || []; }catch(e){}
+  }
+  const sel = document.getElementById('purch-emp');
+  sel.innerHTML = '<option value="">-- اختر موظف --</option>' +
+    _hrEmployees.filter(e => e.active).map(e => `<option value="${e.id}">${escapeHtml(e.name_ar)} (${escapeHtml(e.code||'')})</option>`).join('');
+  
+  document.getElementById('purch-order').value = '';
+  document.getElementById('purch-amount').value = '';
+  document.getElementById('purch-items').value = '';
+  document.getElementById('purch-notes').value = '';
+  
+  document.getElementById('m-hr-purchase').style.display = 'flex';
+}
+
+async function saveManualPurchase(){
+  const data = {
+    employee_id: document.getElementById('purch-emp').value,
+    order_id: document.getElementById('purch-order').value.trim() || null,
+    amount: parseFloat(document.getElementById('purch-amount').value),
+    items_summary: document.getElementById('purch-items').value.trim(),
+    notes: document.getElementById('purch-notes').value.trim()
+  };
+  
+  if(!data.employee_id) { toast('❌ اختر موظف'); return; }
+  if(!data.amount || data.amount <= 0) { toast('❌ المبلغ مطلوب'); return; }
+  
+  try{
+    await apiFetch('/api/hr/employee-purchases', 'POST', data);
+    toast('✅ تم تسجيل المديونية');
+    closeM('m-hr-purchase');
+    loadHrPurchases();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+function openMonthlyReport(){
+  const now = new Date();
+  const m = now.getMonth() + 1;
+  const ym = now.getFullYear() + '-' + String(m).padStart(2,'0');
+  document.getElementById('mr-month').value = ym;
+  document.getElementById('mr-content').innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div>';
+  document.getElementById('m-hr-monthly-report').style.display = 'flex';
+  loadMonthlyReport();
+}
+
+async function loadMonthlyReport(){
+  const month = document.getElementById('mr-month').value;
+  if(!month) return;
+  
+  try{
+    const r = await apiFetch('/api/hr/employee-purchases/monthly-report?month=' + month);
+    if(!r) return;
+    
+    const employees = r.employees || [];
+    const summary = r.summary || {};
+    
+    if(!employees.length){
+      document.getElementById('mr-content').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">مفيش مشتريات في الشهر ده</div>';
+      return;
+    }
+    
+    const rows = employees.map(e => `
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:8px 10px"><strong>${escapeHtml(e.name_ar)}</strong><div style="font-size:10px;color:var(--muted)">${escapeHtml(e.code||'')}</div></td>
+        <td style="font-size:11px;direction:ltr">${escapeHtml(e.shopify_email||'—')}</td>
+        <td style="text-align:center">${e.orders_count}</td>
+        <td style="font-weight:700;color:var(--accent)">${fmtMoney(e.pending_total)}</td>
+        <td style="color:var(--muted)">${fmtMoney(e.cancelled_total)}</td>
+        <td style="font-weight:800">${fmtMoney(e.grand_total)}</td>
+      </tr>
+    `).join('');
+    
+    document.getElementById('mr-content').innerHTML = `
+      <div style="background:var(--bg);padding:14px;border-radius:10px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px;font-size:13px">
+          <div>👥 موظفين بمشتريات: <strong>${employees.length}</strong></div>
+          <div>🛒 إجمالي طلبات: <strong>${summary.total_orders || 0}</strong></div>
+          <div style="color:var(--accent);font-size:15px">💰 إجمالي معلّق: <strong>${fmtMoney(summary.pending_amount)}</strong></div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead style="background:var(--bg)"><tr>
+          <th style="text-align:right;padding:10px">الموظف</th>
+          <th style="text-align:right;padding:10px">الإيميل</th>
+          <th style="text-align:center;padding:10px">عدد الطلبات</th>
+          <th style="text-align:right;padding:10px">معلّق (هيتخصم)</th>
+          <th style="text-align:right;padding:10px">ملغي</th>
+          <th style="text-align:right;padding:10px">الإجمالي</th>
+        </tr></thead><tbody>${rows}</tbody></table>
+    `;
+  }catch(e){
+    document.getElementById('mr-content').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -14066,6 +14329,7 @@ function goPage(el,page){
   if(page==='hr-payroll') loadHrPayroll();
   if(page==='hr-advances') loadHrAdvances();
   if(page==='hr-penalties') loadHrPenalties();
+  if(page==='hr-purchases') loadHrPurchases();
   if(page==='stars-reviews')loadStarsReviews();
   if(page==='shop-transfers')loadShopTransfers();
   if(page==='shipping-transfers')loadShippingTransfers();
@@ -17466,6 +17730,39 @@ try{
   </div>
 </div>
 
+<!-- ===== HR PURCHASES PAGE (v244) ===== -->
+<div class="page" id="page-hr-purchases">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">🛒 مشتريات الموظفين</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="openMonthlyReport()">📊 تقرير شهري</button>
+      <button class="btn btn-primary btn-sm" onclick="openManualPurchase()">➕ إضافة يدوية</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
+    <div class="sc"><div class="sc-icon">🛒</div><div class="sc-label">مشتريات معلّقة</div><div class="sc-val" id="hr-purch-pending-cnt">0</div></div>
+    <div class="sc" style="border-right:4px solid var(--accent)"><div class="sc-icon">💰</div><div class="sc-label">إجمالي المعلّق</div><div class="sc-val" id="hr-purch-pending-total" style="color:var(--accent);font-size:18px">0 ج</div></div>
+    <div class="sc" style="border-right:4px solid var(--warn)"><div class="sc-icon">⚠️</div><div class="sc-label">إلغاءات تحتاج موافقة</div><div class="sc-val" id="hr-purch-cancel-cnt" style="color:var(--warn)">0</div></div>
+  </div>
+
+  <!-- Filters -->
+  <div class="card" style="margin-bottom:14px;padding:12px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap" id="hr-purch-tabs">
+      <button class="chip on" onclick="filterPurchases('all', this)">الكل</button>
+      <button class="chip" onclick="filterPurchases('pending', this)">⏳ معلّقة</button>
+      <button class="chip" onclick="filterPurchases('needs_approval', this)" style="background:#fef3c7;color:#92400e;border-color:#fbbf24">⚠️ تحتاج موافقة إلغاء</button>
+      <button class="chip" onclick="filterPurchases('applied', this)">✅ متخصمة</button>
+      <button class="chip" onclick="filterPurchases('cancelled', this)">❌ ملغاة</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="hr-purch-table" style="overflow-x:auto"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
+  </div>
+</div>
+
 <!-- ===== HR MODALS ===== -->
 <div id="m-hr-employee" class="modal-overlay" style="display:none">
   <div class="modal" style="max-width:760px">
@@ -17488,6 +17785,10 @@ try{
         <div class="form-group"><label>ربط بمندوب</label><select id="hr-emp-courier" class="form-input"><option value="">— بدون ربط —</option></select></div>
         <div class="form-group" style="grid-column:span 2"><label>العنوان</label><input id="hr-emp-address" class="form-input"></div>
         <div class="form-group" style="grid-column:span 2"><label>رقم حساب بنكي</label><input id="hr-emp-bank" class="form-input"></div>
+        <div class="form-group" style="grid-column:span 2;background:#eff6ff;padding:10px;border-radius:8px;border:1px dashed #93c5fd">
+          <label>📧 إيميل المشتريات (Shopify) — لربط طلبات الموظف على Shopify بمديونيته الشهرية</label>
+          <input id="hr-emp-shopify-email" type="email" class="form-input" placeholder="ahmed@cafelax.com">
+        </div>
       </div>
       
       <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px">
@@ -17582,6 +17883,42 @@ try{
     <div class="modal-header"><h3 id="pr-detail-title" style="margin:0">كشف الرواتب</h3><button class="modal-close" onclick="closeM('m-hr-payroll-detail')">×</button></div>
     <div class="modal-body" style="max-height:78vh;overflow-y:auto">
       <div id="pr-detail-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 🆕 v244: Manual Purchase Modal -->
+<div id="m-hr-purchase" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><h3 style="margin:0">🛒 إضافة مديونية موظف</h3><button class="modal-close" onclick="closeM('m-hr-purchase')">×</button></div>
+    <div class="modal-body">
+      <div style="background:#fef3c7;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#92400e">
+        ℹ️ لو الطلب جا من Shopify بإيميل مش متطابق مع موظف، استخدم ده عشان تربطه يدوياً.
+      </div>
+      <div class="form-group"><label>الموظف *</label><select id="purch-emp" class="form-input"></select></div>
+      <div class="form-group"><label>رقم الطلب (اختياري)</label><input id="purch-order" class="form-input" placeholder="SH-12345"></div>
+      <div class="form-group"><label>المبلغ *</label><input id="purch-amount" type="number" min="0" step="0.01" class="form-input"></div>
+      <div class="form-group"><label>تفاصيل المشتريات</label><textarea id="purch-items" class="form-input" rows="2" placeholder="منتج × 2، منتج آخر × 1..."></textarea></div>
+      <div class="form-group"><label>ملاحظات</label><textarea id="purch-notes" class="form-input" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-hr-purchase')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveManualPurchase()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- 🆕 v244: Monthly Report Modal -->
+<div id="m-hr-monthly-report" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:900px">
+    <div class="modal-header"><h3 style="margin:0">📊 تقرير شهري - مشتريات الموظفين</h3><button class="modal-close" onclick="closeM('m-hr-monthly-report')">×</button></div>
+    <div class="modal-body" style="max-height:78vh;overflow-y:auto">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;padding:10px;background:var(--bg);border-radius:8px">
+        <label style="font-weight:700;font-size:13px">الشهر:</label>
+        <input id="mr-month" type="month" class="form-input" style="max-width:200px" onchange="loadMonthlyReport()">
+        <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨️ طباعة</button>
+      </div>
+      <div id="mr-content"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ اختر شهر</div></div>
     </div>
   </div>
 </div>
