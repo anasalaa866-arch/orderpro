@@ -112,7 +112,9 @@ tr:hover td{background:#fafbff}
 .fg textarea{resize:vertical;min-height:70px}
 
 /* 🆕 v243: aliases لـ CSS classes اللي ضيفتها لـ Inventory و HR pages */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px)}
+/* 🔧 v246: modal-overlay بيستخدم flex لما يفتح (JS بيحدد display) */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px);display:none}
+.modal-overlay[style*="flex"]{display:flex !important}
 .modal-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--card);z-index:1}
 .modal-header h3{font-size:14px;font-weight:700;margin:0}
 .modal-body{padding:18px}
@@ -1813,6 +1815,600 @@ tr:hover td{background:#fafbff}
     </div>
   </div>
 
+
+<!-- 🔧 v245: orphan pages moved INSIDE content -->
+<!-- ===== INVENTORY PAGE (v240) ===== -->
+<div class="page" id="page-inventory">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">📦 المخزون</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="syncInventoryLevels()">🔄 مزامنة الكميات</button>
+      <button class="btn btn-primary btn-sm" onclick="syncInventoryFull()">🔁 مزامنة كاملة</button>
+    </div>
+  </div>
+
+  <!-- Stats Bar -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+    <div class="sc" style="border-right:4px solid var(--accent)">
+      <div class="sc-icon">📦</div>
+      <div class="sc-label">إجمالي المنتجات</div>
+      <div class="sc-val" id="inv-stat-total">0</div>
+    </div>
+    <div class="sc" style="border-right:4px solid var(--success)">
+      <div class="sc-icon">✅</div>
+      <div class="sc-label">متوفّر</div>
+      <div class="sc-val" id="inv-stat-stock" style="color:var(--success)">0</div>
+    </div>
+    <div class="sc" style="border-right:4px solid var(--warn)">
+      <div class="sc-icon">⚠️</div>
+      <div class="sc-label">منخفض</div>
+      <div class="sc-val" id="inv-stat-low" style="color:var(--warn)">0</div>
+    </div>
+    <div class="sc" style="border-right:4px solid var(--danger)">
+      <div class="sc-icon">❌</div>
+      <div class="sc-label">منتهي</div>
+      <div class="sc-val" id="inv-stat-out" style="color:var(--danger)">0</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="card" style="margin-bottom:14px;padding:12px 14px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input id="inv-search" type="text" placeholder="🔍 ابحث (اسم/SKU/باركود)..." class="form-input" style="flex:1;min-width:200px;max-width:300px" oninput="renderInventoryTable()">
+      <select id="inv-filter-status" class="form-input" style="max-width:160px" onchange="renderInventoryTable()">
+        <option value="all">كل الحالات</option>
+        <option value="in_stock">متوفّر</option>
+        <option value="low">منخفض</option>
+        <option value="out">منتهي</option>
+      </select>
+      <select id="inv-filter-warehouse" class="form-input" style="max-width:200px" onchange="renderInventoryTable()">
+        <option value="">كل المخازن</option>
+      </select>
+      <span style="font-size:11px;color:var(--muted);margin-right:auto" id="inv-last-sync"></span>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="card">
+    <div id="inv-table-container" style="overflow-x:auto">
+      <div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== STOCKTAKE PAGE (v240) ===== -->
+<div class="page" id="page-stocktake">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">🔍 الجرد</h2>
+    <button class="btn btn-primary btn-sm" onclick="openNewStocktake()">➕ بدء جرد جديد</button>
+  </div>
+
+  <!-- Active Session (لو فيه) -->
+  <div id="active-stocktake-card"></div>
+
+  <!-- Sessions History -->
+  <div class="card">
+    <div class="card-header">
+      <h3 style="margin:0">📋 سجل عمليات الجرد</h3>
+    </div>
+    <div id="stocktake-sessions-list" style="padding:14px">
+      <div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== STOCKTAKE NEW SESSION MODAL ===== -->
+<div id="m-new-stocktake" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <h3 style="margin:0">🔍 بدء جرد جديد</h3>
+      <button class="modal-close" onclick="closeM('m-new-stocktake')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>المخزن:</label>
+        <select id="new-stk-warehouse" class="form-input"></select>
+      </div>
+      <div class="form-group">
+        <label>اسم الجلسة:</label>
+        <input id="new-stk-title" type="text" class="form-input" placeholder="مثلاً: جرد شهري - أكتوبر">
+      </div>
+      <div class="form-group">
+        <label>ملاحظات:</label>
+        <textarea id="new-stk-notes" class="form-input" rows="2"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-new-stocktake')">إلغاء</button>
+      <button class="btn btn-primary" onclick="startStocktake()">🚀 ابدأ الجرد</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== STOCKTAKE SESSION DETAIL MODAL ===== -->
+<div id="m-stk-detail" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:1100px">
+    <div class="modal-header">
+      <h3 id="stk-detail-title" style="margin:0">جلسة الجرد</h3>
+      <button class="modal-close" onclick="closeM('m-stk-detail')">×</button>
+    </div>
+    <div class="modal-body" style="max-height:75vh;overflow-y:auto">
+      <div id="stk-detail-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== HR EMPLOYEES PAGE (v242) ===== -->
+<div class="page" id="page-hr-employees">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">👥 الموظفين</h2>
+    <button class="btn btn-primary btn-sm" onclick="openNewEmployee()">➕ إضافة موظف</button>
+  </div>
+
+  <!-- Stats -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px" id="hr-stats-cards">
+    <div class="sc"><div class="sc-icon">👥</div><div class="sc-label">إجمالي الموظفين</div><div class="sc-val" id="hr-stat-total">0</div></div>
+    <div class="sc" style="border-right:4px solid var(--success)"><div class="sc-icon">✅</div><div class="sc-label">نشطين</div><div class="sc-val" id="hr-stat-active" style="color:var(--success)">0</div></div>
+    <div class="sc" style="border-right:4px solid var(--accent)"><div class="sc-icon">💰</div><div class="sc-label">إجمالي المرتبات الشهرية</div><div class="sc-val" id="hr-stat-payroll" style="color:var(--accent);font-size:18px">0 ج</div></div>
+    <div class="sc" style="border-right:4px solid var(--warn)"><div class="sc-icon">💵</div><div class="sc-label">سلف نشطة</div><div class="sc-val" id="hr-stat-adv" style="color:var(--warn);font-size:18px">0 ج</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;padding:12px 14px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input id="hr-search" type="text" placeholder="🔍 ابحث (اسم/كود/تليفون/رقم قومي)..." class="form-input" style="flex:1;min-width:200px;max-width:320px" oninput="renderHrEmployeesTable()">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="hr-show-inactive" onchange="loadHrEmployees()"> عرض المعطّلين</label>
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="hr-emp-table" style="overflow-x:auto"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
+  </div>
+</div>
+
+<!-- ===== HR PAYROLL PAGE ===== -->
+<div class="page" id="page-hr-payroll">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">💰 كشف الرواتب</h2>
+    <button class="btn btn-primary btn-sm" onclick="openGeneratePayroll()">📄 إنشاء كشف جديد</button>
+  </div>
+  <div class="card">
+    <div id="hr-payroll-list" style="padding:14px"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
+  </div>
+</div>
+
+<!-- ===== HR ADVANCES PAGE ===== -->
+<div class="page" id="page-hr-advances">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">💵 السلف</h2>
+    <button class="btn btn-primary btn-sm" onclick="openNewAdvance()">➕ سلفة جديدة</button>
+  </div>
+  
+  <div class="card" style="margin-bottom:14px;padding:10px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap" id="hr-adv-tabs">
+      <button class="chip on" onclick="filterAdvances('all', this)">الكل</button>
+      <button class="chip" onclick="filterAdvances('pending', this)">⏳ في الانتظار</button>
+      <button class="chip" onclick="filterAdvances('active', this)">✅ نشطة</button>
+      <button class="chip" onclick="filterAdvances('completed', this)">🏁 مكتملة</button>
+    </div>
+  </div>
+  
+  <div class="card">
+    <div id="hr-adv-table" style="overflow-x:auto"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
+  </div>
+</div>
+
+<!-- ===== HR PENALTIES PAGE ===== -->
+<div class="page" id="page-hr-penalties">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">⚠️ الجزاءات والخصومات</h2>
+    <button class="btn btn-primary btn-sm" onclick="openNewPenalty()">➕ إضافة جزاء</button>
+  </div>
+  <div class="card">
+    <div id="hr-pen-table" style="overflow-x:auto"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
+  </div>
+</div>
+
+<!-- ===== HR PURCHASES PAGE (v244) ===== -->
+<div class="page" id="page-hr-purchases">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">🛒 مشتريات الموظفين</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="openMonthlyReport()">📊 تقرير شهري</button>
+      <button class="btn btn-primary btn-sm" onclick="openManualPurchase()">➕ إضافة يدوية</button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
+    <div class="sc"><div class="sc-icon">🛒</div><div class="sc-label">مشتريات معلّقة</div><div class="sc-val" id="hr-purch-pending-cnt">0</div></div>
+    <div class="sc" style="border-right:4px solid var(--accent)"><div class="sc-icon">💰</div><div class="sc-label">إجمالي المعلّق</div><div class="sc-val" id="hr-purch-pending-total" style="color:var(--accent);font-size:18px">0 ج</div></div>
+    <div class="sc" style="border-right:4px solid var(--warn)"><div class="sc-icon">⚠️</div><div class="sc-label">إلغاءات تحتاج موافقة</div><div class="sc-val" id="hr-purch-cancel-cnt" style="color:var(--warn)">0</div></div>
+  </div>
+
+  <!-- Filters -->
+  <div class="card" style="margin-bottom:14px;padding:12px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap" id="hr-purch-tabs">
+      <button class="chip on" onclick="filterPurchases('all', this)">الكل</button>
+      <button class="chip" onclick="filterPurchases('pending', this)">⏳ معلّقة</button>
+      <button class="chip" onclick="filterPurchases('needs_approval', this)" style="background:#fef3c7;color:#92400e;border-color:#fbbf24">⚠️ تحتاج موافقة إلغاء</button>
+      <button class="chip" onclick="filterPurchases('applied', this)">✅ متخصمة</button>
+      <button class="chip" onclick="filterPurchases('cancelled', this)">❌ ملغاة</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="hr-purch-table" style="overflow-x:auto"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
+  </div>
+</div>
+
+<!-- ===== HR MODALS ===== -->
+<div id="m-hr-employee" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:760px">
+    <div class="modal-header">
+      <h3 id="hr-emp-title" style="margin:0">إضافة موظف</h3>
+      <button class="modal-close" onclick="closeM('m-hr-employee')">×</button>
+    </div>
+    <div class="modal-body" style="max-height:75vh;overflow-y:auto">
+      <input type="hidden" id="hr-emp-id">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="form-group"><label>الاسم بالعربي *</label><input id="hr-emp-name-ar" class="form-input" required></div>
+        <div class="form-group"><label>الاسم بالإنجليزي</label><input id="hr-emp-name-en" class="form-input"></div>
+        <div class="form-group"><label>رقم قومي</label><input id="hr-emp-nid" class="form-input"></div>
+        <div class="form-group"><label>تليفون</label><input id="hr-emp-phone" class="form-input"></div>
+        <div class="form-group"><label>إيميل</label><input id="hr-emp-email" type="email" class="form-input"></div>
+        <div class="form-group"><label>تاريخ الميلاد</label><input id="hr-emp-birth" type="date" class="form-input"></div>
+        <div class="form-group"><label>تاريخ التعيين *</label><input id="hr-emp-hire" type="date" class="form-input" required></div>
+        <div class="form-group"><label>القسم</label><select id="hr-emp-dept" class="form-input"><option value="">— بدون قسم —</option></select></div>
+        <div class="form-group"><label>الوظيفة</label><input id="hr-emp-position" class="form-input"></div>
+        <div class="form-group"><label>ربط بمندوب</label><select id="hr-emp-courier" class="form-input"><option value="">— بدون ربط —</option></select></div>
+        <div class="form-group" style="grid-column:span 2"><label>العنوان</label><input id="hr-emp-address" class="form-input"></div>
+        <div class="form-group" style="grid-column:span 2"><label>رقم حساب بنكي</label><input id="hr-emp-bank" class="form-input"></div>
+        <div class="form-group" style="grid-column:span 2;background:#eff6ff;padding:10px;border-radius:8px;border:1px dashed #93c5fd">
+          <label>📧 إيميل المشتريات (Shopify) — لربط طلبات الموظف على Shopify بمديونيته الشهرية</label>
+          <input id="hr-emp-shopify-email" type="email" class="form-input" placeholder="ahmed@cafelax.com">
+        </div>
+      </div>
+      
+      <!-- 🆕 v247: قسم الصور -->
+      <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px">
+        <div style="font-weight:700;margin-bottom:10px;color:var(--accent)">📸 الصور</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px">صورة الموظف</label>
+            <div id="hr-emp-photo-preview" style="width:100%;aspect-ratio:1;border:2px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;background:var(--bg);overflow:hidden;cursor:pointer;position:relative" onclick="document.getElementById('hr-emp-photo-input').click()">
+              <span style="color:var(--muted);font-size:11px;text-align:center;padding:10px">📷<br>اضغط للرفع</span>
+            </div>
+            <input id="hr-emp-photo-input" type="file" accept="image/*" style="display:none" onchange="handleEmpPhotoUpload(event,'photo')">
+            <button type="button" id="hr-emp-photo-remove" onclick="removeEmpPhoto('photo')" style="display:none;width:100%;margin-top:6px;padding:4px;background:#fee2e2;color:#991b1b;border:none;border-radius:6px;font-size:11px;cursor:pointer">🗑️ حذف</button>
+            <input type="hidden" id="hr-emp-photo-data">
+          </div>
+          
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px">بطاقة الرقم القومي - وجه</label>
+            <div id="hr-emp-id-front-preview" style="width:100%;aspect-ratio:1.6;border:2px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;background:var(--bg);overflow:hidden;cursor:pointer;position:relative" onclick="document.getElementById('hr-emp-id-front-input').click()">
+              <span style="color:var(--muted);font-size:11px;text-align:center;padding:10px">🪪<br>اضغط للرفع</span>
+            </div>
+            <input id="hr-emp-id-front-input" type="file" accept="image/*" style="display:none" onchange="handleEmpPhotoUpload(event,'id_front')">
+            <button type="button" id="hr-emp-id-front-remove" onclick="removeEmpPhoto('id_front')" style="display:none;width:100%;margin-top:6px;padding:4px;background:#fee2e2;color:#991b1b;border:none;border-radius:6px;font-size:11px;cursor:pointer">🗑️ حذف</button>
+            <input type="hidden" id="hr-emp-id-front-data">
+          </div>
+          
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px">بطاقة الرقم القومي - ظهر</label>
+            <div id="hr-emp-id-back-preview" style="width:100%;aspect-ratio:1.6;border:2px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;background:var(--bg);overflow:hidden;cursor:pointer;position:relative" onclick="document.getElementById('hr-emp-id-back-input').click()">
+              <span style="color:var(--muted);font-size:11px;text-align:center;padding:10px">🪪<br>اضغط للرفع</span>
+            </div>
+            <input id="hr-emp-id-back-input" type="file" accept="image/*" style="display:none" onchange="handleEmpPhotoUpload(event,'id_back')">
+            <button type="button" id="hr-emp-id-back-remove" onclick="removeEmpPhoto('id_back')" style="display:none;width:100%;margin-top:6px;padding:4px;background:#fee2e2;color:#991b1b;border:none;border-radius:6px;font-size:11px;cursor:pointer">🗑️ حذف</button>
+            <input type="hidden" id="hr-emp-id-back-data">
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">💡 الصور بتتضغط تلقائياً عشان تحفظ مساحة. حد أقصى ~2MB لكل صورة قبل الضغط.</div>
+      </div>
+      
+      <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px">
+        <div style="font-weight:700;margin-bottom:10px;color:var(--accent)">💰 الراتب</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+          <div class="form-group"><label>الأساسي *</label><input id="hr-emp-base" type="number" min="0" class="form-input" placeholder="0"></div>
+          <div class="form-group"><label>بدل مواصلات</label><input id="hr-emp-transport" type="number" min="0" class="form-input" placeholder="0"></div>
+          <div class="form-group"><label>بدل سكن</label><input id="hr-emp-housing" type="number" min="0" class="form-input" placeholder="0"></div>
+          <div class="form-group"><label>بدل وجبة</label><input id="hr-emp-meal" type="number" min="0" class="form-input" placeholder="0"></div>
+          <div class="form-group"><label>بدلات أخرى</label><input id="hr-emp-other-alw" type="number" min="0" class="form-input" placeholder="0"></div>
+          <div class="form-group"><label>تأمينات</label><input id="hr-emp-insurance" type="number" min="0" class="form-input" placeholder="0"></div>
+          <div class="form-group" style="grid-column:span 3"><label>ضرائب</label><input id="hr-emp-tax" type="number" min="0" class="form-input" placeholder="0"></div>
+        </div>
+      </div>
+      
+      <div class="form-group"><label>ملاحظات</label><textarea id="hr-emp-notes" class="form-input" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-hr-employee')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveEmployee()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<div id="m-hr-advance" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><h3 style="margin:0">💵 سلفة جديدة</h3><button class="modal-close" onclick="closeM('m-hr-advance')">×</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>الموظف *</label><select id="adv-emp" class="form-input"></select></div>
+      <div class="form-group"><label>المبلغ *</label><input id="adv-amount" type="number" min="0" step="0.01" class="form-input"></div>
+      <div class="form-group"><label>السبب</label><input id="adv-reason" class="form-input" placeholder="مثل: ظروف طارئة"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="form-group"><label>عدد الأقساط</label><input id="adv-installments" type="number" min="1" value="1" class="form-input" oninput="updateAdvMonthly()"></div>
+        <div class="form-group"><label>القسط الشهري</label><input id="adv-monthly" type="number" min="0" step="0.01" class="form-input"></div>
+      </div>
+      <div class="form-group"><label>ملاحظات</label><textarea id="adv-notes" class="form-input" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-hr-advance')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveAdvance()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<div id="m-hr-penalty" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><h3 style="margin:0">⚠️ إضافة جزاء</h3><button class="modal-close" onclick="closeM('m-hr-penalty')">×</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>الموظف *</label><select id="pen-emp" class="form-input"></select></div>
+      <div class="form-group"><label>نوع الجزاء *</label>
+        <select id="pen-type" class="form-input">
+          <option value="late">⏰ تأخير</option>
+          <option value="absence">❌ غياب</option>
+          <option value="violation">⚠️ مخالفة</option>
+          <option value="performance">📉 ضعف أداء</option>
+          <option value="other">📝 آخر</option>
+        </select>
+      </div>
+      <div class="form-group"><label>المبلغ *</label><input id="pen-amount" type="number" min="0" step="0.01" class="form-input"></div>
+      <div class="form-group"><label>التاريخ *</label><input id="pen-date" type="date" class="form-input"></div>
+      <div class="form-group"><label>السبب</label><input id="pen-reason" class="form-input"></div>
+      <div class="form-group"><label>ملاحظات</label><textarea id="pen-notes" class="form-input" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-hr-penalty')">إلغاء</button>
+      <button class="btn btn-primary" onclick="savePenalty()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<div id="m-hr-payroll-gen" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header"><h3 style="margin:0">📄 إنشاء كشف رواتب</h3><button class="modal-close" onclick="closeM('m-hr-payroll-gen')">×</button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="form-group"><label>السنة</label><input id="pr-year" type="number" class="form-input"></div>
+        <div class="form-group"><label>الشهر</label><select id="pr-month" class="form-input"><option value="1">1 - يناير</option><option value="2">2 - فبراير</option><option value="3">3 - مارس</option><option value="4">4 - أبريل</option><option value="5">5 - مايو</option><option value="6">6 - يونيو</option><option value="7">7 - يوليو</option><option value="8">8 - أغسطس</option><option value="9">9 - سبتمبر</option><option value="10">10 - أكتوبر</option><option value="11">11 - نوفمبر</option><option value="12">12 - ديسمبر</option></select></div>
+      </div>
+      <div style="background:#fef3c7;border-radius:8px;padding:10px;font-size:12px;color:#92400e">
+        ⚠️ سيتم حساب الراتب لكل موظف نشط بناءً على هيكل المرتب الحالي + خصم السلف النشطة + الجزاءات المعلّقة.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-hr-payroll-gen')">إلغاء</button>
+      <button class="btn btn-primary" onclick="generatePayroll()">🚀 إنشاء</button>
+    </div>
+  </div>
+</div>
+
+<div id="m-hr-payroll-detail" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:1200px">
+    <div class="modal-header"><h3 id="pr-detail-title" style="margin:0">كشف الرواتب</h3><button class="modal-close" onclick="closeM('m-hr-payroll-detail')">×</button></div>
+    <div class="modal-body" style="max-height:78vh;overflow-y:auto">
+      <div id="pr-detail-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 🆕 v244: Manual Purchase Modal -->
+<div id="m-hr-purchase" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><h3 style="margin:0">🛒 إضافة مديونية موظف</h3><button class="modal-close" onclick="closeM('m-hr-purchase')">×</button></div>
+    <div class="modal-body">
+      <div style="background:#fef3c7;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#92400e">
+        ℹ️ لو الطلب جا من Shopify بإيميل مش متطابق مع موظف، استخدم ده عشان تربطه يدوياً.
+      </div>
+      <div class="form-group"><label>الموظف *</label><select id="purch-emp" class="form-input"></select></div>
+      <div class="form-group"><label>رقم الطلب (اختياري)</label><input id="purch-order" class="form-input" placeholder="SH-12345"></div>
+      <div class="form-group"><label>المبلغ *</label><input id="purch-amount" type="number" min="0" step="0.01" class="form-input"></div>
+      <div class="form-group"><label>تفاصيل المشتريات</label><textarea id="purch-items" class="form-input" rows="2" placeholder="منتج × 2، منتج آخر × 1..."></textarea></div>
+      <div class="form-group"><label>ملاحظات</label><textarea id="purch-notes" class="form-input" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-hr-purchase')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveManualPurchase()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- 🆕 v244: Monthly Report Modal -->
+<div id="m-hr-monthly-report" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:900px">
+    <div class="modal-header"><h3 style="margin:0">📊 تقرير شهري - مشتريات الموظفين</h3><button class="modal-close" onclick="closeM('m-hr-monthly-report')">×</button></div>
+    <div class="modal-body" style="max-height:78vh;overflow-y:auto">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;padding:10px;background:var(--bg);border-radius:8px">
+        <label style="font-weight:700;font-size:13px">الشهر:</label>
+        <input id="mr-month" type="month" class="form-input" style="max-width:200px" onchange="loadMonthlyReport()">
+        <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨️ طباعة</button>
+      </div>
+      <div id="mr-content"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ اختر شهر</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== EXPIRY PAGE ===== -->
+<div class="page" id="page-expiry">
+
+  <!-- Stats Bar -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+    <div class="sc" style="border-right:4px solid var(--danger)">
+      <div class="sc-icon">🔴</div>
+      <div class="sc-label">منتهية الصلاحية</div>
+      <div class="sc-val" id="exp-stat-expired" style="color:var(--danger)">0</div>
+    </div>
+    <div class="sc" style="border-right:4px solid var(--warn)">
+      <div class="sc-icon">🟡</div>
+      <div class="sc-label">تنتهي خلال 30 يوم</div>
+      <div class="sc-val" id="exp-stat-soon" style="color:var(--warn)">0</div>
+    </div>
+    <div class="sc" style="border-right:4px solid var(--info)">
+      <div class="sc-icon">🔵</div>
+      <div class="sc-label">تنتهي خلال 90 يوم</div>
+      <div class="sc-val" id="exp-stat-ok" style="color:var(--info)">0</div>
+    </div>
+    <div class="sc" style="border-right:4px solid var(--success)">
+      <div class="sc-icon">✅</div>
+      <div class="sc-label">إجمالي المنتجات</div>
+      <div class="sc-val" id="exp-stat-total" style="color:var(--success)">0</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-body" style="padding:10px 14px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <!-- Filter chips -->
+        <div style="display:flex;gap:5px;flex-wrap:wrap" id="exp-filter-chips">
+          <button class="chip on" onclick="expSetFilter('all',this)">الكل</button>
+          <button class="chip" onclick="expSetFilter('expired',this)" style="color:var(--danger)">🔴 منتهية</button>
+          <button class="chip" onclick="expSetFilter('soon',this)" style="color:var(--warn)">🟡 خلال 30 يوم</button>
+          <button class="chip" onclick="expSetFilter('ok',this)" style="color:var(--info)">🔵 خلال 90 يوم</button>
+          <button class="chip" onclick="expSetFilter('safe',this)" style="color:var(--success)">✅ آمنة</button>
+        </div>
+        <!-- Search -->
+        <input id="exp-search" placeholder="ابحث عن منتج..." oninput="renderExpiryPage()"
+          style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;width:180px">
+        <!-- Alert days -->
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px">
+          <label style="color:var(--muted)">تنبيه قبل:</label>
+          <input id="exp-alert-days" type="number" value="30" min="1" max="365" onchange="saveExpSettings()"
+            style="width:55px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;text-align:center">
+          <span style="color:var(--muted)">يوم</span>
+        </div>
+        <div style="margin-right:auto;display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="syncExpiryFromShopify()">🔄 مزامنة Shopify</button>
+          <button class="btn btn-ghost btn-sm" onclick="printExpiryReport()">🖨️ طباعة التصفية</button>
+          <button class="btn btn-primary btn-sm" onclick="openAddExpiry()">+ إضافة منتج</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="card">
+    <div class="card-hd">
+      <h3>⏳ قائمة الصلاحيات</h3>
+      <span id="exp-count" style="font-size:12px;color:var(--muted)"></span>
+      <button class="btn btn-ghost btn-sm" onclick="expBulkDelete()" style="margin-right:auto;color:var(--danger)">🗑️ حذف المحددة</button>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr>
+        <th style="width:30px"><input type="checkbox" id="exp-check-all" onchange="expToggleAll(this.checked)"></th>
+        <th>المنتج</th>
+        <th>الباركود / SKU</th>
+        <th>الكمية</th>
+        <th>تاريخ الانتهاء</th>
+        <th>الأيام المتبقية</th>
+        <th>الحالة</th>
+        <th>إجراءات</th>
+      </tr></thead>
+      <tbody id="exp-tbody"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<!-- MODAL: إضافة/تعديل منتج -->
+<div class="overlay" id="m-expiry">
+  <div class="modal" style="width:500px">
+    <div class="mhd"><h3 id="exp-modal-title">➕ إضافة منتج</h3><button class="xbtn" onclick="closeM('m-expiry')">✕</button></div>
+    <div class="mbody">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="fg" style="grid-column:1/-1"><label>اسم المنتج *</label><input id="exp-name" placeholder="مثال: نسكافيه جولد 200 جرام"></div>
+        <div class="fg"><label>SKU / باركود</label><input id="exp-sku" placeholder="اختياري"></div>
+        <div class="fg"><label>الكمية</label><input id="exp-qty" type="number" value="1" min="0"></div>
+        <div class="fg"><label>تاريخ الانتهاء *</label><input id="exp-date" type="date"></div>
+        <div class="fg"><label>الفئة</label><input id="exp-category" placeholder="مثال: قهوة، شاي..."></div>
+        <div class="fg" style="grid-column:1/-1"><label>ملاحظات</label><textarea id="exp-note" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px"></textarea></div>
+      </div>
+    </div>
+    <div class="mft">
+      <button class="btn btn-ghost" onclick="closeM('m-expiry')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveExpiry()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: إضافة/تعديل مستخدم -->
+<div class="overlay" id="m-add-user">
+  <div class="modal" style="width:520px;max-height:90vh;overflow-y:auto">
+    <div class="mhd"><h3 id="add-user-modal-title">+ مستخدم جديد</h3><button class="xbtn" onclick="closeM('m-add-user')">✕</button></div>
+    <div class="mbody">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px">
+        <div class="fg"><label>الاسم الكامل *</label><input id="au-name" placeholder="مثال: أحمد محمد"></div>
+        <div class="fg"><label>اسم المستخدم *</label><input id="au-username" placeholder="مثال: ahmed" style="direction:ltr"></div>
+      </div>
+      <div class="fg">
+        <label>كلمة المرور * <span id="au-pass-hint" style="font-size:11px;color:var(--muted);font-weight:400">(اتركها فارغة للإبقاء على القديمة)</span></label>
+        <input type="password" id="au-pass" placeholder="كلمة المرور">
+      </div>
+      <div class="fg">
+        <label style="margin-bottom:8px;display:block">الصفحات المتاحة *</label>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
+          <button type="button" class="btn btn-ghost btn-xs" onclick="auSelectAll(true)">تحديد الكل</button>
+          <button type="button" class="btn btn-ghost btn-xs" onclick="auSelectAll(false)">إلغاء الكل</button>
+        </div>
+        <div id="au-pages-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--bg);border-radius:8px;padding:8px;border:1px solid var(--border)">
+          <!-- يتولد تلقائياً من buildPermissionsGrid() -->
+        </div>
+      </div>
+    </div>
+    <div class="mft">
+      <button class="btn btn-ghost" onclick="closeM('m-add-user')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveUser()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="m-order-history"><div class="modal" style="width:min(560px,96vw);max-height:85vh;overflow-y:auto">
+  <div class="mhd"><h3>📋 تاريخ الطلب <span id="oh-order-id" style="color:var(--accent);font-size:13px"></span></h3><button class="xbtn" onclick="closeM('m-order-history')">✕</button></div>
+  <div id="oh-content" style="padding:16px">
+    <div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div>
+  </div>
+</div></div>
+
+
+<!-- MERGE ORDERS MODAL -->
+<div class="overlay" id="m-merge-orders"><div class="modal" style="width:min(600px,96vw);max-height:90vh;overflow-y:auto">
+  <div class="mhd"><h3>🔗 دمج الطلبات</h3><button class="xbtn" onclick="closeM('m-merge-orders')">✕</button></div>
+  <div style="padding:16px">
+    <div id="merge-orders-list" style="margin-bottom:16px"></div>
+    <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px">الطلب الرئيسي (الباقي نشط)</div>
+      <select id="merge-primary-sel" onchange="renderMergeSummary()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px"></select>
+    </div>
+    <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px">تكلفة الشحن</div>
+      <div style="display:flex;gap:10px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="radio" name="merge-ship-mode" value="one" checked onchange="updateMergeShip()"> شحن واحد
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="radio" name="merge-ship-mode" value="all" onchange="updateMergeShip()"> شحن لكل طلب
+        </label>
+        <input id="merge-ship-val" type="number" placeholder="تكلفة الشحن" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">
+      </div>
+    </div>
+    <div id="merge-summary" style="background:var(--accent-light);border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeM('m-merge-orders')">إلغاء</button>
+      <button class="btn btn-primary" onclick="confirmMergeOrders()">🔗 تأكيد الدمج</button>
+    </div>
+  </div>
+
+  <!-- end of moved pages -->
+
   </div>
 </div>
 </div>
@@ -2186,17 +2782,25 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v244 — EMPLOYEE PURCHASES =====
-// 2026-05-05: مشتريات الموظفين من Shopify
+// ===== OrderPro v247 — EMPLOYEE PHOTOS =====
+// 2026-05-05: رفع صورة الموظف + صور البطاقة
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 1. ✅ حقل shopify_email في الموظف
-// 2. ✅ webhook يطابق الإيميل تلقائياً
-// 3. ✅ صفحة 🛒 مشتريات الموظفين (filter + cancel approval)
-// 4. ✅ تقرير شهري
-// 5. ✅ خصم تلقائي في كشف الرواتب (عمود مشتريات)
-// 6. ✅ موافقة يدوية على إلغاء (لو الطلب اتلغى في Shopify)
+// 1. ✅ صورة الموظف (avatar)
+// 2. ✅ صورة البطاقة - وجه + ظهر
+// 3. ✅ ضغط تلقائي للصور (canvas + jpeg)
+// 4. ✅ عرض الصور في الجدول + التفاصيل
+// 5. ✅ image viewer (full size + download)
 // =================================
-// السابق: v243 — HR + INVENTORY CSS FIX
+// السابق: v246 — MODALS FIX
+// (v246: closeM/openM يدعم modal-overlay الجديد)
+// =================================
+// السابق: v245 — PAGES STRUCTURE FIX
+// 2026-05-05: إصلاح موقع الصفحات الفارغة
+// المشكلة: HR + Inventory + Stocktake + Expiry pages كانوا موضوعين
+//         خارج الـ <div class="content"> ولذلك مكانوش بيظهروا
+// الحل: نقل كل الـ pages داخل الـ <div class="content"> الصحيح
+// =================================
+// السابق: v244 — EMPLOYEE PURCHASES
 // - تحسين رسائل Loading و Empty State
 const COLORS=['#6366f1','#8b5cf6','#10b981','#f59e0b','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#84cc16'];
 
@@ -2932,8 +3536,29 @@ async function doAction(label, apiCall, opts = {}){
   }
 }
 
-function openM(id){refreshSelects();if(id==='m-assign')renderAssignGrid();$(id).classList.add('open')}
-function closeM(id){$(id).classList.remove('open');selectedCourierId=null}
+function openM(id){
+  refreshSelects();
+  if(id==='m-assign')renderAssignGrid();
+  const el = $(id);
+  if(!el) return;
+  // 🔧 v246: support both .overlay (old) and .modal-overlay (new)
+  if(el.classList.contains('modal-overlay')){
+    el.style.display = 'flex';
+  } else {
+    el.classList.add('open');
+  }
+}
+function closeM(id){
+  const el = $(id);
+  if(!el) return;
+  // 🔧 v246: support both styles
+  if(el.classList.contains('modal-overlay')){
+    el.style.display = 'none';
+  } else {
+    el.classList.remove('open');
+  }
+  selectedCourierId=null;
+}
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open')}));
 
 // ===== OFFLINE QUEUE SYSTEM =====
@@ -12613,6 +13238,122 @@ function payrollStatusLabel(s){
 }
 
 // ─── EMPLOYEES ───
+// 🆕 v247: photo upload + compression helpers
+async function compressImage(file, maxDim = 1200, quality = 0.8){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        // resize لو كبير
+        if(width > maxDim || height > maxDim){
+          const ratio = Math.min(maxDim/width, maxDim/height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        // jpeg with quality
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+const _empPhotoMap = {
+  'photo': { preview: 'hr-emp-photo-preview', data: 'hr-emp-photo-data', remove: 'hr-emp-photo-remove', input: 'hr-emp-photo-input' },
+  'id_front': { preview: 'hr-emp-id-front-preview', data: 'hr-emp-id-front-data', remove: 'hr-emp-id-front-remove', input: 'hr-emp-id-front-input' },
+  'id_back': { preview: 'hr-emp-id-back-preview', data: 'hr-emp-id-back-data', remove: 'hr-emp-id-back-remove', input: 'hr-emp-id-back-input' }
+};
+
+async function handleEmpPhotoUpload(event, type){
+  const file = event.target.files[0];
+  if(!file) return;
+  
+  // فحص الحجم (قبل الضغط)
+  if(file.size > 8 * 1024 * 1024){
+    toast('❌ الصورة كبيرة جداً (الحد 8 MB)');
+    event.target.value = '';
+    return;
+  }
+  
+  if(!file.type.startsWith('image/')){
+    toast('❌ لازم صورة');
+    event.target.value = '';
+    return;
+  }
+  
+  try{
+    toast('⏳ جاري الضغط...');
+    // الموظف صورة أصغر (للـ avatar)
+    const maxDim = type === 'photo' ? 600 : 1400;
+    const quality = type === 'photo' ? 0.85 : 0.75;
+    const dataUrl = await compressImage(file, maxDim, quality);
+    
+    setEmpPhoto(type, dataUrl);
+    toast('✅ تم الرفع');
+  }catch(e){
+    console.error('compress failed:', e);
+    toast('❌ فشل ضغط الصورة');
+  }
+  event.target.value = ''; // reset input
+}
+
+function setEmpPhoto(type, dataUrl){
+  const map = _empPhotoMap[type];
+  if(!map) return;
+  
+  document.getElementById(map.data).value = dataUrl || '';
+  const preview = document.getElementById(map.preview);
+  const removeBtn = document.getElementById(map.remove);
+  
+  if(dataUrl){
+    preview.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover">`;
+    preview.style.borderStyle = 'solid';
+    removeBtn.style.display = 'block';
+  } else {
+    preview.innerHTML = type === 'photo' 
+      ? '<span style="color:var(--muted);font-size:11px;text-align:center;padding:10px">📷<br>اضغط للرفع</span>'
+      : '<span style="color:var(--muted);font-size:11px;text-align:center;padding:10px">🪪<br>اضغط للرفع</span>';
+    preview.style.borderStyle = 'dashed';
+    removeBtn.style.display = 'none';
+  }
+}
+
+function removeEmpPhoto(type){
+  if(!confirm('حذف الصورة؟')) return;
+  setEmpPhoto(type, '');
+}
+
+// 🆕 v247: عرض الصورة بالكامل
+function showFullImage(src, title){
+  let m = document.getElementById('m-image-viewer');
+  if(!m){
+    m = document.createElement('div');
+    m.id = 'm-image-viewer';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:10000;display:none;align-items:center;justify-content:center;cursor:pointer;padding:20px';
+    m.onclick = () => m.style.display = 'none';
+    document.body.appendChild(m);
+  }
+  m.innerHTML = `
+    <div style="position:relative;max-width:95vw;max-height:95vh;display:flex;flex-direction:column;align-items:center;gap:10px">
+      <div style="color:#fff;font-weight:700;font-size:14px">${escapeHtml(title || '')}</div>
+      <img src="${src}" style="max-width:100%;max-height:85vh;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.5)">
+      <button onclick="event.stopPropagation();(function(){const a=document.createElement('a');a.href='${src}';a.download='${(title||'image').replace(/[^a-zA-Z0-9]/g,'_')}.jpg';a.click();})()" style="background:#fff;color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:700;font-family:Cairo,sans-serif">⬇️ تحميل</button>
+    </div>
+  `;
+  m.style.display = 'flex';
+}
+
 async function loadHrEmployees(){
   try{
     // جيب الـ departments
@@ -12666,7 +13407,10 @@ function renderHrEmployeesTable(){
     return `<tr style="border-bottom:1px solid var(--border)">
       <td style="padding:8px 10px">
         <div style="display:flex;gap:10px;align-items:center">
-          <div style="width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">${initials}</div>
+          ${e.photo_url
+            ? `<div style="width:36px;height:36px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--bg)"><img src="${e.photo_url}" style="width:100%;height:100%;object-fit:cover"></div>`
+            : `<div style="width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${initials}</div>`
+          }
           <div>
             <div style="font-weight:700;font-size:13px">${escapeHtml(e.name_ar)}</div>
             <div style="font-size:10px;color:var(--muted)">${escapeHtml(e.code||'')} ${e.position?'· '+escapeHtml(e.position):''}</div>
@@ -12709,6 +13453,11 @@ async function openNewEmployee(){
     .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   document.getElementById('hr-emp-hire').value = new Date().toISOString().slice(0,10);
   
+  // 🆕 v247: reset photos
+  setEmpPhoto('photo', '');
+  setEmpPhoto('id_front', '');
+  setEmpPhoto('id_back', '');
+  
   // املأ الـ depts
   const deptSel = document.getElementById('hr-emp-dept');
   deptSel.innerHTML = '<option value="">— بدون قسم —</option>' + 
@@ -12741,6 +13490,11 @@ async function editEmployee(id){
     document.getElementById('hr-emp-address').value = e.address || '';
     document.getElementById('hr-emp-bank').value = e.bank_account || '';
     document.getElementById('hr-emp-shopify-email').value = e.shopify_email || '';
+    
+    // 🆕 v247: تحميل الصور
+    setEmpPhoto('photo', e.photo_url || '');
+    setEmpPhoto('id_front', e.id_card_front || '');
+    setEmpPhoto('id_back', e.id_card_back || '');
     document.getElementById('hr-emp-notes').value = e.notes || '';
     
     // depts
@@ -12786,6 +13540,10 @@ async function saveEmployee(){
     address: document.getElementById('hr-emp-address').value.trim(),
     bank_account: document.getElementById('hr-emp-bank').value.trim(),
     shopify_email: document.getElementById('hr-emp-shopify-email').value.trim().toLowerCase(),
+    // 🆕 v247: الصور
+    photo_url: document.getElementById('hr-emp-photo-data').value || '',
+    id_card_front: document.getElementById('hr-emp-id-front-data').value || '',
+    id_card_back: document.getElementById('hr-emp-id-back-data').value || '',
     notes: document.getElementById('hr-emp-notes').value.trim(),
     base_salary: document.getElementById('hr-emp-base').value || 0,
     transport_allowance: document.getElementById('hr-emp-transport').value || 0,
@@ -12861,15 +13619,29 @@ async function openEmployee(id){
     const html = `
       <div style="background:var(--bg);padding:16px;border-radius:12px;margin-bottom:14px">
         <div style="display:flex;gap:14px;align-items:center">
-          <div style="width:60px;height:60px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px">${(e.name_ar||'?').split(' ').map(w=>w[0]).slice(0,2).join('')}</div>
+          ${e.photo_url 
+            ? `<div style="width:70px;height:70px;border-radius:50%;overflow:hidden;background:var(--bg);flex-shrink:0;cursor:pointer" onclick="showFullImage('${e.photo_url}','صورة الموظف')"><img src="${e.photo_url}" style="width:100%;height:100%;object-fit:cover"></div>`
+            : `<div style="width:70px;height:70px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;flex-shrink:0">${(e.name_ar||'?').split(' ').map(w=>w[0]).slice(0,2).join('')}</div>`
+          }
           <div style="flex:1">
             <div style="font-weight:800;font-size:18px">${escapeHtml(e.name_ar)}</div>
             <div style="color:var(--muted);font-size:12px">${escapeHtml(e.code||'')} ${e.position?'· '+escapeHtml(e.position):''} ${e.department_name?'· '+escapeHtml(e.department_name):''}</div>
             <div style="color:var(--muted);font-size:11px;direction:ltr;margin-top:4px">${escapeHtml(e.phone||'')} ${e.email?'· '+escapeHtml(e.email):''}</div>
+            ${e.national_id ? `<div style="color:var(--muted);font-size:11px;margin-top:2px">🪪 ${escapeHtml(e.national_id)}</div>` : ''}
           </div>
           <button class="btn btn-primary btn-sm" onclick="closeM('m-emp-view');editEmployee(${e.id})">✏️ تعديل</button>
         </div>
       </div>
+      
+      ${(e.id_card_front || e.id_card_back) ? `
+        <div class="card" style="padding:14px;margin-bottom:14px">
+          <div style="font-weight:700;margin-bottom:10px">🪪 صور البطاقة</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            ${e.id_card_front ? `<div style="cursor:pointer" onclick="showFullImage('${e.id_card_front}','بطاقة - وجه')"><img src="${e.id_card_front}" style="width:100%;border-radius:8px;border:1px solid var(--border)"><div style="font-size:11px;color:var(--muted);text-align:center;margin-top:4px">وجه البطاقة</div></div>` : '<div></div>'}
+            ${e.id_card_back ? `<div style="cursor:pointer" onclick="showFullImage('${e.id_card_back}','بطاقة - ظهر')"><img src="${e.id_card_back}" style="width:100%;border-radius:8px;border:1px solid var(--border)"><div style="font-size:11px;color:var(--muted);text-align:center;margin-top:4px">ظهر البطاقة</div></div>` : '<div></div>'}
+          </div>
+        </div>
+      ` : ''}
       
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         <div class="card" style="padding:14px">
@@ -17539,558 +18311,6 @@ try{
   </div>
 </div>
 
-<!-- ===== INVENTORY PAGE (v240) ===== -->
-<div class="page" id="page-inventory">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-    <h2 style="margin:0">📦 المخزون</h2>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-ghost btn-sm" onclick="syncInventoryLevels()">🔄 مزامنة الكميات</button>
-      <button class="btn btn-primary btn-sm" onclick="syncInventoryFull()">🔁 مزامنة كاملة</button>
-    </div>
-  </div>
-
-  <!-- Stats Bar -->
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
-    <div class="sc" style="border-right:4px solid var(--accent)">
-      <div class="sc-icon">📦</div>
-      <div class="sc-label">إجمالي المنتجات</div>
-      <div class="sc-val" id="inv-stat-total">0</div>
-    </div>
-    <div class="sc" style="border-right:4px solid var(--success)">
-      <div class="sc-icon">✅</div>
-      <div class="sc-label">متوفّر</div>
-      <div class="sc-val" id="inv-stat-stock" style="color:var(--success)">0</div>
-    </div>
-    <div class="sc" style="border-right:4px solid var(--warn)">
-      <div class="sc-icon">⚠️</div>
-      <div class="sc-label">منخفض</div>
-      <div class="sc-val" id="inv-stat-low" style="color:var(--warn)">0</div>
-    </div>
-    <div class="sc" style="border-right:4px solid var(--danger)">
-      <div class="sc-icon">❌</div>
-      <div class="sc-label">منتهي</div>
-      <div class="sc-val" id="inv-stat-out" style="color:var(--danger)">0</div>
-    </div>
-  </div>
-
-  <!-- Filters -->
-  <div class="card" style="margin-bottom:14px;padding:12px 14px">
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-      <input id="inv-search" type="text" placeholder="🔍 ابحث (اسم/SKU/باركود)..." class="form-input" style="flex:1;min-width:200px;max-width:300px" oninput="renderInventoryTable()">
-      <select id="inv-filter-status" class="form-input" style="max-width:160px" onchange="renderInventoryTable()">
-        <option value="all">كل الحالات</option>
-        <option value="in_stock">متوفّر</option>
-        <option value="low">منخفض</option>
-        <option value="out">منتهي</option>
-      </select>
-      <select id="inv-filter-warehouse" class="form-input" style="max-width:200px" onchange="renderInventoryTable()">
-        <option value="">كل المخازن</option>
-      </select>
-      <span style="font-size:11px;color:var(--muted);margin-right:auto" id="inv-last-sync"></span>
-    </div>
-  </div>
-
-  <!-- Table -->
-  <div class="card">
-    <div id="inv-table-container" style="overflow-x:auto">
-      <div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div>
-    </div>
-  </div>
-</div>
-
-<!-- ===== STOCKTAKE PAGE (v240) ===== -->
-<div class="page" id="page-stocktake">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-    <h2 style="margin:0">🔍 الجرد</h2>
-    <button class="btn btn-primary btn-sm" onclick="openNewStocktake()">➕ بدء جرد جديد</button>
-  </div>
-
-  <!-- Active Session (لو فيه) -->
-  <div id="active-stocktake-card"></div>
-
-  <!-- Sessions History -->
-  <div class="card">
-    <div class="card-header">
-      <h3 style="margin:0">📋 سجل عمليات الجرد</h3>
-    </div>
-    <div id="stocktake-sessions-list" style="padding:14px">
-      <div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div>
-    </div>
-  </div>
-</div>
-
-<!-- ===== STOCKTAKE NEW SESSION MODAL ===== -->
-<div id="m-new-stocktake" class="modal-overlay" style="display:none">
-  <div class="modal" style="max-width:500px">
-    <div class="modal-header">
-      <h3 style="margin:0">🔍 بدء جرد جديد</h3>
-      <button class="modal-close" onclick="closeM('m-new-stocktake')">×</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label>المخزن:</label>
-        <select id="new-stk-warehouse" class="form-input"></select>
-      </div>
-      <div class="form-group">
-        <label>اسم الجلسة:</label>
-        <input id="new-stk-title" type="text" class="form-input" placeholder="مثلاً: جرد شهري - أكتوبر">
-      </div>
-      <div class="form-group">
-        <label>ملاحظات:</label>
-        <textarea id="new-stk-notes" class="form-input" rows="2"></textarea>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeM('m-new-stocktake')">إلغاء</button>
-      <button class="btn btn-primary" onclick="startStocktake()">🚀 ابدأ الجرد</button>
-    </div>
-  </div>
-</div>
-
-<!-- ===== STOCKTAKE SESSION DETAIL MODAL ===== -->
-<div id="m-stk-detail" class="modal-overlay" style="display:none">
-  <div class="modal" style="max-width:1100px">
-    <div class="modal-header">
-      <h3 id="stk-detail-title" style="margin:0">جلسة الجرد</h3>
-      <button class="modal-close" onclick="closeM('m-stk-detail')">×</button>
-    </div>
-    <div class="modal-body" style="max-height:75vh;overflow-y:auto">
-      <div id="stk-detail-content"></div>
-    </div>
-  </div>
-</div>
-
-<!-- ===== HR EMPLOYEES PAGE (v242) ===== -->
-<div class="page" id="page-hr-employees">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-    <h2 style="margin:0">👥 الموظفين</h2>
-    <button class="btn btn-primary btn-sm" onclick="openNewEmployee()">➕ إضافة موظف</button>
-  </div>
-
-  <!-- Stats -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px" id="hr-stats-cards">
-    <div class="sc"><div class="sc-icon">👥</div><div class="sc-label">إجمالي الموظفين</div><div class="sc-val" id="hr-stat-total">0</div></div>
-    <div class="sc" style="border-right:4px solid var(--success)"><div class="sc-icon">✅</div><div class="sc-label">نشطين</div><div class="sc-val" id="hr-stat-active" style="color:var(--success)">0</div></div>
-    <div class="sc" style="border-right:4px solid var(--accent)"><div class="sc-icon">💰</div><div class="sc-label">إجمالي المرتبات الشهرية</div><div class="sc-val" id="hr-stat-payroll" style="color:var(--accent);font-size:18px">0 ج</div></div>
-    <div class="sc" style="border-right:4px solid var(--warn)"><div class="sc-icon">💵</div><div class="sc-label">سلف نشطة</div><div class="sc-val" id="hr-stat-adv" style="color:var(--warn);font-size:18px">0 ج</div></div>
-  </div>
-
-  <div class="card" style="margin-bottom:14px;padding:12px 14px">
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-      <input id="hr-search" type="text" placeholder="🔍 ابحث (اسم/كود/تليفون/رقم قومي)..." class="form-input" style="flex:1;min-width:200px;max-width:320px" oninput="renderHrEmployeesTable()">
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="hr-show-inactive" onchange="loadHrEmployees()"> عرض المعطّلين</label>
-    </div>
-  </div>
-
-  <div class="card">
-    <div id="hr-emp-table" style="overflow-x:auto"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
-  </div>
-</div>
-
-<!-- ===== HR PAYROLL PAGE ===== -->
-<div class="page" id="page-hr-payroll">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-    <h2 style="margin:0">💰 كشف الرواتب</h2>
-    <button class="btn btn-primary btn-sm" onclick="openGeneratePayroll()">📄 إنشاء كشف جديد</button>
-  </div>
-  <div class="card">
-    <div id="hr-payroll-list" style="padding:14px"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
-  </div>
-</div>
-
-<!-- ===== HR ADVANCES PAGE ===== -->
-<div class="page" id="page-hr-advances">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-    <h2 style="margin:0">💵 السلف</h2>
-    <button class="btn btn-primary btn-sm" onclick="openNewAdvance()">➕ سلفة جديدة</button>
-  </div>
-  
-  <div class="card" style="margin-bottom:14px;padding:10px">
-    <div style="display:flex;gap:6px;flex-wrap:wrap" id="hr-adv-tabs">
-      <button class="chip on" onclick="filterAdvances('all', this)">الكل</button>
-      <button class="chip" onclick="filterAdvances('pending', this)">⏳ في الانتظار</button>
-      <button class="chip" onclick="filterAdvances('active', this)">✅ نشطة</button>
-      <button class="chip" onclick="filterAdvances('completed', this)">🏁 مكتملة</button>
-    </div>
-  </div>
-  
-  <div class="card">
-    <div id="hr-adv-table" style="overflow-x:auto"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
-  </div>
-</div>
-
-<!-- ===== HR PENALTIES PAGE ===== -->
-<div class="page" id="page-hr-penalties">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-    <h2 style="margin:0">⚠️ الجزاءات والخصومات</h2>
-    <button class="btn btn-primary btn-sm" onclick="openNewPenalty()">➕ إضافة جزاء</button>
-  </div>
-  <div class="card">
-    <div id="hr-pen-table" style="overflow-x:auto"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
-  </div>
-</div>
-
-<!-- ===== HR PURCHASES PAGE (v244) ===== -->
-<div class="page" id="page-hr-purchases">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-    <h2 style="margin:0">🛒 مشتريات الموظفين</h2>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-ghost btn-sm" onclick="openMonthlyReport()">📊 تقرير شهري</button>
-      <button class="btn btn-primary btn-sm" onclick="openManualPurchase()">➕ إضافة يدوية</button>
-    </div>
-  </div>
-
-  <!-- Stats -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
-    <div class="sc"><div class="sc-icon">🛒</div><div class="sc-label">مشتريات معلّقة</div><div class="sc-val" id="hr-purch-pending-cnt">0</div></div>
-    <div class="sc" style="border-right:4px solid var(--accent)"><div class="sc-icon">💰</div><div class="sc-label">إجمالي المعلّق</div><div class="sc-val" id="hr-purch-pending-total" style="color:var(--accent);font-size:18px">0 ج</div></div>
-    <div class="sc" style="border-right:4px solid var(--warn)"><div class="sc-icon">⚠️</div><div class="sc-label">إلغاءات تحتاج موافقة</div><div class="sc-val" id="hr-purch-cancel-cnt" style="color:var(--warn)">0</div></div>
-  </div>
-
-  <!-- Filters -->
-  <div class="card" style="margin-bottom:14px;padding:12px">
-    <div style="display:flex;gap:6px;flex-wrap:wrap" id="hr-purch-tabs">
-      <button class="chip on" onclick="filterPurchases('all', this)">الكل</button>
-      <button class="chip" onclick="filterPurchases('pending', this)">⏳ معلّقة</button>
-      <button class="chip" onclick="filterPurchases('needs_approval', this)" style="background:#fef3c7;color:#92400e;border-color:#fbbf24">⚠️ تحتاج موافقة إلغاء</button>
-      <button class="chip" onclick="filterPurchases('applied', this)">✅ متخصمة</button>
-      <button class="chip" onclick="filterPurchases('cancelled', this)">❌ ملغاة</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div id="hr-purch-table" style="overflow-x:auto"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>
-  </div>
-</div>
-
-<!-- ===== HR MODALS ===== -->
-<div id="m-hr-employee" class="modal-overlay" style="display:none">
-  <div class="modal" style="max-width:760px">
-    <div class="modal-header">
-      <h3 id="hr-emp-title" style="margin:0">إضافة موظف</h3>
-      <button class="modal-close" onclick="closeM('m-hr-employee')">×</button>
-    </div>
-    <div class="modal-body" style="max-height:75vh;overflow-y:auto">
-      <input type="hidden" id="hr-emp-id">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-        <div class="form-group"><label>الاسم بالعربي *</label><input id="hr-emp-name-ar" class="form-input" required></div>
-        <div class="form-group"><label>الاسم بالإنجليزي</label><input id="hr-emp-name-en" class="form-input"></div>
-        <div class="form-group"><label>رقم قومي</label><input id="hr-emp-nid" class="form-input"></div>
-        <div class="form-group"><label>تليفون</label><input id="hr-emp-phone" class="form-input"></div>
-        <div class="form-group"><label>إيميل</label><input id="hr-emp-email" type="email" class="form-input"></div>
-        <div class="form-group"><label>تاريخ الميلاد</label><input id="hr-emp-birth" type="date" class="form-input"></div>
-        <div class="form-group"><label>تاريخ التعيين *</label><input id="hr-emp-hire" type="date" class="form-input" required></div>
-        <div class="form-group"><label>القسم</label><select id="hr-emp-dept" class="form-input"><option value="">— بدون قسم —</option></select></div>
-        <div class="form-group"><label>الوظيفة</label><input id="hr-emp-position" class="form-input"></div>
-        <div class="form-group"><label>ربط بمندوب</label><select id="hr-emp-courier" class="form-input"><option value="">— بدون ربط —</option></select></div>
-        <div class="form-group" style="grid-column:span 2"><label>العنوان</label><input id="hr-emp-address" class="form-input"></div>
-        <div class="form-group" style="grid-column:span 2"><label>رقم حساب بنكي</label><input id="hr-emp-bank" class="form-input"></div>
-        <div class="form-group" style="grid-column:span 2;background:#eff6ff;padding:10px;border-radius:8px;border:1px dashed #93c5fd">
-          <label>📧 إيميل المشتريات (Shopify) — لربط طلبات الموظف على Shopify بمديونيته الشهرية</label>
-          <input id="hr-emp-shopify-email" type="email" class="form-input" placeholder="ahmed@cafelax.com">
-        </div>
-      </div>
-      
-      <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px">
-        <div style="font-weight:700;margin-bottom:10px;color:var(--accent)">💰 الراتب</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
-          <div class="form-group"><label>الأساسي *</label><input id="hr-emp-base" type="number" min="0" class="form-input" placeholder="0"></div>
-          <div class="form-group"><label>بدل مواصلات</label><input id="hr-emp-transport" type="number" min="0" class="form-input" placeholder="0"></div>
-          <div class="form-group"><label>بدل سكن</label><input id="hr-emp-housing" type="number" min="0" class="form-input" placeholder="0"></div>
-          <div class="form-group"><label>بدل وجبة</label><input id="hr-emp-meal" type="number" min="0" class="form-input" placeholder="0"></div>
-          <div class="form-group"><label>بدلات أخرى</label><input id="hr-emp-other-alw" type="number" min="0" class="form-input" placeholder="0"></div>
-          <div class="form-group"><label>تأمينات</label><input id="hr-emp-insurance" type="number" min="0" class="form-input" placeholder="0"></div>
-          <div class="form-group" style="grid-column:span 3"><label>ضرائب</label><input id="hr-emp-tax" type="number" min="0" class="form-input" placeholder="0"></div>
-        </div>
-      </div>
-      
-      <div class="form-group"><label>ملاحظات</label><textarea id="hr-emp-notes" class="form-input" rows="2"></textarea></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeM('m-hr-employee')">إلغاء</button>
-      <button class="btn btn-primary" onclick="saveEmployee()">💾 حفظ</button>
-    </div>
-  </div>
-</div>
-
-<div id="m-hr-advance" class="modal-overlay" style="display:none">
-  <div class="modal" style="max-width:520px">
-    <div class="modal-header"><h3 style="margin:0">💵 سلفة جديدة</h3><button class="modal-close" onclick="closeM('m-hr-advance')">×</button></div>
-    <div class="modal-body">
-      <div class="form-group"><label>الموظف *</label><select id="adv-emp" class="form-input"></select></div>
-      <div class="form-group"><label>المبلغ *</label><input id="adv-amount" type="number" min="0" step="0.01" class="form-input"></div>
-      <div class="form-group"><label>السبب</label><input id="adv-reason" class="form-input" placeholder="مثل: ظروف طارئة"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-        <div class="form-group"><label>عدد الأقساط</label><input id="adv-installments" type="number" min="1" value="1" class="form-input" oninput="updateAdvMonthly()"></div>
-        <div class="form-group"><label>القسط الشهري</label><input id="adv-monthly" type="number" min="0" step="0.01" class="form-input"></div>
-      </div>
-      <div class="form-group"><label>ملاحظات</label><textarea id="adv-notes" class="form-input" rows="2"></textarea></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeM('m-hr-advance')">إلغاء</button>
-      <button class="btn btn-primary" onclick="saveAdvance()">💾 حفظ</button>
-    </div>
-  </div>
-</div>
-
-<div id="m-hr-penalty" class="modal-overlay" style="display:none">
-  <div class="modal" style="max-width:520px">
-    <div class="modal-header"><h3 style="margin:0">⚠️ إضافة جزاء</h3><button class="modal-close" onclick="closeM('m-hr-penalty')">×</button></div>
-    <div class="modal-body">
-      <div class="form-group"><label>الموظف *</label><select id="pen-emp" class="form-input"></select></div>
-      <div class="form-group"><label>نوع الجزاء *</label>
-        <select id="pen-type" class="form-input">
-          <option value="late">⏰ تأخير</option>
-          <option value="absence">❌ غياب</option>
-          <option value="violation">⚠️ مخالفة</option>
-          <option value="performance">📉 ضعف أداء</option>
-          <option value="other">📝 آخر</option>
-        </select>
-      </div>
-      <div class="form-group"><label>المبلغ *</label><input id="pen-amount" type="number" min="0" step="0.01" class="form-input"></div>
-      <div class="form-group"><label>التاريخ *</label><input id="pen-date" type="date" class="form-input"></div>
-      <div class="form-group"><label>السبب</label><input id="pen-reason" class="form-input"></div>
-      <div class="form-group"><label>ملاحظات</label><textarea id="pen-notes" class="form-input" rows="2"></textarea></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeM('m-hr-penalty')">إلغاء</button>
-      <button class="btn btn-primary" onclick="savePenalty()">💾 حفظ</button>
-    </div>
-  </div>
-</div>
-
-<div id="m-hr-payroll-gen" class="modal-overlay" style="display:none">
-  <div class="modal" style="max-width:480px">
-    <div class="modal-header"><h3 style="margin:0">📄 إنشاء كشف رواتب</h3><button class="modal-close" onclick="closeM('m-hr-payroll-gen')">×</button></div>
-    <div class="modal-body">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-        <div class="form-group"><label>السنة</label><input id="pr-year" type="number" class="form-input"></div>
-        <div class="form-group"><label>الشهر</label><select id="pr-month" class="form-input"><option value="1">1 - يناير</option><option value="2">2 - فبراير</option><option value="3">3 - مارس</option><option value="4">4 - أبريل</option><option value="5">5 - مايو</option><option value="6">6 - يونيو</option><option value="7">7 - يوليو</option><option value="8">8 - أغسطس</option><option value="9">9 - سبتمبر</option><option value="10">10 - أكتوبر</option><option value="11">11 - نوفمبر</option><option value="12">12 - ديسمبر</option></select></div>
-      </div>
-      <div style="background:#fef3c7;border-radius:8px;padding:10px;font-size:12px;color:#92400e">
-        ⚠️ سيتم حساب الراتب لكل موظف نشط بناءً على هيكل المرتب الحالي + خصم السلف النشطة + الجزاءات المعلّقة.
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeM('m-hr-payroll-gen')">إلغاء</button>
-      <button class="btn btn-primary" onclick="generatePayroll()">🚀 إنشاء</button>
-    </div>
-  </div>
-</div>
-
-<div id="m-hr-payroll-detail" class="modal-overlay" style="display:none">
-  <div class="modal" style="max-width:1200px">
-    <div class="modal-header"><h3 id="pr-detail-title" style="margin:0">كشف الرواتب</h3><button class="modal-close" onclick="closeM('m-hr-payroll-detail')">×</button></div>
-    <div class="modal-body" style="max-height:78vh;overflow-y:auto">
-      <div id="pr-detail-content"></div>
-    </div>
-  </div>
-</div>
-
-<!-- 🆕 v244: Manual Purchase Modal -->
-<div id="m-hr-purchase" class="modal-overlay" style="display:none">
-  <div class="modal" style="max-width:520px">
-    <div class="modal-header"><h3 style="margin:0">🛒 إضافة مديونية موظف</h3><button class="modal-close" onclick="closeM('m-hr-purchase')">×</button></div>
-    <div class="modal-body">
-      <div style="background:#fef3c7;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#92400e">
-        ℹ️ لو الطلب جا من Shopify بإيميل مش متطابق مع موظف، استخدم ده عشان تربطه يدوياً.
-      </div>
-      <div class="form-group"><label>الموظف *</label><select id="purch-emp" class="form-input"></select></div>
-      <div class="form-group"><label>رقم الطلب (اختياري)</label><input id="purch-order" class="form-input" placeholder="SH-12345"></div>
-      <div class="form-group"><label>المبلغ *</label><input id="purch-amount" type="number" min="0" step="0.01" class="form-input"></div>
-      <div class="form-group"><label>تفاصيل المشتريات</label><textarea id="purch-items" class="form-input" rows="2" placeholder="منتج × 2، منتج آخر × 1..."></textarea></div>
-      <div class="form-group"><label>ملاحظات</label><textarea id="purch-notes" class="form-input" rows="2"></textarea></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeM('m-hr-purchase')">إلغاء</button>
-      <button class="btn btn-primary" onclick="saveManualPurchase()">💾 حفظ</button>
-    </div>
-  </div>
-</div>
-
-<!-- 🆕 v244: Monthly Report Modal -->
-<div id="m-hr-monthly-report" class="modal-overlay" style="display:none">
-  <div class="modal" style="max-width:900px">
-    <div class="modal-header"><h3 style="margin:0">📊 تقرير شهري - مشتريات الموظفين</h3><button class="modal-close" onclick="closeM('m-hr-monthly-report')">×</button></div>
-    <div class="modal-body" style="max-height:78vh;overflow-y:auto">
-      <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;padding:10px;background:var(--bg);border-radius:8px">
-        <label style="font-weight:700;font-size:13px">الشهر:</label>
-        <input id="mr-month" type="month" class="form-input" style="max-width:200px" onchange="loadMonthlyReport()">
-        <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨️ طباعة</button>
-      </div>
-      <div id="mr-content"><div style="text-align:center;padding:30px;color:var(--muted)">⏳ اختر شهر</div></div>
-    </div>
-  </div>
-</div>
-
-<!-- ===== EXPIRY PAGE ===== -->
-<div class="page" id="page-expiry">
-
-  <!-- Stats Bar -->
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
-    <div class="sc" style="border-right:4px solid var(--danger)">
-      <div class="sc-icon">🔴</div>
-      <div class="sc-label">منتهية الصلاحية</div>
-      <div class="sc-val" id="exp-stat-expired" style="color:var(--danger)">0</div>
-    </div>
-    <div class="sc" style="border-right:4px solid var(--warn)">
-      <div class="sc-icon">🟡</div>
-      <div class="sc-label">تنتهي خلال 30 يوم</div>
-      <div class="sc-val" id="exp-stat-soon" style="color:var(--warn)">0</div>
-    </div>
-    <div class="sc" style="border-right:4px solid var(--info)">
-      <div class="sc-icon">🔵</div>
-      <div class="sc-label">تنتهي خلال 90 يوم</div>
-      <div class="sc-val" id="exp-stat-ok" style="color:var(--info)">0</div>
-    </div>
-    <div class="sc" style="border-right:4px solid var(--success)">
-      <div class="sc-icon">✅</div>
-      <div class="sc-label">إجمالي المنتجات</div>
-      <div class="sc-val" id="exp-stat-total" style="color:var(--success)">0</div>
-    </div>
-  </div>
-
-  <!-- Controls -->
-  <div class="card" style="margin-bottom:14px">
-    <div class="card-body" style="padding:10px 14px">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <!-- Filter chips -->
-        <div style="display:flex;gap:5px;flex-wrap:wrap" id="exp-filter-chips">
-          <button class="chip on" onclick="expSetFilter('all',this)">الكل</button>
-          <button class="chip" onclick="expSetFilter('expired',this)" style="color:var(--danger)">🔴 منتهية</button>
-          <button class="chip" onclick="expSetFilter('soon',this)" style="color:var(--warn)">🟡 خلال 30 يوم</button>
-          <button class="chip" onclick="expSetFilter('ok',this)" style="color:var(--info)">🔵 خلال 90 يوم</button>
-          <button class="chip" onclick="expSetFilter('safe',this)" style="color:var(--success)">✅ آمنة</button>
-        </div>
-        <!-- Search -->
-        <input id="exp-search" placeholder="ابحث عن منتج..." oninput="renderExpiryPage()"
-          style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;width:180px">
-        <!-- Alert days -->
-        <div style="display:flex;align-items:center;gap:6px;font-size:12px">
-          <label style="color:var(--muted)">تنبيه قبل:</label>
-          <input id="exp-alert-days" type="number" value="30" min="1" max="365" onchange="saveExpSettings()"
-            style="width:55px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;text-align:center">
-          <span style="color:var(--muted)">يوم</span>
-        </div>
-        <div style="margin-right:auto;display:flex;gap:6px">
-          <button class="btn btn-ghost btn-sm" onclick="syncExpiryFromShopify()">🔄 مزامنة Shopify</button>
-          <button class="btn btn-ghost btn-sm" onclick="printExpiryReport()">🖨️ طباعة التصفية</button>
-          <button class="btn btn-primary btn-sm" onclick="openAddExpiry()">+ إضافة منتج</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Table -->
-  <div class="card">
-    <div class="card-hd">
-      <h3>⏳ قائمة الصلاحيات</h3>
-      <span id="exp-count" style="font-size:12px;color:var(--muted)"></span>
-      <button class="btn btn-ghost btn-sm" onclick="expBulkDelete()" style="margin-right:auto;color:var(--danger)">🗑️ حذف المحددة</button>
-    </div>
-    <div class="tbl-wrap"><table>
-      <thead><tr>
-        <th style="width:30px"><input type="checkbox" id="exp-check-all" onchange="expToggleAll(this.checked)"></th>
-        <th>المنتج</th>
-        <th>الباركود / SKU</th>
-        <th>الكمية</th>
-        <th>تاريخ الانتهاء</th>
-        <th>الأيام المتبقية</th>
-        <th>الحالة</th>
-        <th>إجراءات</th>
-      </tr></thead>
-      <tbody id="exp-tbody"></tbody>
-    </table></div>
-  </div>
-</div>
-
-<!-- MODAL: إضافة/تعديل منتج -->
-<div class="overlay" id="m-expiry">
-  <div class="modal" style="width:500px">
-    <div class="mhd"><h3 id="exp-modal-title">➕ إضافة منتج</h3><button class="xbtn" onclick="closeM('m-expiry')">✕</button></div>
-    <div class="mbody">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="fg" style="grid-column:1/-1"><label>اسم المنتج *</label><input id="exp-name" placeholder="مثال: نسكافيه جولد 200 جرام"></div>
-        <div class="fg"><label>SKU / باركود</label><input id="exp-sku" placeholder="اختياري"></div>
-        <div class="fg"><label>الكمية</label><input id="exp-qty" type="number" value="1" min="0"></div>
-        <div class="fg"><label>تاريخ الانتهاء *</label><input id="exp-date" type="date"></div>
-        <div class="fg"><label>الفئة</label><input id="exp-category" placeholder="مثال: قهوة، شاي..."></div>
-        <div class="fg" style="grid-column:1/-1"><label>ملاحظات</label><textarea id="exp-note" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px"></textarea></div>
-      </div>
-    </div>
-    <div class="mft">
-      <button class="btn btn-ghost" onclick="closeM('m-expiry')">إلغاء</button>
-      <button class="btn btn-primary" onclick="saveExpiry()">💾 حفظ</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL: إضافة/تعديل مستخدم -->
-<div class="overlay" id="m-add-user">
-  <div class="modal" style="width:520px;max-height:90vh;overflow-y:auto">
-    <div class="mhd"><h3 id="add-user-modal-title">+ مستخدم جديد</h3><button class="xbtn" onclick="closeM('m-add-user')">✕</button></div>
-    <div class="mbody">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px">
-        <div class="fg"><label>الاسم الكامل *</label><input id="au-name" placeholder="مثال: أحمد محمد"></div>
-        <div class="fg"><label>اسم المستخدم *</label><input id="au-username" placeholder="مثال: ahmed" style="direction:ltr"></div>
-      </div>
-      <div class="fg">
-        <label>كلمة المرور * <span id="au-pass-hint" style="font-size:11px;color:var(--muted);font-weight:400">(اتركها فارغة للإبقاء على القديمة)</span></label>
-        <input type="password" id="au-pass" placeholder="كلمة المرور">
-      </div>
-      <div class="fg">
-        <label style="margin-bottom:8px;display:block">الصفحات المتاحة *</label>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
-          <button type="button" class="btn btn-ghost btn-xs" onclick="auSelectAll(true)">تحديد الكل</button>
-          <button type="button" class="btn btn-ghost btn-xs" onclick="auSelectAll(false)">إلغاء الكل</button>
-        </div>
-        <div id="au-pages-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--bg);border-radius:8px;padding:8px;border:1px solid var(--border)">
-          <!-- يتولد تلقائياً من buildPermissionsGrid() -->
-        </div>
-      </div>
-    </div>
-    <div class="mft">
-      <button class="btn btn-ghost" onclick="closeM('m-add-user')">إلغاء</button>
-      <button class="btn btn-primary" onclick="saveUser()">💾 حفظ</button>
-    </div>
-  </div>
-</div>
-
-<div class="overlay" id="m-order-history"><div class="modal" style="width:min(560px,96vw);max-height:85vh;overflow-y:auto">
-  <div class="mhd"><h3>📋 تاريخ الطلب <span id="oh-order-id" style="color:var(--accent);font-size:13px"></span></h3><button class="xbtn" onclick="closeM('m-order-history')">✕</button></div>
-  <div id="oh-content" style="padding:16px">
-    <div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div>
-  </div>
-</div></div>
-
-
-<!-- MERGE ORDERS MODAL -->
-<div class="overlay" id="m-merge-orders"><div class="modal" style="width:min(600px,96vw);max-height:90vh;overflow-y:auto">
-  <div class="mhd"><h3>🔗 دمج الطلبات</h3><button class="xbtn" onclick="closeM('m-merge-orders')">✕</button></div>
-  <div style="padding:16px">
-    <div id="merge-orders-list" style="margin-bottom:16px"></div>
-    <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:14px">
-      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px">الطلب الرئيسي (الباقي نشط)</div>
-      <select id="merge-primary-sel" onchange="renderMergeSummary()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px"></select>
-    </div>
-    <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:14px">
-      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px">تكلفة الشحن</div>
-      <div style="display:flex;gap:10px">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-          <input type="radio" name="merge-ship-mode" value="one" checked onchange="updateMergeShip()"> شحن واحد
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-          <input type="radio" name="merge-ship-mode" value="all" onchange="updateMergeShip()"> شحن لكل طلب
-        </label>
-        <input id="merge-ship-val" type="number" placeholder="تكلفة الشحن" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">
-      </div>
-    </div>
-    <div id="merge-summary" style="background:var(--accent-light);border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn btn-ghost" onclick="closeM('m-merge-orders')">إلغاء</button>
-      <button class="btn btn-primary" onclick="confirmMergeOrders()">🔗 تأكيد الدمج</button>
-    </div>
-  </div>
 </div></div>
 
 <!-- AI Assistant Floating Button + Panel -->
