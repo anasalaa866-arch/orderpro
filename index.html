@@ -1966,13 +1966,13 @@ tr:hover td{background:#fafbff}
   <div class="card" style="margin-bottom:14px;padding:12px 14px">
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <input id="inv-search" type="text" placeholder="🔍 ابحث (اسم/SKU/باركود)..." class="form-input" style="flex:1;min-width:200px;max-width:300px" oninput="invDebouncedRender()">
-      <select id="inv-filter-status" class="form-input" style="max-width:160px" onchange="renderInventoryTable()">
+      <select id="inv-filter-status" class="form-input" style="max-width:160px" onchange="invGoToPage(1)">
         <option value="all">كل الحالات</option>
         <option value="in_stock">متوفّر</option>
         <option value="low">منخفض</option>
         <option value="out">منتهي</option>
       </select>
-      <select id="inv-filter-warehouse" class="form-input" style="max-width:200px" onchange="renderInventoryTable()">
+      <select id="inv-filter-warehouse" class="form-input" style="max-width:200px" onchange="invGoToPage(1)">
         <option value="">كل المخازن</option>
       </select>
       <span style="font-size:11px;color:var(--muted);margin-right:auto" id="inv-last-sync"></span>
@@ -1991,16 +1991,28 @@ tr:hover td{background:#fafbff}
 <div class="page" id="page-stocktake">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">🔍 الجرد</h2>
-    <button class="btn btn-primary btn-sm" onclick="openNewStocktake()">➕ بدء جرد جديد</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="openStocktakers()" style="color:#16a34a;border-color:#16a34a">👷 موظفي الجرد</button>
+      <button class="btn btn-primary btn-sm" onclick="openNewStocktake()">➕ بدء جرد جديد</button>
+    </div>
   </div>
+
+  <!-- 🆕 v256: Stats -->
+  <div id="stk-stats-container"></div>
 
   <!-- Active Session (لو فيه) -->
   <div id="active-stocktake-card"></div>
 
   <!-- Sessions History -->
   <div class="card">
-    <div class="card-header">
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:12px 14px">
       <h3 style="margin:0">📋 سجل عمليات الجرد</h3>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">
+        <button class="chip stk-filter-chip on" onclick="setStkHistoryFilter('all',this)">الكل</button>
+        <button class="chip stk-filter-chip" onclick="setStkHistoryFilter('approved',this)">✅ معتمد</button>
+        <button class="chip stk-filter-chip" onclick="setStkHistoryFilter('with_diff',this)">⚠️ بفروقات</button>
+        <button class="chip stk-filter-chip" onclick="setStkHistoryFilter('cancelled',this)">❌ ملغي</button>
+      </div>
     </div>
     <div id="stocktake-sessions-list" style="padding:14px">
       <div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div>
@@ -2009,6 +2021,69 @@ tr:hover td{background:#fafbff}
 </div>
 
 <!-- ===== STOCKTAKE NEW SESSION MODAL ===== -->
+<!-- 🆕 v257: Stocktakers Management Modal -->
+<div id="m-stocktakers" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <h3 style="margin:0">👷 موظفي الجرد</h3>
+      <button class="modal-close" onclick="closeM('m-stocktakers')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#eff6ff;color:#1e40af;padding:12px;border-radius:8px;font-size:12px;margin-bottom:14px;line-height:1.7">
+        💡 <strong>موظف الجرد</strong> هو شخص متخصص بيستخدم تطبيق Stars بس لتسجيل الجرد - مش بيوصّل طلبات.
+        <br>لما يفتح Stars، هيشوف قسم الجرد بس - مش هيشوف الطلبات.
+      </div>
+      
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-weight:700">القائمة الحالية:</div>
+        <button class="btn btn-primary btn-sm" onclick="openNewStocktaker()">➕ موظف جرد جديد</button>
+      </div>
+      
+      <div id="stocktakers-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-stocktakers')">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Stocktaker Modal -->
+<div id="m-new-stocktaker" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <h3 style="margin:0" id="stocktaker-modal-title">👷 إضافة موظف جرد</h3>
+      <button class="modal-close" onclick="closeM('m-new-stocktaker')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="stk-emp-id">
+      <div class="form-group">
+        <label>الاسم *</label>
+        <input id="stk-emp-name" class="form-input" placeholder="اسم الموظف">
+      </div>
+      <div class="form-group">
+        <label>التليفون</label>
+        <input id="stk-emp-phone" class="form-input" placeholder="01xxxxxxxxx" type="tel">
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+        <div style="font-weight:700;margin-bottom:8px;color:var(--accent)">⭐ بيانات دخول Stars (مهم)</div>
+        <div class="form-group">
+          <label>اسم المستخدم *</label>
+          <input id="stk-emp-username" class="form-input" placeholder="مثلاً: ahmed_stk" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>كلمة المرور *</label>
+          <input id="stk-emp-password" class="form-input" placeholder="على الأقل 4 حروف" type="text" autocomplete="off">
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">💡 الموظف سيستخدم هذه البيانات لدخول تطبيق Stars</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-new-stocktaker')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveStocktaker()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
 <div id="m-new-stocktake" class="modal-overlay" style="display:none">
   <div class="modal" style="max-width:600px">
     <div class="modal-header">
@@ -2060,6 +2135,19 @@ tr:hover td{background:#fafbff}
       <div class="form-group">
         <label>ملاحظات:</label>
         <textarea id="new-stk-notes" class="form-input" rows="2"></textarea>
+      </div>
+      
+      <!-- 🆕 v258: خيار إظهار كمية النظام للموظف -->
+      <div class="form-group" style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:12px">
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:700">
+          <input type="checkbox" id="new-stk-show-system" style="margin-top:3px;width:18px;height:18px">
+          <div>
+            <div>👁️ إظهار الكمية الفعلية بالنظام (on_hand) للموظف</div>
+            <div style="font-size:11px;color:#92400e;font-weight:400;margin-top:4px">
+              ⚠️ <strong>ينصح بإلغاء التحديد</strong> عشان الجرد يكون <strong>أعمى (blind)</strong> - الموظف ما يشوفش الكمية الموجودة في النظام، فيعدّ بدقة بدون تأثر.
+            </div>
+          </div>
+        </label>
       </div>
       
       <div id="stk-mode-info" style="background:#eff6ff;color:#1e40af;padding:10px;border-radius:8px;font-size:12px;margin-top:6px">
@@ -2957,7 +3045,50 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v254 — STOCKTAKE COMPLETE =====
+// ===== OrderPro v258 — STOCKTAKE LOGIC REDESIGN =====
+// 2026-05-05: المنطق الجديد للجرد
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 1. ✅ checkbox "إظهار on_hand للموظف" عند بدء الجلسة
+// 2. ✅ default = جرد أعمى (الموظف لا يشوف كميات النظام)
+// 3. ✅ عرض entries (المواقع المتعددة) في الجدول
+// 4. ✅ Shopify update يكتب على on_hand بدل available
+// 5. ✅ on_hand هو المعروض للموظف لو الإظهار مفعّل
+// 6. ✅ web يستخدم Grid mode فقط (الـ scan في Stars)
+// =================================
+// السابق: v257 — STOCKTAKER ROLE
+// 2026-05-05: role منفصل لموظفي الجرد
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 1. ✅ زرار 👷 موظفي الجرد في صفحة الجرد
+// 2. ✅ modal لإدارة الموظفين (إضافة/تعديل/حذف)
+// 3. ✅ stocktaker مش بيظهر في قائمة المناديب
+// 4. ✅ role جديد في dropdown تغيير الدور
+// 5. ✅ كل موظف بيدخل Stars بـ username + password
+// =================================
+// السابق: v256 — STOCKTAKE Phase 4+5
+// 2026-05-05: تقرير PDF + سجل الجرد التاريخي
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Phase 4 (PDF):
+// 1. ✅ زرار 📄 تقرير PDF في الجلسة
+// 2. ✅ تقرير شامل: stats + فروقات + uncounted
+// 3. ✅ قيمة الفائض/العجز (لو السعر متاح)
+// 4. ✅ توقيعات للمشرف والمدير
+// 5. ✅ Save as PDF من المتصفح للإيميل
+// 
+// Phase 5 (السجل):
+// 1. ✅ stats cards (إجمالي / معتمد / نشط / آخر جرد)
+// 2. ✅ filter chips (الكل / معتمد / بفروقات / ملغي)
+// 3. ✅ كل جلسة بـ stats مفصلة
+// 4. ✅ زرار 📄 PDF مباشر من السجل
+// =================================
+// السابق: v255 — INVENTORY PAGINATION
+// 2026-05-05: Pagination 50/صفحة بدل virtual scrolling
+// 1. ✅ 50 منتج لكل صفحة
+// 2. ✅ Smart pagination (1 ... 5 6 [7] 8 9 ... 30)
+// 3. ✅ زراير السابق/التالي
+// 4. ✅ عداد ظاهر (عرض X-Y من الإجمالي)
+// 5. ✅ البحث/الفلتر يرجع للصفحة 1
+// =================================
+// السابق: v254 — STOCKTAKE COMPLETE
 // 2026-05-05: إكمال نظام الجرد بالكامل
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 1. ✅ 3 modes: كامل / جزئي / Scan فقط
@@ -4714,18 +4845,18 @@ function _renderCdashChart(daily){
 
 function renderCouriers(){
   // فلترة: مش نعرض المحضرين (هما عندهم صفحة منفصلة لو احتجنا)
-  const visibleCouriers = couriers.filter(c => (c.role || 'courier') !== 'preparer');
+  const visibleCouriers = couriers.filter(c => (c.role || 'courier') !== 'preparer' && (c.role || 'courier') !== 'stocktaker');
   $('courier-count').textContent=visibleCouriers.length+' مندوب';
   $('couriers-grid').innerHTML=visibleCouriers.map((c,i)=>{
     const active=oByC(c.id,'جاري التوصيل').length,done=oByC(c.id,'مكتمل').length,tot=active+done,rate=tot?Math.round(done/tot*100):0;
     const hasStarsAccount = c.username ? '⭐' : '';
     const role = c.role || 'courier';
-    const roleLabel = role === 'preparer' ? '📦 محضر' : role === 'shop' ? '🏪 محل' : '🛵 مندوب';
-    const roleColor = role === 'preparer' ? '#7c3aed' : role === 'shop' ? '#0891b2' : '#64748b';
+    const roleLabel = role === 'preparer' ? '📦 محضر' : role === 'shop' ? '🏪 محل' : role === 'stocktaker' ? '🔍 جرد' : '🛵 مندوب';
+    const roleColor = role === 'preparer' ? '#7c3aed' : role === 'shop' ? '#0891b2' : role === 'stocktaker' ? '#16a34a' : '#64748b';
     return`<div class="cc"><div class="cc-av" style="background:${COLORS[i%COLORS.length]}">${c.name[0]}</div><div class="cc-name">${c.name} ${hasStarsAccount}</div><div class="cc-info"><span style="background:${roleColor}20;color:${roleColor};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">${roleLabel}</span></div><div class="cc-info">📱 ${c.phone}</div><div class="cc-info">📍 ${c.zone}</div><div class="cc-info">🚗 ${c.vehicle}</div><div class="cc-info">💰 شحن: <strong>${c.ship} ج</strong></div><div class="cc-info" style="margin-top:5px">📦 نشط: <strong>${active}</strong> | مكتمل: <strong>${done}</strong></div><div class="pbar"><div class="pbar-f" style="width:${rate}%"></div></div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
         <span class="cc-status s-active">${c.status}</span>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-xs" onclick="changeCourierRole(${c.id})" style="color:#7c3aed;border-color:#7c3aed" title="تغيير الدور (مندوب/محضر/محل)">🎭 الدور</button>
+          <button class="btn btn-ghost btn-xs" onclick="changeCourierRole(${c.id})" style="color:#7c3aed;border-color:#7c3aed" title="تغيير الدور">🎭 الدور</button>
           <button class="btn btn-ghost btn-xs" onclick="openStarsCredentials(${c.id})" style="color:#d4af37;border-color:#d4af37" title="Cafelax Stars — حساب دخول التطبيق">⭐ ${c.username?'تعديل دخول':'إنشاء دخول'}</button>
           <button class="btn btn-ghost btn-xs" onclick="openEditCourier(${c.id})" style="color:var(--accent);border-color:var(--accent)">✏️ تعديل</button>
           <button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="delCourier(${c.id})">✕</button>
@@ -4734,19 +4865,22 @@ function renderCouriers(){
   saveCouriers();refreshSelects();
 }
 
-// ===== Change courier role (courier/preparer/shop) =====
+// ===== Change courier role (courier/preparer/shop/stocktaker) =====
 async function changeCourierRole(courierId){
   const c = couriers.find(x => x.id == courierId);
   if(!c){ toast('❗ المندوب غير موجود'); return; }
   const current = c.role || 'courier';
-  const opts = `الدور الحالي: ${current === 'preparer' ? 'محضر' : current === 'shop' ? 'محل' : 'مندوب'}\n\n` +
+  const currentLabel = current === 'preparer' ? 'محضر' : current === 'shop' ? 'محل' : current === 'stocktaker' ? 'جرد' : 'مندوب';
+  const opts = `الدور الحالي: ${currentLabel}\n\n` +
                `اختر الدور الجديد:\n` +
                `1 = مندوب توصيل\n` +
                `2 = موظف تحضير (باركود)\n` +
-               `3 = موظف محل (Pickup)`;
-  const choice = prompt(opts, current === 'preparer' ? '2' : current === 'shop' ? '3' : '1');
+               `3 = موظف محل (Pickup)\n` +
+               `4 = موظف جرد (Stocktaker)`;
+  const defaultChoice = current === 'preparer' ? '2' : current === 'shop' ? '3' : current === 'stocktaker' ? '4' : '1';
+  const choice = prompt(opts, defaultChoice);
   if(choice === null) return;
-  const roleMap = { '1': 'courier', '2': 'preparer', '3': 'shop' };
+  const roleMap = { '1': 'courier', '2': 'preparer', '3': 'shop', '4': 'stocktaker' };
   const newRole = roleMap[choice.trim()];
   if(!newRole){ toast('❌ اختيار غير صحيح'); return; }
   try{
@@ -13594,12 +13728,10 @@ function renderInventoryStats(){
   }
 }
 
-// 🆕 v253: Virtual Scrolling state
+// 🆕 v255: Pagination state (بدل virtual scrolling)
 let _invFilteredItems = [];
-let _invRowHeight = 56;
-let _invVisibleStart = 0;
-let _invVisibleEnd = 0;
-const _invBufferRows = 10;
+let _invCurrentPage = 1;
+const _invPageSize = 50;
 
 // 🆕 v253: Debounced render للبحث (250ms delay)
 let _invSearchTimer = null;
@@ -13607,6 +13739,7 @@ function invDebouncedRender(){
   if(_invSearchTimer) clearTimeout(_invSearchTimer);
   _invSearchTimer = setTimeout(() => {
     _invSearchTimer = null;
+    _invCurrentPage = 1; // رجع للصفحة الأولى عند البحث
     renderInventoryTable();
   }, 250);
 }
@@ -13645,68 +13778,21 @@ function renderInventoryTable(){
     return;
   }
   
+  // 🆕 v255: Pagination logic
+  const totalPages = Math.ceil(items.length / _invPageSize);
+  if(_invCurrentPage > totalPages) _invCurrentPage = totalPages;
+  if(_invCurrentPage < 1) _invCurrentPage = 1;
+  
+  const startIdx = (_invCurrentPage - 1) * _invPageSize;
+  const endIdx = Math.min(startIdx + _invPageSize, items.length);
+  const pageItems = items.slice(startIdx, endIdx);
+  
   // ابني الـ columns headers
   const whCols = _invWarehouses.map(w => 
     `<th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);min-width:90px">${escapeHtml(w.name)}</th>`
   ).join('');
   
-  // 🆕 v253: Virtual scrolling structure
-  const totalHeight = items.length * _invRowHeight;
-  const itemsCountStr = `<div style="padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)">📊 عرض ${items.length.toLocaleString()} منتج</div>`;
-  
-  container.innerHTML = `
-    ${itemsCountStr}
-    <div style="position:relative;overflow:hidden">
-      <!-- Sticky header -->
-      <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
-        <thead style="background:var(--bg)">
-          <tr>
-            <th style="text-align:right;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:auto">المنتج</th>
-            ${whCols}
-            <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:80px">الإجمالي</th>
-            <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:100px">الحالة</th>
-            <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:60px">حركة</th>
-          </tr>
-        </thead>
-      </table>
-      <!-- Virtual scroll viewport -->
-      <div id="inv-vscroll-viewport" style="height:600px;overflow-y:auto;position:relative" onscroll="invHandleScroll(this)">
-        <!-- Spacer للارتفاع الكامل -->
-        <div id="inv-vscroll-spacer" style="height:${totalHeight}px;position:relative">
-          <!-- Visible rows table absolutely positioned -->
-          <table id="inv-vscroll-rows" style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;position:absolute;top:0;left:0;right:0">
-            <tbody id="inv-tbody-vscroll"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  `;
-  
-  // ارسم الصفوف الأولى
-  _invVisibleStart = 0;
-  invRenderVisibleRows();
-}
-
-// 🆕 v253: Render visible rows only
-function invRenderVisibleRows(){
-  const tbody = document.getElementById('inv-tbody-vscroll');
-  const table = document.getElementById('inv-vscroll-rows');
-  const viewport = document.getElementById('inv-vscroll-viewport');
-  if(!tbody || !table || !viewport) return;
-  
-  const viewportHeight = viewport.clientHeight;
-  const visibleCount = Math.ceil(viewportHeight / _invRowHeight);
-  
-  const start = Math.max(0, _invVisibleStart - _invBufferRows);
-  const end = Math.min(_invFilteredItems.length, _invVisibleStart + visibleCount + _invBufferRows);
-  _invVisibleEnd = end;
-  
-  const visibleItems = _invFilteredItems.slice(start, end);
-  
-  // ضع table في الموقع الصحيح
-  table.style.transform = `translateY(${start * _invRowHeight}px)`;
-  
-  tbody.innerHTML = visibleItems.map(item => {
+  const rows = pageItems.map(item => {
     const statusBadge = item.status === 'out' 
       ? '<span class="badge" style="background:#fee2e2;color:#991b1b">❌ منتهي</span>'
       : item.status === 'low'
@@ -13717,47 +13803,105 @@ function invRenderVisibleRows(){
       const lvl = item.levels[w.id];
       const qty = lvl ? lvl.qty : 0;
       const color = qty <= 0 ? 'var(--danger)' : qty <= (lvl?.reorder || 0) ? 'var(--warn)' : 'var(--text)';
-      return `<td style="text-align:center;font-weight:700;color:${color};min-width:90px;height:${_invRowHeight}px">${qty}</td>`;
+      return `<td style="text-align:center;font-weight:700;color:${color}">${qty}</td>`;
     }).join('');
     
     const img = item.imageUrl 
       ? `<img src="${escapeHtml(item.imageUrl)}" loading="lazy" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:#f1f5f9">`
       : '<div style="width:36px;height:36px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:14px">📦</div>';
     
-    return `<tr style="border-bottom:1px solid var(--border);height:${_invRowHeight}px">
+    return `<tr style="border-bottom:1px solid var(--border)">
       <td style="padding:8px 10px">
         <div style="display:flex;gap:10px;align-items:center">
           ${img}
           <div style="overflow:hidden">
-            <div style="font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.productTitle)}${item.variantTitle ? ' - ' + escapeHtml(item.variantTitle) : ''}</div>
-            <div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.sku || '—')}${item.barcode ? ' · ' + escapeHtml(item.barcode) : ''}</div>
+            <div style="font-weight:700;font-size:12px">${escapeHtml(item.productTitle)}${item.variantTitle ? ' - ' + escapeHtml(item.variantTitle) : ''}</div>
+            <div style="font-size:10px;color:var(--muted)">${escapeHtml(item.sku || '—')}${item.barcode ? ' · ' + escapeHtml(item.barcode) : ''}</div>
           </div>
         </div>
       </td>
       ${whCells}
-      <td style="text-align:center;font-weight:800;font-size:14px;width:80px">${item.totalQty}</td>
-      <td style="text-align:center;width:100px">${statusBadge}</td>
-      <td style="text-align:center;width:60px">
+      <td style="text-align:center;font-weight:800;font-size:14px">${item.totalQty}</td>
+      <td style="text-align:center">${statusBadge}</td>
+      <td style="text-align:center">
         <button class="btn btn-ghost btn-xs" onclick="showProductHistory('${escapeHtml(item.variantId)}','${escapeHtml((item.productTitle||'').replace(/'/g,"\\'"))}')">📜</button>
       </td>
     </tr>`;
   }).join('');
+  
+  // 🆕 v255: Pagination controls
+  const paginationHtml = renderInvPagination(items.length, totalPages);
+  
+  container.innerHTML = `
+    <div style="padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>📊 عرض ${startIdx + 1}-${endIdx} من ${items.length.toLocaleString()} منتج</div>
+      <div>صفحة ${_invCurrentPage} من ${totalPages}</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:700px">
+      <thead style="background:var(--bg)">
+        <tr>
+          <th style="text-align:right;padding:10px;font-size:11px;font-weight:700;color:var(--muted)">المنتج</th>
+          ${whCols}
+          <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:80px">الإجمالي</th>
+          <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:100px">الحالة</th>
+          <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:60px">حركة</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${paginationHtml}
+  `;
 }
 
-// 🆕 v253: Scroll handler
-let _invScrollTimer = null;
-function invHandleScroll(viewport){
-  // throttle - ما تحدّثش كل scroll event، حدّث كل 16ms (60fps)
-  if(_invScrollTimer) return;
-  _invScrollTimer = setTimeout(() => {
-    _invScrollTimer = null;
-    const scrollTop = viewport.scrollTop;
-    const newStart = Math.floor(scrollTop / _invRowHeight);
-    if(Math.abs(newStart - _invVisibleStart) >= _invBufferRows / 2){
-      _invVisibleStart = newStart;
-      invRenderVisibleRows();
+// 🆕 v255: Smart pagination (مع ... لو الصفحات كتيرة)
+function renderInvPagination(totalItems, totalPages){
+  if(totalPages <= 1) return '';
+  
+  const cur = _invCurrentPage;
+  const pages = [];
+  
+  // Logic: عرض أول صفحة، آخر صفحة، الحالية و2 جنبها
+  // مثلاً: 1 ... 5 6 [7] 8 9 ... 30
+  
+  pages.push(1);
+  if(cur - 2 > 2) pages.push('...');
+  for(let i = Math.max(2, cur - 2); i <= Math.min(totalPages - 1, cur + 2); i++){
+    pages.push(i);
+  }
+  if(cur + 2 < totalPages - 1) pages.push('...');
+  if(totalPages > 1) pages.push(totalPages);
+  
+  // أزل المتكرر
+  const uniquePages = [...new Set(pages)];
+  
+  const btnStyle = 'min-width:36px;padding:6px 10px;border:1px solid var(--border);background:#fff;cursor:pointer;font-family:Cairo,sans-serif;font-size:12px;border-radius:6px';
+  const activeBtnStyle = 'min-width:36px;padding:6px 10px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:default;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;border-radius:6px';
+  const disabledStyle = 'min-width:36px;padding:6px 10px;border:1px solid var(--border);background:#f9fafb;color:#cbd5e1;cursor:not-allowed;font-family:Cairo,sans-serif;font-size:12px;border-radius:6px';
+  
+  const buttons = uniquePages.map(p => {
+    if(p === '...'){
+      return `<span style="padding:6px 4px;color:var(--muted)">...</span>`;
     }
-  }, 16);
+    if(p === cur){
+      return `<button style="${activeBtnStyle}">${p}</button>`;
+    }
+    return `<button style="${btnStyle}" onclick="invGoToPage(${p})">${p}</button>`;
+  }).join('');
+  
+  return `
+    <div style="display:flex;justify-content:center;align-items:center;gap:6px;padding:14px;border-top:1px solid var(--border);flex-wrap:wrap;background:#fafbfc">
+      <button style="${cur === 1 ? disabledStyle : btnStyle}" ${cur === 1 ? 'disabled' : `onclick="invGoToPage(${cur - 1})"`}>← السابق</button>
+      ${buttons}
+      <button style="${cur === totalPages ? disabledStyle : btnStyle}" ${cur === totalPages ? 'disabled' : `onclick="invGoToPage(${cur + 1})"`}>التالي →</button>
+    </div>
+  `;
+}
+
+function invGoToPage(page){
+  _invCurrentPage = page;
+  renderInventoryTable();
+  // Scroll to top of table
+  document.getElementById('inv-table-container')?.scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
 async function syncInventoryLevels(){
@@ -13821,17 +13965,156 @@ async function showProductHistory(variantId, productTitle){
 // 🆕 v240: STOCKTAKE PAGE
 // ============================================================
 
+// ============================================================
+// 🆕 v257: STOCKTAKERS MANAGEMENT
+// ============================================================
+function openStocktakers(){
+  renderStocktakersList();
+  openM('m-stocktakers');
+}
+
+function renderStocktakersList(){
+  const container = document.getElementById('stocktakers-list');
+  if(!container) return;
+  
+  const stocktakers = couriers.filter(c => (c.role || 'courier') === 'stocktaker');
+  
+  if(!stocktakers.length){
+    container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);background:var(--bg);border-radius:10px"><div style="font-size:48px;opacity:.3">👷</div><div>مفيش موظفي جرد. اضغط "➕ موظف جرد جديد" لإضافة أول واحد.</div></div>';
+    return;
+  }
+  
+  container.innerHTML = stocktakers.map(s => `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-weight:700;font-size:13px;display:flex;gap:6px;align-items:center">
+          <span style="background:#16a34a20;color:#16a34a;padding:2px 8px;border-radius:4px;font-size:11px">🔍 جرد</span>
+          ${escapeHtml(s.name)}
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">📱 ${escapeHtml(s.phone || '—')}</div>
+        <div style="font-size:11px;color:var(--muted)">⭐ Stars: ${s.username ? `<strong>${escapeHtml(s.username)}</strong>` : '<span style="color:var(--danger)">مفيش حساب</span>'}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-xs" onclick="editStocktaker(${s.id})" style="color:var(--accent)">✏️ تعديل</button>
+        <button class="btn btn-ghost btn-xs" onclick="deleteStocktaker(${s.id})" style="color:var(--danger)">🗑️ حذف</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openNewStocktaker(){
+  document.getElementById('stk-emp-id').value = '';
+  document.getElementById('stocktaker-modal-title').textContent = '👷 إضافة موظف جرد';
+  ['stk-emp-name','stk-emp-phone','stk-emp-username','stk-emp-password'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  openM('m-new-stocktaker');
+}
+
+function editStocktaker(id){
+  const s = couriers.find(c => c.id == id);
+  if(!s) return;
+  document.getElementById('stk-emp-id').value = id;
+  document.getElementById('stocktaker-modal-title').textContent = '✏️ تعديل موظف جرد';
+  document.getElementById('stk-emp-name').value = s.name || '';
+  document.getElementById('stk-emp-phone').value = s.phone || '';
+  document.getElementById('stk-emp-username').value = s.username || '';
+  document.getElementById('stk-emp-password').value = ''; // ما نظهرش الباسورد
+  openM('m-new-stocktaker');
+}
+
+async function saveStocktaker(){
+  const id = document.getElementById('stk-emp-id').value;
+  const name = document.getElementById('stk-emp-name').value.trim();
+  const phone = document.getElementById('stk-emp-phone').value.trim();
+  const username = document.getElementById('stk-emp-username').value.trim().toLowerCase();
+  const password = document.getElementById('stk-emp-password').value.trim();
+  
+  if(!name){ toast('❌ الاسم مطلوب'); return; }
+  if(!username){ toast('❌ اسم المستخدم مطلوب'); return; }
+  if(!id && !password){ toast('❌ كلمة المرور مطلوبة'); return; }
+  if(password && password.length < 4){ toast('❌ كلمة المرور على الأقل 4 حروف'); return; }
+  
+  try{
+    if(id){
+      // تعديل
+      const updates = { name, phone, role: 'stocktaker' };
+      await apiFetch('/api/couriers/' + id, 'PATCH', updates);
+      
+      // حدّث الـ Stars credentials
+      if(username || password){
+        const credPayload = { username };
+        if(password) credPayload.password = password;
+        await apiFetch('/api/couriers/' + id + '/stars-credentials', 'POST', credPayload);
+      }
+      
+      // local update
+      const c = couriers.find(c => c.id == id);
+      if(c){ c.name = name; c.phone = phone; c.role = 'stocktaker'; c.username = username; }
+      
+      toast('✅ تم التحديث');
+    } else {
+      // جديد
+      const r = await apiFetch('/api/couriers', 'POST', {
+        name, phone, zone: 'الجرد', vehicle: '—', ship: 0,
+        role: 'stocktaker', status: 'نشط'
+      });
+      
+      const newCourier = r?.courier || r;
+      if(newCourier?.id){
+        // اعمل Stars credentials
+        await apiFetch('/api/couriers/' + newCourier.id + '/stars-credentials', 'POST', {
+          username, password
+        });
+        
+        couriers.push({...newCourier, role: 'stocktaker', username});
+        toast('✅ تم الإضافة');
+      }
+    }
+    
+    closeM('m-new-stocktaker');
+    renderStocktakersList();
+    if(typeof renderCouriers === 'function') renderCouriers();
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function deleteStocktaker(id){
+  const s = couriers.find(c => c.id == id);
+  if(!s) return;
+  if(!confirm(`حذف موظف الجرد "${s.name}"؟\n\nده هيمنعه من دخول Stars.`)) return;
+  
+  try{
+    await apiFetch('/api/couriers/' + id, 'DELETE');
+    couriers = couriers.filter(c => c.id != id);
+    saveCouriers && saveCouriers();
+    renderStocktakersList();
+    if(typeof renderCouriers === 'function') renderCouriers();
+    toast('✅ تم الحذف');
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
 async function loadStocktakePage(){
   try{
-    const sessions = await apiFetch('/api/stocktake/sessions') || [];
+    // 🆕 v256: تحميل stats + history
+    const [historyR, statsR] = await Promise.all([
+      apiFetch('/api/stocktake/history?limit=100'),
+      apiFetch('/api/stocktake/history/stats').catch(() => null)
+    ]);
+    
+    const sessions = historyR?.sessions || [];
+    const stats = statsR || {};
     
     // الـ active session (لو فيه)
     const active = sessions.find(s => s.status === 'in_progress');
     const activeCard = document.getElementById('active-stocktake-card');
     if(activeCard){
       if(active){
-        const counted = active.counted_count || 0;
-        const total = active.items_count || 0;
+        const counted = active.items_counted || 0;
+        const total = active.items_total || 0;
         const progress = total ? Math.round(counted * 100 / total) : 0;
         activeCard.innerHTML = `
           <div class="card" style="margin-bottom:14px;border:2px solid var(--warn);background:linear-gradient(135deg,#fef3c7 0%,#fff 100%)">
@@ -13858,39 +14141,109 @@ async function loadStocktakePage(){
       }
     }
     
-    // قائمة الـ sessions
-    const list = document.getElementById('stocktake-sessions-list');
-    if(!list) return;
-    
-    const completed = sessions.filter(s => s.status !== 'in_progress');
-    if(!completed.length){
-      list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">مفيش عمليات جرد سابقة. اضغط "بدء جرد جديد" للبدء.</div>';
-      return;
+    // 🆕 v256: stats cards
+    const statsContainer = document.getElementById('stk-stats-container');
+    if(statsContainer){
+      const lastApproved = stats.last_approved_at 
+        ? new Date(stats.last_approved_at).toLocaleDateString('ar-EG')
+        : '—';
+      statsContainer.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px">
+          <div class="sc"><div class="sc-icon">📊</div><div class="sc-label">إجمالي الجلسات</div><div class="sc-val">${stats.total_sessions || 0}</div></div>
+          <div class="sc" style="border-right:4px solid var(--success)"><div class="sc-icon">✅</div><div class="sc-label">معتمدة</div><div class="sc-val" style="color:var(--success)">${stats.approved_count || 0}</div></div>
+          <div class="sc" style="border-right:4px solid var(--warn)"><div class="sc-icon">⚡</div><div class="sc-label">نشطة</div><div class="sc-val" style="color:var(--warn)">${stats.active_count || 0}</div></div>
+          <div class="sc"><div class="sc-icon">📅</div><div class="sc-label">آخر جرد</div><div class="sc-val" style="font-size:13px">${lastApproved}</div></div>
+        </div>
+      `;
     }
     
-    list.innerHTML = completed.map(s => {
-      const statusBadge = s.status === 'approved' 
-        ? '<span class="badge" style="background:#d1fae5;color:#065f46">✅ معتمد</span>'
-        : s.status === 'cancelled' 
-        ? '<span class="badge" style="background:#fee2e2;color:#991b1b">❌ ملغي</span>'
-        : '<span class="badge" style="background:#dbeafe;color:#1e40af">📋 مراجعة</span>';
-      
-      return `<div style="padding:12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-        <div>
-          <div style="font-weight:700;font-size:13px;margin-bottom:3px">${escapeHtml(s.title || 'جرد')}</div>
-          <div style="font-size:11px;color:var(--muted)">${escapeHtml(s.warehouse_name || '')} · ${new Date(s.started_at).toLocaleDateString('ar-EG')}</div>
-          ${s.differences_count ? `<div style="font-size:11px;color:var(--warn)">${s.differences_count} فرق</div>` : ''}
-        </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          ${statusBadge}
-          <button class="btn btn-ghost btn-sm" onclick="openStocktakeSession(${s.id})">🔍 عرض</button>
-        </div>
-      </div>`;
-    }).join('');
+    // قائمة الـ sessions
+    _stkAllSessions = sessions;
+    renderStkHistoryList();
   }catch(e){
     console.error('stocktake load:', e);
     toast('❌ ' + e.message);
   }
+}
+
+// 🆕 v256: السجل الكامل + filter
+let _stkAllSessions = [];
+let _stkHistoryFilter = 'all';
+
+function setStkHistoryFilter(filter, btn){
+  _stkHistoryFilter = filter;
+  document.querySelectorAll('.stk-filter-chip').forEach(c => c.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  renderStkHistoryList();
+}
+
+function renderStkHistoryList(){
+  const list = document.getElementById('stocktake-sessions-list');
+  if(!list) return;
+  
+  let sessions = _stkAllSessions.filter(s => s.status !== 'in_progress');
+  
+  if(_stkHistoryFilter === 'approved'){
+    sessions = sessions.filter(s => s.status === 'approved');
+  } else if(_stkHistoryFilter === 'cancelled'){
+    sessions = sessions.filter(s => s.status === 'cancelled');
+  } else if(_stkHistoryFilter === 'with_diff'){
+    sessions = sessions.filter(s => parseInt(s.items_diff) > 0);
+  }
+  
+  if(!sessions.length){
+    list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">مفيش جلسات في الفلتر ده.</div>';
+    return;
+  }
+  
+  list.innerHTML = sessions.map(s => {
+    const statusBadge = s.status === 'approved' 
+      ? '<span class="badge" style="background:#d1fae5;color:#065f46">✅ معتمد</span>'
+      : s.status === 'cancelled' 
+      ? '<span class="badge" style="background:#fee2e2;color:#991b1b">❌ ملغي</span>'
+      : '<span class="badge" style="background:#dbeafe;color:#1e40af">📋 مراجعة</span>';
+    
+    const itemsTotal = parseInt(s.items_total) || 0;
+    const itemsCounted = parseInt(s.items_counted) || 0;
+    const itemsDiff = parseInt(s.items_diff) || 0;
+    const progress = itemsTotal ? Math.round(itemsCounted * 100 / itemsTotal) : 0;
+    
+    const startedDate = new Date(s.started_at).toLocaleDateString('ar-EG');
+    const completedDate = s.completed_at ? new Date(s.completed_at).toLocaleDateString('ar-EG') : null;
+    
+    return `<div style="padding:14px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;background:#fff">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+        <div style="flex:1;min-width:200px">
+          <div style="font-weight:800;font-size:14px;margin-bottom:4px">${escapeHtml(s.title || 'جرد')}</div>
+          <div style="font-size:11px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap">
+            <span>📦 ${escapeHtml(s.warehouse_name || '—')}</span>
+            <span>📅 ${startedDate}${completedDate ? ' → ' + completedDate : ''}</span>
+            <span>👤 ${escapeHtml(s.started_by || '')}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${statusBadge}
+          <button class="btn btn-ghost btn-sm" onclick="openStocktakeSession(${s.id})" title="عرض التفاصيل">🔍</button>
+          <button class="btn btn-ghost btn-sm" onclick="printStkReportById(${s.id})" title="تقرير PDF" style="color:var(--accent)">📄</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;font-size:11px;background:var(--bg);padding:8px;border-radius:6px">
+        <div>📋 إجمالي: <strong>${itemsTotal}</strong></div>
+        <div>✅ معدود: <strong>${itemsCounted}</strong> (${progress}%)</div>
+        <div>⚠️ فروقات: <strong style="color:${itemsDiff > 0 ? 'var(--warn)' : 'var(--success)'}">${itemsDiff}</strong></div>
+        ${s.approved_by ? `<div>✅ اعتمد: <strong>${escapeHtml(s.approved_by)}</strong></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// 🆕 v256: print report لجلسة بدون فتحها
+async function printStkReportById(sessionId){
+  // حفظ الجلسة الحالية مؤقتاً
+  const oldSession = _stkCurrentSession;
+  _stkCurrentSession = {id: sessionId};
+  await printStkReport();
+  _stkCurrentSession = oldSession;
 }
 
 async function openNewStocktake(){
@@ -13914,6 +14267,9 @@ async function openNewStocktake(){
   
   document.getElementById('new-stk-title').value = `جرد - ${new Date().toLocaleDateString('ar-EG')}`;
   document.getElementById('new-stk-notes').value = '';
+  // 🆕 v258: reset show system qty
+  const showSysCb = document.getElementById('new-stk-show-system');
+  if(showSysCb) showSysCb.checked = false;
   
   // 🆕 v254: reset mode للـ default
   const fullRadio = document.querySelector('input[name="stk-mode"][value="full"]');
@@ -14018,10 +14374,11 @@ async function startStocktake(){
   const title = document.getElementById('new-stk-title').value.trim();
   const notes = document.getElementById('new-stk-notes').value.trim();
   const mode = document.querySelector('input[name="stk-mode"]:checked')?.value || 'full';
+  const showSystemQty = document.getElementById('new-stk-show-system')?.checked === true;
   
   if(!warehouseId){ toast('❌ اختار مخزن'); return; }
   
-  let payload = {warehouseId, title, notes, mode};
+  let payload = {warehouseId, title, notes, mode, showSystemQty};
   
   if(mode === 'partial'){
     if(_stkSelectedVariants.size === 0){
@@ -14120,26 +14477,25 @@ function renderStocktakeDetail(){
       <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
         <button class="btn btn-success" onclick="approveStocktake()">✅ اعتماد + تحديث Shopify</button>
         <button class="btn btn-ghost" onclick="cancelStocktake()" style="color:var(--danger)">❌ إلغاء الجرد</button>
+        <button class="btn btn-ghost" onclick="printStkReport()" style="color:var(--accent)">📄 تقرير PDF</button>
         ${total > 0 ? `<button class="btn btn-ghost" onclick="markAllSystemQty()" style="margin-right:auto">⚡ ملأ الكميات الفعلية = النظام</button>` : ''}
+      </div>
+    `;
+  } else {
+    // الجلسة منتهية - إظهار زرار التقرير بس
+    actionsHtml = `
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="printStkReport()">📄 تقرير PDF</button>
       </div>
     `;
   }
   
-  // Tabs
-  const tabsHtml = isActive ? `
-    <div style="display:flex;gap:0;margin-bottom:14px;border-bottom:2px solid var(--border)">
-      <button onclick="switchStkTab('scan')" style="padding:10px 20px;background:${_stkCurrentTab==='scan'?'var(--accent)':'transparent'};color:${_stkCurrentTab==='scan'?'#fff':'var(--text)'};border:none;border-radius:8px 8px 0 0;cursor:pointer;font-weight:700;font-family:Cairo,sans-serif">📱 Scan باركود</button>
-      <button onclick="switchStkTab('grid')" style="padding:10px 20px;background:${_stkCurrentTab==='grid'?'var(--accent)':'transparent'};color:${_stkCurrentTab==='grid'?'#fff':'var(--text)'};border:none;border-radius:8px 8px 0 0;cursor:pointer;font-weight:700;font-family:Cairo,sans-serif">⌨️ جدول الإدخال</button>
-    </div>
-  ` : '';
+  // 🆕 v258: على الـ web - mode الجدول فقط (الـ scan في Stars بس)
+  const tabsHtml = '';
+  _stkCurrentTab = 'grid';
   
   // Tab content
-  let tabContent = '';
-  if(_stkCurrentTab === 'scan' && isActive){
-    tabContent = renderStkScanTab();
-  } else {
-    tabContent = renderStkGridTab(isActive);
-  }
+  const tabContent = renderStkGridTab(isActive);
   
   document.getElementById('stk-detail-content').innerHTML = headerHtml + actionsHtml + tabsHtml + tabContent;
   
@@ -14217,15 +14573,29 @@ function renderStkGridTab(isActive){
     const sign = diff > 0 ? '+' : '';
     const rowBg = counted && diff !== 0 ? 'background:#fef3c7' : counted ? 'background:#f0fdf4' : '';
     
+    // 🆕 v258: عرض الـ entries (إن وجدت)
+    const entries = item.entries || [];
+    const hasMultipleLocations = entries.length > 1;
+    const entriesHtml = entries.length ? `
+      <div style="margin-top:6px;padding:6px 8px;background:rgba(99,102,241,.08);border-radius:6px;font-size:10px">
+        <div style="font-weight:700;color:var(--accent);margin-bottom:3px">📍 ${entries.length} موقع${hasMultipleLocations ? ' (مجمّعة)' : ''}:</div>
+        ${entries.map(e => `<div style="display:flex;justify-content:space-between;gap:6px;padding:2px 0">
+          <span>${e.location_note ? '📌 '+escapeHtml(e.location_note) : '📍 موقع رئيسي'}</span>
+          <span style="font-weight:700">${e.qty}</span>
+          <span style="color:var(--muted)">${escapeHtml(e.counted_by || '')}</span>
+        </div>`).join('')}
+      </div>` : '';
+    
     return `<tr style="border-bottom:1px solid var(--border);${rowBg}">
       <td style="padding:8px 10px;font-size:12px">
         <div style="font-weight:700">${escapeHtml(item.product_title)}${item.variant_title ? ' - '+escapeHtml(item.variant_title) : ''}</div>
         <div style="font-size:10px;color:var(--muted)">${escapeHtml(item.sku || '—')}</div>
+        ${entriesHtml}
       </td>
       <td style="text-align:center;font-weight:700">${item.system_qty}</td>
       <td style="text-align:center">
         ${isActive 
-          ? `<input type="number" class="form-input" style="width:80px;text-align:center;font-weight:700" value="${item.counted_qty != null ? item.counted_qty : ''}" onchange="updateStocktakeItem(${item.id}, this.value)" min="0">` 
+          ? `<input type="number" class="form-input" style="width:80px;text-align:center;font-weight:700" value="${item.counted_qty != null ? item.counted_qty : ''}" onchange="updateStocktakeItem(${item.id}, this.value)" min="0" title="${entries.length ? 'مجموع كل المواقع' : ''}">` 
           : `<span style="font-weight:700">${item.counted_qty != null ? item.counted_qty : '—'}</span>`}
       </td>
       <td style="text-align:center;font-weight:700;color:${diffColor}">${counted ? sign + diff : '—'}</td>
@@ -14244,7 +14614,7 @@ function renderStkGridTab(isActive){
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <thead style="background:var(--bg);position:sticky;top:0">
         <tr>
-          <th style="text-align:right;padding:10px">المنتج</th>
+          <th style="text-align:right;padding:10px">المنتج (مع تفاصيل المواقع)</th>
           <th style="text-align:center;padding:10px;width:90px">النظام</th>
           <th style="text-align:center;padding:10px;width:100px">الفعلية</th>
           <th style="text-align:center;padding:10px;width:80px">الفرق</th>
@@ -14329,6 +14699,198 @@ async function deleteStkItem(itemId){
     } else {
       toast('❌ ' + (r?.error || 'فشل'));
     }
+  }catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+// 🆕 v256: PDF Report للجرد
+async function printStkReport(){
+  if(!_stkCurrentSession) return;
+  
+  toast('📄 جاري تجهيز التقرير...');
+  
+  try{
+    const data = await apiFetch('/api/stocktake/sessions/' + _stkCurrentSession.id + '/report');
+    if(!data || !data.session){ toast('❌ فشل تحميل البيانات'); return; }
+    
+    const s = data.session;
+    const stats = data.stats;
+    const items = data.items;
+    
+    const startedDate = s.started_at ? new Date(s.started_at).toLocaleString('ar-EG') : '—';
+    const completedDate = s.completed_at ? new Date(s.completed_at).toLocaleString('ar-EG') : '—';
+    const printDate = new Date().toLocaleString('ar-EG');
+    
+    // Status label
+    const statusLabels = {
+      in_progress: '🟡 جاري التنفيذ',
+      review: '🔍 قيد المراجعة', 
+      approved: '✅ معتمد',
+      cancelled: '❌ ملغي'
+    };
+    const statusLabel = statusLabels[s.status] || s.status;
+    
+    // ابني rows للفروقات
+    const diffRows = items.differences.map(i => {
+      const diff = i.counted_qty - i.system_qty;
+      const sign = diff > 0 ? '+' : '';
+      const color = diff > 0 ? '#16a34a' : '#dc2626';
+      const value = (parseFloat(i.price) || 0) * Math.abs(diff);
+      return `<tr>
+        <td>${escapeHtml(i.product_title || '')}${i.variant_title ? ' - '+escapeHtml(i.variant_title) : ''}</td>
+        <td>${escapeHtml(i.sku || '—')}</td>
+        <td style="text-align:center">${i.system_qty}</td>
+        <td style="text-align:center;font-weight:700">${i.counted_qty}</td>
+        <td style="text-align:center;font-weight:700;color:${color}">${sign}${diff}</td>
+        <td style="text-align:left">${value > 0 ? value.toLocaleString('en-US', {maximumFractionDigits: 2}) + ' ج' : '—'}</td>
+        <td style="font-size:10px">${escapeHtml(i.reason || '')}</td>
+      </tr>`;
+    }).join('');
+    
+    // الـ uncounted
+    const uncountedRows = items.uncounted.slice(0, 50).map(i => `
+      <tr>
+        <td>${escapeHtml(i.product_title || '')}${i.variant_title ? ' - '+escapeHtml(i.variant_title) : ''}</td>
+        <td>${escapeHtml(i.sku || '—')}</td>
+        <td style="text-align:center">${i.system_qty}</td>
+      </tr>
+    `).join('');
+    
+    const html = `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<title>تقرير جرد - ${escapeHtml(s.title || '')}</title>
+<style>
+@page { size: A4; margin: 1.5cm; }
+body { font-family: 'Cairo', 'Tahoma', sans-serif; color: #000; padding: 20px; line-height: 1.6; font-size: 12px; }
+.header { text-align: center; border-bottom: 3px double #000; padding-bottom: 12px; margin-bottom: 18px; }
+.brand { font-size: 24px; font-weight: 800; letter-spacing: 2px; }
+.title { font-size: 20px; font-weight: 800; margin: 14px 0; text-align:center; color:#1f2937; }
+.info-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 18px; margin:12px 0; padding:12px; background:#f9fafb; border-radius:6px; font-size:12px; }
+.info-grid b { color:#374151; }
+.summary { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:16px 0; }
+.sum-box { padding:10px 8px; border:1px solid #ccc; border-radius:6px; text-align:center; }
+.sum-box .lbl { font-size:10px; color:#666; }
+.sum-box .val { font-size:16px; font-weight:800; margin-top:4px; }
+h3 { margin: 18px 0 8px 0; font-size: 14px; color: #1f2937; padding-bottom: 6px; border-bottom: 2px solid #e5e7eb; }
+table { width:100%; border-collapse:collapse; margin-top:8px; font-size:10px; }
+th { background:#1f2937; color:#fff; padding:6px; border:1px solid #1f2937; text-align: right; font-weight:700; }
+td { padding:5px 6px; border:1px solid #d1d5db; }
+tr:nth-child(even) td { background:#fafafa; }
+.signatures { display:grid; grid-template-columns:1fr 1fr; gap:60px; margin-top: 40px; }
+.sig-box { text-align:center; }
+.sig-line { border-top:1px solid #000; margin-top:50px; padding-top:6px; font-weight:700; font-size:12px; }
+.footer { margin-top:24px; text-align:center; font-size:10px; color:#666; border-top:1px solid #ccc; padding-top:8px; }
+.no-diff-banner { background:#d1fae5; color:#065f46; padding:14px; border-radius:8px; text-align:center; font-weight:700; }
+@media print { 
+  .no-print { display: none; } 
+  body { padding: 0; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="brand">CAFELAX</div>
+  <div style="font-size:11px;color:#666">إدارة المخزون</div>
+</div>
+
+<div class="title">📄 تقرير جرد المخزن</div>
+
+<div class="info-grid">
+  <div><b>اسم الجلسة:</b> ${escapeHtml(s.title || '')}</div>
+  <div><b>المخزن:</b> ${escapeHtml(s.warehouse_name || '—')}</div>
+  <div><b>تاريخ البدء:</b> ${startedDate}</div>
+  <div><b>تاريخ الانتهاء:</b> ${completedDate}</div>
+  <div><b>المشرف:</b> ${escapeHtml(s.started_by || '—')}</div>
+  <div><b>المعتمد:</b> ${escapeHtml(s.approved_by || '—')}</div>
+  <div><b>الحالة:</b> ${statusLabel}</div>
+  <div><b>تاريخ الطباعة:</b> ${printDate}</div>
+  ${s.notes ? `<div style="grid-column:span 2"><b>ملاحظات:</b> ${escapeHtml(s.notes)}</div>` : ''}
+</div>
+
+<div class="summary">
+  <div class="sum-box"><div class="lbl">إجمالي المنتجات</div><div class="val">${stats.totalItems}</div></div>
+  <div class="sum-box" style="background:#d1fae5"><div class="lbl">تم العد</div><div class="val">${stats.countedCount} (${stats.progressPercent}%)</div></div>
+  <div class="sum-box" style="background:#fef3c7"><div class="lbl">فروقات</div><div class="val">${stats.differencesCount}</div></div>
+  <div class="sum-box" style="background:${stats.uncountedCount > 0 ? '#fee2e2' : '#f3f4f6'}"><div class="lbl">لم يُعد</div><div class="val">${stats.uncountedCount}</div></div>
+</div>
+
+<div class="summary">
+  <div class="sum-box" style="background:#fef3c7"><div class="lbl">فائض</div><div class="val">${stats.surplusCount} منتج</div></div>
+  <div class="sum-box" style="background:#fee2e2"><div class="lbl">عجز</div><div class="val">${stats.shortageCount} منتج</div></div>
+  <div class="sum-box" style="background:${stats.totalSurplusValue > 0 ? '#d1fae5' : '#f3f4f6'}"><div class="lbl">قيمة الفائض</div><div class="val" style="font-size:13px">${(stats.totalSurplusValue||0).toLocaleString('en-US', {maximumFractionDigits: 0})} ج</div></div>
+  <div class="sum-box" style="background:${stats.totalShortageValue > 0 ? '#fee2e2' : '#f3f4f6'}"><div class="lbl">قيمة العجز</div><div class="val" style="font-size:13px">${(stats.totalShortageValue||0).toLocaleString('en-US', {maximumFractionDigits: 0})} ج</div></div>
+</div>
+
+<div style="background:${stats.netValue > 0 ? '#d1fae5' : stats.netValue < 0 ? '#fee2e2' : '#f3f4f6'};padding:12px;border-radius:8px;text-align:center;font-weight:800;font-size:14px;margin:12px 0">
+  صافي قيمة الفروقات: ${stats.netValue >= 0 ? '+' : ''}${stats.netValue.toLocaleString('en-US', {maximumFractionDigits: 2})} ج
+  ${stats.netValue > 0 ? '(فائض)' : stats.netValue < 0 ? '(عجز)' : ''}
+</div>
+
+${items.differences.length > 0 ? `
+<h3>⚠️ المنتجات اللي بها فروقات (${items.differences.length} منتج)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>المنتج</th>
+      <th>SKU</th>
+      <th style="text-align:center">النظام</th>
+      <th style="text-align:center">الفعلي</th>
+      <th style="text-align:center">الفرق</th>
+      <th style="text-align:left">القيمة</th>
+      <th>السبب</th>
+    </tr>
+  </thead>
+  <tbody>${diffRows}</tbody>
+</table>
+` : `
+<div class="no-diff-banner">✅ ممتاز! مفيش فروقات في الجرد - كل الكميات مطابقة للنظام</div>
+`}
+
+${items.uncounted.length > 0 ? `
+<h3>⚠️ المنتجات اللي ما اتعدتش (${items.uncounted.length} منتج${items.uncounted.length > 50 ? ' - عرض أول 50' : ''})</h3>
+<table>
+  <thead>
+    <tr>
+      <th>المنتج</th>
+      <th>SKU</th>
+      <th style="text-align:center">الكمية بالنظام</th>
+    </tr>
+  </thead>
+  <tbody>${uncountedRows}</tbody>
+</table>
+` : ''}
+
+<div class="signatures">
+  <div class="sig-box">
+    <div class="sig-line">توقيع المشرف</div>
+    <div style="font-size:10px;color:#666;margin-top:4px">${escapeHtml(s.started_by || '')}</div>
+  </div>
+  <div class="sig-box">
+    <div class="sig-line">توقيع المدير</div>
+  </div>
+</div>
+
+<div class="footer">
+  CAFELAX · تقرير جرد · ${printDate} · جلسة #${s.id}
+</div>
+
+<div class="no-print" style="margin-top:30px;text-align:center">
+  <button onclick="window.print()" style="background:#6366f1;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit">🖨️ طباعة / حفظ PDF</button>
+  <button onclick="window.close()" style="background:#888;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit;margin-right:8px">إغلاق</button>
+  <div style="margin-top:10px;font-size:11px;color:#666">💡 اختار "Save as PDF" من نافذة الطباعة لحفظه كـ PDF وإرساله بالإيميل</div>
+</div>
+
+</body>
+</html>`;
+    
+    const w = window.open('', '_blank');
+    if(!w){ toast('❌ السماح للنافذة المنبثقة'); return; }
+    w.document.write(html);
+    w.document.close();
   }catch(e){
     toast('❌ ' + e.message);
   }
