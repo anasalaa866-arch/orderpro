@@ -430,6 +430,9 @@ tr:hover td{background:#fafbff}
 .pickup-tab{position:relative}
 .pickup-tab.active{color:var(--primary);border-bottom-color:var(--primary)!important}
 .pickup-tab:hover{background:rgba(0,0,0,0.02)}
+
+/* 🆕 v272: Orders date range buttons */
+.orders-range-btn-active{background:#3b82f6 !important;color:#fff !important;border-color:#3b82f6 !important;font-weight:800 !important}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
@@ -774,6 +777,23 @@ tr:hover td{background:#fafbff}
 
   <!-- ORDERS -->
   <div class="page" id="page-orders">
+    <!-- 🆕 v272: Date Range Selector -->
+    <div style="background:linear-gradient(135deg,#dbeafe 0%,#fff 100%);border:1px solid #3b82f6;border-radius:10px;padding:12px;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-weight:800;color:#1e40af;font-size:14px">📅 الفترة المعروضة</div>
+          <div style="font-size:11px;color:#3b82f6" id="orders-range-info">آخر 60 يوم</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-ghost btn-xs" onclick="setOrdersRange(30)" data-orders-range="30">آخر 30 يوم</button>
+          <button class="btn btn-ghost btn-xs orders-range-btn-active" onclick="setOrdersRange(60)" data-orders-range="60">آخر 60 يوم</button>
+          <button class="btn btn-ghost btn-xs" onclick="setOrdersRange(90)" data-orders-range="90">آخر 90 يوم</button>
+          <button class="btn btn-ghost btn-xs" onclick="setOrdersRange(180)" data-orders-range="180">آخر 6 شهور</button>
+          <button class="btn btn-ghost btn-xs" onclick="setOrdersRange('all')" data-orders-range="all" style="color:#dc2626;border-color:#dc2626">⚠️ كل الطلبات</button>
+        </div>
+      </div>
+    </div>
+    
     <div class="card">
       <div class="card-hd">
         <div class="chips" id="order-chips">
@@ -4455,7 +4475,28 @@ tr:hover td{background:#fafbff}
 <div class="toast" id="toast"></div>
 
 <script>
-// ===== OrderPro v271 — ZERO STOCKS REPORT =====
+// ===== OrderPro v272 — ORDERS DATE-BASED LIMIT =====
+// 2026-05-05: استبدال limit 5000 بـ date-based limit
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🐛 المشكلة:
+// Backend كان بيرجع آخر 5000 طلب
+// لو 100 طلب/يوم → بعد 50 يوم اتجمعوا
+// الطلبات الأقدم مش هتظهر
+// 
+// 🎯 الحل:
+// 1. ✅ Backend default = آخر 60 يوم (بدل 5000 count)
+// 2. ✅ Query params:
+//    • ?days=N → آخر N يوم
+//    • ?days=all → كل الطلبات
+//    • ?from=YYYY-MM-DD&to=YYYY-MM-DD → range محدد
+// 3. ✅ Frontend: Date Range Selector في صفحة الطلبات
+//    • آخر 30/60/90/180 يوم
+//    • زر ⚠️ كل الطلبات (مع confirm)
+//    • Active state على الزر المختار
+//    • محفوظ في localStorage
+// 4. ✅ Info bar: "آخر 60 يوم (1,234 طلب)"
+// =================================
+// السابق: v271 — ZERO STOCKS
 // 2026-05-05: تقرير المنتجات اللي خلصت في فترة معينة
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 🎯 الفكرة: مش "خلصانة دلوقتي"، لكن "خلصت في الفترة دي"
@@ -5804,12 +5845,78 @@ async function syncCouriersToDB(){
     }
   }catch(e){ console.error('syncCouriersToDB:',e); }
 }
+// 🆕 v272: Orders date range management
+function setOrdersRange(range){
+  // Confirm لو "all" (مكلف)
+  if(range === 'all'){
+    if(!confirm('⚠️ تحذير\n\nده هيحمّل كل الطلبات (ممكن يكون آلاف).\n\nقد ياخد وقت طويل ويستهلك data كتير.\n\nمتأكد؟')) return;
+  }
+  
+  localStorage.setItem('orders_date_range', String(range));
+  
+  // حدّث الـ buttons (active state)
+  document.querySelectorAll('[data-orders-range]').forEach(btn => {
+    btn.classList.remove('orders-range-btn-active');
+    if(btn.dataset.ordersRange === String(range)){
+      btn.classList.add('orders-range-btn-active');
+    }
+  });
+  
+  // أعد تحميل
+  loadOrders().then(() => {
+    if(typeof renderOrders === 'function') renderOrders();
+    toast('✅ تم تحميل الفترة الجديدة', 'success');
+  });
+}
+
+function _updateOrdersRangeInfo(count){
+  const range = localStorage.getItem('orders_date_range') || '60';
+  const info = document.getElementById('orders-range-info');
+  if(!info) return;
+  
+  let label = '';
+  if(range === 'all'){
+    label = `⚠️ كل الطلبات (${count} طلب)`;
+  } else if(range === '30'){
+    label = `آخر 30 يوم (${count} طلب)`;
+  } else if(range === '60'){
+    label = `آخر 60 يوم (${count} طلب)`;
+  } else if(range === '90'){
+    label = `آخر 90 يوم (${count} طلب)`;
+  } else if(range === '180'){
+    label = `آخر 6 شهور (${count} طلب)`;
+  } else {
+    label = `آخر ${range} يوم (${count} طلب)`;
+  }
+  
+  info.textContent = label;
+}
+
+// عند الـ load الأول، اعمل sync للـ button للـ active
+document.addEventListener('DOMContentLoaded', () => {
+  const range = localStorage.getItem('orders_date_range') || '60';
+  document.querySelectorAll('[data-orders-range]').forEach(btn => {
+    btn.classList.remove('orders-range-btn-active');
+    if(btn.dataset.ordersRange === String(range)){
+      btn.classList.add('orders-range-btn-active');
+    }
+  });
+});
+
 async function loadOrders(){
   await syncCouriersToDB();
 
-  const data=await apiFetch('/api/orders');
+  // 🆕 v272: استخدم الـ range المحفوظ
+  const ordersRange = localStorage.getItem('orders_date_range') || '60';
+  const queryStr = ordersRange === 'all' ? '?days=all' : '?days=' + ordersRange;
+  
+  const data=await apiFetch('/api/orders' + queryStr);
   if(!data)return;
   const prev=orders.length;
+  
+  // 🆕 v272: حدّث info نص الفترة
+  _updateOrdersRangeInfo(data.orders.length);
+  
 let _bostaIds={};
 let _bostaExported={};
 try{_bostaIds=JSON.parse(localStorage.getItem('bosta_ids')||'{}');}catch(e){}
