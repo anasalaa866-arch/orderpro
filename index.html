@@ -1173,6 +1173,7 @@ tr:hover td{background:#fafbff}
             <button class="btn btn-ghost btn-sm" onclick="printChecksReport()">🖨️ طباعة</button>
             <button class="btn btn-ghost btn-sm" style="color:#16a34a;border-color:#16a34a" onclick="exportChecksExcel()">📊 Excel</button>
             <button class="btn btn-ghost btn-sm" onclick="openCheckBook()">📚 دفاتر</button>
+            <button class="btn btn-ghost btn-sm" id="chk-recovery-btn" onclick="openCheckBookRecovery()" style="display:none;color:#dc2626;border-color:#dc2626" title="فيه دفتر اتمسح وشيكاته لسه موجودة">♻️ استعادة دفتر</button>
             <button class="btn btn-primary btn-sm" onclick="openAddChk()">+ شيك جديد</button>
           </div>
         </div>
@@ -1406,6 +1407,28 @@ tr:hover td{background:#fafbff}
         </div>
       </div>
       <div class="mft"><button class="btn btn-ghost" onclick="closeM('m-chk-books')">إغلاق</button></div>
+    </div>
+  </div>
+
+  <!-- 🆕 v278: استعادة دفتر شيكات (لو اتمسح بالغلط) -->
+  <div class="overlay" id="m-chk-recovery">
+    <div class="modal" style="max-width:680px">
+      <div class="mhd"><h3>♻️ استعادة دفتر شيكات</h3><button class="xbtn" onclick="closeM('m-chk-recovery')">✕</button></div>
+      <div class="mbody">
+        <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#92400e;line-height:1.7">
+          <strong>💡 إيه ده؟</strong><br>
+          لو اتمسح دفتر شيكات بالغلط، الشيكات اللي جواه لسه موجودة في قاعدة البيانات وعندها <code>book_id</code> الخاص بالدفتر اللي اتمسح. هنا تقدر تستعيد الدفتر بنفس الـ id فالشيكات هترجع تتربط بيه تلقائياً.
+        </div>
+        <div id="chk-orphans-loading" style="text-align:center;padding:20px;color:var(--muted)">⏳ جاري الفحص...</div>
+        <div id="chk-orphans-list" style="display:none"></div>
+        <div id="chk-orphans-empty" style="display:none;text-align:center;padding:30px;color:var(--muted)">
+          ✅ مفيش دفاتر يتيمة - كل الشيكات في الـ DB متربطة بدفاترها صح
+        </div>
+      </div>
+      <div class="mft">
+        <button class="btn btn-ghost" onclick="closeM('m-chk-recovery')">إغلاق</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadCheckBookOrphans()">🔄 إعادة فحص</button>
+      </div>
     </div>
   </div>
 
@@ -2639,7 +2662,10 @@ tr:hover td{background:#fafbff}
       
       <!-- Search to add -->
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px">
-        <div style="font-weight:700;color:var(--accent);margin-bottom:6px;font-size:13px">➕ إضافة منتج جديد</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-weight:700;color:var(--accent);font-size:13px">➕ إضافة منتج جديد</div>
+          <button class="btn btn-secondary btn-xs" onclick="openSPBulkAdd()" style="font-size:11px;color:#7c3aed;border-color:#7c3aed" title="ضيف كل المنتجات اللي تحتوي على كلمة معينة دفعة واحدة">📦 إضافة Bulk</button>
+        </div>
         <input id="sp-search" class="form-input" placeholder="ابحث بالاسم/SKU/باركود..." oninput="searchSupplierProduct()">
         <div id="sp-search-results" style="max-height:200px;overflow-y:auto;background:var(--elev);border-radius:6px;margin-top:6px;display:none"></div>
       </div>
@@ -2649,6 +2675,47 @@ tr:hover td{background:#fafbff}
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeM('m-supplier-products')">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<!-- 🆕 v278: Bulk Add modal -->
+<div id="m-sp-bulk" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:800px">
+    <div class="modal-header">
+      <h3 style="margin:0">📦 إضافة Bulk للمورد: <span id="sp-bulk-supplier-name"></span></h3>
+      <button class="modal-close" onclick="closeM('m-sp-bulk')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:linear-gradient(135deg,#ede9fe 0%,#fff 100%);border:1px solid #a78bfa;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#5b21b6;line-height:1.7">
+        💡 اكتب كلمة تبحث بيها (مثل "قهوة" أو "Capsule") — هنعرضلك كل المنتجات اللي تحتوي عليها وتقدر تضيفهم كلهم مرة واحدة. يدور في الاسم/SKU/الباركود.
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input id="sp-bulk-search" class="form-input" placeholder="مثلاً: قهوة، حبوب، Capsule..." style="flex:1" oninput="spBulkSearchDebounced()" onkeydown="if(event.key==='Enter') spBulkSearchNow()">
+        <button class="btn btn-primary btn-sm" onclick="spBulkSearchNow()">🔍 ابحث</button>
+      </div>
+
+      <div id="sp-bulk-status" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px"></div>
+
+      <div id="sp-bulk-results-wrap" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;padding:6px 8px;background:var(--elev);border-radius:6px">
+          <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="sp-bulk-select-all" onchange="spBulkToggleAll(this.checked)" checked>
+            <span>تحديد الكل</span>
+          </label>
+          <div style="font-size:11px;color:var(--muted)" id="sp-bulk-selected-count">0 محدد</div>
+        </div>
+        <div id="sp-bulk-results" style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--card)"></div>
+      </div>
+
+      <div id="sp-bulk-empty" style="display:none;text-align:center;padding:30px;color:var(--muted)">
+        <div style="font-size:32px;margin-bottom:6px;opacity:.5">🔍</div>
+        <div>اكتب كلمة بحث في الأعلى وابدأ</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeM('m-sp-bulk')">إلغاء</button>
+      <button class="btn btn-primary" id="sp-bulk-add-btn" onclick="spBulkAddSelected()" disabled>➕ إضافة المحدد</button>
     </div>
   </div>
 </div>
@@ -10811,6 +10878,8 @@ async function loadChks(){
       });
     }
     chkRenderActive();
+    // 🆕 v278: فحص الدفاتر اليتيمة في الخلفية
+    checkOrphanedCheckBooks().catch(()=>{});
   }catch(e){ console.error('loadChks:', e); }
 }
 
@@ -11282,6 +11351,137 @@ function previewChkImg(input){
 }
 function clearChkImg(){chkImgData='';$('chk-img-show').style.display='none';$('chk-img-placeholder').style.display='block';$('chk-img-input').value='';}
 function viewChkImg(id){const c=chkList.find(x=>x.id===id);if(!c||!c.img)return;$('chk-img-full').src=c.img;openM('m-chk-img');}
+// 🆕 v278: استعادة دفتر شيكات
+async function checkOrphanedCheckBooks(){
+  // بنفحص في الـ background ونعرض زرار الاستعادة لو فيه orphans
+  if(!API_URL) return;
+  try{
+    const r = await apiFetch('/api/check-books/orphan-stats');
+    const orphans = (r && r.orphans) || [];
+    const btn = document.getElementById('chk-recovery-btn');
+    if(btn){
+      if(orphans.length){
+        btn.style.display = '';
+        btn.innerHTML = `♻️ استعادة دفتر <span style="background:#dc2626;color:#fff;border-radius:50%;padding:1px 6px;font-size:10px;margin-right:3px">${orphans.length}</span>`;
+      } else {
+        btn.style.display = 'none';
+      }
+    }
+  }catch(e){ /* ignore - الـ endpoint قد يكون مش متوفر بعد deploy جديد */ }
+}
+
+async function openCheckBookRecovery(){
+  openM('m-chk-recovery');
+  await loadCheckBookOrphans();
+}
+
+async function loadCheckBookOrphans(){
+  const loading = document.getElementById('chk-orphans-loading');
+  const list = document.getElementById('chk-orphans-list');
+  const empty = document.getElementById('chk-orphans-empty');
+  if(loading) loading.style.display = '';
+  if(list) list.style.display = 'none';
+  if(empty) empty.style.display = 'none';
+
+  try{
+    const r = await apiFetch('/api/check-books/orphan-stats');
+    const orphans = (r && r.orphans) || [];
+    if(loading) loading.style.display = 'none';
+
+    if(!orphans.length){
+      if(empty) empty.style.display = '';
+      // برضه نخفي زرار الاستعادة من الـ header
+      const btn = document.getElementById('chk-recovery-btn');
+      if(btn) btn.style.display = 'none';
+      return;
+    }
+
+    let html = '';
+    orphans.forEach((o, idx) => {
+      const total = parseFloat(o.total_amount) || 0;
+      const payees = (o.payees || []).filter(p => p && p.trim()).slice(0, 5);
+      const nums = (o.check_numbers || []).filter(n => n && String(n).trim());
+      const minNum = nums.length ? Math.min(...nums.map(n=>parseInt(n)||0).filter(n=>n>0)) : null;
+      const maxNum = nums.length ? Math.max(...nums.map(n=>parseInt(n)||0).filter(n=>n>0)) : null;
+      // اقتراح اسم
+      const firstDate = o.first_check ? new Date(o.first_check).toLocaleDateString('ar-EG',{year:'numeric',month:'short'}) : '';
+      const suggestedName = `دفتر مُستعاد ${firstDate}`.trim();
+      const suggestedFirst = minNum || 1;
+      const suggestedPages = (minNum && maxNum) ? (maxNum - minNum + 1) : 48;
+
+      html += `
+      <div class="card" style="margin-bottom:12px;border:1.5px solid #fbbf24">
+        <div class="card-body" style="padding:12px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;margin-bottom:10px">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:800;font-size:13px;margin-bottom:3px">📒 الدفتر #${idx+1}</div>
+              <div style="font-size:11px;color:var(--muted);font-family:monospace;word-break:break-all">ID: ${escapeHtml(o.book_id)}</div>
+            </div>
+            <div style="text-align:left;font-size:11px">
+              <div style="color:var(--success);font-weight:700">${o.checks_count} شيك</div>
+              ${o.pending_count ? `<div style="color:var(--warn)">⏳ ${o.pending_count} pending</div>` : ''}
+              ${o.done_count ? `<div style="color:var(--success)">✅ ${o.done_count} done</div>` : ''}
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;background:var(--bg);padding:8px 10px;border-radius:6px;margin-bottom:10px">
+            <div><strong>إجمالي:</strong> ${total.toLocaleString()} ج</div>
+            ${minNum ? `<div><strong>أرقام الشيكات:</strong> ${minNum} - ${maxNum}</div>` : ''}
+            ${payees.length ? `<div style="grid-column:1/-1"><strong>المستلمين:</strong> ${payees.map(escapeHtml).join('، ')}${o.payees && o.payees.length > 5 ? '...' : ''}</div>` : ''}
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
+            <div><label style="font-size:10px;color:var(--muted)">اسم الدفتر *</label><input type="text" id="rec-name-${idx}" value="${escapeAttr(suggestedName)}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px"></div>
+            <div><label style="font-size:10px;color:var(--muted)">البنك</label><input type="text" id="rec-bank-${idx}" placeholder="مثلاً: الأهلي" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px"></div>
+            <div><label style="font-size:10px;color:var(--muted)">الحساب</label><input type="text" id="rec-account-${idx}" placeholder="رقم الحساب" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px"></div>
+            <div><label style="font-size:10px;color:var(--muted)">رقم أول شيك</label><input type="number" id="rec-first-${idx}" value="${suggestedFirst}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px"></div>
+            <div><label style="font-size:10px;color:var(--muted)">عدد الأوراق</label><input type="number" id="rec-pages-${idx}" value="${suggestedPages}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px"></div>
+            <div><label style="font-size:10px;color:var(--muted)">ملاحظة</label><input type="text" id="rec-note-${idx}" placeholder="اختياري" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px"></div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="restoreCheckBook('${escapeAttr(o.book_id)}', ${idx})" style="width:100%">♻️ استعادة الدفتر — هيتربط بالـ${o.checks_count} شيك تلقائياً</button>
+        </div>
+      </div>`;
+    });
+    if(list){ list.innerHTML = html; list.style.display = ''; }
+  }catch(e){
+    console.error('loadCheckBookOrphans:', e);
+    if(loading) loading.style.display = 'none';
+    if(list){
+      list.style.display = '';
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--danger)">❌ فشل التحميل: '+escapeHtml(e.message||'')+'</div>';
+    }
+  }
+}
+
+async function restoreCheckBook(bookId, idx){
+  const name = document.getElementById('rec-name-'+idx)?.value?.trim();
+  if(!name){ toast('❗ أدخل اسم الدفتر'); return; }
+  const bank = document.getElementById('rec-bank-'+idx)?.value?.trim() || '';
+  const account = document.getElementById('rec-account-'+idx)?.value?.trim() || '';
+  const firstNum = parseInt(document.getElementById('rec-first-'+idx)?.value) || 1;
+  const pages = parseInt(document.getElementById('rec-pages-'+idx)?.value) || 48;
+  const note = document.getElementById('rec-note-'+idx)?.value?.trim() || '';
+  const lastNum = firstNum + pages - 1;
+
+  try{
+    const r = await apiFetch('/api/check-books/restore','POST',{
+      id: bookId,
+      name, bank, account, pages, note,
+      firstNum, lastNum
+    });
+    if(r && r.ok){
+      toast(`✅ تم استعادة الدفتر — اتربط بـ ${r.linkedChecks} شيك`, 'success');
+      // أعد التحميل
+      await loadChks();
+      await loadCheckBookOrphans();
+      // برضه renderChecksPage عشان الواجهة تتحدث
+      if(typeof renderChecksPage === 'function') renderChecksPage();
+    } else {
+      toast('❌ ' + (r?.error || 'فشل الاستعادة'), 'error');
+    }
+  }catch(e){
+    toast('❌ ' + e.message, 'error');
+  }
+}
+
 function openCheckBook(){
   renderChkBooks();
   ['bk-name','bk-bank','bk-account','bk-first-num','bk-last-num'].forEach(id=>$(id)&&($(id).value=''));
@@ -19232,19 +19432,40 @@ async function searchSupplierProduct(){
       _spSearchResults = r?.results || [];
       
       if(!_spSearchResults.length){
-        resultsEl.innerHTML = '<div style="padding:10px;text-align:center;color:var(--muted);font-size:12px">مفيش نتائج</div>';
+        resultsEl.innerHTML = '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px">مفيش نتائج لـ "'+escapeHtml(q)+'"</div>';
       } else {
-        resultsEl.innerHTML = _spSearchResults.map((v, i) => `
-          <div onclick="addSPProduct(${i})" style="padding:8px 10px;border-bottom:1px solid var(--border);cursor:${v.already_added ? 'not-allowed' : 'pointer'};font-size:12px;${v.already_added ? 'opacity:.5' : ''}" 
-               onmouseover="${v.already_added ? '' : "this.style.background='var(--bg)'"}" 
-               onmouseout="this.style.background='transparent'">
-            <div style="font-weight:700">${escapeHtml(v.product_title)}${v.variant_title ? ' - '+escapeHtml(v.variant_title) : ''} ${v.already_added ? '<span style="color:#16a34a;font-size:10px">✓ مضاف</span>' : ''}</div>
-            <div style="color:var(--muted);font-size:10px">${v.sku ? 'SKU: '+escapeHtml(v.sku) : ''} ${v.barcode ? '· '+escapeHtml(v.barcode) : ''} · مخزون: ${v.total_stock}</div>
-          </div>
-        `).join('');
+        // 🔧 v283: عرض أوضح - صورة + اسم كامل + السعر + المخزون + زرار "ضيف"
+        resultsEl.innerHTML = _spSearchResults.map((v, i) => {
+          const title = (v.product_title || '') + (v.variant_title ? ' - ' + v.variant_title : '');
+          const price = parseFloat(v.price) || 0;
+          const imgUrl = v.image_url || '';
+          const isAdded = !!v.already_added;
+          return `
+          <div style="display:flex;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border);align-items:center;${isAdded?'opacity:.5;background:var(--bg)':''}">
+            <div style="width:42px;height:42px;background:var(--bg);border-radius:6px;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+              ${imgUrl 
+                ? `<img src="${escapeAttr(imgUrl)}" style="width:100%;height:100%;object-fit:cover" loading="lazy" onerror="this.style.display='none'">` 
+                : '<span style="font-size:18px;opacity:.4">📦</span>'}
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:12px;line-height:1.4">${escapeHtml(title)}</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:2px">
+                ${v.sku ? 'SKU: '+escapeHtml(v.sku)+' · ' : ''}${price ? price.toFixed(0)+' ج · ' : ''}مخزون: ${v.total_stock || 0}
+              </div>
+            </div>
+            ${isAdded 
+              ? '<span style="font-size:11px;color:#16a34a;font-weight:700;white-space:nowrap">✓ مضاف</span>' 
+              : `<button class="btn btn-success btn-xs" onclick="addSPProduct(${i})" style="white-space:nowrap">➕ ضيف</button>`}
+          </div>`;
+        }).join('');
       }
       resultsEl.style.display = 'block';
-    } catch(e){}
+      resultsEl.style.maxHeight = '320px'; // 🔧 v283: أعرض شوية
+    } catch(e){
+      console.error('searchSupplierProduct:', e);
+      resultsEl.innerHTML = '<div style="padding:10px;color:var(--danger);font-size:12px">❌ '+escapeHtml(e.message||'')+'</div>';
+      resultsEl.style.display = 'block';
+    }
   }, 300);
 }
 
@@ -19267,6 +19488,181 @@ async function addSPProduct(idx){
     toast('✅ تم الإضافة');
     loadSupplierProductsList();
   } catch(e) { toast('❌ ' + e.message); }
+}
+
+// ─── 🆕 v278: Bulk Add ───────────────────────────────────
+let _spBulkResults = [];
+let _spBulkSelected = new Set();
+let _spBulkSearchTimer = null;
+
+function openSPBulkAdd(){
+  const sup = _suppliers.find(s => s.id == _spCurrentSupplierId);
+  const nameEl = document.getElementById('sp-bulk-supplier-name');
+  if(nameEl) nameEl.textContent = sup ? sup.name : '';
+  document.getElementById('sp-bulk-search').value = '';
+  document.getElementById('sp-bulk-results-wrap').style.display = 'none';
+  document.getElementById('sp-bulk-status').style.display = 'none';
+  document.getElementById('sp-bulk-empty').style.display = '';
+  document.getElementById('sp-bulk-add-btn').disabled = true;
+  _spBulkResults = [];
+  _spBulkSelected.clear();
+  openM('m-sp-bulk');
+  setTimeout(() => document.getElementById('sp-bulk-search')?.focus(), 100);
+}
+
+function spBulkSearchDebounced(){
+  if(_spBulkSearchTimer) clearTimeout(_spBulkSearchTimer);
+  _spBulkSearchTimer = setTimeout(spBulkSearchNow, 400);
+}
+
+async function spBulkSearchNow(){
+  const q = document.getElementById('sp-bulk-search').value.trim();
+  const status = document.getElementById('sp-bulk-status');
+  const wrap = document.getElementById('sp-bulk-results-wrap');
+  const empty = document.getElementById('sp-bulk-empty');
+  const addBtn = document.getElementById('sp-bulk-add-btn');
+
+  if(q.length < 2){
+    status.style.display = 'block';
+    status.innerHTML = '⚠️ اكتب على الأقل حرفين';
+    status.style.background = '#fef3c7';
+    status.style.color = '#92400e';
+    wrap.style.display = 'none';
+    empty.style.display = 'none';
+    addBtn.disabled = true;
+    return;
+  }
+
+  // Loading state
+  status.style.display = 'block';
+  status.style.background = 'var(--bg)';
+  status.style.color = 'var(--muted)';
+  status.innerHTML = '⏳ جاري البحث...';
+  empty.style.display = 'none';
+  addBtn.disabled = true;
+
+  try {
+    const r = await apiFetch('/api/suppliers/' + _spCurrentSupplierId + '/bulk-search?q=' + encodeURIComponent(q));
+    _spBulkResults = r?.results || [];
+    const newOnly = _spBulkResults.filter(v => !v.already_added);
+
+    if(!_spBulkResults.length){
+      status.innerHTML = '❌ مفيش منتجات تطابق "' + escapeHtml(q) + '"';
+      status.style.background = '#fee2e2';
+      status.style.color = '#991b1b';
+      wrap.style.display = 'none';
+      return;
+    }
+
+    // Status
+    status.style.background = '#dcfce7';
+    status.style.color = '#166534';
+    status.innerHTML = `✅ <strong>${_spBulkResults.length}</strong> منتج تطابق "${escapeHtml(q)}" — `
+      + `<strong>${newOnly.length}</strong> جديد قابل للإضافة`
+      + (r.alreadyAddedCount ? `، ${r.alreadyAddedCount} موجود سابقاً` : '');
+
+    // Render list - select all new by default
+    _spBulkSelected = new Set(newOnly.map(v => v.variant_id));
+    spBulkRenderResults();
+    wrap.style.display = '';
+    document.getElementById('sp-bulk-select-all').checked = newOnly.length > 0;
+    spBulkUpdateAddBtn();
+  } catch(e) {
+    status.innerHTML = '❌ خطأ: ' + escapeHtml(e.message || '');
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    wrap.style.display = 'none';
+  }
+}
+
+function spBulkRenderResults(){
+  const html = _spBulkResults.map((v, i) => {
+    const isAlready = !!v.already_added;
+    const isChecked = !isAlready && _spBulkSelected.has(v.variant_id);
+    const title = (v.product_title || '') + (v.variant_title ? ' - ' + v.variant_title : '');
+    const price = parseFloat(v.price) || 0;
+    const imgUrl = v.image_url || '';
+    return `
+    <div style="padding:8px 12px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;${isAlready?'opacity:.5;background:var(--bg)':''}">
+      <input type="checkbox" ${isAlready?'disabled':''} ${isChecked?'checked':''} onchange="spBulkToggleItem('${escapeAttr(v.variant_id)}', this.checked)" style="cursor:${isAlready?'not-allowed':'pointer'};margin:0;flex-shrink:0">
+      <div style="width:42px;height:42px;background:var(--bg);border-radius:6px;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+        ${imgUrl
+          ? `<img src="${escapeAttr(imgUrl)}" style="width:100%;height:100%;object-fit:cover" loading="lazy" onerror="this.style.display='none'">`
+          : '<span style="font-size:18px;opacity:.4">📦</span>'}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:12px;line-height:1.4">${escapeHtml(title)} ${isAlready?'<span style="color:#16a34a;font-size:10px;margin-right:4px">✓ موجود</span>':''}</div>
+        <div style="color:var(--muted);font-size:10px;margin-top:2px">
+          ${v.sku ? 'SKU: '+escapeHtml(v.sku)+' · ' : ''}${price ? price.toFixed(0)+' ج · ' : ''}مخزون: ${v.total_stock || 0}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('sp-bulk-results').innerHTML = html;
+  spBulkUpdateCount();
+}
+
+function spBulkToggleItem(variantId, checked){
+  if(checked) _spBulkSelected.add(variantId);
+  else _spBulkSelected.delete(variantId);
+  spBulkUpdateCount();
+  spBulkUpdateAddBtn();
+  // sync the select-all checkbox
+  const newCount = _spBulkResults.filter(v => !v.already_added).length;
+  document.getElementById('sp-bulk-select-all').checked = _spBulkSelected.size === newCount && newCount > 0;
+}
+
+function spBulkToggleAll(checked){
+  _spBulkResults.forEach(v => {
+    if(v.already_added) return;
+    if(checked) _spBulkSelected.add(v.variant_id);
+    else _spBulkSelected.delete(v.variant_id);
+  });
+  spBulkRenderResults();
+  spBulkUpdateAddBtn();
+}
+
+function spBulkUpdateCount(){
+  document.getElementById('sp-bulk-selected-count').textContent = _spBulkSelected.size + ' محدد';
+}
+
+function spBulkUpdateAddBtn(){
+  const btn = document.getElementById('sp-bulk-add-btn');
+  btn.disabled = _spBulkSelected.size === 0;
+  btn.textContent = _spBulkSelected.size ? `➕ إضافة ${_spBulkSelected.size} منتج` : '➕ إضافة المحدد';
+}
+
+async function spBulkAddSelected(){
+  if(!_spBulkSelected.size) return;
+  const selectedVariants = _spBulkResults
+    .filter(v => _spBulkSelected.has(v.variant_id) && !v.already_added)
+    .map(v => ({
+      variantId: v.variant_id,
+      productTitle: v.product_title,
+      variantTitle: v.variant_title,
+      sku: v.sku,
+      barcode: v.barcode
+    }));
+
+  if(!selectedVariants.length){ toast('❗ مفيش منتجات للإضافة'); return; }
+  if(!confirm(`هتضيف ${selectedVariants.length} منتج للمورد. متأكد؟`)) return;
+
+  const btn = document.getElementById('sp-bulk-add-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ جاري الإضافة...';
+
+  try {
+    const r = await apiFetch('/api/suppliers/' + _spCurrentSupplierId + '/products/bulk-add', 'POST', {
+      variants: selectedVariants
+    });
+    toast(`✅ تم إضافة ${r.added} منتج${r.skipped ? ` (${r.skipped} موجودين أصلاً)` : ''}`, 'success');
+    closeM('m-sp-bulk');
+    loadSupplierProductsList();
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+    btn.disabled = false;
+    spBulkUpdateAddBtn();
+  }
 }
 
 async function toggleSPPrimary(variantId){
