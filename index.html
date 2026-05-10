@@ -9284,6 +9284,19 @@ async function delCourierFromEdit(){
 function saveCouriers(){localStorage.setItem('op_couriers',JSON.stringify(couriers))}
 
 function renderAcc(){
+  // 🔧 v278: لو سجل التسويات لسه ما اتحملش، حمّله الأول
+  // عشان getSettledIds ما ترجعش Set فاضي وتظهر طلبات متسوّاة كأنها لسه pending
+  if(!_settlementsLoaded){
+    const tbody = $('acc-tbody');
+    if(tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري تحميل سجل التسويات...</td></tr>';
+    loadSettlements().then(()=>renderAcc());
+    return;
+  }
+  if(_settlementsError){
+    const tbody = $('acc-tbody');
+    if(tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px"><div style="color:var(--danger);font-weight:700;margin-bottom:8px">⚠️ فشل تحميل سجل التسويات — لا يمكن عرض المحاسبة بدونه</div><div style="color:var(--muted);font-size:11px;margin-bottom:10px">السبب: '+(_settlementsError||'غير معروف')+'</div><button class="btn btn-primary btn-sm" onclick="_settlementsLoaded=false;_settlementsError=null;renderAcc()">🔄 حاول مرة تانية</button></td></tr>';
+    return;
+  }
   let totCod=0,totShip=0,rows='';
   // 🆕 v274: فلترة - بس مندوبين و محلات (الكاشيرز عندهم سجل تصفيات منفصل)
   const visibleCouriers = couriers.filter(c => {
@@ -12263,20 +12276,31 @@ async function deleteUser(username){
 
 var _allSettlements = [];
 var _settlementsLoaded = false;
+var _settlementsError = null; // 🔧 v278: track فشل التحميل
 var _currentSettleOrders = [];
 
 async function loadSettlements(){
   if(!API_URL){ _settlementsLoaded=true; return; }
   try{
+    _settlementsError = null;
     const data = await apiFetch('/api/settlements');
     if(data && data.settlements){
-      _allSettlements = data.settlements.map(s=>({
-        ...s,
-        orderIds: Array.isArray(s.orderIds)?s.orderIds:JSON.parse(s.orderIds||'[]'),
-        ts: new Date(s.ts)
-      }));
+      _allSettlements = data.settlements.map(s=>{
+        let orderIds = s.orderIds;
+        if(!Array.isArray(orderIds)){
+          try { orderIds = JSON.parse(s.orderIds||'[]'); } catch(e){ orderIds = []; }
+        }
+        return {
+          ...s,
+          orderIds: Array.isArray(orderIds) ? orderIds : [],
+          ts: new Date(s.ts)
+        };
+      });
     }
-  }catch(e){ console.error('loadSettlements:',e); }
+  }catch(e){
+    console.error('loadSettlements failed:',e);
+    _settlementsError = e.message || 'فشل التحميل';
+  }
   _settlementsLoaded = true;
 }
 
@@ -12994,6 +13018,9 @@ function renderSettleHistory(){
     if(!_settlementsLoaded){
       el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div>';
       loadSettlements().then(()=>renderSettleHistory());
+    } else if(_settlementsError) {
+      // 🔧 v278: عرض رسالة خطأ واضحة بدل ما تفضل عالقة
+      el.innerHTML='<div style="padding:30px;text-align:center"><div style="font-size:32px;margin-bottom:10px">⚠️</div><div style="color:var(--danger);font-weight:700;margin-bottom:6px">فشل تحميل سجل التسويات</div><div style="color:var(--muted);font-size:12px;margin-bottom:14px">'+(_settlementsError||'')+'</div><button class="btn btn-primary btn-sm" onclick="_settlementsLoaded=false;_settlementsError=null;renderSettleHistory()">🔄 حاول مرة تانية</button></div>';
     } else {
       el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا توجد تسويات بعد</div>';
     }
