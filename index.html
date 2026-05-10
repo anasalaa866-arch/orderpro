@@ -561,7 +561,7 @@ tr:hover td{background:#fafbff}
     <div class="search-wrap"><span class="search-ic">🔍</span><input type="text" placeholder="بحث..." id="srch" oninput="onSearch(this.value)"></div>
     <div class="api-badge wait desktop-only" id="api-badge">⏳ جاري...</div>
     <button class="btn btn-ghost desktop-only" onclick="syncNow()">🔄 مزامنة</button>
-      <button class="btn btn-ghost desktop-only" id="btn-import-shopify" onclick="openM('m-import')" style="color:var(--purple);border-color:var(--purple)">📥 استيراد من Shopify</button>
+      <button class="btn btn-ghost desktop-only" id="btn-import-shopify" onclick="openImportModal()" style="color:var(--purple);border-color:var(--purple)">📥 استيراد من Shopify</button>
     <button class="btn btn-primary" onclick="openM('m-order')">＋ طلب جديد</button>
     <div class="desktop-only" style="display:flex;align-items:center;gap:8px;margin-right:8px;border-right:1px solid var(--border);padding-right:12px">
       <span id="user-badge" style="font-size:12px;color:var(--muted);font-family:Roboto,sans-serif">👤</span>
@@ -4422,11 +4422,13 @@ tr:hover td{background:#fafbff}
 <div class="overlay" id="m-import"><div class="modal">
   <div class="mhd"><h3>📥 استيراد طلبات من Shopify</h3><button class="xbtn" onclick="closeM('m-import')">✕</button></div>
   <div class="mbd">
+    <!-- 🆕 v278: status banner للـ credentials -->
+    <div id="imp-creds-status" style="display:none;border-radius:9px;padding:10px 14px;margin-bottom:14px;font-size:12px;line-height:1.7"></div>
     <div style="background:var(--accent-light);border:1px solid #a5b4fc;border-radius:9px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:#3730a3;line-height:1.8">
       💡 هيجيب كل طلبات Shopify من آخر عدد الأيام اللي تحدده — الطلبات الجديدة بتتضاف، والطلبات الموجودة بتتحدث تلقائياً
     </div>
-    <div class="fg"><label>رابط المتجر</label><input type="text" id="imp-url" placeholder="your-store.myshopify.com"></div>
-    <div class="fg"><label>Admin API Access Token</label><input type="password" id="imp-token" placeholder="shpat_xxxxxxxxxxxx"></div>
+    <div class="fg" id="imp-url-fg"><label>رابط المتجر</label><input type="text" id="imp-url" placeholder="your-store.myshopify.com"></div>
+    <div class="fg" id="imp-token-fg"><label>Admin API Access Token</label><input type="password" id="imp-token" placeholder="shpat_xxxxxxxxxxxx"></div>
     <div class="fg">
       <label>استيراد طلبات آخر كم يوم؟</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px" id="days-btns">
@@ -4453,7 +4455,6 @@ tr:hover td{background:#fafbff}
   </div>
   <div class="mft">
     <button class="btn btn-ghost" onclick="closeM('m-import')">إلغاء</button>
-    <button class="btn btn-ghost" onclick="forceUpdateServerCredentials()" style="color:#6366f1;border-color:#6366f1" title="حفظ الـ Token في الـ Database">🔐 حفظ التوكن في السيرفر</button>
     <button class="btn btn-ghost" onclick="backfillImages()" style="color:#96bf48;border-color:#96bf48" title="جلب صور المنتجات للطلبات اللي مفيهاش صور">🖼️ تحميل صور المنتجات</button>
     <button class="btn btn-primary" id="imp-btn" onclick="doImport()">📥 استيراد الآن</button>
   </div>
@@ -7867,16 +7868,15 @@ async function checkShopifyPrice(orderId){
   if(!o || !o.shopifyId){ toast('❗ الطلب مش من Shopify'); return; }
   if(!API_URL){ toast('❗ الـ backend غير متصل'); return; }
 
-  const shopUrl = localStorage.getItem('orderpro_shop_url') || localStorage.getItem('shopify_url')||'';
-  const accessToken = localStorage.getItem('orderpro_shop_token') || localStorage.getItem('shopify_token')||'';
-  if(!shopUrl || !accessToken){ toast('❗ بيانات Shopify غير مضبوطة'); return; }
-
+  // 🔧 v278: السيرفر هيستخدم credentials اللي عنده (env vars أو DB)
   toast('⏳ جاري تحليل السعر من Shopify...');
 
   try{
     const r = await fetch(API_URL.replace(/\/$/,'')+'/api/shopify/price-check',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ shopUrl, accessToken, shopifyOrderId: o.shopifyId })
+      method:'POST',
+      headers:{'Content-Type':'application/json',
+               ...(window._adminToken ? {'Authorization':'Bearer '+window._adminToken} : {})},
+      body: JSON.stringify({ shopifyOrderId: o.shopifyId })
     });
     let d;
     try { d = await r.json(); }
@@ -8007,16 +8007,16 @@ function resyncOrderPrice(orderId, newTotal){
 
 async function backfillImages(){
   if(!API_URL){ toast('❗ الـ backend غير متصل'); return; }
-  const shopUrl = localStorage.getItem('orderpro_shop_url') || $('imp-url')?.value?.trim();
-  const accessToken = localStorage.getItem('orderpro_shop_token') || $('imp-token')?.value?.trim();
-  if(!shopUrl || !accessToken){ toast('❗ أدخل رابط المتجر والـ token'); return; }
+  // 🔧 v278: السيرفر يستخدم credentials اللي عنده
   if(!confirm('هيجيب صور المنتجات لآخر 100 طلب Shopify. العملية ممكن تاخد دقيقة. نبدأ؟'))return;
 
   toast('⏳ جاري جلب صور المنتجات...');
   try{
     const r = await fetch(API_URL.replace(/\/$/,'')+'/api/shopify/backfill-images',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ shopUrl, accessToken, limit: 100 })
+      method:'POST',
+      headers:{'Content-Type':'application/json',
+               ...(window._adminToken ? {'Authorization':'Bearer '+window._adminToken} : {})},
+      body: JSON.stringify({ limit: 100 })
     });
     const d = await r.json();
     if(!r.ok){
@@ -8151,24 +8151,20 @@ async function printPackingSlipLegacy(orderId){
   const hasAllImages = lineItems.length > 0 && lineItems.every(i=>i.image);
   if(!hasAllImages && o.src==='shopify' && o.shopifyId && API_URL){
     try{
-      const shopUrl = localStorage.getItem('orderpro_shop_url');
-      const accessToken = localStorage.getItem('orderpro_shop_token');
-      if(shopUrl && accessToken){
-        toast('⏳ جاري جلب صور المنتجات من Shopify...');
-        const r = await apiFetch('/api/shopify/fetch-line-items','POST',{
-          shopUrl, accessToken,
-          shopifyOrderId: String(o.shopifyId),
-          orderId: o.id,
-        });
-        if(r && r.lineItemsJson){
-          try{
-            lineItems = JSON.parse(r.lineItemsJson);
-            o.lineItemsJson = r.lineItemsJson;
-            if(r.subtotalPrice) o.subtotalPrice = r.subtotalPrice;
-            if(r.shippingPrice) o.shippingPrice = r.shippingPrice;
-            debouncedSaveOrders();
-          }catch(e){}
-        }
+      // 🔧 v278: السيرفر يستخدم credentials اللي عنده
+      toast('⏳ جاري جلب صور المنتجات من Shopify...');
+      const r = await apiFetch('/api/shopify/fetch-line-items','POST',{
+        shopifyOrderId: String(o.shopifyId),
+        orderId: o.id,
+      });
+      if(r && r.lineItemsJson){
+        try{
+          lineItems = JSON.parse(r.lineItemsJson);
+          o.lineItemsJson = r.lineItemsJson;
+          if(r.subtotalPrice) o.subtotalPrice = r.subtotalPrice;
+          if(r.shippingPrice) o.shippingPrice = r.shippingPrice;
+          debouncedSaveOrders();
+        }catch(e){}
       }
     }catch(e){ console.warn('fetch-line-items:', e.message); }
   }
@@ -8510,13 +8506,11 @@ async function _doShopifyFulfill(order, courierName){
   if(!shopifyOrderId) return null;
   if(!API_URL) return null;
 
-  const shopUrl = localStorage.getItem('orderpro_shop_url') || '';
-  const accessToken = localStorage.getItem('orderpro_shop_token') || '';
-
   try{
     console.log('Calling shopify/assign:', order.id, '→', courierName);
+    // 🔧 v278: ما نبعتش credentials من localStorage عشان السيرفر يستخدم
+    // الـ env vars (Railway) أو DB. الـ localStorage ممكن يكون فيه token قديم.
     const r = await apiFetch('/api/shopify/assign','POST',{
-      shopUrl, accessToken,
       shopifyOrderId: String(shopifyOrderId),
       courierName: courierName || 'OrderPro',
       orderId: order.id,
@@ -13461,14 +13455,8 @@ window.addEventListener('load', function(){
       const s=JSON.parse(localStorage.getItem('current_user_session')||'null');
       if(s){s._expires=Date.now()+8*60*60*1000;localStorage.setItem('current_user_session',JSON.stringify(s));}
     }catch(e){}
-    // ابعت الـ Shopify credentials للسيرفر لو مخزنة محلياً (عشان السيرفر يجيب الصور)
-    try{
-      const shopUrl = localStorage.getItem('orderpro_shop_url');
-      const shopToken = localStorage.getItem('orderpro_shop_token');
-      if(shopUrl && shopToken && API_URL && currentUser.role==='admin'){
-        apiFetch('/api/settings','POST',{ shopify_url: shopUrl, shopify_token: shopToken }).catch(()=>{});
-      }
-    }catch(e){}
+    // 🔧 v278: شيلنا الـ flow اللي كان بيكتب الـ token من localStorage في DB
+    // لإن دلوقتي الـ token الصحيح موجود في Railway env vars
     syncCouriersToDB().then(async ()=>{
       await loadSettlements();
       await loadCurrentBatchFromServer();
@@ -14292,18 +14280,15 @@ async function buildPackingSlipHtml(o){
   const hasAllImages = lineItems.length > 0 && lineItems.every(i=>i.image);
   if(!hasAllImages && o.src==='shopify' && o.shopifyId && API_URL){
     try{
-      const shopUrl = localStorage.getItem('orderpro_shop_url');
-      const accessToken = localStorage.getItem('orderpro_shop_token');
-      if(shopUrl && accessToken){
-        const r = await apiFetch('/api/shopify/fetch-line-items','POST',{
-          shopUrl, accessToken, shopifyOrderId: String(o.shopifyId), orderId: o.id,
-        });
-        if(r && r.lineItemsJson){
-          lineItems = JSON.parse(r.lineItemsJson);
-          o.lineItemsJson = r.lineItemsJson;
-          if(r.subtotalPrice) o.subtotalPrice = r.subtotalPrice;
-          if(r.shippingPrice) o.shippingPrice = r.shippingPrice;
-        }
+      // 🔧 v278: السيرفر يستخدم credentials اللي عنده
+      const r = await apiFetch('/api/shopify/fetch-line-items','POST',{
+        shopifyOrderId: String(o.shopifyId), orderId: o.id,
+      });
+      if(r && r.lineItemsJson){
+        lineItems = JSON.parse(r.lineItemsJson);
+        o.lineItemsJson = r.lineItemsJson;
+        if(r.subtotalPrice) o.subtotalPrice = r.subtotalPrice;
+        if(r.shippingPrice) o.shippingPrice = r.shippingPrice;
       }
     }catch(e){}
   }
@@ -24855,11 +24840,102 @@ async function forceUpdateServerCredentials(){
   }
 }
 
+// 🆕 v278: ذاكرة لحالة الـ credentials بتاع Shopify على السيرفر
+var _shopifyCredsStatus = null; // {configured, source, shopUrl, tokenPreview}
+
+async function checkShopifyCredsStatus(){
+  if(!API_URL) return null;
+  try{
+    const r = await apiFetch('/api/shopify/creds-status');
+    _shopifyCredsStatus = r;
+    return r;
+  }catch(e){
+    console.warn('checkShopifyCredsStatus failed:', e.message);
+    return null;
+  }
+}
+
+// فتح modal الاستيراد - بيشيك الأول لو في credentials في السيرفر
+async function openImportModal(){
+  // افتح الـ modal أولاً مع loader
+  openM('m-import');
+  const banner = document.getElementById('imp-creds-status');
+  const urlFg = document.getElementById('imp-url-fg');
+  const tokenFg = document.getElementById('imp-token-fg');
+  if(banner){
+    banner.style.display = 'block';
+    banner.style.background = '#f3f4f6';
+    banner.style.border = '1px solid var(--border)';
+    banner.style.color = 'var(--muted)';
+    banner.innerHTML = '⏳ جاري التحقق من إعدادات Shopify...';
+  }
+  if(urlFg) urlFg.style.display = 'none';
+  if(tokenFg) tokenFg.style.display = 'none';
+
+  const status = await checkShopifyCredsStatus();
+
+  if(status && status.configured){
+    // 🟢 الـ credentials محفوظة في السيرفر
+    const sourceLabel = status.source === 'env' ? '🔒 Railway env vars' : '💾 قاعدة البيانات';
+    const sourceColor = status.source === 'env' ? '#065f46' : '#92400e';
+    const sourceBg = status.source === 'env' ? '#dcfce7' : '#fef3c7';
+    const sourceBorder = status.source === 'env' ? '#86efac' : '#fcd34d';
+    if(banner){
+      banner.style.background = sourceBg;
+      banner.style.border = '1px solid ' + sourceBorder;
+      banner.style.color = sourceColor;
+      banner.innerHTML = '<strong>✅ Token محفوظ في السيرفر</strong>'
+        + '<div style="margin-top:4px;font-size:11px">'
+        + '<strong>المصدر:</strong> ' + sourceLabel + '<br>'
+        + '<strong>المتجر:</strong> ' + escapeHtml(status.shopUrl) + '<br>'
+        + '<strong>Token:</strong> <code style="font-size:11px">' + escapeHtml(status.tokenPreview||'') + '</code>'
+        + '</div>'
+        + '<div style="margin-top:6px"><a href="#" onclick="event.preventDefault();showManualImpFields()" style="color:'+sourceColor+';font-size:11px;text-decoration:underline">استخدام Token مختلف لمرة واحدة</a></div>';
+    }
+    // فضي الـ inputs عشان لو المستخدم ضغط "استخدام Token مختلف" يحطه
+    if($('imp-url')) $('imp-url').value = '';
+    if($('imp-token')) $('imp-token').value = '';
+  } else {
+    // 🟡 مفيش credentials - عرض الفورم زي العادة
+    if(banner){
+      banner.style.background = '#fef3c7';
+      banner.style.border = '1px solid #fcd34d';
+      banner.style.color = '#92400e';
+      banner.innerHTML = '⚠️ مفيش Token محفوظ في السيرفر. <strong>الأفضل:</strong> ضيف <code>SHOPIFY_SHOP_URL</code> و <code>SHOPIFY_ACCESS_TOKEN</code> في Railway env vars.';
+    }
+    showManualImpFields();
+  }
+}
+
+// عرض حقول الـ URL/Token اليدوية (لو المستخدم عايز يستخدم Token مختلف)
+function showManualImpFields(){
+  const urlFg = document.getElementById('imp-url-fg');
+  const tokenFg = document.getElementById('imp-token-fg');
+  if(urlFg) urlFg.style.display = '';
+  if(tokenFg) tokenFg.style.display = '';
+  // اقترح الـ URL القديم من localStorage لو موجود
+  const savedUrl = localStorage.getItem('orderpro_shop_url') || '';
+  if(savedUrl && $('imp-url') && !$('imp-url').value) $('imp-url').value = savedUrl;
+}
+
 async function doImport() {
-  const url = $('imp-url').value.trim();
-  const token = $('imp-token').value.trim();
   const days = +$('imp-days').value || 15;
-  if (!url || !token) { toast('❗ أدخل رابط المتجر والـ Token'); return; }
+  // 🆕 v278: لو الحقول مخفية → السيرفر هيستخدم credentials المحفوظة
+  // لو الحقول ظاهرة → استخدم اللي المستخدم كتبه
+  const urlFgVisible = document.getElementById('imp-url-fg')?.style.display !== 'none';
+  let url = '';
+  let token = '';
+  if(urlFgVisible){
+    url = $('imp-url').value.trim();
+    token = $('imp-token').value.trim();
+    if (!url || !token) {
+      // لو السيرفر عنده creds، اسمح بـ submit بدونهم
+      if(!(_shopifyCredsStatus && _shopifyCredsStatus.configured)){
+        toast('❗ أدخل رابط المتجر والـ Token');
+        return;
+      }
+    }
+  }
   if (!API_URL) { toast('❗ الـ Backend مش متصل — اضبط الإعدادات أولاً'); return; }
 
   const btn = $('imp-btn');
@@ -24894,10 +24970,15 @@ async function doImport() {
   }, 3000);
 
   try {
+    // 🆕 v278: ابعت body بدون url/token لو فاضيين، السيرفر هيستخدم اللي عنده
+    const body = { days };
+    if(url) body.shopUrl = url;
+    if(token) body.accessToken = token;
     const res = await fetch(API_URL + '/api/import-shopify', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shopUrl: url, accessToken: token, days })
+      headers: { 'Content-Type': 'application/json',
+                 ...(window._adminToken ? {'Authorization':'Bearer '+window._adminToken} : {}) },
+      body: JSON.stringify(body)
     });
     const data = await res.json();
 
@@ -24926,12 +25007,13 @@ async function doImport() {
           </div>
         </div>
         ${data.pages>1?`<div style="margin-top:6px;font-size:11px;color:var(--muted)">📄 ${data.pages} صفحة × 250 طلب</div>`:''}`;
-      localStorage.setItem('orderpro_shop_url', url);
-      localStorage.setItem('orderpro_shop_token', token);
-      if($('cfg-shop')) $('cfg-shop').value = url;
-      if($('cfg-token')) $('cfg-token').value = token;
-      // احفظها على السيرفر كمان عشان يقدر يجيب الصور تلقائياً
-      if(API_URL){
+      // 🆕 v278: احفظ في localStorage بس لو المستخدم كتبهم يدوياً
+      if(url) localStorage.setItem('orderpro_shop_url', url);
+      if(token) localStorage.setItem('orderpro_shop_token', token);
+      if(url && $('cfg-shop')) $('cfg-shop').value = url;
+      if(token && $('cfg-token')) $('cfg-token').value = token;
+      // احفظها على السيرفر كمان (لو المستخدم كتبهم بدلاً من credentials اللي عنده)
+      if(API_URL && url && token){
         apiFetch('/api/settings','POST',{ shopify_url: url, shopify_token: token }).catch(()=>{});
       }
       await loadOrders();
