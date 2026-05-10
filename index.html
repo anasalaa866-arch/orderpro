@@ -2732,7 +2732,7 @@ tr:hover td{background:#fafbff}
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px">
         <div>
           <label style="font-size:11px;color:var(--muted)">المخزن المستلم *</label>
-          <select id="reorder-warehouse" class="form-input" style="font-size:13px"></select>
+          <select id="reorder-warehouse" class="form-input" style="font-size:13px" onchange="updateAISourceHint()"></select>
         </div>
         <div>
           <label style="font-size:11px;color:var(--muted)">📅 أيام التغطية</label>
@@ -2756,7 +2756,26 @@ tr:hover td{background:#fafbff}
             🤖 تشغيل التحليل الذكي
           </button>
         </div>
-        
+
+        <!-- 🆕 v285: Source selector - من فين الـ AI يحسب المتوسط؟ -->
+        <div style="background:rgba(255,255,255,.6);border:1px solid #c4b5fd;border-radius:8px;padding:8px 10px;margin-top:8px">
+          <div style="font-size:11px;color:#5b21b6;font-weight:700;margin-bottom:5px">📊 مصدر بيانات المبيعات:</div>
+          <div id="ai-source-options" style="display:flex;gap:5px;flex-wrap:wrap;font-size:11px">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;background:#fff;border:1px solid #c4b5fd;border-radius:6px;padding:4px 8px">
+              <input type="radio" name="ai_source" value="auto" checked onchange="aiSourceChanged()"> <span>🎯 تلقائي (حسب المخزن)</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;background:#fff;border:1px solid #c4b5fd;border-radius:6px;padding:4px 8px">
+              <input type="radio" name="ai_source" value="all" onchange="aiSourceChanged()"> <span>🌐 كل المصادر</span>
+            </label>
+            <!-- Stores هتتحط dynamically -->
+            <div id="ai-source-stores" style="display:contents"></div>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer;background:#fff;border:1px solid #c4b5fd;border-radius:6px;padding:4px 8px">
+              <input type="radio" name="ai_source" value="online" onchange="aiSourceChanged()"> <span>🌍 Online فقط</span>
+            </label>
+          </div>
+          <div id="ai-source-hint" style="font-size:10px;color:#7c3aed;margin-top:4px"></div>
+        </div>
+
         <!-- AI Summary -->
         <div id="ai-summary" style="display:none;background:#fff;border:1px solid #c4b5fd;border-radius:8px;padding:10px;margin-top:8px"></div>
       </div>
@@ -19714,7 +19733,10 @@ async function openSupplierReorder(supplierId){
     _reorderInvWarehouses.map(w => `<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
   
   openM('m-reorder');
-  
+
+  // 🆕 v285: load POS stores for AI source picker
+  loadPosStoresForAI();
+
   // Load products + stats
   try {
     const r = await apiFetch('/api/suppliers/' + supplierId + '/reorder-data-smart');
@@ -19870,9 +19892,9 @@ function renderReorderTable(){
         </td>
         ${whCells}
         <td style="padding:6px;text-align:center;font-weight:800;color:${p.total_stock === 0 ? '#ef4444' : p.total_stock < 10 ? '#f97316' : '#3b82f6'}">${p.total_stock}</td>
-        <td style="padding:6px;text-align:center;font-size:11px">${p.avg_7d.toFixed(1)}</td>
-        <td style="padding:6px;text-align:center;font-size:11px;font-weight:700" title="${p.smart_metadata && p.smart_metadata.improvement_pct ? 'القديم: '+p.naive_avg_30d+' | الذكي: '+p.avg_30d+' | تحسين: '+p.smart_metadata.improvement_pct+'%' : ''}">${p.avg_30d.toFixed(1)}${p.smart_metadata && p.smart_metadata.improvement_pct && Math.abs(p.smart_metadata.improvement_pct) > 20 ? ' <span style="font-size:9px;color:#16a34a">✨</span>' : ''}</td>
-        <td style="padding:6px;text-align:center;font-size:11px">${p.avg_60d.toFixed(1)}</td>
+        <td style="padding:6px;text-align:center;font-size:11px" title="${_buildBreakdownTooltip(p, 'avg_7d')}">${p.avg_7d.toFixed(1)}</td>
+        <td style="padding:6px;text-align:center;font-size:11px;font-weight:700" title="${_buildBreakdownTooltip(p, 'avg_30d')}">${p.avg_30d.toFixed(1)}${p.smart_metadata && p.smart_metadata.improvement_pct && Math.abs(p.smart_metadata.improvement_pct) > 20 ? ' <span style="font-size:9px;color:#16a34a">✨</span>' : ''}</td>
+        <td style="padding:6px;text-align:center;font-size:11px" title="${_buildBreakdownTooltip(p, 'avg_60d')}">${p.avg_60d.toFixed(1)}</td>
         <td style="padding:6px;text-align:center;font-size:11px;${daysClass}">${p.days_remaining < 999 ? p.days_remaining.toFixed(0) : '∞'}</td>
         <td style="padding:6px;text-align:center;font-weight:700;color:${p.ai_suggested_qty != null ? '#7c3aed' : '#3b82f6'}" title="${p.ai_suggested_qty != null ? 'اقتراح AI: '+p.ai_suggested_qty+' (الأساسي: '+(p.suggested_qty||0)+')' : 'الكمية المقترحة'}">
           ${p.ai_suggested_qty != null ? `🤖 ${p.ai_suggested_qty}` : (p.suggested_qty || 0)}
@@ -20625,12 +20647,108 @@ async function loadDashboardTrend(){
 // ============================================================
 
 let _aiAnalysis = null;
+let _aiPosStores = []; // 🆕 v285: cached list of POS stores
+
+// 🆕 v285: load POS stores ومعرفة أي مخزن مرتبط بأي محل
+async function loadPosStoresForAI(){
+  try {
+    const r = await apiFetch('/api/pos/stores');
+    _aiPosStores = (r && r.stores) || r || [];
+    renderAISourceOptions();
+  } catch(e){
+    _aiPosStores = [];
+  }
+}
+
+function renderAISourceOptions(){
+  const container = document.getElementById('ai-source-stores');
+  if(!container) return;
+  const html = (_aiPosStores || []).filter(s => s.is_active !== false).map(s => {
+    // نـ derive key بسيط - نشيل المسافات
+    return `
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;background:#fff;border:1px solid #c4b5fd;border-radius:6px;padding:4px 8px">
+      <input type="radio" name="ai_source" value="${s.id}" onchange="aiSourceChanged()"> <span>🏪 ${escapeHtml(s.name || ('Store ' + s.id))}</span>
+    </label>`;
+  }).join('');
+  container.innerHTML = html;
+  updateAISourceHint();
+}
+
+// لما المستخدم يغير الـ radio
+function aiSourceChanged(){
+  updateAISourceHint();
+}
+
+function updateAISourceHint(){
+  const hint = document.getElementById('ai-source-hint');
+  if(!hint) return;
+  const sel = document.querySelector('input[name="ai_source"]:checked')?.value;
+  if (sel === 'auto') {
+    const auto = _autoSelectAISource();
+    if (auto && auto !== 'all') {
+      const store = _aiPosStores.find(s => String(s.id) === String(auto));
+      hint.textContent = '💡 هيتم استخدام: ' + (store ? store.name : (auto === 'online' ? 'Online' : auto));
+    } else {
+      hint.textContent = '💡 اختار مخزن من فوق عشان نستخدم مبيعاته';
+    }
+  } else if (sel === 'all') {
+    hint.textContent = '💡 هيتم جمع مبيعات Online + كل المحلات';
+  } else if (sel === 'online') {
+    hint.textContent = '💡 هيتم استخدام مبيعات Shopify Online فقط';
+  } else {
+    const store = _aiPosStores.find(s => String(s.id) === String(sel));
+    hint.textContent = '💡 هيتم استخدام مبيعات ' + (store ? store.name : 'المحل المختار') + ' فقط';
+  }
+}
+
+// (B) Auto-select based on selected warehouse
+function _autoSelectAISource(){
+  const whSelect = document.getElementById('reorder-warehouse');
+  const whId = whSelect?.value;
+  if (!whId) return null;
+  // ابحث عن المحل اللي مرتبط بالمخزن ده
+  const store = _aiPosStores.find(s => String(s.warehouse_id) === String(whId));
+  if (store) return String(store.id);
+  return 'all';
+}
+
+// 🆕 v285: build tooltip text showing breakdown per source
+function _buildBreakdownTooltip(p, field){
+  // p might have ai_breakdown (from AI assistant) or naive_avg_30d (smart metadata)
+  const lines = [];
+  const breakdown = p.ai_sources_breakdown;
+  if (breakdown && Object.keys(breakdown).length) {
+    Object.values(breakdown).forEach(src => {
+      const val = src[field] != null ? src[field] : 0;
+      const soldField = field.replace('avg_', 'sold_');
+      const sold = src[soldField] != null ? src[soldField] : 0;
+      lines.push(`${src.display_name}: ${val.toFixed(2)}/يوم (${sold} مبيع)`);
+    });
+  } else {
+    // Fallback: show smart metadata comparison
+    if (p.smart_metadata && p.smart_metadata.improvement_pct) {
+      lines.push('الذكي: ' + p[field].toFixed(2));
+      const naiveField = 'naive_' + field;
+      if (p[naiveField] != null) lines.push('الساذج: ' + p[naiveField].toFixed(2));
+      lines.push('تحسين: ' + p.smart_metadata.improvement_pct + '%');
+    }
+  }
+  return lines.join(' | ').replace(/"/g, '&quot;');
+}
 
 async function runAIAssistant(){
   if(!_reorderSupplierId) return;
   
   const days = parseInt(document.getElementById('reorder-days').value) || 30;
-  
+
+  // 🆕 v285: source param
+  const sourceRadio = document.querySelector('input[name="ai_source"]:checked');
+  let source = sourceRadio?.value || 'auto';
+  if (source === 'auto') {
+    // اختار حسب المخزن المسلّم
+    source = _autoSelectAISource() || 'all';
+  }
+
   // Loading state
   const summaryEl = document.getElementById('ai-summary');
   summaryEl.style.display = 'block';
@@ -20641,9 +20759,9 @@ async function runAIAssistant(){
       <div style="font-size:11px;color:var(--muted);margin-top:3px">دا قد ياخد ثواني حسب عدد المنتجات</div>
     </div>
   `;
-  
+
   try {
-    const r = await apiFetch('/api/suppliers/' + _reorderSupplierId + '/ai-reorder?days=' + days);
+    const r = await apiFetch('/api/suppliers/' + _reorderSupplierId + '/ai-reorder?days=' + days + '&source=' + encodeURIComponent(source));
     _aiAnalysis = r;
     
     if(!r?.suggestions?.length){
@@ -20662,6 +20780,14 @@ async function runAIAssistant(){
         product.ai_reasoning = s.reasoning;
         product.ai_forecast = s.forecast;
         product.ai_priority_score = s.priority_score;
+        // 🆕 v285: حدّث الـ avgs والـ breakdown من الـ AI (مصدر مختلف)
+        if (s.forecast) {
+          product.avg_7d = s.forecast.avg_7d;
+          product.avg_30d = s.forecast.avg_30d;
+          product.avg_60d = s.forecast.avg_60d;
+          product.ai_sources_breakdown = s.forecast.sources_breakdown || null;
+          product.ai_source_used = s.forecast.source_used;
+        }
       }
     });
     
