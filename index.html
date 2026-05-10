@@ -3218,7 +3218,7 @@ tr:hover td{background:#fafbff}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">💵 سجل تصفيات الكاشيرز</h2>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <button class="btn btn-ghost btn-sm" onclick="loadSettlements()">🔄 تحديث</button>
+      <button class="btn btn-ghost btn-sm" onclick="loadCashierSettlements()">🔄 تحديث</button>
       <button class="btn btn-primary btn-sm" onclick="openNewSettlement()">➕ تصفية جديدة</button>
     </div>
   </div>
@@ -3248,10 +3248,10 @@ tr:hover td{background:#fafbff}
   <div class="card">
     <div class="card-header"><h3 style="margin:0">📜 سجل التصفيات السابقة</h3></div>
     <div style="padding:12px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <input type="date" id="settle-filter-from" class="form-input" style="max-width:160px" onchange="loadSettlements()">
+      <input type="date" id="settle-filter-from" class="form-input" style="max-width:160px" onchange="loadCashierSettlements()">
       <span style="color:var(--muted)">→</span>
-      <input type="date" id="settle-filter-to" class="form-input" style="max-width:160px" onchange="loadSettlements()">
-      <select id="settle-filter-cashier" class="form-input" style="max-width:200px" onchange="loadSettlements()">
+      <input type="date" id="settle-filter-to" class="form-input" style="max-width:160px" onchange="loadCashierSettlements()">
+      <select id="settle-filter-cashier" class="form-input" style="max-width:200px" onchange="loadCashierSettlements()">
         <option value="">كل الكاشيرز</option>
       </select>
       <button class="btn btn-ghost btn-xs" onclick="clearSettleFilters()">✕ مسح الفلاتر</button>
@@ -9284,19 +9284,6 @@ async function delCourierFromEdit(){
 function saveCouriers(){localStorage.setItem('op_couriers',JSON.stringify(couriers))}
 
 function renderAcc(){
-  // 🔧 v278: لو سجل التسويات لسه ما اتحملش، حمّله الأول
-  // عشان getSettledIds ما ترجعش Set فاضي وتظهر طلبات متسوّاة كأنها لسه pending
-  if(!_settlementsLoaded){
-    const tbody = $('acc-tbody');
-    if(tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري تحميل سجل التسويات...</td></tr>';
-    loadSettlements().then(()=>renderAcc());
-    return;
-  }
-  if(_settlementsError){
-    const tbody = $('acc-tbody');
-    if(tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px"><div style="color:var(--danger);font-weight:700;margin-bottom:8px">⚠️ فشل تحميل سجل التسويات — لا يمكن عرض المحاسبة بدونه</div><div style="color:var(--muted);font-size:11px;margin-bottom:10px">السبب: '+(_settlementsError||'غير معروف')+'</div><button class="btn btn-primary btn-sm" onclick="_settlementsLoaded=false;_settlementsError=null;renderAcc()">🔄 حاول مرة تانية</button></td></tr>';
-    return;
-  }
   let totCod=0,totShip=0,rows='';
   // 🆕 v274: فلترة - بس مندوبين و محلات (الكاشيرز عندهم سجل تصفيات منفصل)
   const visibleCouriers = couriers.filter(c => {
@@ -12276,31 +12263,20 @@ async function deleteUser(username){
 
 var _allSettlements = [];
 var _settlementsLoaded = false;
-var _settlementsError = null; // 🔧 v278: track فشل التحميل
 var _currentSettleOrders = [];
 
 async function loadSettlements(){
   if(!API_URL){ _settlementsLoaded=true; return; }
   try{
-    _settlementsError = null;
     const data = await apiFetch('/api/settlements');
     if(data && data.settlements){
-      _allSettlements = data.settlements.map(s=>{
-        let orderIds = s.orderIds;
-        if(!Array.isArray(orderIds)){
-          try { orderIds = JSON.parse(s.orderIds||'[]'); } catch(e){ orderIds = []; }
-        }
-        return {
-          ...s,
-          orderIds: Array.isArray(orderIds) ? orderIds : [],
-          ts: new Date(s.ts)
-        };
-      });
+      _allSettlements = data.settlements.map(s=>({
+        ...s,
+        orderIds: Array.isArray(s.orderIds)?s.orderIds:JSON.parse(s.orderIds||'[]'),
+        ts: new Date(s.ts)
+      }));
     }
-  }catch(e){
-    console.error('loadSettlements failed:',e);
-    _settlementsError = e.message || 'فشل التحميل';
-  }
+  }catch(e){ console.error('loadSettlements:',e); }
   _settlementsLoaded = true;
 }
 
@@ -13018,9 +12994,6 @@ function renderSettleHistory(){
     if(!_settlementsLoaded){
       el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div>';
       loadSettlements().then(()=>renderSettleHistory());
-    } else if(_settlementsError) {
-      // 🔧 v278: عرض رسالة خطأ واضحة بدل ما تفضل عالقة
-      el.innerHTML='<div style="padding:30px;text-align:center"><div style="font-size:32px;margin-bottom:10px">⚠️</div><div style="color:var(--danger);font-weight:700;margin-bottom:6px">فشل تحميل سجل التسويات</div><div style="color:var(--muted);font-size:12px;margin-bottom:14px">'+(_settlementsError||'')+'</div><button class="btn btn-primary btn-sm" onclick="_settlementsLoaded=false;_settlementsError=null;renderSettleHistory()">🔄 حاول مرة تانية</button></div>';
     } else {
       el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">لا توجد تسويات بعد</div>';
     }
@@ -21213,7 +21186,11 @@ async function renderPosTeam(){
 // ════════════════════════════════════════════════════════════
 let _settlementsCache = { pending: [], history: [] };
 
-async function loadSettlements(){
+// 🔧 v278: renamed from loadSettlements -> loadCashierSettlements
+// لأن كان فيه function تانية بنفس الاسم في السطر 12268 (للمناديب)
+// و JS بياخد آخر تعريف فقط، يعني الـ function بتاعت المناديب كانت بتتجاهل
+// النتيجة: _allSettlements تفضل فاضية → سجل التسويات عالق + محاسبة المناديب بتعرض كل الطلبات
+async function loadCashierSettlements(){
   try {
     // pending
     const pendingR = await apiFetch('/api/cashier-settlements/pending');
@@ -21260,7 +21237,7 @@ async function loadSettlements(){
     renderPendingSettlements();
     renderSettlementsHistory();
   } catch(e) {
-    console.error('loadSettlements:', e);
+    console.error('loadCashierSettlements:', e);
     toast('❌ خطأ في التحميل: ' + e.message, 'error');
   }
 }
@@ -21372,7 +21349,7 @@ function clearSettleFilters(){
   $('settle-filter-from').value = '';
   $('settle-filter-to').value = '';
   $('settle-filter-cashier').value = '';
-  loadSettlements();
+  loadCashierSettlements();
 }
 
 function openNewSettlement(preselectCashierId){
@@ -21496,7 +21473,7 @@ async function saveSettlement(){
     if(r.success){
       toast('✅ تم تسجيل التصفية', 'success');
       closeM('m-new-settlement');
-      loadSettlements();
+      loadCashierSettlements();
     } else {
       toast('❌ ' + (r.error || 'فشل الحفظ'), 'error');
     }
@@ -21510,7 +21487,7 @@ async function deleteSettlement(id){
   try {
     await apiFetch('/api/cashier-settlements/' + id, 'DELETE');
     toast('✅ اتمسحت', 'success');
-    loadSettlements();
+    loadCashierSettlements();
   } catch(e) {
     toast('❌ ' + e.message, 'error');
   }
@@ -25062,7 +25039,7 @@ function goPage(el,page){
   if(page==='unsynced-sales') loadUnsyncedSales();
   // 🆕 v274: POS team & settlements
   if(page==='pos-team') renderPosTeam();
-  if(page==='settlements') loadSettlements();
+  if(page==='settlements') loadCashierSettlements(); // 🔧 v278: renamed
   // 🆕 v276: store offers
   if(page==='store-offers') loadStoreOffers();
   // 🆕 v277: signage - يظهر loader لما يفتح الصفحة
