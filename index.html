@@ -512,6 +512,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="shopify-reports" onclick="goPage(this,'shopify-reports')"><span class="ni-icon">🛍️</span><span class="ni-label">تقارير Shopify</span></div>
         <div class="ni" data-p="reports" onclick="goPage(this,'reports')"><span class="ni-icon">📈</span><span class="ni-label">التقارير</span></div>
         <div class="ni" data-p="orders" onclick="goPage(this,'orders')"><span class="ni-icon">📋</span><span class="ni-label">الطلبات</span><span class="nbadge" id="nb-orders">0</span></div>
+        <div class="ni" data-p="tasks" onclick="goPage(this,'tasks')"><span class="ni-icon">✅</span><span class="ni-label">التاسكات</span><span class="nbadge" id="nb-tasks" style="background:var(--purple)">0</span></div>
       </div>
     </div>
 
@@ -1281,6 +1282,99 @@ tr:hover td{background:#fafbff}
       </div>
     </div>
     <div id="late-orders-content"></div>
+  </div>
+
+  <!-- 🆕 v295: TASKS PAGE -->
+  <div class="page" id="page-tasks">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
+      <div class="sc purple"><div class="sc-icon">📥</div><div class="sc-label">وارد ليّا</div><div class="sc-val" id="tsk-stat-inbox">0</div></div>
+      <div class="sc orange"><div class="sc-icon">⚡</div><div class="sc-label">قيد التنفيذ</div><div class="sc-val" id="tsk-stat-progress">0</div></div>
+      <div class="sc red"><div class="sc-icon">⚠️</div><div class="sc-label">متأخرة</div><div class="sc-val" id="tsk-stat-overdue">0</div></div>
+      <div class="sc green"><div class="sc-icon">✅</div><div class="sc-label">مكتملة هذا الأسبوع</div><div class="sc-val" id="tsk-stat-done">0</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-body" style="padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div id="tasks-tabs" style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="chip on" onclick="taskSetFilter('inbox',this)">📥 وارد ليّا</button>
+          <button class="chip" onclick="taskSetFilter('sent',this)">📤 صادر مني</button>
+          <button class="chip" onclick="taskSetFilter('shared',this)">👁️ متابع</button>
+          <button class="chip" onclick="taskSetFilter('all',this)">📋 الكل</button>
+        </div>
+        <select id="tasks-status-filter" onchange="loadTasks()" style="font-family:Cairo,sans-serif;padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;margin-right:10px">
+          <option value="">كل الحالات</option>
+          <option value="new">جديد</option>
+          <option value="in_progress">قيد التنفيذ</option>
+          <option value="review">مراجعة</option>
+          <option value="completed">مكتمل</option>
+          <option value="cancelled">ملغي</option>
+        </select>
+        <input id="tasks-search" placeholder="بحث..." oninput="renderTasksList()" style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-family:Cairo,sans-serif;font-size:12px;width:180px">
+        <button class="btn btn-primary btn-sm" onclick="openNewTaskModal()" style="margin-right:auto">➕ تاسك جديد</button>
+      </div>
+    </div>
+
+    <div id="tasks-list"></div>
+  </div>
+
+  <!-- 🆕 v295: TASK CREATE/EDIT MODAL -->
+  <div class="modal" id="m-task-edit">
+    <div class="modal-box" style="max-width:600px">
+      <div class="modal-hd">
+        <h3 id="task-modal-title">➕ تاسك جديد</h3>
+        <button class="modal-close" onclick="closeM('m-task-edit')">×</button>
+      </div>
+      <div class="modal-body" style="padding:14px 16px">
+        <input type="hidden" id="tsk-id" value="">
+
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">العنوان *</label>
+        <input id="tsk-title" class="form-input" placeholder="مثال: راجع طلبات اليوم" style="margin-bottom:10px">
+
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">الوصف</label>
+        <textarea id="tsk-description" class="form-input" rows="3" placeholder="تفاصيل..." style="margin-bottom:10px;font-family:Cairo,sans-serif"></textarea>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div>
+            <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">الأولوية</label>
+            <select id="tsk-priority" class="form-input">
+              <option value="low">🟢 منخفضة</option>
+              <option value="normal" selected>🔵 عادية</option>
+              <option value="urgent">🔴 عاجلة</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">ميعاد التسليم</label>
+            <input type="datetime-local" id="tsk-due-date" class="form-input">
+          </div>
+        </div>
+
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">مُكلَّف لـ *</label>
+        <select id="tsk-assigned-to" class="form-input" style="margin-bottom:10px"></select>
+
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">شارك مع (متابعين)</label>
+        <div id="tsk-share-list" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;min-height:44px;margin-bottom:10px"></div>
+
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">📎 مرفقات</label>
+        <input type="file" id="tsk-attachments" multiple style="margin-bottom:6px">
+        <div id="tsk-attachments-preview" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+          <button class="btn btn-ghost" onclick="closeM('m-task-edit')">إلغاء</button>
+          <button class="btn btn-primary" onclick="saveTask()">💾 حفظ</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🆕 v295: TASK DETAIL MODAL -->
+  <div class="modal" id="m-task-detail">
+    <div class="modal-box" style="max-width:720px">
+      <div class="modal-hd">
+        <h3 id="task-detail-title">📋 تفاصيل التاسك</h3>
+        <button class="modal-close" onclick="closeM('m-task-detail')">×</button>
+      </div>
+      <div class="modal-body" style="padding:14px 16px" id="task-detail-content"></div>
+    </div>
   </div>
 
   <!-- ACCOUNTING -->
@@ -5457,7 +5551,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','inventory':'📦 المخزون','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','tasks':'✅ التاسكات',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','inventory':'📦 المخزون','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -10807,6 +10901,447 @@ function callPhone(phone){
   if (!phone) return;
   window.location.href = 'tel:' + phone.replace(/\D/g, '');
 }
+
+// ============================================================
+// 🆕 v295: TASKS SYSTEM
+// ============================================================
+let _tasks = [];
+let _tasksMe = '';
+let _tasksFilter = 'inbox';
+let _editingTask = null;
+let _taskShareSelected = []; // array of usernames
+let _taskAttachmentsBuffer = []; // {filename, content_type, data_base64}
+
+// Status & priority configs
+const TASK_STATUSES = {
+  new: { label: 'جديد', color: '#3b82f6', icon: '🆕' },
+  in_progress: { label: 'قيد التنفيذ', color: '#f97316', icon: '⚡' },
+  review: { label: 'مراجعة', color: '#a855f7', icon: '👁️' },
+  completed: { label: 'مكتمل', color: '#16a34a', icon: '✅' },
+  cancelled: { label: 'ملغي', color: '#94a3b8', icon: '❌' }
+};
+const TASK_PRIORITIES = {
+  urgent: { label: 'عاجلة', color: '#ef4444', icon: '🔴' },
+  normal: { label: 'عادية', color: '#3b82f6', icon: '🔵' },
+  low: { label: 'منخفضة', color: '#16a34a', icon: '🟢' }
+};
+
+function _allUsernames(){
+  // كل users من sysUsers + admin
+  const list = (sysUsers || []).map(u => ({ username: u.username, name: u.name }));
+  if (!list.find(u => u.username === 'admin')) list.unshift({ username: 'admin', name: 'المدير' });
+  return list;
+}
+
+function _userDisplayName(username){
+  if (!username) return '-';
+  if (username === 'admin') return 'المدير';
+  const u = (sysUsers || []).find(x => x.username === username);
+  return u?.name || username;
+}
+
+async function loadTasks(){
+  if (!API_URL) return;
+  const status = document.getElementById('tasks-status-filter')?.value || '';
+  try {
+    const url = '/api/tasks?filter=' + _tasksFilter + (status ? '&status=' + status : '');
+    const r = await apiFetch(url);
+    _tasks = r?.tasks || [];
+    _tasksMe = r?.me || '';
+    renderTasksList();
+    updateTasksStats();
+  } catch(e) {
+    document.getElementById('tasks-list').innerHTML = `<div class="card"><div class="card-body" style="text-align:center;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+function updateTasksStats(){
+  const now = Date.now();
+  const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+  let inbox = 0, progress = 0, overdue = 0, doneWeek = 0;
+  _tasks.forEach(t => {
+    const isOpen = t.status !== 'completed' && t.status !== 'cancelled';
+    if (t.assigned_to === _tasksMe && isOpen) inbox++;
+    if (t.status === 'in_progress' && t.assigned_to === _tasksMe) progress++;
+    if (isOpen && t.assigned_to === _tasksMe && t.due_date && new Date(t.due_date).getTime() < now) overdue++;
+    if (t.status === 'completed' && t.completed_at && new Date(t.completed_at).getTime() >= weekAgo) doneWeek++;
+  });
+  if ($('tsk-stat-inbox')) $('tsk-stat-inbox').textContent = inbox;
+  if ($('tsk-stat-progress')) $('tsk-stat-progress').textContent = progress;
+  if ($('tsk-stat-overdue')) $('tsk-stat-overdue').textContent = overdue;
+  if ($('tsk-stat-done')) $('tsk-stat-done').textContent = doneWeek;
+}
+
+function taskSetFilter(f, btn){
+  _tasksFilter = f;
+  document.querySelectorAll('#tasks-tabs .chip').forEach(c => c.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  loadTasks();
+}
+
+function renderTasksList(){
+  const q = (document.getElementById('tasks-search')?.value || '').trim().toLowerCase();
+  let list = _tasks;
+  if (q) list = list.filter(t =>
+    (t.title || '').toLowerCase().includes(q) ||
+    (t.description || '').toLowerCase().includes(q) ||
+    (t.assigned_to || '').toLowerCase().includes(q) ||
+    (t.assigned_by || '').toLowerCase().includes(q)
+  );
+
+  const cont = document.getElementById('tasks-list');
+  if (!cont) return;
+  if (!list.length) {
+    cont.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:40px">
+      <div style="font-size:48px;opacity:.3">📋</div>
+      <div style="font-size:15px;font-weight:700;margin-top:8px">مفيش تاسكات هنا</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">${_tasksFilter === 'inbox' ? 'مفيش تاسكات وارد ليك' : _tasksFilter === 'sent' ? 'مفيش تاسكات أنشأتها' : 'مفيش نتائج'}</div>
+    </div></div>`;
+    return;
+  }
+
+  const now = Date.now();
+  const rows = list.map(t => {
+    const st = TASK_STATUSES[t.status] || TASK_STATUSES.new;
+    const pr = TASK_PRIORITIES[t.priority] || TASK_PRIORITIES.normal;
+    const isOpen = t.status !== 'completed' && t.status !== 'cancelled';
+    const dueOverdue = t.due_date && isOpen && new Date(t.due_date).getTime() < now;
+    const dueStr = t.due_date ? new Date(t.due_date).toLocaleDateString('ar-EG') + ' ' + new Date(t.due_date).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : '';
+    const createdStr = new Date(t.created_at).toLocaleDateString('ar-EG');
+    const sharedCount = (t.shared_with || []).filter(Boolean).length;
+
+    return `
+      <div class="card" style="margin-bottom:8px;cursor:pointer;${dueOverdue ? 'border-color:var(--danger);' : ''}" onclick="openTaskDetail(${t.id})">
+        <div class="card-body" style="padding:12px 14px">
+          <div style="display:flex;align-items:flex-start;gap:10px">
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+                <span style="background:${pr.color};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">${pr.icon} ${pr.label}</span>
+                <span style="background:${st.color};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">${st.icon} ${st.label}</span>
+                ${dueOverdue ? `<span style="background:var(--danger);color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">⚠️ متأخر</span>` : ''}
+                ${t.comments_count > 0 ? `<span style="color:var(--muted);font-size:11px">💬 ${t.comments_count}</span>` : ''}
+                ${t.attachments_count > 0 ? `<span style="color:var(--muted);font-size:11px">📎 ${t.attachments_count}</span>` : ''}
+                ${sharedCount > 0 ? `<span style="color:var(--muted);font-size:11px">👁️ ${sharedCount}</span>` : ''}
+              </div>
+              <div style="font-weight:700;font-size:14px;${t.status === 'completed' ? 'text-decoration:line-through;color:var(--muted)' : ''}">${escapeHtml(t.title)}</div>
+              ${t.description ? `<div style="font-size:12px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(t.description)}</div>` : ''}
+              <div style="display:flex;gap:14px;font-size:11px;color:var(--muted);margin-top:6px;flex-wrap:wrap">
+                <span>👤 لـ: <strong>${escapeHtml(_userDisplayName(t.assigned_to))}</strong></span>
+                <span>📤 من: <strong>${escapeHtml(_userDisplayName(t.assigned_by))}</strong></span>
+                ${dueStr ? `<span style="${dueOverdue ? 'color:var(--danger);font-weight:700' : ''}">📅 ${dueStr}</span>` : ''}
+                <span style="margin-right:auto;opacity:.6">${createdStr}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+  cont.innerHTML = rows;
+}
+
+function openNewTaskModal(){
+  _editingTask = null;
+  _taskShareSelected = [];
+  _taskAttachmentsBuffer = [];
+  document.getElementById('task-modal-title').textContent = '➕ تاسك جديد';
+  document.getElementById('tsk-id').value = '';
+  document.getElementById('tsk-title').value = '';
+  document.getElementById('tsk-description').value = '';
+  document.getElementById('tsk-priority').value = 'normal';
+  document.getElementById('tsk-due-date').value = '';
+  document.getElementById('tsk-attachments').value = '';
+  document.getElementById('tsk-attachments-preview').innerHTML = '';
+
+  // املأ select المستخدمين
+  const sel = document.getElementById('tsk-assigned-to');
+  const users = _allUsernames();
+  sel.innerHTML = '<option value="">-- اختار --</option>' + users.map(u =>
+    `<option value="${escapeHtml(u.username)}">${escapeHtml(u.name || u.username)} (${escapeHtml(u.username)})</option>`
+  ).join('');
+
+  renderShareList();
+  openM('m-task-edit');
+}
+
+function renderShareList(){
+  const cont = document.getElementById('tsk-share-list');
+  const users = _allUsernames();
+  const assignedTo = document.getElementById('tsk-assigned-to')?.value;
+  cont.innerHTML = users.map(u => {
+    if (u.username === assignedTo || u.username === _tasksMe) return ''; // مش هيظهر في الـ share
+    const on = _taskShareSelected.includes(u.username);
+    return `<button type="button" onclick="toggleTaskShare('${escapeHtml(u.username)}')"
+      style="padding:4px 10px;border-radius:18px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};
+      background:${on ? 'var(--accent)' : 'var(--card)'};color:${on ? '#fff' : 'var(--text)'};
+      font-family:Cairo,sans-serif;font-size:11px;cursor:pointer">
+      ${on ? '✓ ' : ''}${escapeHtml(u.name || u.username)}
+    </button>`;
+  }).join('') || '<span style="color:var(--muted);font-size:11px">مفيش users لاختيارهم</span>';
+}
+
+function toggleTaskShare(username){
+  const i = _taskShareSelected.indexOf(username);
+  if (i >= 0) _taskShareSelected.splice(i, 1);
+  else _taskShareSelected.push(username);
+  renderShareList();
+}
+
+// لما المُكلَّف يتغير، نحدّث الـ share list
+document.addEventListener('change', e => {
+  if (e.target && e.target.id === 'tsk-assigned-to') renderShareList();
+});
+
+// قراءة المرفقات → Base64
+document.addEventListener('change', async e => {
+  if (e.target && e.target.id === 'tsk-attachments') {
+    const files = Array.from(e.target.files || []);
+    _taskAttachmentsBuffer = [];
+    const preview = document.getElementById('tsk-attachments-preview');
+    preview.innerHTML = '';
+    for (const f of files) {
+      if (f.size > 4 * 1024 * 1024) { toast('❌ ' + f.name + ' أكبر من 4MB'); continue; }
+      try {
+        const b64 = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result.split(',')[1]);
+          r.onerror = reject;
+          r.readAsDataURL(f);
+        });
+        _taskAttachmentsBuffer.push({ filename: f.name, content_type: f.type, data_base64: b64 });
+        const sizeKB = Math.round(f.size / 1024);
+        preview.insertAdjacentHTML('beforeend',
+          `<div style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:11px">
+            📎 ${escapeHtml(f.name)} <span style="color:var(--muted)">(${sizeKB}KB)</span>
+          </div>`);
+      } catch(err) { toast('❌ خطأ في ' + f.name); }
+    }
+  }
+});
+
+async function saveTask(){
+  const title = document.getElementById('tsk-title').value.trim();
+  const description = document.getElementById('tsk-description').value.trim();
+  const priority = document.getElementById('tsk-priority').value;
+  const due_date = document.getElementById('tsk-due-date').value;
+  const assigned_to = document.getElementById('tsk-assigned-to').value;
+
+  if (!title) { toast('❗ العنوان مطلوب'); return; }
+  if (!assigned_to) { toast('❗ اختار الشخص اللي هتكلفه'); return; }
+
+  const payload = {
+    title, description, priority,
+    due_date: due_date || null,
+    assigned_to,
+    share_with: _taskShareSelected,
+    attachments: _taskAttachmentsBuffer
+  };
+
+  try {
+    if (_editingTask) {
+      const r = await apiFetch('/api/tasks/' + _editingTask.id, 'PATCH', payload);
+      if (r?.error) { toast('❌ ' + r.error); return; }
+      toast('✅ تم تحديث التاسك');
+    } else {
+      const r = await apiFetch('/api/tasks', 'POST', payload);
+      if (r?.error) { toast('❌ ' + r.error); return; }
+      toast('✅ تم إنشاء التاسك');
+    }
+    closeM('m-task-edit');
+    loadTasks();
+    refreshTasksBadge();
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+async function openTaskDetail(id){
+  try {
+    const r = await apiFetch('/api/tasks/' + id);
+    if (!r?.task) { toast('❌ التاسك مش موجود'); return; }
+    renderTaskDetail(r);
+    openM('m-task-detail');
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+function renderTaskDetail(data){
+  const t = data.task;
+  const comments = data.comments || [];
+  const attachments = data.attachments || [];
+  const shares = data.shares || [];
+  const me = data.me || _tasksMe;
+  const st = TASK_STATUSES[t.status] || TASK_STATUSES.new;
+  const pr = TASK_PRIORITIES[t.priority] || TASK_PRIORITIES.normal;
+  const canEdit = me === 'admin' || t.assigned_by === me || t.assigned_to === me;
+  const canDelete = me === 'admin' || t.assigned_by === me;
+
+  document.getElementById('task-detail-title').innerHTML = `📋 ${escapeHtml(t.title)}`;
+
+  const dueStr = t.due_date ? new Date(t.due_date).toLocaleString('ar-EG') : '-';
+  const sharesList = shares.map(s => `<span class="badge" style="background:var(--purple-light);color:#5b21b6">${escapeHtml(_userDisplayName(s.shared_with))}</span>`).join(' ') || '<span style="color:var(--muted);font-size:11px">مفيش</span>';
+
+  // Status quick change
+  const statusButtons = canEdit ? Object.keys(TASK_STATUSES).map(s => {
+    const cfg = TASK_STATUSES[s];
+    const isCurrent = t.status === s;
+    return `<button onclick="changeTaskStatus(${t.id}, '${s}')"
+      style="padding:6px 12px;border-radius:6px;border:1.5px solid ${cfg.color};
+      background:${isCurrent ? cfg.color : 'transparent'};color:${isCurrent ? '#fff' : cfg.color};
+      font-family:Cairo,sans-serif;font-size:11px;font-weight:700;cursor:pointer">
+      ${cfg.icon} ${cfg.label}
+    </button>`;
+  }).join('') : `<span class="badge" style="background:${st.color};color:#fff;padding:4px 10px">${st.icon} ${st.label}</span>`;
+
+  const commentsHtml = comments.map(c => `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <strong style="font-size:12px;color:var(--accent)">${escapeHtml(_userDisplayName(c.author))}</strong>
+        <span style="font-size:10px;color:var(--muted)">${new Date(c.created_at).toLocaleString('ar-EG')}</span>
+      </div>
+      <div style="font-size:13px;white-space:pre-wrap">${escapeHtml(c.body)}</div>
+    </div>
+  `).join('');
+
+  const attachmentsHtml = attachments.length ? attachments.map(a => `
+    <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:11px;margin:3px;cursor:pointer" onclick="downloadTaskAttachment(${t.id}, ${a.id}, '${escapeHtml(a.filename || 'file')}')">
+      📎 ${escapeHtml(a.filename || 'file')} <span style="color:var(--muted)">(${Math.round((a.size_bytes || 0) / 1024)}KB)</span>
+    </div>
+  `).join('') : '<span style="color:var(--muted);font-size:11px">مفيش مرفقات</span>';
+
+  document.getElementById('task-detail-content').innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <span class="badge" style="background:${pr.color};color:#fff;padding:4px 10px;font-size:11px">${pr.icon} ${pr.label}</span>
+    </div>
+
+    ${t.description ? `<div style="background:var(--bg);padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;white-space:pre-wrap;line-height:1.6">${escapeHtml(t.description)}</div>` : ''}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;margin-bottom:14px">
+      <div><strong>📤 من:</strong> ${escapeHtml(_userDisplayName(t.assigned_by))}</div>
+      <div><strong>👤 لـ:</strong> ${escapeHtml(_userDisplayName(t.assigned_to))}</div>
+      <div><strong>📅 ميعاد التسليم:</strong> ${dueStr}</div>
+      <div><strong>📥 الإنشاء:</strong> ${new Date(t.created_at).toLocaleString('ar-EG')}</div>
+      ${t.completed_at ? `<div><strong>✅ تم في:</strong> ${new Date(t.completed_at).toLocaleString('ar-EG')} (بواسطة ${escapeHtml(_userDisplayName(t.completed_by))})</div>` : ''}
+    </div>
+
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">👁️ متابعين:</div>
+      <div>${sharesList}</div>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">⚡ تغيير الحالة:</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">${statusButtons}</div>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">📎 المرفقات:</div>
+      <div>${attachmentsHtml}</div>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">💬 التعليقات (${comments.length}):</div>
+      ${commentsHtml || '<div style="color:var(--muted);font-size:11px;padding:8px">مفيش تعليقات</div>'}
+      <div style="margin-top:8px;display:flex;gap:6px">
+        <input id="tsk-new-comment" placeholder="اكتب تعليق..." class="form-input" style="flex:1;font-size:13px" onkeydown="if(event.key==='Enter')addTaskComment(${t.id})">
+        <button class="btn btn-primary btn-sm" onclick="addTaskComment(${t.id})">📨 أرسل</button>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:6px;justify-content:flex-end;border-top:1px solid var(--border);padding-top:10px">
+      ${canEdit ? `<button class="btn btn-secondary btn-sm" onclick="closeM('m-task-detail');openEditTask(${t.id})">✏️ تعديل</button>` : ''}
+      ${canDelete ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteTask(${t.id})">🗑️ حذف</button>` : ''}
+    </div>
+  `;
+}
+
+async function openEditTask(id){
+  try {
+    const r = await apiFetch('/api/tasks/' + id);
+    if (!r?.task) return;
+    const t = r.task;
+    _editingTask = t;
+    _taskShareSelected = (r.shares || []).map(s => s.shared_with);
+    _taskAttachmentsBuffer = [];
+
+    document.getElementById('task-modal-title').textContent = '✏️ تعديل التاسك';
+    document.getElementById('tsk-id').value = t.id;
+    document.getElementById('tsk-title').value = t.title || '';
+    document.getElementById('tsk-description').value = t.description || '';
+    document.getElementById('tsk-priority').value = t.priority || 'normal';
+    document.getElementById('tsk-due-date').value = t.due_date ? new Date(t.due_date).toISOString().slice(0,16) : '';
+    document.getElementById('tsk-attachments').value = '';
+    document.getElementById('tsk-attachments-preview').innerHTML = '';
+
+    const sel = document.getElementById('tsk-assigned-to');
+    const users = _allUsernames();
+    sel.innerHTML = '<option value="">-- اختار --</option>' + users.map(u =>
+      `<option value="${escapeHtml(u.username)}" ${u.username === t.assigned_to ? 'selected' : ''}>${escapeHtml(u.name || u.username)} (${escapeHtml(u.username)})</option>`
+    ).join('');
+
+    renderShareList();
+    openM('m-task-edit');
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+async function changeTaskStatus(id, status){
+  try {
+    const r = await apiFetch('/api/tasks/' + id, 'PATCH', { status });
+    if (r?.error) { toast('❌ ' + r.error); return; }
+    toast('✅ تم تحديث الحالة');
+    openTaskDetail(id);
+    loadTasks();
+    refreshTasksBadge();
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+async function addTaskComment(id){
+  const input = document.getElementById('tsk-new-comment');
+  const body = input?.value?.trim();
+  if (!body) return;
+  try {
+    const r = await apiFetch('/api/tasks/' + id + '/comments', 'POST', { body });
+    if (r?.error) { toast('❌ ' + r.error); return; }
+    openTaskDetail(id);
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+async function deleteTask(id){
+  if (!confirm('احذف التاسك ده نهائياً؟')) return;
+  try {
+    const r = await apiFetch('/api/tasks/' + id, 'DELETE');
+    if (r?.error) { toast('❌ ' + r.error); return; }
+    toast('✅ تم الحذف');
+    closeM('m-task-detail');
+    loadTasks();
+    refreshTasksBadge();
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+async function downloadTaskAttachment(taskId, attId, filename){
+  try {
+    const r = await apiFetch('/api/tasks/' + taskId + '/attachment/' + attId);
+    if (!r?.attachment) return;
+    const a = r.attachment;
+    const bin = atob(a.data_base64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    const blob = new Blob([arr], { type: a.content_type || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = filename || a.filename || 'file'; link.click();
+    URL.revokeObjectURL(url);
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+async function refreshTasksBadge(){
+  if (!API_URL) return;
+  try {
+    const r = await apiFetch('/api/tasks-summary');
+    const el = document.getElementById('nb-tasks');
+    if (el) el.textContent = r?.inbox_open || '';
+  } catch(e) {}
+}
+
+// تحدث الـ badge كل دقيقة
+setInterval(refreshTasksBadge, 60000);
+document.addEventListener('DOMContentLoaded', () => setTimeout(refreshTasksBadge, 2000));
 
 function probFilter(f, btn){
   currentProbFilter=f;
@@ -26167,6 +26702,7 @@ function goPage(el,page){
   if(page==='courier-orders')renderCourierOrdersPage();
   if(page==='problems')renderProblemsPage();
   if(page==='late-orders')renderLateOrdersPage();
+  if(page==='tasks'){ _tasksFilter='inbox'; loadTasks(); }
   if(page==='import-excel')renderImportExcelPage();
   if(page==='accounting'){
     // 🆕 v236: تأكد إن rates map محملة قبل العرض (مهم للتسعير الصح)
