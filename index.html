@@ -19111,6 +19111,8 @@ async function viewPO(id){
     document.getElementById('po-detail-title').innerHTML = `📋 ${escapeHtml(po.po_number)}`;
     
     let actionButtons = '';
+    // 🆕 v287: زرار طباعة PDF لكل أمر شراء (متاح في كل الحالات)
+    actionButtons += `<button class="btn btn-secondary btn-sm" onclick="printPO(${po.id})" style="background:#d4af37;border-color:#d4af37;color:#000;font-weight:800">🖨️ طباعة PDF</button>`;
     if(po.status === 'draft'){
       actionButtons += `<button class="btn btn-primary btn-sm" onclick="sendPO(${po.id})">📤 إرسال</button>`;
       actionButtons += `<button class="btn btn-danger btn-sm" onclick="cancelPO(${po.id})">❌ إلغاء</button>`;
@@ -19217,6 +19219,166 @@ async function viewPO(id){
     
     document.getElementById('po-detail-content').innerHTML = html;
     openM('m-po-detail');
+  } catch(e) { toast('❌ ' + e.message); }
+}
+
+// 🆕 v287: طباعة PDF لأمر شراء موجود (من قائمة أوامر الشراء)
+async function printPO(id){
+  try {
+    const r = _currentPO && _currentPO.order && _currentPO.order.id == id
+      ? _currentPO
+      : await apiFetch('/api/purchase-orders/' + id);
+    if(!r?.order){ toast('❌ مفيش بيانات'); return; }
+
+    const po = r.order;
+    const items = r.items || [];
+    if(!items.length){ toast('❌ مفيش منتجات في الأمر'); return; }
+
+    const totalQty = items.reduce((s, it) => s + (parseFloat(it.ordered_qty) || 0), 0);
+    const totalCost = parseFloat(po.total) || items.reduce((s, it) => s + (parseFloat(it.line_total) || 0), 0);
+    const today = new Date(po.order_date || Date.now()).toLocaleDateString('ar-EG', { year:'numeric', month:'long', day:'numeric' });
+
+    const rows = items.map((it, i) => `
+      <tr>
+        <td style="padding:8px;text-align:center;border:1px solid #ddd">${i+1}</td>
+        <td style="padding:8px;border:1px solid #ddd">
+          <div style="font-weight:700">${escapeHtml(it.product_title || '')}${it.variant_title ? ' - '+escapeHtml(it.variant_title) : ''}</div>
+          ${it.sku ? `<div style="font-size:11px;color:#666">SKU: ${escapeHtml(it.sku)}</div>` : ''}
+          ${it.barcode ? `<div style="font-size:11px;color:#666">Barcode: ${escapeHtml(it.barcode)}</div>` : ''}
+        </td>
+        <td style="padding:8px;text-align:center;border:1px solid #ddd;font-weight:800;font-size:16px">${it.ordered_qty}</td>
+        <td style="padding:8px;text-align:center;border:1px solid #ddd">${parseFloat(it.unit_cost || 0).toFixed(2)} ج</td>
+        <td style="padding:8px;text-align:center;border:1px solid #ddd;font-weight:700">${parseFloat(it.line_total || 0).toFixed(2)} ج</td>
+      </tr>
+    `).join('');
+
+    const html = `
+      <!DOCTYPE html>
+      <html dir="rtl">
+      <head>
+        <meta charset="UTF-8">
+        <title>${escapeHtml(po.po_number)} - ${escapeHtml(po.supplier_name_ref || po.supplier_name || '')}</title>
+        <style>
+          @page { size: A4; margin: 12mm; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Arial', sans-serif; padding: 16px; direction: rtl; color: #1e293b; }
+          .header { text-align: center; border-bottom: 3px solid #d4af37; padding-bottom: 12px; margin-bottom: 16px; }
+          .logo-img { max-width: 220px; height: auto; margin: 0 auto 6px; display: block; }
+          .subtitle { font-size: 13px; color: #64748b; margin-top: 2px; }
+          .doc-title { font-size: 22px; font-weight: 800; margin: 10px 0 4px; color: #1e293b; }
+          .po-num { font-size: 14px; color: #d4af37; font-weight: 800; margin-top: 4px; font-family: monospace; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+          .info-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; }
+          .info-card-title { font-size: 11px; color: #64748b; margin-bottom: 4px; }
+          .info-card-value { font-size: 14px; font-weight: 700; }
+          .delivery-banner { background: linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%); border: 2px solid #d4af37; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
+          .delivery-title { font-size: 14px; font-weight: 800; color: #92400e; margin-bottom: 6px; }
+          .delivery-address { font-size: 12.5px; line-height: 1.6; color: #1e293b; font-weight: 600; }
+          .delivery-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 11.5px; color: #475569; }
+          .delivery-meta strong { color: #92400e; }
+          .delivery-link { display: inline-block; margin-top: 6px; color: #1d4ed8; font-size: 11px; word-break: break-all; }
+          .delivery-link a { color: #1d4ed8; text-decoration: underline; }
+          table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+          th { background: #1e293b; color: white; padding: 9px 6px; font-size: 12px; border: 1px solid #1e293b; }
+          td { padding: 7px; font-size: 12px; }
+          tr:nth-child(even) td { background: #f8fafc; }
+          .totals { margin-top: 16px; background: linear-gradient(135deg, #fef3c7 0%, #fff 100%); border: 2px solid #d4af37; border-radius: 10px; padding: 12px; }
+          .totals-row { display: flex; justify-content: space-between; padding: 3px 0; }
+          .totals-final { border-top: 2px solid #d4af37; padding-top: 6px; margin-top: 4px; font-size: 17px; font-weight: 800; color: #92400e; }
+          .footer { margin-top: 24px; padding-top: 12px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; }
+          .signature { text-align: center; }
+          .signature-line { width: 150px; border-bottom: 1px solid #1e293b; height: 30px; margin-bottom: 4px; }
+          .signature-label { font-size: 11px; color: #64748b; }
+          .notes-box { margin-top: 12px; background: #fef3c7; border-right: 4px solid #d4af37; padding: 9px 12px; border-radius: 6px; font-size: 12px; }
+          .print-btn { position: fixed; bottom: 20px; left: 20px; background: #d4af37; color: #000; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 9999; }
+          @media print { .print-btn { display: none; } body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <button class="print-btn" onclick="window.print()">🖨️ طباعة / حفظ PDF</button>
+
+        <div class="header">
+          <img class="logo-img" src="${LOGO_B64}" alt="CAFELAX">
+          
+          <div class="doc-title">📋 أمر شراء</div>
+          <div class="po-num">${escapeHtml(po.po_number)}</div>
+          <div style="font-size:12px;color:#64748b">Purchase Order · ${today}</div>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-card">
+            <div class="info-card-title">🏭 المورد:</div>
+            <div class="info-card-value">${escapeHtml(po.supplier_name_ref || po.supplier_name || '-')}</div>
+            ${(po.supplier_phone_ref || po.supplier_phone) ? `<div style="font-size:11px;color:#64748b;margin-top:3px">📱 ${escapeHtml(po.supplier_phone_ref || po.supplier_phone)}</div>` : ''}
+          </div>
+          <div class="info-card">
+            <div class="info-card-title">📦 يُسلّم في:</div>
+            <div class="info-card-value">${escapeHtml(po.warehouse_name || '-')}</div>
+            ${po.expected_date ? `<div style="font-size:11px;color:#64748b;margin-top:3px">📅 التاريخ المتوقع: ${new Date(po.expected_date).toLocaleDateString('ar-EG')}</div>` : ''}
+          </div>
+        </div>
+
+        <div class="delivery-banner">
+          <div class="delivery-title">📍 عنوان التوريد:</div>
+          <div class="delivery-address">
+            العبور - المنطقة الصناعية الأولى - خلف مصنع عبور لاند وبجوار مصنع هاي فارم - بلوك 13018 - قطعة 6
+          </div>
+          <div class="delivery-meta">
+            <span>🕙 <strong>مواعيد العمل:</strong> من 10 صباحاً إلى 5 مساءً (ما عدا الجمعة)</span>
+            <span>📞 <strong>رقم المخزن:</strong> 01030954484</span>
+          </div>
+          <div class="delivery-link">
+            🗺️ <a href="https://maps.app.goo.gl/tR183fbbvmhmpo1VA" target="_blank">https://maps.app.goo.gl/tR183fbbvmhmpo1VA</a>
+          </div>
+        </div>
+
+        <h3 style="margin-bottom:8px;font-size:14px">📦 المنتجات المطلوبة:</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:36px">#</th>
+              <th>المنتج</th>
+              <th style="width:70px">الكمية</th>
+              <th style="width:90px">السعر</th>
+              <th style="width:110px">الإجمالي</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+
+        <div class="totals">
+          <div class="totals-row"><span>عدد المنتجات:</span><strong>${items.length}</strong></div>
+          <div class="totals-row"><span>إجمالي القطع:</span><strong>${totalQty}</strong></div>
+          ${po.shipping_cost ? `<div class="totals-row"><span>الشحن:</span><strong>${parseFloat(po.shipping_cost).toFixed(2)} ج</strong></div>` : ''}
+          ${po.tax_amount ? `<div class="totals-row"><span>الضريبة:</span><strong>${parseFloat(po.tax_amount).toFixed(2)} ج</strong></div>` : ''}
+          <div class="totals-row totals-final"><span>الإجمالي:</span><span>${totalCost.toFixed(2)} ج</span></div>
+        </div>
+
+        ${po.notes ? `<div class="notes-box"><strong>📝 ملاحظات:</strong><br>${escapeHtml(po.notes)}</div>` : ''}
+
+        <div class="footer">
+          <div class="signature">
+            <div class="signature-line"></div>
+            <div class="signature-label">توقيع المورد</div>
+          </div>
+          <div class="signature">
+            <div class="signature-line"></div>
+            <div class="signature-label">توقيع المشتري</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const w = window.open('', '_blank', 'width=900,height=1000');
+    if(!w){ toast('❌ السماح للنافذة المنبثقة', 'error'); return; }
+    w.document.write(html);
+    w.document.close();
+    // 🆕 v289: ضمان اسم الفايل في الـ Save dialog
+    try {
+      const fileName = (po.po_number || 'PO') + ' - ' + (po.supplier_name_ref || po.supplier_name || '');
+      w.document.title = fileName;
+    } catch(e) {}
   } catch(e) { toast('❌ ' + e.message); }
 }
 
@@ -20112,45 +20274,54 @@ function exportReorderPDF(){
     <html dir="rtl">
     <head>
       <meta charset="UTF-8">
-      <title>أمر شراء - ${escapeHtml(sup?.name || '')}</title>
+      <title>PO-DRAFT-${new Date().toISOString().slice(0,10).replace(/-/g,'')} - ${escapeHtml(sup?.name || '')}</title>
       <style>
-        @page { size: A4; margin: 15mm; }
+        @page { size: A4; margin: 12mm; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Arial', sans-serif; padding: 20px; direction: rtl; color: #1e293b; }
-        .header { text-align: center; border-bottom: 3px solid #d4af37; padding-bottom: 12px; margin-bottom: 20px; }
-        .logo { font-size: 32px; font-weight: 800; letter-spacing: 4px; color: #d4af37; }
-        .subtitle { font-size: 14px; color: #64748b; margin-top: 4px; }
-        .doc-title { font-size: 24px; font-weight: 800; margin: 14px 0 6px; color: #1e293b; }
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
-        .info-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
+        body { font-family: 'Arial', sans-serif; padding: 16px; direction: rtl; color: #1e293b; }
+        .header { text-align: center; border-bottom: 3px solid #d4af37; padding-bottom: 12px; margin-bottom: 16px; }
+        .logo-img { max-width: 220px; height: auto; margin: 0 auto 6px; display: block; }
+        .subtitle { font-size: 13px; color: #64748b; margin-top: 2px; }
+        .doc-title { font-size: 22px; font-weight: 800; margin: 10px 0 4px; color: #1e293b; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+        .info-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; }
         .info-card-title { font-size: 11px; color: #64748b; margin-bottom: 4px; }
         .info-card-value { font-size: 14px; font-weight: 700; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { background: #1e293b; color: white; padding: 10px 8px; font-size: 12px; border: 1px solid #1e293b; }
-        td { padding: 8px; font-size: 12px; }
+        /* 🆕 v286: Delivery address banner */
+        .delivery-banner { background: linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%); border: 2px solid #d4af37; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
+        .delivery-title { font-size: 14px; font-weight: 800; color: #92400e; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+        .delivery-address { font-size: 12.5px; line-height: 1.6; color: #1e293b; font-weight: 600; }
+        .delivery-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 11.5px; color: #475569; }
+        .delivery-meta span { display: inline-flex; align-items: center; gap: 4px; }
+        .delivery-meta strong { color: #92400e; }
+        .delivery-link { display: inline-block; margin-top: 6px; color: #1d4ed8; font-size: 11px; word-break: break-all; }
+        .delivery-link a { color: #1d4ed8; text-decoration: underline; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th { background: #1e293b; color: white; padding: 9px 6px; font-size: 12px; border: 1px solid #1e293b; }
+        td { padding: 7px; font-size: 12px; }
         tr:nth-child(even) td { background: #f8fafc; }
-        .totals { margin-top: 20px; background: linear-gradient(135deg, #fef3c7 0%, #fff 100%); border: 2px solid #d4af37; border-radius: 10px; padding: 14px; }
-        .totals-row { display: flex; justify-content: space-between; padding: 4px 0; }
-        .totals-final { border-top: 2px solid #d4af37; padding-top: 8px; margin-top: 6px; font-size: 18px; font-weight: 800; color: #92400e; }
-        .footer { margin-top: 30px; padding-top: 14px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; }
+        .totals { margin-top: 16px; background: linear-gradient(135deg, #fef3c7 0%, #fff 100%); border: 2px solid #d4af37; border-radius: 10px; padding: 12px; }
+        .totals-row { display: flex; justify-content: space-between; padding: 3px 0; }
+        .totals-final { border-top: 2px solid #d4af37; padding-top: 6px; margin-top: 4px; font-size: 17px; font-weight: 800; color: #92400e; }
+        .footer { margin-top: 24px; padding-top: 12px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; }
         .signature { text-align: center; }
-        .signature-line { width: 150px; border-bottom: 1px solid #1e293b; height: 35px; margin-bottom: 4px; }
+        .signature-line { width: 150px; border-bottom: 1px solid #1e293b; height: 30px; margin-bottom: 4px; }
         .signature-label { font-size: 11px; color: #64748b; }
-        .notes-box { margin-top: 14px; background: #fef3c7; border-right: 4px solid #d4af37; padding: 10px; border-radius: 6px; font-size: 12px; }
-        .print-btn { position: fixed; bottom: 20px; left: 20px; background: #d4af37; color: #000; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,.2); }
-        @media print { .print-btn { display: none; } }
+        .notes-box { margin-top: 12px; background: #fef3c7; border-right: 4px solid #d4af37; padding: 9px 12px; border-radius: 6px; font-size: 12px; }
+        .print-btn { position: fixed; bottom: 20px; left: 20px; background: #d4af37; color: #000; border: none; border-radius: 8px; padding: 10px 20px; font-size: 14px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,.2); z-index: 9999; }
+        @media print { .print-btn { display: none; } body { padding: 0; } }
       </style>
     </head>
     <body>
       <button class="print-btn" onclick="window.print()">🖨️ طباعة / حفظ PDF</button>
-      
+
       <div class="header">
-        <div class="logo">CAFELAX</div>
-        <div class="subtitle">القهوة الفاخرة - Premium Coffee</div>
+        <img class="logo-img" src="${LOGO_B64}" alt="CAFELAX">
+        
         <div class="doc-title">📋 أمر شراء</div>
-        <div style="font-size:13px;color:#64748b">Purchase Order - ${today}</div>
+        <div style="font-size:12px;color:#64748b">Purchase Order · ${today}</div>
       </div>
-      
+
       <div class="info-grid">
         <div class="info-card">
           <div class="info-card-title">🏭 المورد:</div>
@@ -20164,29 +20335,44 @@ function exportReorderPDF(){
           ${expectedDate ? `<div style="font-size:11px;color:#64748b;margin-top:3px">📅 التاريخ المتوقع: ${new Date(expectedDate).toLocaleDateString('ar-EG')}</div>` : ''}
         </div>
       </div>
-      
-      <h3 style="margin-bottom:10px">📦 المنتجات المطلوبة:</h3>
+
+      <!-- 🆕 v286: Permanent delivery address banner -->
+      <div class="delivery-banner">
+        <div class="delivery-title">📍 عنوان التوريد:</div>
+        <div class="delivery-address">
+          العبور - المنطقة الصناعية الأولى - خلف مصنع عبور لاند وبجوار مصنع هاي فارم - بلوك 13018 - قطعة 6
+        </div>
+        <div class="delivery-meta">
+          <span>🕙 <strong>مواعيد العمل:</strong> من 10 صباحاً إلى 5 مساءً (ما عدا الجمعة)</span>
+          <span>📞 <strong>رقم المخزن:</strong> 01030954484</span>
+        </div>
+        <div class="delivery-link">
+          🗺️ <a href="https://maps.app.goo.gl/tR183fbbvmhmpo1VA" target="_blank">https://maps.app.goo.gl/tR183fbbvmhmpo1VA</a>
+        </div>
+      </div>
+
+      <h3 style="margin-bottom:8px;font-size:14px">📦 المنتجات المطلوبة:</h3>
       <table>
         <thead>
           <tr>
-            <th style="width:40px">#</th>
+            <th style="width:36px">#</th>
             <th>المنتج</th>
-            <th style="width:80px">الكمية</th>
-            <th style="width:100px">السعر</th>
-            <th style="width:120px">الإجمالي</th>
+            <th style="width:70px">الكمية</th>
+            <th style="width:90px">السعر</th>
+            <th style="width:110px">الإجمالي</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
-      
+
       <div class="totals">
         <div class="totals-row"><span>عدد المنتجات:</span><strong>${requested.length}</strong></div>
         <div class="totals-row"><span>إجمالي القطع:</span><strong>${totalQty}</strong></div>
         <div class="totals-row totals-final"><span>الإجمالي:</span><span>${totalCost.toFixed(2)} ج</span></div>
       </div>
-      
+
       ${notes ? `<div class="notes-box"><strong>📝 ملاحظات:</strong><br>${escapeHtml(notes)}</div>` : ''}
-      
+
       <div class="footer">
         <div class="signature">
           <div class="signature-line"></div>
@@ -20205,6 +20391,11 @@ function exportReorderPDF(){
   if(!w){ toast('❌ السماح للنافذة المنبثقة', 'error'); return; }
   w.document.write(html);
   w.document.close();
+  // 🆕 v289: ضمان اسم الفايل في الـ Save dialog
+  try {
+    const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    w.document.title = 'PO-DRAFT-' + dateStr + ' - ' + (sup?.name || '');
+  } catch(e) {}
 }
 
 // ============================================================
