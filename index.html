@@ -16228,10 +16228,31 @@ function renderVendorsPage(){
   if(!tbody)return;
 
   // 🆕 v251: حمّل الرصيد من الـ Backend
-  loadVendorsLedger();
+  // 🔧 v297: re-render بعد ما الـ fetch يخلص (كان bug: render قبل الحمل)
+  loadVendorsLedger().then(() => {
+    _renderVendorsList();
+  });
+  _renderVendorsList();
+}
+
+function _renderVendorsList(){
+  const tbody=$('vendors-tbody');
+  const empty=$('vendors-empty');
+  if(!tbody)return;
 
   const search=($('vendor-search')?.value||'').trim().toLowerCase();
   let list=[..._vendorsLedger.length ? _vendorsLedger : chkSuppliers].sort((a,b)=>(a.name||'').localeCompare(b.name||'','ar'));
+  // 🆕 v297: لو الـ ledger بيرجع قديم، اعرض من chkSuppliers اللي مش موجودين فيه
+  if(_vendorsLedger.length){
+    const ledgerIds = new Set(_vendorsLedger.map(v => v.id));
+    const ledgerNames = new Set(_vendorsLedger.map(v => (v.name || '').toLowerCase()));
+    chkSuppliers.forEach(s => {
+      if (!ledgerIds.has(s.id) && !ledgerNames.has((s.name || '').toLowerCase())) {
+        list.push({...s, current_balance: 0, tx_count: 0});
+      }
+    });
+    list.sort((a,b)=>(a.name||'').localeCompare(b.name||'','ar'));
+  }
   if(search){
     list=list.filter(v=>
       (v.name||'').toLowerCase().includes(search) ||
@@ -16814,7 +16835,13 @@ async function saveSupplierActual(){
   try{ localStorage.setItem('chk_suppliers',JSON.stringify(chkSuppliers)); }catch(e){}
   closeM('m-add-supplier');
   fillSupplierSel();
-  if(typeof renderVendorsPage==='function') renderVendorsPage();
+  // 🔧 v297: re-load ledger من السيرفر عشان المورد الجديد يظهر في الجدول
+  if(typeof loadVendorsLedger==='function'){
+    loadVendorsLedger().then(()=>{
+      if(typeof _renderVendorsList==='function') _renderVendorsList();
+      else if(typeof renderVendorsPage==='function') renderVendorsPage();
+    });
+  } else if(typeof renderVendorsPage==='function') renderVendorsPage();
   editingVendorId=null;
 }
 
