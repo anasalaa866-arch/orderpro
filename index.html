@@ -1369,25 +1369,10 @@ tr:hover td{background:#fafbff}
 
         <!-- بيانات العميل -->
         <details open style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
-          <summary style="font-weight:700;font-size:13px;cursor:pointer;color:#3b82f6">👤 بيانات العميل (اختياري)</summary>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
-            <div>
-              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">الاسم</label>
-              <input id="mo-customer-name" class="form-input" placeholder="اسم العميل">
-            </div>
-            <div>
-              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">التليفون</label>
-              <input id="mo-customer-phone" class="form-input" placeholder="01XXXXXXXXX">
-            </div>
-            <div style="grid-column:1/-1">
-              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">العنوان</label>
-              <input id="mo-customer-address" class="form-input" placeholder="عنوان الشحن">
-            </div>
-            <div>
-              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">المدينة</label>
-              <input id="mo-customer-city" class="form-input" placeholder="القاهرة" value="القاهرة">
-            </div>
-          </div>
+          <summary style="font-weight:700;font-size:13px;cursor:pointer;color:#3b82f6">👤 العميل</summary>
+
+          <!-- 🆕 v313: Customer Picker Box -->
+          <div id="mo-customer-box" style="margin-top:10px"></div>
         </details>
 
         <!-- المنتجات -->
@@ -1422,6 +1407,57 @@ tr:hover td{background:#fafbff}
       <div class="modal-body" style="padding:14px">
         <input id="mo-product-search" placeholder="ابحث (اسم/SKU/Barcode)..." oninput="renderMOProductSearch()" autofocus style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:7px;font-family:Cairo,sans-serif;font-size:13px;margin-bottom:10px">
         <div id="mo-product-results" style="max-height:400px;overflow-y:auto"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🆕 v313: MANUAL ORDER CUSTOMER PICKER MODAL -->
+  <div id="m-mo-customer-picker" class="modal-overlay" style="display:none">
+    <div class="modal" style="max-width:560px">
+      <div class="modal-header">
+        <h3 style="margin:0">👤 اختار عميل</h3>
+        <button class="modal-close" onclick="closeM('m-mo-customer-picker')">×</button>
+      </div>
+      <div class="modal-body" style="padding:14px">
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          <input id="mo-customer-search" placeholder="ابحث بالاسم أو التليفون..." oninput="renderMOCustomerSearch()" autofocus style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:7px;font-family:Cairo,sans-serif;font-size:13px">
+          <button class="btn btn-secondary btn-sm" onclick="moOpenNewCustomerForm()" style="background:#16a34a;color:#fff;border-color:#16a34a;white-space:nowrap">➕ عميل جديد</button>
+        </div>
+        <div id="mo-customer-results" style="max-height:400px;overflow-y:auto"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🆕 v313: NEW CUSTOMER FORM MODAL -->
+  <div id="m-mo-new-customer" class="modal-overlay" style="display:none">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-header">
+        <h3 style="margin:0">➕ عميل جديد</h3>
+        <button class="modal-close" onclick="closeM('m-mo-new-customer')">×</button>
+      </div>
+      <div class="modal-body" style="padding:16px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">الاسم *</label>
+            <input id="mo-nc-name" class="form-input" placeholder="اسم العميل" autofocus>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">التليفون *</label>
+            <input id="mo-nc-phone" class="form-input" placeholder="01XXXXXXXXX" inputmode="tel">
+          </div>
+          <div style="grid-column:1/-1">
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">العنوان</label>
+            <input id="mo-nc-address" class="form-input" placeholder="عنوان الشحن">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">المدينة</label>
+            <input id="mo-nc-city" class="form-input" placeholder="القاهرة" value="القاهرة">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+          <button class="btn btn-ghost" onclick="closeM('m-mo-new-customer')">إلغاء</button>
+          <button class="btn btn-primary" onclick="moSaveNewCustomer()" style="background:#16a34a">💾 حفظ واختيار</button>
+        </div>
       </div>
     </div>
   </div>
@@ -11340,20 +11376,20 @@ function exportTrackerCSV(){
 
 // ============================================================
 // 🆕 v310: MANUAL ORDERS - طلبات يدوية بتسجّل على Shopify
+// 🆕 v313: Customer picker
 // ============================================================
 let _moLineItems = []; // [{variantId, productTitle, variantTitle, sku, price, qty, imageUrl}]
 let _moLocations = []; // [{id, name, shopify_location_id}]
 let _manualOrders = [];
 let _moDebounceTimer = null;
 let _moProductSearchResults = [];
+let _moSelectedCustomer = null; // {name, phone, address, city, shopifyId}
+let _moCustomerSearchResults = [];
 
 async function openManualOrderModal(){
   _moLineItems = [];
+  _moSelectedCustomer = null;
   document.getElementById('mo-code').value = '';
-  document.getElementById('mo-customer-name').value = '';
-  document.getElementById('mo-customer-phone').value = '';
-  document.getElementById('mo-customer-address').value = '';
-  document.getElementById('mo-customer-city').value = 'القاهرة';
   document.getElementById('mo-note').value = '';
 
   // حمل قائمة المخازن
@@ -11371,8 +11407,146 @@ async function openManualOrderModal(){
     document.getElementById('mo-warehouse').innerHTML = '<option value="">⚠️ فشل تحميل المخازن</option>';
   }
 
+  renderMOCustomerBox();
   renderMOProducts();
   openM('m-manual-order');
+}
+
+// 🆕 v313: عرض الـ customer box (إما placeholder أو الـ selected)
+function renderMOCustomerBox(){
+  const box = document.getElementById('mo-customer-box');
+  if(!box) return;
+  if(!_moSelectedCustomer){
+    box.innerHTML = `
+      <div onclick="openMOCustomerPicker()" style="border:2px dashed var(--border);border-radius:8px;padding:14px;text-align:center;cursor:pointer;transition:all .15s" onmouseenter="this.style.borderColor='#3b82f6';this.style.background='#eff6ff'" onmouseleave="this.style.borderColor='var(--border)';this.style.background=''">
+        <div style="font-size:28px;opacity:.4">👤</div>
+        <div style="font-size:13px;font-weight:700;color:#3b82f6;margin-top:4px">اضغط لاختيار عميل</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">ابحث في العملاء الموجودين أو ضيف جديد</div>
+      </div>`;
+  } else {
+    const c = _moSelectedCustomer;
+    box.innerHTML = `
+      <div style="background:#eff6ff;border:1px solid #3b82f6;border-radius:8px;padding:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:800;font-size:14px;color:#1e3a8a">👤 ${escapeHtml(c.name || '-')}</div>
+            <div style="font-size:12px;color:#374151;margin-top:3px;direction:ltr;text-align:right">📞 ${escapeHtml(c.phone || '-')}</div>
+            ${c.address ? `<div style="font-size:11px;color:var(--muted);margin-top:3px">📍 ${escapeHtml(c.address)}${c.city ? '، '+escapeHtml(c.city) : ''}</div>` : ''}
+            ${c.source ? `<div style="font-size:10px;color:var(--muted);margin-top:4px"><span style="background:#dbeafe;padding:1px 6px;border-radius:8px">من ${c.source === 'cache' ? 'كاشير' : c.source === 'orders' ? 'طلبات سابقة' : c.source === 'manual' ? 'طلبات يدوية' : 'جديد'}</span></div>` : ''}
+          </div>
+          <div style="display:flex;gap:4px">
+            <button onclick="openMOCustomerPicker()" style="background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:5px 10px;font-family:Cairo,sans-serif;font-size:11px;cursor:pointer">🔁 تغيير</button>
+            <button onclick="moClearCustomer()" style="background:#fff;border:1px solid #fecaca;color:#dc2626;border-radius:6px;padding:5px 10px;font-family:Cairo,sans-serif;font-size:11px;cursor:pointer">✕</button>
+          </div>
+        </div>
+      </div>`;
+  }
+}
+
+function moClearCustomer(){
+  _moSelectedCustomer = null;
+  renderMOCustomerBox();
+}
+
+async function openMOCustomerPicker(){
+  document.getElementById('mo-customer-search').value = '';
+  document.getElementById('mo-customer-results').innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">ابحث بالاسم أو التليفون...</div>';
+  openM('m-mo-customer-picker');
+  setTimeout(() => document.getElementById('mo-customer-search')?.focus(), 100);
+}
+
+let _moCustomerSearchTimer = null;
+function renderMOCustomerSearch(){
+  clearTimeout(_moCustomerSearchTimer);
+  _moCustomerSearchTimer = setTimeout(async () => {
+    const q = document.getElementById('mo-customer-search').value.trim();
+    const cont = document.getElementById('mo-customer-results');
+    if(!q || q.length < 2){
+      cont.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">اكتب حرفين على الأقل</div>';
+      return;
+    }
+    cont.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">🔍 جاري البحث...</div>';
+    try {
+      const r = await apiFetch('/api/customers/search?q=' + encodeURIComponent(q));
+      const customers = r?.customers || [];
+      _moCustomerSearchResults = customers;
+      if(!customers.length){
+        cont.innerHTML = `<div style="text-align:center;color:var(--muted);padding:24px;font-size:13px">
+          <div style="font-size:36px;opacity:.3">🔍</div>
+          <div style="margin-top:6px">مفيش عميل بالإسم/الرقم ده</div>
+          <button onclick="moOpenNewCustomerFormPrefilled('${escapeHtml(q)}')" style="margin-top:12px;background:#16a34a;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer">➕ أضف "${escapeHtml(q)}" كعميل جديد</button>
+        </div>`;
+        return;
+      }
+      const sourceLabel = { cache: 'كاشير', orders: 'طلبات', manual: 'يدوي' };
+      const sourceColor = { cache: '#16a34a', orders: '#3b82f6', manual: '#a855f7' };
+      cont.innerHTML = customers.map((c, i) => `
+        <div onclick="moPickCustomer(${i})" style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--border);border-radius:7px;margin-bottom:5px;cursor:pointer;background:var(--card);transition:background .12s" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background='var(--card)'">
+          <div style="width:36px;height:36px;background:#dbeafe;color:#1e40af;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px">${escapeHtml((c.name || '?').charAt(0))}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.name || '-')}</div>
+            <div style="font-size:11px;color:var(--muted);direction:ltr;text-align:right">${escapeHtml(c.phone || '-')}</div>
+            ${c.address ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">📍 ${escapeHtml(c.address)}</div>` : ''}
+          </div>
+          <span style="background:${sourceColor[c.source] || '#94a3b8'};color:#fff;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:700">${sourceLabel[c.source] || '-'}</span>
+        </div>
+      `).join('');
+    } catch(e) {
+      cont.innerHTML = `<div style="color:var(--danger);padding:10px">❌ ${escapeHtml(e.message)}</div>`;
+    }
+  }, 300);
+}
+
+function moPickCustomer(idx){
+  const c = _moCustomerSearchResults[idx];
+  if(!c) return;
+  _moSelectedCustomer = {
+    name: c.name || '',
+    phone: c.phone || '',
+    address: c.address || '',
+    city: c.city || 'القاهرة',
+    shopifyId: c.shopifyId || null,
+    source: c.source || null
+  };
+  closeM('m-mo-customer-picker');
+  renderMOCustomerBox();
+  toast('✅ تم اختيار العميل');
+}
+
+function moOpenNewCustomerForm(){
+  document.getElementById('mo-nc-name').value = '';
+  document.getElementById('mo-nc-phone').value = '';
+  document.getElementById('mo-nc-address').value = '';
+  document.getElementById('mo-nc-city').value = 'القاهرة';
+  closeM('m-mo-customer-picker');
+  openM('m-mo-new-customer');
+  setTimeout(() => document.getElementById('mo-nc-name')?.focus(), 100);
+}
+
+function moOpenNewCustomerFormPrefilled(q){
+  // لو الـ q أرقام → تليفون، غير كده → اسم
+  const isPhone = /^\d+$/.test(q);
+  document.getElementById('mo-nc-name').value = isPhone ? '' : q;
+  document.getElementById('mo-nc-phone').value = isPhone ? q : '';
+  document.getElementById('mo-nc-address').value = '';
+  document.getElementById('mo-nc-city').value = 'القاهرة';
+  closeM('m-mo-customer-picker');
+  openM('m-mo-new-customer');
+  setTimeout(() => document.getElementById(isPhone ? 'mo-nc-name' : 'mo-nc-phone')?.focus(), 100);
+}
+
+function moSaveNewCustomer(){
+  const name = document.getElementById('mo-nc-name').value.trim();
+  const phone = document.getElementById('mo-nc-phone').value.trim();
+  const address = document.getElementById('mo-nc-address').value.trim();
+  const city = document.getElementById('mo-nc-city').value.trim();
+  if(!name){ toast('❗ الاسم مطلوب'); return; }
+  if(!phone){ toast('❗ التليفون مطلوب'); return; }
+
+  _moSelectedCustomer = { name, phone, address, city, shopifyId: null, source: 'new' };
+  closeM('m-mo-new-customer');
+  renderMOCustomerBox();
+  toast('✅ تم اختيار العميل');
 }
 
 function renderMOProducts(){
@@ -11458,10 +11632,10 @@ function renderMOProductSearch(){
       }
       cont.innerHTML = products.map((p, i) => `
         <div onclick="moAddProductFromSearch(${i})" style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:7px;margin-bottom:4px;cursor:pointer;background:var(--card);transition:background .12s" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background='var(--card)'">
-          ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" style="width:40px;height:40px;border-radius:5px;object-fit:cover">` : '<div style="width:40px;height:40px;background:#e5e7eb;border-radius:5px;display:flex;align-items:center;justify-content:center">📦</div>'}
+          ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" style="width:40px;height:40px;border-radius:5px;object-fit:cover" onerror="this.style.display='none'">` : '<div style="width:40px;height:40px;background:#e5e7eb;border-radius:5px;display:flex;align-items:center;justify-content:center">📦</div>'}
           <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.product_title || p.title || '-')}${p.variant_title && p.variant_title !== 'Default Title' ? ' — '+escapeHtml(p.variant_title) : ''}</div>
-            <div style="font-size:10px;color:var(--muted)">SKU: ${escapeHtml(p.sku || '-')} · Variant: ${escapeHtml(String(p.shopify_variant_id || p.variant_id || '-'))}</div>
+            <div style="font-weight:700;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.productTitle || '-')}${p.variantTitle && p.variantTitle !== 'Default Title' ? ' — '+escapeHtml(p.variantTitle) : ''}</div>
+            <div style="font-size:10px;color:var(--muted)">SKU: ${escapeHtml(p.sku || '-')} · Variant: ${escapeHtml(String(p.variantId || '-'))}</div>
           </div>
           <div style="font-weight:700;font-size:13px;color:#16a34a;white-space:nowrap">${parseFloat(p.price || 0).toFixed(0)} ج</div>
         </div>
@@ -11475,7 +11649,8 @@ function renderMOProductSearch(){
 function moAddProductFromSearch(idx){
   const p = _moProductSearchResults[idx];
   if(!p) return;
-  const variantId = p.shopify_variant_id || p.variant_id;
+  // 🔧 v311: الـ inventory/items بترجع camelCase
+  const variantId = p.variantId || p.shopify_variant_id || p.variant_id;
   if(!variantId){ toast('❌ المنتج ده مالوش variant_id - مش هينفع'); return; }
 
   // لو موجود، زود الكمية
@@ -11485,12 +11660,12 @@ function moAddProductFromSearch(idx){
   } else {
     _moLineItems.push({
       variantId: String(variantId),
-      productTitle: p.product_title || p.title || '',
-      variantTitle: p.variant_title || '',
+      productTitle: p.productTitle || p.product_title || '',
+      variantTitle: p.variantTitle || p.variant_title || '',
       sku: p.sku || '',
       qty: 1,
       price: parseFloat(p.price || 0),
-      imageUrl: p.image_url || ''
+      imageUrl: p.imageUrl || p.image_url || ''
     });
   }
   closeM('m-mo-product-picker');
@@ -11500,19 +11675,22 @@ function moAddProductFromSearch(idx){
 
 async function submitManualOrder(){
   const code = document.getElementById('mo-code').value.trim();
-  const customerName = document.getElementById('mo-customer-name').value.trim();
-  const customerPhone = document.getElementById('mo-customer-phone').value.trim();
-  const customerAddress = document.getElementById('mo-customer-address').value.trim();
-  const customerCity = document.getElementById('mo-customer-city').value.trim();
   const note = document.getElementById('mo-note').value.trim();
   const warehouseId = document.getElementById('mo-warehouse').value;
+
+  // 🆕 v313: استخدم الـ selected customer
+  const customerName = _moSelectedCustomer?.name || '';
+  const customerPhone = _moSelectedCustomer?.phone || '';
+  const customerAddress = _moSelectedCustomer?.address || '';
+  const customerCity = _moSelectedCustomer?.city || 'القاهرة';
 
   if(!code){ toast('❗ الكود مطلوب'); return; }
   if(!_moLineItems.length){ toast('❗ ضيف منتج واحد على الأقل'); return; }
 
   // تأكيد
   const total = _moLineItems.reduce((s,it)=>s+(it.qty*it.price),0);
-  if(!confirm(`تأكيد إنشاء الطلب على Shopify؟\n\nالكود: ${code}\nالمنتجات: ${_moLineItems.length}\nالإجمالي: ${total.toFixed(2)} ج\n\n⚠️ هيتم خصم المنتجات من المخزن`)) return;
+  const customerLine = _moSelectedCustomer ? `\nالعميل: ${customerName} (${customerPhone})` : '\n⚠️ بدون عميل';
+  if(!confirm(`تأكيد إنشاء الطلب على Shopify؟\n\nالكود: ${code}${customerLine}\nالمنتجات: ${_moLineItems.length}\nالإجمالي: ${total.toFixed(2)} ج\n\n⚠️ هيتم خصم المنتجات من المخزن`)) return;
 
   const payload = {
     code, note,
@@ -11532,11 +11710,34 @@ async function submitManualOrder(){
   try {
     const r = await apiFetch('/api/manual-orders', 'POST', payload);
     if(!r || r.error){
-      const errDetails = r?.details ? '\n\nتفاصيل: ' + JSON.stringify(r.details) : '';
-      toast('❌ ' + ((r?.error) || 'فشل الإنشاء') + errDetails);
+      // 🆕 v312: اعرض الـ details من Shopify في popup مفصّل
+      const errDetails = r?.details ? JSON.stringify(r.details, null, 2) : '';
+      const status = r?.status ? ` (HTTP ${r.status})` : '';
+      console.error('Manual order error:', r);
+
+      // popup كبير يبين الـ error
+      const errOv = document.createElement('div');
+      errOv.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+      errOv.innerHTML = `
+        <div style="background:#fff;border-radius:12px;width:min(560px,95vw);max-height:90vh;overflow-y:auto;padding:20px;font-family:Cairo,sans-serif">
+          <div style="font-weight:800;color:#dc2626;font-size:16px;margin-bottom:10px">❌ فشل إنشاء الطلب${status}</div>
+          <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px;margin-bottom:10px;font-size:13px">${escapeHtml(r?.error || 'خطأ غير معروف')}</div>
+          ${errDetails ? `<div style="font-weight:700;font-size:12px;margin-bottom:4px">تفاصيل من Shopify:</div>
+          <pre style="background:#f3f4f6;border-radius:6px;padding:10px;font-size:11px;max-height:300px;overflow:auto;direction:ltr;text-align:left;white-space:pre-wrap;word-break:break-word">${escapeHtml(errDetails)}</pre>` : ''}
+          <div style="text-align:left;margin-top:14px">
+            <button onclick="this.closest('div[style*=fixed]').remove()" style="padding:8px 16px;border-radius:7px;border:none;background:#3b82f6;color:#fff;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer">حسناً</button>
+          </div>
+        </div>`;
+      document.body.appendChild(errOv);
       return;
     }
     toast(`✅ تم إنشاء الطلب ${r.order.name} على Shopify`);
+    // 🆕 v314: لو الـ fulfillment اتنقل (يعني المخزن المطلوب مكنش فيه stock)
+    if(r.fulfillment?.moved > 0){
+      setTimeout(() => {
+        toast(`✅ تم تخصيم المنتجات من المخزن: ${r.warehouse?.name || '?'}`, 'success');
+      }, 1500);
+    }
     closeM('m-manual-order');
     loadManualOrders();
   } catch(e) {
