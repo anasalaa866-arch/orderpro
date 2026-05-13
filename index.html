@@ -534,6 +534,8 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="bosta-exported" onclick="goPage(this,'bosta-exported')"><span class="ni-icon">📤</span><span class="ni-label">مصدّرة</span><span class="nbadge" id="nb-bosta-exp" style="background:#f59e0b"></span></div>
         <div class="ni" data-p="courier-orders" onclick="goPage(this,'courier-orders')"><span class="ni-icon">🧑</span><span class="ni-label">طلبات المناديب</span></div>
         <div class="ni" data-p="late-orders" onclick="goPage(this,'late-orders')"><span class="ni-icon">⏰</span><span class="ni-label">طلبات متأخرة</span><span class="nbadge" id="nb-late-orders" style="background:var(--danger)">0</span></div>
+        <div class="ni" data-p="order-tracker" onclick="goPage(this,'order-tracker')"><span class="ni-icon">📊</span><span class="ni-label">متابعة الأرقام</span><span class="nbadge" id="nb-tracker-gaps" style="background:var(--warn)">0</span></div>
+        <div class="ni" data-p="manual-orders" onclick="goPage(this,'manual-orders')"><span class="ni-icon">📝</span><span class="ni-label">طلبات يدوية</span></div>
         <div class="ni" data-p="delivery-sheet" onclick="goPage(this,'delivery-sheet')"><span class="ni-icon">🖨️</span><span class="ni-label">ورقة التوصيل</span></div>
         <div class="ni" data-p="import-excel" onclick="goPage(this,'import-excel')"><span class="ni-icon">📥</span><span class="ni-label">استيراد Excel</span></div>
         <div class="ni" data-p="problems" onclick="goPage(this,'problems')"><span class="ni-icon">⚠️</span><span class="ni-label">طلبات مشكلة</span><span class="nbadge" id="nb-problems" style="background:var(--danger)"></span></div>
@@ -1285,6 +1287,145 @@ tr:hover td{background:#fafbff}
     <div id="late-orders-content"></div>
   </div>
 
+  <!-- 🆕 v307: ORDER TRACKER - متابعة الأرقام التسلسلية -->
+  <div class="page" id="page-order-tracker">
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px">
+      <div class="sc blue"><div class="sc-icon">🔢</div><div class="sc-label">المدى</div><div class="sc-val" id="trk-range" style="font-size:14px">—</div></div>
+      <div class="sc green"><div class="sc-icon">✅</div><div class="sc-label">موجودة</div><div class="sc-val" id="trk-found">0</div></div>
+      <div class="sc red"><div class="sc-icon">⛔</div><div class="sc-label">مفقودة (Gap)</div><div class="sc-val" id="trk-missing">0</div></div>
+      <div class="sc orange"><div class="sc-icon">⚠️</div><div class="sc-label">ملغية</div><div class="sc-val" id="trk-cancelled">0</div></div>
+      <div class="sc purple"><div class="sc-icon">📦</div><div class="sc-label">مكتملة</div><div class="sc-val" id="trk-done">0</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-body" style="padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:12px;color:var(--muted);font-weight:700">من رقم:</label>
+        <input type="number" id="trk-from" value="141600" onchange="renderOrderTracker()" style="padding:6px 12px;border:1px solid var(--border);border-radius:7px;font-family:Cairo,sans-serif;font-size:13px;width:120px;font-weight:700">
+
+        <label style="font-size:12px;color:var(--muted);font-weight:700;margin-right:10px">إلى رقم:</label>
+        <input type="number" id="trk-to" placeholder="(آخر طلب)" onchange="renderOrderTracker()" style="padding:6px 12px;border:1px solid var(--border);border-radius:7px;font-family:Cairo,sans-serif;font-size:13px;width:120px">
+
+        <select id="trk-status-filter" onchange="renderOrderTracker()" style="font-family:Cairo,sans-serif;padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;margin-right:10px">
+          <option value="">كل الحالات</option>
+          <option value="missing">⛔ مفقودة فقط</option>
+          <option value="جديد">🆕 جديد</option>
+          <option value="جاري التوصيل">🚚 جاري التوصيل</option>
+          <option value="مكتمل">✅ مكتمل</option>
+          <option value="ملغي">❌ ملغي</option>
+          <option value="تحت التسوية">⏳ تحت التسوية</option>
+        </select>
+
+        <input id="trk-search" placeholder="ابحث (عميل/تليفون)..." oninput="renderOrderTracker()" style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:Cairo,sans-serif;width:200px">
+
+        <button class="btn btn-ghost btn-sm" onclick="renderOrderTracker()" style="margin-right:auto">🔄 تحديث</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportTrackerCSV()" style="background:#16a34a;color:#fff;border-color:#16a34a">📥 تصدير Excel</button>
+      </div>
+    </div>
+
+    <div id="order-tracker-content"></div>
+  </div>
+
+  <!-- 🆕 v310: MANUAL ORDERS - طلبات يدوية -->
+  <div class="page" id="page-manual-orders">
+    <div style="background:linear-gradient(135deg,#dbeafe 0%,#fff 100%);border:1px solid #3b82f6;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:24px">📝</span>
+      <div style="flex:1">
+        <div style="font-weight:800;color:#1e40af">طلبات يدوية</div>
+        <div style="font-size:11px;color:var(--muted)">الطلبات هتتسجل تلقائياً على Shopify كـ <strong>fulfilled + unpaid</strong> + هتخصم من المخزن. الكود اللي تكتبه هيظهر في الـ note.</div>
+      </div>
+      <button class="btn btn-primary" onclick="openManualOrderModal()" style="background:#3b82f6">➕ طلب جديد</button>
+    </div>
+
+    <!-- قائمة الطلبات اليدوية السابقة -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-body" style="padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input id="manual-orders-search" placeholder="ابحث (كود/عميل/تليفون)..." oninput="loadManualOrdersDebounced()" style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:Cairo,sans-serif;width:240px">
+        <button class="btn btn-ghost btn-sm" onclick="loadManualOrders()">🔄 تحديث</button>
+      </div>
+    </div>
+
+    <div id="manual-orders-list"></div>
+  </div>
+
+  <!-- 🆕 v310: MANUAL ORDER MODAL -->
+  <div id="m-manual-order" class="modal-overlay" style="display:none">
+    <div class="modal" style="max-width:780px">
+      <div class="modal-header">
+        <h3 style="margin:0">📝 إنشاء طلب يدوي</h3>
+        <button class="modal-close" onclick="closeM('m-manual-order')">×</button>
+      </div>
+      <div class="modal-body" style="padding:16px 18px">
+        <!-- معلومات أساسية -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div>
+            <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">📌 الكود (للملاحظة في Shopify) *</label>
+            <input id="mo-code" class="form-input" placeholder="مثال: ORD-2026-001" autocomplete="off">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">🏬 المخزن</label>
+            <select id="mo-warehouse" class="form-input"></select>
+          </div>
+        </div>
+
+        <!-- بيانات العميل -->
+        <details open style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
+          <summary style="font-weight:700;font-size:13px;cursor:pointer;color:#3b82f6">👤 بيانات العميل (اختياري)</summary>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+            <div>
+              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">الاسم</label>
+              <input id="mo-customer-name" class="form-input" placeholder="اسم العميل">
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">التليفون</label>
+              <input id="mo-customer-phone" class="form-input" placeholder="01XXXXXXXXX">
+            </div>
+            <div style="grid-column:1/-1">
+              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">العنوان</label>
+              <input id="mo-customer-address" class="form-input" placeholder="عنوان الشحن">
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">المدينة</label>
+              <input id="mo-customer-city" class="form-input" placeholder="القاهرة" value="القاهرة">
+            </div>
+          </div>
+        </details>
+
+        <!-- المنتجات -->
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <label style="font-size:13px;font-weight:700">🛒 المنتجات *</label>
+            <button class="btn btn-secondary btn-sm" onclick="openManualOrderProductPicker()" style="background:#16a34a;color:#fff;border-color:#16a34a">➕ أضف منتج</button>
+          </div>
+          <div id="mo-products-list" style="border:1px solid var(--border);border-radius:8px;min-height:60px;padding:8px;background:var(--bg)"></div>
+          <div id="mo-total" style="text-align:left;margin-top:8px;font-weight:800;font-size:16px;color:#16a34a"></div>
+        </div>
+
+        <!-- ملاحظات إضافية -->
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">📝 ملاحظات إضافية (اختياري)</label>
+        <textarea id="mo-note" class="form-input" rows="2" placeholder="ملاحظات تظهر مع الكود في الـ note بتاع Shopify" style="font-family:Cairo,sans-serif"></textarea>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+          <button class="btn btn-ghost" onclick="closeM('m-manual-order')">إلغاء</button>
+          <button class="btn btn-primary" onclick="submitManualOrder()" style="background:#3b82f6">💾 إنشاء الطلب على Shopify</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🆕 v310: MANUAL ORDER PRODUCT PICKER MODAL -->
+  <div id="m-mo-product-picker" class="modal-overlay" style="display:none">
+    <div class="modal" style="max-width:680px">
+      <div class="modal-header">
+        <h3 style="margin:0">🛒 اختار منتج</h3>
+        <button class="modal-close" onclick="closeM('m-mo-product-picker')">×</button>
+      </div>
+      <div class="modal-body" style="padding:14px">
+        <input id="mo-product-search" placeholder="ابحث (اسم/SKU/Barcode)..." oninput="renderMOProductSearch()" autofocus style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:7px;font-family:Cairo,sans-serif;font-size:13px;margin-bottom:10px">
+        <div id="mo-product-results" style="max-height:400px;overflow-y:auto"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- 🆕 v295: TASKS PAGE -->
   <div class="page" id="page-tasks">
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
@@ -1383,8 +1524,8 @@ tr:hover td{background:#fafbff}
     <div style="background:linear-gradient(135deg,#fef2f2 0%,#fff 100%);border:2px solid var(--danger);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
       <span style="font-size:24px">🔍</span>
       <div style="flex:1">
-        <div style="font-weight:800;color:#991b1b">مراقبة حركات الكاشيرز</div>
-        <div style="font-size:11px;color:var(--muted)">كل حركة في كارت Stars: إضافة / شيل / مسح / خصم / تعديل كمية - بيتسجل هنا تلقائياً</div>
+        <div style="font-weight:800;color:#991b1b">مراقبة الحركات المشبوهة</div>
+        <div style="font-size:11px;color:var(--muted)">بيتم تسجيل وعرض الحركات المشبوهة فقط: شيل منتج / مسح السلة / تقليل كمية / تطبيق خصم / تعديل سعر / إلغاء بيع</div>
       </div>
     </div>
 
@@ -1402,24 +1543,20 @@ tr:hover td{background:#fafbff}
           <option value="">كل الكاشيرز</option>
         </select>
         <select id="audit-action-filter" onchange="loadCartAudit()" style="font-family:Cairo,sans-serif;padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px">
-          <option value="">كل الحركات</option>
-          <option value="add_item">➕ إضافة</option>
-          <option value="qty_increased">📈 زيادة كمية</option>
-          <option value="qty_decreased">📉 تقليل كمية</option>
+          <option value="">كل الحركات المشبوهة</option>
           <option value="remove_item">❌ شيل منتج</option>
           <option value="clear_cart">🗑️ مسح السلة</option>
+          <option value="qty_decreased">📉 تقليل كمية</option>
           <option value="discount_applied">💸 تطبيق خصم</option>
-          <option value="sale_completed">✅ بيع تم</option>
+          <option value="price_change">💰 تعديل سعر</option>
+          <option value="cancel_sale">🚫 إلغاء بيع</option>
         </select>
         <label style="font-size:11px;color:var(--muted)">من:</label>
         <input type="date" id="audit-from" onchange="loadCartAudit()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
         <label style="font-size:11px;color:var(--muted)">إلى:</label>
         <input type="date" id="audit-to" onchange="loadCartAudit()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
         <input id="audit-search" placeholder="ابحث (منتج/SKU/كاشير)..." oninput="loadCartAuditDebounced()" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:Cairo,sans-serif;width:200px">
-        <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;margin-right:auto">
-          <input type="checkbox" id="audit-suspicious" onchange="loadCartAudit()"> ⚠️ المشبوهة فقط
-        </label>
-        <button class="btn btn-ghost btn-sm" onclick="loadCartAudit()">🔄 تحديث</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadCartAudit()" style="margin-right:auto">🔄 تحديث</button>
       </div>
     </div>
 
@@ -5600,7 +5737,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','inventory':'📦 المخزون','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','inventory':'📦 المخزون','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -10952,6 +11089,530 @@ function callPhone(phone){
 }
 
 // ============================================================
+// 🆕 v307: ORDER TRACKER - متابعة الأرقام التسلسلية
+// 🔧 v308: حماية من RangeError + extraction أدق
+// ============================================================
+const TRACKER_DEFAULT_START = 141600;
+const TRACKER_MAX_RANGE = 50000; // حد أقصى 50K row عشان نمنع crash
+
+function _extractOrderNum(orderId){
+  if(!orderId) return 0;
+  const s = String(orderId);
+  // جرب SH-XXXXX format الأول
+  let m = s.match(/SH[-_]?(\d+)/i);
+  if(m) return parseInt(m[1]);
+  // جرب #XXXXX format
+  m = s.match(/#(\d+)/);
+  if(m) return parseInt(m[1]);
+  // آخر سلسلة أرقام في الـ string
+  const matches = s.match(/\d+/g);
+  if(!matches || !matches.length) return 0;
+  // خد آخر number في الـ ID (أصغر غالباً)
+  const nums = matches.map(n => parseInt(n)).filter(n => n > 0 && n < 10000000);
+  if(!nums.length) return 0;
+  // رجع أصغر رقم منطقي (مثلاً 141600 مش 5654000123456)
+  return Math.min(...nums);
+}
+
+function _getTrackerData(){
+  const fromInput = parseInt(document.getElementById('trk-from')?.value);
+  const from = fromInput && fromInput > 0 ? fromInput : TRACKER_DEFAULT_START;
+
+  const byNum = {};
+  let maxNum = 0;
+  if(!Array.isArray(orders)) return { from, to: from, byNum, allNums: [] };
+
+  orders.forEach(o => {
+    const num = _extractOrderNum(o.id);
+    // 🔧 v309: حد أقصى منطقي - متفسحش الـ range يبقى ضخم
+    if(num >= from && num < from + TRACKER_MAX_RANGE){
+      byNum[num] = o;
+      if(num > maxNum) maxNum = num;
+    }
+  });
+
+  const toInput = parseInt(document.getElementById('trk-to')?.value);
+  let to = toInput && toInput > 0 ? toInput : maxNum;
+
+  // 🛡️ v309: الحد الأقصى للـ rows
+  if(to - from > TRACKER_MAX_RANGE){
+    console.warn(`Tracker: range too big (${to-from}), truncating to ${TRACKER_MAX_RANGE}`);
+    to = from + TRACKER_MAX_RANGE;
+  }
+
+  if(to < from || maxNum === 0 || !isFinite(to) || !isFinite(from)) {
+    return { from, to: from, byNum, allNums: [] };
+  }
+
+  const rangeSize = to - from + 1;
+  // 🛡️ آخر safety check قبل الـ allocation
+  if(rangeSize > TRACKER_MAX_RANGE || rangeSize < 0){
+    return { from, to: from, byNum, allNums: [] };
+  }
+
+  const allNums = [];
+  for(let i = from; i <= to; i++) allNums.push(i);
+  return { from, to, byNum, allNums };
+}
+
+function _getStatusBadge(status, isCancelled){
+  const cfg = {
+    'جديد': { color: '#3b82f6', bg: '#dbeafe', icon: '🆕' },
+    'جاري التوصيل': { color: '#f97316', bg: '#fed7aa', icon: '🚚' },
+    'مكتمل': { color: '#16a34a', bg: '#dcfce7', icon: '✅' },
+    'ملغي': { color: '#dc2626', bg: '#fee2e2', icon: '❌' },
+    'تحت التسوية': { color: '#a16207', bg: '#fef3c7', icon: '⏳' }
+  };
+  const c = cfg[status] || { color: '#64748b', bg: '#e2e8f0', icon: '•' };
+  return `<span style="display:inline-block;background:${c.bg};color:${c.color};padding:3px 10px;border-radius:11px;font-size:11px;font-weight:700;white-space:nowrap">${c.icon} ${status || '-'}</span>`;
+}
+
+function renderOrderTracker(){
+  const { from, to, byNum, allNums } = _getTrackerData();
+  const statusFilter = document.getElementById('trk-status-filter')?.value || '';
+  const search = (document.getElementById('trk-search')?.value || '').trim().toLowerCase();
+
+  // 🔧 v308: لو مفيش بيانات، اعرض sample IDs عشان المستخدم يعرف الـ format
+  if(!allNums.length){
+    const samples = (Array.isArray(orders) ? orders : []).slice(0, 5).map(o => o.id);
+    const allIds = (Array.isArray(orders) ? orders : []);
+    const extracted = samples.map(id => ({ id, num: _extractOrderNum(id) }));
+    const cont = document.getElementById('order-tracker-content');
+    if(cont){
+      cont.innerHTML = `<div class="card"><div class="card-body" style="padding:25px;text-align:center">
+        <div style="font-size:42px;opacity:.3">🔍</div>
+        <div style="font-size:14px;font-weight:700;margin:10px 0">مفيش طلبات في المدى ${from} لحد ${to || from}</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px">إجمالي طلبات في النظام: ${allIds.length}</div>
+        ${samples.length ? `
+          <div style="background:var(--bg);border-radius:8px;padding:12px;text-align:right;font-size:11px;display:inline-block">
+            <div style="font-weight:700;margin-bottom:6px">عينة من الـ IDs الموجودة:</div>
+            ${extracted.map(x => `<div style="font-family:monospace;margin:2px 0">• <strong>${escapeHtml(x.id)}</strong> → الرقم المستخرج: <span style="color:${x.num>=from?'#16a34a':'#dc2626'}">${x.num}</span></div>`).join('')}
+          </div>
+          <div style="margin-top:14px;font-size:12px;color:var(--muted)">
+            ${extracted.every(x => x.num < from) ? `💡 جرب تغير "من رقم" لرقم أصغر (مثلاً <strong>${Math.min(...extracted.map(x=>x.num).filter(n=>n>0))||1}</strong>)` : '💡 الـ IDs مش تبدأ بـ SH- - حاول البحث برقم محدد'}
+          </div>
+        ` : ''}
+      </div></div>`;
+    }
+    if($('trk-range')) $('trk-range').textContent = '—';
+    if($('trk-found')) $('trk-found').textContent = '0';
+    if($('trk-missing')) $('trk-missing').textContent = '0';
+    if($('trk-cancelled')) $('trk-cancelled').textContent = '0';
+    if($('trk-done')) $('trk-done').textContent = '0';
+    return;
+  }
+
+  // إحصائيات
+  let found = 0, missing = 0, cancelled = 0, done = 0;
+  allNums.forEach(num => {
+    const o = byNum[num];
+    if(!o) missing++;
+    else {
+      found++;
+      if(o.status === 'ملغي') cancelled++;
+      if(o.status === 'مكتمل') done++;
+    }
+  });
+
+  if($('trk-range')) $('trk-range').textContent = allNums.length ? `${from} → ${to}` : '—';
+  if($('trk-found')) $('trk-found').textContent = found;
+  if($('trk-missing')) $('trk-missing').textContent = missing;
+  if($('trk-cancelled')) $('trk-cancelled').textContent = cancelled;
+  if($('trk-done')) $('trk-done').textContent = done;
+
+  // حدّث الـ sidebar badge
+  if($('nb-tracker-gaps')) $('nb-tracker-gaps').textContent = missing || '';
+
+  // فلترة
+  let displayNums = allNums;
+  if(statusFilter === 'missing'){
+    displayNums = allNums.filter(n => !byNum[n]);
+  } else if(statusFilter){
+    displayNums = allNums.filter(n => byNum[n]?.status === statusFilter);
+  }
+  if(search){
+    displayNums = displayNums.filter(n => {
+      const o = byNum[n];
+      if(!o) return String(n).includes(search);
+      return (o.name||'').toLowerCase().includes(search) ||
+             (o.phone||'').includes(search) ||
+             String(n).includes(search);
+    });
+  }
+
+  const cont = document.getElementById('order-tracker-content');
+  if(!cont) return;
+
+  if(!displayNums.length){
+    cont.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:30px">
+      <div style="font-size:48px;opacity:.3">📋</div>
+      <div style="font-size:14px;font-weight:700;margin-top:8px">${allNums.length === 0 ? 'مفيش طلبات في المدى ده' : 'مفيش نتائج للفلتر'}</div>
+    </div></div>`;
+    return;
+  }
+
+  // عرض جدول
+  const rows = displayNums.map(num => {
+    const o = byNum[num];
+    if(!o){
+      // طلب مفقود (gap)
+      return `<tr style="background:#fef2f2">
+        <td style="font-family:monospace;font-weight:800;font-size:13px">SH-${num}</td>
+        <td colspan="5" style="text-align:center;color:#dc2626;font-weight:700">⛔ مفقود — مفيش طلب بالرقم ده في النظام</td>
+        <td></td>
+      </tr>`;
+    }
+    const dateStr = o.createdAt ? new Date(o.createdAt).toLocaleDateString('ar-EG') : '-';
+    const timeStr = o.createdAt ? new Date(o.createdAt).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}) : '';
+    let courier = '-';
+    if(o.isBosta) courier = '🚚 بوسطة';
+    else if(o.courierId){
+      const c = (typeof couriers !== 'undefined' && Array.isArray(couriers)) ? couriers.find(cc=>String(cc.id)===String(o.courierId)) : null;
+      courier = c?.name || 'مندوب #'+o.courierId;
+    }
+    return `<tr style="cursor:pointer" onclick="viewOrderDetail('${escapeHtml(o.id)}')">
+      <td style="font-family:monospace;font-weight:800;font-size:13px">${escapeHtml(o.id)}</td>
+      <td>${_getStatusBadge(o.status)}</td>
+      <td style="font-size:12px;font-weight:500">${escapeHtml(o.name || '-')}</td>
+      <td style="font-size:11px;color:var(--muted)">${escapeHtml(o.phone || '-')}</td>
+      <td style="text-align:center;font-weight:700;font-size:12px">${parseFloat(o.total||o.cod||0).toFixed(0)} ج</td>
+      <td style="font-size:11px">${escapeHtml(courier)}</td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${dateStr}<br><span style="font-size:10px">${timeStr}</span></td>
+    </tr>`;
+  }).join('');
+
+  cont.innerHTML = `
+    <div class="card">
+      <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0">📊 جدول الأرقام (${displayNums.length} صف${missing>0?' · '+missing+' مفقود':''})</h3>
+        <span style="font-size:11px;color:var(--muted)">المدى: ${from} → ${to}</span>
+      </div>
+      <div class="tw" style="overflow-x:auto;max-height:75vh;overflow-y:auto">
+        <table style="width:100%;font-size:12px">
+          <thead style="position:sticky;top:0;background:var(--card);z-index:1;box-shadow:0 1px 0 var(--border)">
+            <tr>
+              <th>رقم الطلب</th>
+              <th>الحالة</th>
+              <th>العميل</th>
+              <th>التليفون</th>
+              <th style="text-align:center">المبلغ</th>
+              <th>المندوب</th>
+              <th>التاريخ</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function exportTrackerCSV(){
+  const { from, to, byNum, allNums } = _getTrackerData();
+  if(!allNums.length){ toast('❗ مفيش بيانات للتصدير'); return; }
+
+  const headers = ['رقم الطلب','الحالة','العميل','التليفون','المبلغ','المندوب','التاريخ','ملاحظات'];
+  const rows = allNums.map(num => {
+    const o = byNum[num];
+    if(!o) return ['SH-'+num, '⛔ مفقود', '', '', '', '', '', 'مفيش طلب بالرقم ده'].map(v=>`"${v}"`).join(',');
+    let courier = '';
+    if(o.isBosta) courier = 'بوسطة';
+    else if(o.courierId){
+      const c = (typeof couriers !== 'undefined' && Array.isArray(couriers)) ? couriers.find(cc=>String(cc.id)===String(o.courierId)) : null;
+      courier = c?.name || '#'+o.courierId;
+    }
+    const date = o.createdAt ? new Date(o.createdAt).toLocaleString('ar-EG') : '';
+    return [
+      o.id || '', o.status || '', o.name || '', o.phone || '',
+      parseFloat(o.total||o.cod||0).toFixed(2), courier, date, ''
+    ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
+  });
+  const csv = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tracker-${from}-to-${to}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('✅ تم التصدير');
+}
+
+// ============================================================
+// 🆕 v310: MANUAL ORDERS - طلبات يدوية بتسجّل على Shopify
+// ============================================================
+let _moLineItems = []; // [{variantId, productTitle, variantTitle, sku, price, qty, imageUrl}]
+let _moLocations = []; // [{id, name, shopify_location_id}]
+let _manualOrders = [];
+let _moDebounceTimer = null;
+let _moProductSearchResults = [];
+
+async function openManualOrderModal(){
+  _moLineItems = [];
+  document.getElementById('mo-code').value = '';
+  document.getElementById('mo-customer-name').value = '';
+  document.getElementById('mo-customer-phone').value = '';
+  document.getElementById('mo-customer-address').value = '';
+  document.getElementById('mo-customer-city').value = 'القاهرة';
+  document.getElementById('mo-note').value = '';
+
+  // حمل قائمة المخازن
+  try {
+    if(!_moLocations.length){
+      const r = await apiFetch('/api/manual-orders/locations');
+      _moLocations = r?.locations || [];
+    }
+    const sel = document.getElementById('mo-warehouse');
+    const onlineIdx = _moLocations.findIndex(l => /online|markets|متجر/i.test(l.name || ''));
+    sel.innerHTML = _moLocations.map((l, i) =>
+      `<option value="${l.id}" ${i === onlineIdx ? 'selected' : ''}>${escapeHtml(l.name)}</option>`
+    ).join('') || '<option value="">— مفيش مخازن متاحة —</option>';
+  } catch(e) {
+    document.getElementById('mo-warehouse').innerHTML = '<option value="">⚠️ فشل تحميل المخازن</option>';
+  }
+
+  renderMOProducts();
+  openM('m-manual-order');
+}
+
+function renderMOProducts(){
+  const cont = document.getElementById('mo-products-list');
+  if(!_moLineItems.length){
+    cont.innerHTML = '<div style="text-align:center;color:var(--muted);padding:14px;font-size:12px">مفيش منتجات. اضغط "أضف منتج" للبدء</div>';
+    document.getElementById('mo-total').textContent = '';
+    return;
+  }
+  const rows = _moLineItems.map((it, idx) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--card);border:1px solid var(--border);border-radius:7px;margin-bottom:4px">
+      ${it.imageUrl ? `<img src="${escapeHtml(it.imageUrl)}" style="width:36px;height:36px;border-radius:5px;object-fit:cover">` : '<div style="width:36px;height:36px;background:#e5e7eb;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:14px">📦</div>'}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(it.productTitle)}${it.variantTitle ? ' — '+escapeHtml(it.variantTitle) : ''}</div>
+        <div style="font-size:10px;color:var(--muted)">SKU: ${escapeHtml(it.sku || '-')}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <button onclick="moChangeQty(${idx},-1)" style="width:24px;height:24px;border:1px solid var(--border);background:#fff;border-radius:5px;cursor:pointer;font-weight:700">-</button>
+        <input type="number" min="1" value="${it.qty}" onchange="moSetQty(${idx},this.value)" style="width:50px;text-align:center;padding:3px;border:1px solid var(--border);border-radius:5px;font-family:Cairo,sans-serif;font-size:12px">
+        <button onclick="moChangeQty(${idx},1)" style="width:24px;height:24px;border:1px solid var(--border);background:#fff;border-radius:5px;cursor:pointer;font-weight:700">+</button>
+      </div>
+      <input type="number" step="0.01" value="${parseFloat(it.price).toFixed(2)}" onchange="moSetPrice(${idx},this.value)" style="width:80px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-family:Cairo,sans-serif;font-size:12px;text-align:left" title="السعر/قطعة">
+      <span style="min-width:70px;text-align:left;font-weight:700;font-size:12px">${(it.qty * it.price).toFixed(0)} ج</span>
+      <button onclick="moRemoveItem(${idx})" style="width:24px;height:24px;border:none;background:#fee2e2;color:#dc2626;border-radius:5px;cursor:pointer;font-weight:700">×</button>
+    </div>
+  `).join('');
+  cont.innerHTML = rows;
+  const total = _moLineItems.reduce((s, it) => s + (it.qty * it.price), 0);
+  document.getElementById('mo-total').textContent = `الإجمالي: ${total.toFixed(2)} ج`;
+}
+
+function moChangeQty(idx, delta){
+  if(!_moLineItems[idx]) return;
+  _moLineItems[idx].qty = Math.max(1, _moLineItems[idx].qty + delta);
+  renderMOProducts();
+}
+
+function moSetQty(idx, val){
+  if(!_moLineItems[idx]) return;
+  _moLineItems[idx].qty = Math.max(1, parseInt(val) || 1);
+  renderMOProducts();
+}
+
+function moSetPrice(idx, val){
+  if(!_moLineItems[idx]) return;
+  _moLineItems[idx].price = Math.max(0, parseFloat(val) || 0);
+  renderMOProducts();
+}
+
+function moRemoveItem(idx){
+  _moLineItems.splice(idx, 1);
+  renderMOProducts();
+}
+
+async function openManualOrderProductPicker(){
+  document.getElementById('mo-product-search').value = '';
+  document.getElementById('mo-product-results').innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">ابحث بالاسم أو الـ SKU...</div>';
+  openM('m-mo-product-picker');
+  setTimeout(() => document.getElementById('mo-product-search')?.focus(), 100);
+}
+
+let _moSearchTimer = null;
+function renderMOProductSearch(){
+  clearTimeout(_moSearchTimer);
+  _moSearchTimer = setTimeout(async () => {
+    const q = document.getElementById('mo-product-search').value.trim();
+    const cont = document.getElementById('mo-product-results');
+    if(!q || q.length < 2){
+      cont.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">اكتب حرفين على الأقل</div>';
+      return;
+    }
+    cont.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">🔍 جاري البحث...</div>';
+    try {
+      const r = await apiFetch('/api/inventory/items?search=' + encodeURIComponent(q));
+      // الـ response format ممكن يكون array مباشرة أو {products: [...]}
+      let products = Array.isArray(r) ? r : (r?.products || r?.items || []);
+      // limit للأداء
+      products = products.slice(0, 30);
+      _moProductSearchResults = products;
+      if(!products.length){
+        cont.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">مفيش نتائج</div>';
+        return;
+      }
+      cont.innerHTML = products.map((p, i) => `
+        <div onclick="moAddProductFromSearch(${i})" style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:7px;margin-bottom:4px;cursor:pointer;background:var(--card);transition:background .12s" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background='var(--card)'">
+          ${p.image_url ? `<img src="${escapeHtml(p.image_url)}" style="width:40px;height:40px;border-radius:5px;object-fit:cover">` : '<div style="width:40px;height:40px;background:#e5e7eb;border-radius:5px;display:flex;align-items:center;justify-content:center">📦</div>'}
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.product_title || p.title || '-')}${p.variant_title && p.variant_title !== 'Default Title' ? ' — '+escapeHtml(p.variant_title) : ''}</div>
+            <div style="font-size:10px;color:var(--muted)">SKU: ${escapeHtml(p.sku || '-')} · Variant: ${escapeHtml(String(p.shopify_variant_id || p.variant_id || '-'))}</div>
+          </div>
+          <div style="font-weight:700;font-size:13px;color:#16a34a;white-space:nowrap">${parseFloat(p.price || 0).toFixed(0)} ج</div>
+        </div>
+      `).join('');
+    } catch(e) {
+      cont.innerHTML = `<div style="color:var(--danger);padding:10px">❌ ${escapeHtml(e.message)}</div>`;
+    }
+  }, 300);
+}
+
+function moAddProductFromSearch(idx){
+  const p = _moProductSearchResults[idx];
+  if(!p) return;
+  const variantId = p.shopify_variant_id || p.variant_id;
+  if(!variantId){ toast('❌ المنتج ده مالوش variant_id - مش هينفع'); return; }
+
+  // لو موجود، زود الكمية
+  const existing = _moLineItems.find(it => String(it.variantId) === String(variantId));
+  if(existing){
+    existing.qty++;
+  } else {
+    _moLineItems.push({
+      variantId: String(variantId),
+      productTitle: p.product_title || p.title || '',
+      variantTitle: p.variant_title || '',
+      sku: p.sku || '',
+      qty: 1,
+      price: parseFloat(p.price || 0),
+      imageUrl: p.image_url || ''
+    });
+  }
+  closeM('m-mo-product-picker');
+  renderMOProducts();
+  toast('✅ تم الإضافة');
+}
+
+async function submitManualOrder(){
+  const code = document.getElementById('mo-code').value.trim();
+  const customerName = document.getElementById('mo-customer-name').value.trim();
+  const customerPhone = document.getElementById('mo-customer-phone').value.trim();
+  const customerAddress = document.getElementById('mo-customer-address').value.trim();
+  const customerCity = document.getElementById('mo-customer-city').value.trim();
+  const note = document.getElementById('mo-note').value.trim();
+  const warehouseId = document.getElementById('mo-warehouse').value;
+
+  if(!code){ toast('❗ الكود مطلوب'); return; }
+  if(!_moLineItems.length){ toast('❗ ضيف منتج واحد على الأقل'); return; }
+
+  // تأكيد
+  const total = _moLineItems.reduce((s,it)=>s+(it.qty*it.price),0);
+  if(!confirm(`تأكيد إنشاء الطلب على Shopify؟\n\nالكود: ${code}\nالمنتجات: ${_moLineItems.length}\nالإجمالي: ${total.toFixed(2)} ج\n\n⚠️ هيتم خصم المنتجات من المخزن`)) return;
+
+  const payload = {
+    code, note,
+    warehouseId: parseInt(warehouseId) || null,
+    customerName, customerPhone, customerAddress, customerCity,
+    lineItems: _moLineItems.map(it => ({
+      variantId: it.variantId,
+      quantity: it.qty,
+      price: it.price,
+      title: it.productTitle
+    }))
+  };
+
+  const btn = document.querySelector('#m-manual-order .btn-primary');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ جاري الإنشاء...'; }
+
+  try {
+    const r = await apiFetch('/api/manual-orders', 'POST', payload);
+    if(!r || r.error){
+      const errDetails = r?.details ? '\n\nتفاصيل: ' + JSON.stringify(r.details) : '';
+      toast('❌ ' + ((r?.error) || 'فشل الإنشاء') + errDetails);
+      return;
+    }
+    toast(`✅ تم إنشاء الطلب ${r.order.name} على Shopify`);
+    closeM('m-manual-order');
+    loadManualOrders();
+  } catch(e) {
+    toast('❌ ' + e.message);
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = '💾 إنشاء الطلب على Shopify'; }
+  }
+}
+
+function loadManualOrdersDebounced(){
+  clearTimeout(_moDebounceTimer);
+  _moDebounceTimer = setTimeout(loadManualOrders, 400);
+}
+
+async function loadManualOrders(){
+  if(!API_URL) return;
+  const search = document.getElementById('manual-orders-search')?.value?.trim() || '';
+  const params = search ? '?search=' + encodeURIComponent(search) : '';
+  try {
+    const r = await apiFetch('/api/manual-orders' + params);
+    _manualOrders = r?.orders || [];
+    renderManualOrdersList();
+  } catch(e){
+    document.getElementById('manual-orders-list').innerHTML = `<div class="card"><div class="card-body" style="color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+function renderManualOrdersList(){
+  const cont = document.getElementById('manual-orders-list');
+  if(!cont) return;
+  if(!_manualOrders.length){
+    cont.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:30px"><div style="font-size:42px;opacity:.3">📝</div><div style="font-size:14px;font-weight:700;margin-top:8px">مفيش طلبات يدوية لسه</div><div style="font-size:11px;color:var(--muted);margin-top:4px">اضغط "➕ طلب جديد" للبدء</div></div></div>';
+    return;
+  }
+  const rows = _manualOrders.map(o => {
+    let items = [];
+    try { items = typeof o.line_items === 'string' ? JSON.parse(o.line_items) : (o.line_items || []); } catch(e){}
+    const created = new Date(o.created_at).toLocaleString('ar-EG');
+    return `
+      <tr>
+        <td><strong>${escapeHtml(o.shopify_order_name || '#'+o.shopify_order_number)}</strong></td>
+        <td><span style="background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:11px;font-size:11px;font-weight:700;font-family:monospace">${escapeHtml(o.code || '-')}</span></td>
+        <td>${escapeHtml(o.customer_name || '-')}<br><span style="font-size:10px;color:var(--muted)">${escapeHtml(o.customer_phone || '')}</span></td>
+        <td style="text-align:center">${items.length}</td>
+        <td style="text-align:center;font-weight:700">${parseFloat(o.total||0).toFixed(0)} ج</td>
+        <td style="font-size:11px;color:var(--muted)">${created}</td>
+        <td>
+          <button class="btn btn-ghost btn-xs" onclick="window.open('https://cafelax.myshopify.com/admin/orders/${escapeHtml(o.shopify_order_id)}','_blank')" title="افتح في Shopify">🛍️</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+  cont.innerHTML = `
+    <div class="card">
+      <div class="card-hd"><h3 style="margin:0">📋 آخر ${_manualOrders.length} طلب يدوي</h3></div>
+      <div class="tw" style="overflow-x:auto">
+        <table style="width:100%;font-size:12px">
+          <thead>
+            <tr>
+              <th>رقم Shopify</th>
+              <th>الكود</th>
+              <th>العميل</th>
+              <th style="text-align:center">عدد المنتجات</th>
+              <th style="text-align:center">الإجمالي</th>
+              <th>التاريخ</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================
 // 🆕 v295: TASKS SYSTEM
 // ============================================================
 let _tasks = [];
@@ -11416,7 +12077,6 @@ async function loadCartAudit(){
   const fromDate = $('audit-from')?.value;
   const toDate = $('audit-to')?.value;
   const search = $('audit-search')?.value?.trim();
-  const suspicious = $('audit-suspicious')?.checked;
 
   if(storeFilter) params.append('store_id', storeFilter);
   if(cashierFilter) params.append('cashier_id', cashierFilter);
@@ -11424,7 +12084,7 @@ async function loadCartAudit(){
   if(fromDate) params.append('from', fromDate);
   if(toDate) params.append('to', toDate + 'T23:59:59');
   if(search) params.append('search', search);
-  if(suspicious) params.append('suspicious', '1');
+  // 🔧 v195: الـ DB أصلاً فيها المشبوهة فقط، فمش محتاجين الفلتر ده
   params.append('limit', '500');
 
   try {
@@ -11480,7 +12140,7 @@ async function loadCartAuditSummary(){
         <thead><tr>
           <th>الكاشير</th>
           <th>المحل</th>
-          <th style="text-align:center">إجمالي</th>
+          <th style="text-align:center">إجمالي المشبوهة</th>
           <th style="text-align:center;background:#fee2e2">❌ شيل</th>
           <th style="text-align:center;background:#fee2e2">🗑️ مسح</th>
           <th style="text-align:center;background:#fee2e2">🚫 إلغاء</th>
@@ -11610,8 +12270,9 @@ function renderCartAuditList(){
 async function refreshCartAuditBadge(){
   if(!API_URL) return;
   try {
+    // 🔧 v195: الـ DB أصلاً فيها المشبوهة فقط
     const today = new Date().toISOString().slice(0,10);
-    const params = new URLSearchParams({ suspicious: '1', from: today, limit: '50' });
+    const params = new URLSearchParams({ from: today, limit: '50' });
     const r = await apiFetch('/api/cart-audit?' + params.toString());
     const count = r?.events?.length || 0;
     const el = $('nb-cart-audit');
@@ -15322,12 +15983,121 @@ function updateBatchIndicator(){
   const el = document.getElementById('batch-indicator');
   if(!el) return;
   const batch = ensureCurrentBatch();
-  const count = orders.filter(o=>o.batchCode===batch.code).length;
+  const batchOrders = orders.filter(o=>o.batchCode===batch.code);
+  const count = batchOrders.length;
+
+  // 🆕 v305: counter per-courier للـ live verification
+  let assignedCount = 0;
+  let unassignedCount = 0;
+  let bostaCount = 0;
+  batchOrders.forEach(o => {
+    if(o.isBosta) bostaCount++;
+    else if(o.courierId) assignedCount++;
+    else unassignedCount++;
+  });
+
+  el.style.cursor = 'pointer';
+  el.title = 'اضغط للتفاصيل';
   el.innerHTML = `
     <span style="font-size:10px;color:var(--muted)">الدفعة الحالية</span>
     <strong style="font-size:13px;color:var(--accent);margin-right:6px">${batch.code}</strong>
-    <span style="background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-right:6px">${count} طلب</span>
+    <span style="background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-right:6px">${count} إجمالي</span>
+    <span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-right:4px">✅ ${assignedCount} موزّع</span>
+    ${bostaCount > 0 ? `<span style="background:#ede9fe;color:#5b21b6;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-right:4px">🚚 ${bostaCount} بوسطة</span>` : ''}
+    ${unassignedCount > 0 ? `<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;margin-right:4px">⏳ ${unassignedCount} غير موزع</span>` : ''}
+    <span style="font-size:10px;color:#6366f1;margin-right:8px;text-decoration:underline">🔍 تفاصيل المناديب</span>
   `;
+  el.onclick = showBatchDetailsPopup;
+}
+
+// 🆕 v305: popup لعرض تفاصيل الدفعة - عداد per-courier real-time
+function showBatchDetailsPopup(){
+  const batch = ensureCurrentBatch();
+  const batchOrders = orders.filter(o=>o.batchCode===batch.code);
+
+  // جمّع per-courier
+  const courierGroups = {}; // courierId -> {name, total, express, normal}
+  let unassignedOrders = [];
+  let bostaCount = 0, bostaExpress = 0;
+
+  batchOrders.forEach(o => {
+    const exp = isSameDay(o);
+    if(o.isBosta){
+      bostaCount++;
+      if(exp) bostaExpress++;
+    } else if(o.courierId){
+      const c = couriers.find(cc=>String(cc.id)===String(o.courierId));
+      const cname = c?.name || ('مندوب #'+o.courierId);
+      if(!courierGroups[o.courierId]) courierGroups[o.courierId] = { name: cname, total: 0, express: 0, normal: 0, exists: !!c };
+      courierGroups[o.courierId].total++;
+      if(exp) courierGroups[o.courierId].express++;
+      else courierGroups[o.courierId].normal++;
+    } else {
+      unassignedOrders.push(o);
+    }
+  });
+
+  const sortedCouriers = Object.values(courierGroups).sort((a,b)=>(a.name||'').localeCompare(b.name||'','ar'));
+
+  const courierRows = sortedCouriers.map(g => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid #f1f5f9;${!g.exists ? 'background:#fef2f2' : ''}">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:13px">${escapeHtml(g.name)} ${!g.exists ? '<span style="color:#dc2626;font-size:10px">⚠️ مندوب محذوف</span>' : ''}</div>
+        <div style="font-size:11px;color:#666;margin-top:2px">
+          ${g.express > 0 ? `<span style="color:#dc2626">⚡ ${g.express} عاجل</span> · ` : ''}
+          <span>📦 ${g.normal} عادي</span>
+        </div>
+      </div>
+      <div style="background:${g.exists?'#16a34a':'#dc2626'};color:#fff;padding:6px 14px;border-radius:10px;font-weight:800;font-size:16px;min-width:50px;text-align:center">${g.total}</div>
+    </div>
+  `).join('');
+
+  const bostaRow = bostaCount > 0 ? `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid #f1f5f9;background:#faf5ff">
+      <div style="flex:1">
+        <div style="font-weight:700;font-size:13px">🚚 بوسطة</div>
+        <div style="font-size:11px;color:#666;margin-top:2px">${bostaExpress > 0 ? `<span style="color:#dc2626">⚡ ${bostaExpress} عاجل</span> · ` : ''}<span>📦 ${bostaCount - bostaExpress} عادي</span></div>
+      </div>
+      <div style="background:#7c3aed;color:#fff;padding:6px 14px;border-radius:10px;font-weight:800;font-size:16px;min-width:50px;text-align:center">${bostaCount}</div>
+    </div>
+  ` : '';
+
+  const unassignedRow = unassignedOrders.length > 0 ? `
+    <div style="padding:12px;background:#fef2f2;border:2px dashed #dc2626;border-radius:8px;margin-top:10px">
+      <div style="font-weight:800;color:#991b1b;font-size:13px;margin-bottom:6px">⚠️ ${unassignedOrders.length} طلب غير موزع لسه</div>
+      <div style="font-size:11px;color:#666">
+        ${unassignedOrders.slice(0,10).map(o=>`<span style="display:inline-block;background:#fff;border:1px solid #fca5a5;padding:2px 8px;border-radius:6px;margin:2px;font-family:monospace">${escapeHtml(o.id)}</span>`).join('')}
+        ${unassignedOrders.length > 10 ? `<span style="color:#666;font-size:11px"> +${unassignedOrders.length - 10} تاني</span>` : ''}
+      </div>
+    </div>
+  ` : '';
+
+  const totalAssigned = sortedCouriers.reduce((s,g)=>s+g.total,0) + bostaCount;
+
+  const ov = document.createElement('div');
+  ov.id = 'batch-details-popup';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.onclick = (e) => { if(e.target === ov) ov.remove(); };
+  ov.innerHTML = `
+    <div style="background:#fff;border-radius:14px;width:min(520px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:Cairo,sans-serif">
+      <div style="padding:14px 18px;background:linear-gradient(135deg,#3b82f6,#6366f1);color:#fff;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:800;font-size:15px">📊 ${batch.code}</div>
+          <div style="font-size:11px;opacity:.9;margin-top:2px">${batchOrders.length} طلب · ${totalAssigned} موزّع · ${unassignedOrders.length} لسه</div>
+        </div>
+        <button onclick="document.getElementById('batch-details-popup').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:14px;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:14px">
+        ${courierRows || '<div style="text-align:center;padding:20px;color:#666">مفيش مناديب اتوزع عليهم لسه</div>'}
+        ${bostaRow}
+        ${unassignedRow}
+      </div>
+      <div style="padding:10px 14px;background:#f8fafc;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#666">
+        🔄 العداد بيتحدث تلقائياً مع كل توزيع جديد
+      </div>
+    </div>
+  `;
+  document.body.appendChild(ov);
 }
 
 function getBatchName(){
@@ -15352,16 +16122,62 @@ async function printBatchInvoices(){
   // حدد الدفعة الحالية افتراضياً
   const currentBatch = ensureCurrentBatch();
 
+  // 🆕 v305: helper - حسبة per-courier counts لكل batch
+  function getBatchBreakdown(b){
+    const groups = {};
+    let unassignedCount = 0;
+    b.orders.forEach(o => {
+      if(o.isBosta){
+        const k = 'bosta';
+        groups[k] = groups[k] || { name: 'بوسطة 🚚', count: 0, isBosta: true };
+        groups[k].count++;
+      } else if(o.courierId){
+        const c = couriers.find(c=>String(c.id)===String(o.courierId));
+        if(c){
+          const k = String(o.courierId);
+          groups[k] = groups[k] || { name: c.name, count: 0 };
+          groups[k].count++;
+        } else {
+          // courierId موجود لكن المندوب اتمسح
+          unassignedCount++;
+        }
+      } else {
+        unassignedCount++;
+      }
+    });
+    return { groups, unassignedCount };
+  }
+
   const batchesHtml = batchList.map(b=>{
     const isOpen = b.code === currentBatch.code;
     const orderCount = b.orders.length;
     const dateStr = b.code.replace('B-','').split('-').slice(0,3).join('-');
+    const { groups, unassignedCount } = getBatchBreakdown(b);
+    const courierList = Object.values(groups).sort((a,b)=>{
+      if(a.isBosta) return 1; if(b.isBosta) return -1;
+      return (a.name||'').localeCompare(b.name||'','ar');
+    });
+    const breakdownHtml = courierList.map(g =>
+      `<span style="display:inline-block;background:${g.isBosta?'#ede9fe':'#dcfce7'};color:${g.isBosta?'#5b21b6':'#166534'};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin:2px">${escapeHtml(g.name)}: ${g.count}</span>`
+    ).join('') + (unassignedCount > 0
+      ? `<span style="display:inline-block;background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;margin:2px">⚠️ غير موزع: ${unassignedCount}</span>`
+      : '');
+    const printableCount = orderCount - unassignedCount;
+
     return `
-      <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:background .15s" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">
-        <input type="checkbox" class="batch-chk" value="${b.code}" ${isOpen?'checked':''} style="width:16px;height:16px;accent-color:var(--accent)">
-        <div style="flex:1">
-          <div style="font-weight:700;font-size:13px">${b.code}</div>
-          <div style="font-size:11px;color:var(--muted)">${dateStr} — ${orderCount} طلب ${isOpen?'<span style="color:#16a34a;font-weight:700">● مفتوحة</span>':'<span style="color:#6b7280">● مقفولة</span>'}</div>
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:background .15s" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">
+        <input type="checkbox" class="batch-chk" value="${b.code}" ${isOpen?'checked':''} style="width:16px;height:16px;accent-color:var(--accent);margin-top:2px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="font-weight:700;font-size:13px">${b.code}</span>
+            ${isOpen?'<span style="color:#16a34a;font-weight:700;font-size:10px">● مفتوحة</span>':'<span style="color:#6b7280;font-size:10px">● مقفولة</span>'}
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">
+            ${dateStr} — <strong style="color:#16a34a">${printableCount} طلب موزع</strong>
+            ${unassignedCount>0 ? `<strong style="color:var(--danger)"> + ${unassignedCount} غير موزع</strong>` : ''}
+            = ${orderCount} إجمالي
+          </div>
+          <div style="margin-top:6px;line-height:1.8">${breakdownHtml}</div>
         </div>
       </label>
     `;
@@ -15371,17 +16187,17 @@ async function printBatchInvoices(){
   ov.id = 'batch-print-popup';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
   ov.innerHTML = `
-    <div style="background:var(--card);border-radius:16px;width:min(520px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:Cairo,sans-serif">
+    <div style="background:var(--card);border-radius:16px;width:min(640px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:Cairo,sans-serif">
       <div style="padding:16px 20px;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;display:flex;justify-content:space-between;align-items:center">
         <div>
           <div style="font-weight:800;font-size:16px">🖨️ طباعة فواتير الدفعة</div>
-          <div style="font-size:11px;opacity:.9;margin-top:2px">اختر الدفعات اللي عايز تطبعها</div>
+          <div style="font-size:11px;opacity:.9;margin-top:2px">العداد لكل مندوب يضمن إنك مش بتسيب طلب</div>
         </div>
         <button onclick="document.getElementById('batch-print-popup').remove()" style="background:rgba(255,255,255,.15);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:14px;cursor:pointer">✕</button>
       </div>
       <div style="padding:18px">
-        <div style="font-weight:700;font-size:12px;margin-bottom:8px;color:var(--muted)">الدفعات المتاحة (${batchList.length})</div>
-        <div style="max-height:280px;overflow-y:auto;margin-bottom:16px">
+        <div style="font-weight:700;font-size:12px;margin-bottom:8px;color:var(--muted)">الدفعات المتاحة (${batchList.length}) — العداد per-courier:</div>
+        <div style="max-height:320px;overflow-y:auto;margin-bottom:16px">
           ${batchesHtml}
         </div>
 
@@ -15389,15 +16205,19 @@ async function printBatchInvoices(){
           <div style="font-weight:700;font-size:12px;margin-bottom:8px">⚙️ خيارات الطباعة</div>
           <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;font-size:13px">
             <input type="checkbox" id="opt-summary" checked style="width:15px;height:15px;accent-color:var(--accent)">
-            📋 ورقة ملخص لكل دفعة
+            📋 ورقة ملخص لكل دفعة (مع العداد per-courier)
           </label>
           <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;font-size:13px">
             <input type="checkbox" id="opt-divider" checked style="width:15px;height:15px;accent-color:var(--accent)">
             📄 صفحة فاصل بين كل مندوب (اسمه + عدد طلباته)
           </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;font-size:13px">
             <input type="checkbox" id="opt-bosta" checked style="width:15px;height:15px;accent-color:var(--accent)">
             🚚 اشمل طلبات بوسطة كمندوب منفصل
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="opt-skip-unassigned" checked style="width:15px;height:15px;accent-color:var(--accent)">
+            🚫 استبعد الطلبات غير الموزعة (لتفادي "غير محدد")
           </label>
         </div>
 
@@ -15417,6 +16237,7 @@ async function doBatchPrint(){
   const optSummary = document.getElementById('opt-summary').checked;
   const optDivider = document.getElementById('opt-divider').checked;
   const optBosta = document.getElementById('opt-bosta').checked;
+  const optSkipUnassigned = document.getElementById('opt-skip-unassigned')?.checked ?? true;
 
   document.getElementById('batch-print-popup').remove();
 
@@ -15426,6 +16247,9 @@ async function doBatchPrint(){
 
   // البداية: جمّع الـ groups والترتيب
   const batchesData = []; // [{batchCode, sortedKeys, groups, ordered: [...orders]}]
+  let totalUnassignedSkipped = 0;
+  // 🆕 v305: counter per-courier للـ verification
+  const finalCounter = {}; // { courierName: count }
 
   for(const batchCode of selected){
     const batchOrders = orders.filter(o=>o.batchCode===batchCode);
@@ -15433,6 +16257,17 @@ async function doBatchPrint(){
 
     const groups = {};
     batchOrders.forEach(o=>{
+      // 🆕 v305: استبعاد طلبات غير موزعة لو الـ option شغّال
+      if(optSkipUnassigned && !o.isBosta && !o.courierId){
+        totalUnassignedSkipped++;
+        return;
+      }
+      // 🆕 v305: استبعاد لو courierId موجود لكن المندوب اتمسح
+      if(optSkipUnassigned && !o.isBosta && o.courierId){
+        const c = couriers.find(cc=>String(cc.id)===String(o.courierId));
+        if(!c){ totalUnassignedSkipped++; return; }
+      }
+
       const key = o.isBosta ? 'bosta' : String(o.courierId||'unassigned');
       if(!groups[key]){
         const cname = o.isBosta ? 'بوسطة' : (couriers.find(c=>String(c.id)===String(o.courierId))?.name || 'غير محدد');
@@ -15482,12 +16317,53 @@ async function doBatchPrint(){
       const ordered = [...expressLarge, ...expressSmall, ...normalLarge, ...normalSmall];
       ordered.forEach(o => allOrderIds.push(o.id));
       g._ordered = ordered;
+      // 🆕 v305: counter
+      finalCounter[g.name] = (finalCounter[g.name] || 0) + ordered.length;
     }
 
     batchesData.push({ batchCode, sortedKeys, groups });
   }
 
   if(!allOrderIds.length){ toast('❗ لا توجد طلبات للطباعة'); return; }
+
+  // 🆕 v305: عرض confirmation مع counter عشان المستخدم يـ verify
+  const counterRows = Object.entries(finalCounter)
+    .sort(([a],[b]) => a.localeCompare(b, 'ar'))
+    .map(([name, count]) => `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed #e5e5e5"><strong>${escapeHtml(name)}</strong><span style="background:#16a34a;color:#fff;padding:2px 10px;border-radius:10px;font-weight:700">${count}</span></div>`)
+    .join('');
+  const totalToPrint = Object.values(finalCounter).reduce((s,n)=>s+n, 0);
+  const confirmHtml = `
+    <div style="font-family:Cairo,sans-serif">
+      <div style="font-weight:700;margin-bottom:10px;font-size:14px">✅ المراجعة قبل الطباعة</div>
+      <div style="background:#f0fdf4;border:1px solid #16a34a;border-radius:8px;padding:10px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:700;color:#166534">إجمالي هيتطبع: ${totalToPrint} طلب</div>
+        ${totalUnassignedSkipped > 0 ? `<div style="font-size:12px;color:#dc2626;margin-top:4px">⚠️ تم استبعاد ${totalUnassignedSkipped} طلب غير موزع</div>` : ''}
+      </div>
+      <div style="background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:10px;max-height:280px;overflow-y:auto">
+        ${counterRows}
+      </div>
+      <div style="margin-top:12px;font-size:11px;color:#666;text-align:center">
+        تأكد إن العداد مطابق لاحتياجك قبل الطباعة
+      </div>
+    </div>`;
+
+  // اعرض confirmation popup
+  const confirmed = await new Promise(resolve => {
+    const cov = document.createElement('div');
+    cov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+    cov.innerHTML = `
+      <div style="background:#fff;border-radius:12px;width:min(420px,95vw);max-height:90vh;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        ${confirmHtml}
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+          <button id="cancel-print-confirm" style="padding:8px 16px;border-radius:7px;border:1px solid #e5e5e5;background:#fff;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer">إلغاء</button>
+          <button id="confirm-print" style="padding:8px 16px;border-radius:7px;border:none;background:#16a34a;color:#fff;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer">✅ ابدأ الطباعة</button>
+        </div>
+      </div>`;
+    document.body.appendChild(cov);
+    document.getElementById('confirm-print').onclick = () => { cov.remove(); resolve(true); };
+    document.getElementById('cancel-print-confirm').onclick = () => { cov.remove(); resolve(false); };
+  });
+  if(!confirmed) return;
 
   // ===== الخطوة 1: اطلب من السيرفر كل الفواتير في request واحد =====
   toast(`⏳ تحضير ${allOrderIds.length} فاتورة...`);
@@ -15664,6 +16540,8 @@ async function doBatchPrint(){
         var imgs = document.images;
         var total = imgs.length;
         var loaded = 0;
+        var failed = 0;
+        var retried = {};
 
         if(total === 0){
           // مفيش صور — طبع فوراً بعد 300ms
@@ -15675,30 +16553,48 @@ async function doBatchPrint(){
 
         function onImgDone(){
           loaded++;
-          if(progressEl) progressEl.textContent = loaded + '/' + total + ' صورة';
+          if(progressEl) progressEl.textContent = loaded + '/' + total + ' صورة' + (failed > 0 ? ' (' + failed + ' فشل)' : '');
           if(loaded >= total){
             // كل الصور جاهزة — طبع بعد delay صغير للـ render
-            setTimeout(hideLoaderAndPrint, 200);
+            setTimeout(hideLoaderAndPrint, 500);
+          }
+        }
+
+        // 🆕 v305: retry logic للصور اللي بتفشل (مرة واحدة)
+        function onImgError(img){
+          if(!retried[img.src] && img.src){
+            retried[img.src] = true;
+            // أعد المحاولة مع cache-buster
+            var origSrc = img.src;
+            setTimeout(function(){
+              img.src = origSrc + (origSrc.includes('?') ? '&' : '?') + '_retry=' + Date.now();
+            }, 300);
+          } else {
+            failed++;
+            onImgDone();
           }
         }
 
         for(var i = 0; i < total; i++){
           var img = imgs[i];
-          if(img.complete){
+          if(img.complete && img.naturalWidth > 0){
             onImgDone();
+          } else if(img.complete && img.naturalWidth === 0){
+            // الصورة "complete" لكن مفشلة - retry
+            onImgError(img);
           } else {
             img.addEventListener('load', onImgDone);
-            img.addEventListener('error', onImgDone);
+            img.addEventListener('error', (function(im){ return function(){ onImgError(im); }; })(img));
           }
         }
 
-        // Safety: حد أقصى 10 ثواني، وبعدين اطبع على أي حال
+        // 🔧 v305: زودت الـ timeout لـ 25 ثانية + استنى الـ retries
         setTimeout(function(){
           if(loader && loader.style.display !== 'none'){
-            if(progressEl) progressEl.innerHTML = '⚠️ بعض الصور لم تُحمّل بعد — هتطبع على أي حال<br><small>' + loaded + '/' + total + ' جاهزة</small>';
-            setTimeout(hideLoaderAndPrint, 600);
+            if(progressEl) progressEl.innerHTML = '⚠️ بعض الصور لم تُحمّل بعد — هتطبع على أي حال<br><small>' + loaded + '/' + total + ' جاهزة (' + failed + ' فشل)</small>';
+            setTimeout(hideLoaderAndPrint, 800);
           }
-        }, 10000);
+        }, 25000);
       })();
     <\/script>
   </body></html>`);
@@ -16012,16 +16908,33 @@ function renderBatchOrder(){
   if(hint)hint.textContent=isPickupOrder?'استلم من المحل أو وزّع على مندوب':'اختر مندوباً للتوزيع';
   const grid=document.getElementById('batch-couriers-grid');
   if(grid){
+    // 🆕 v306: احسب عدد الطلبات في الـ batch الحالية لكل مندوب
+    const currentBatchCode = (typeof _currentBatchCode !== 'undefined') ? _currentBatchCode : null;
+    const batchCounts = {}; // courierId -> count
+    let bostaBatchCount = 0;
+    if(currentBatchCode){
+      orders.forEach(ord => {
+        if(ord.batchCode !== currentBatchCode) return;
+        if(ord.isBosta){ bostaBatchCount++; }
+        else if(ord.courierId){ batchCounts[ord.courierId] = (batchCounts[ord.courierId] || 0) + 1; }
+      });
+    }
+
     const ranked=couriers.filter(c => (c.role || 'courier') !== 'preparer').map(c=>({...c,zm:zoneMatchScore(o.area,c.zone)})).sort((a,b)=>(b.zm-a.zm));
     grid.innerHTML=ranked.map(c=>{
       // 🔧 v238: استخدم getShipCost
       const ship=getShipCost(o,c);
       const star=c.zm===2?'⭐ ':'';
-      const extra=!isPickupOrder?('<br><span style="font-size:10px;opacity:.7">'+ship+' ج</span>'):'';
+      const cnt = batchCounts[c.id] || 0;
+      // 🆕 v306: badge مع عدد الطلبات في الـ batch
+      const badge = `<span style="display:inline-block;background:${cnt>0?'#16a34a':'#e5e7eb'};color:${cnt>0?'#fff':'#94a3b8'};border-radius:11px;padding:2px 9px;font-size:11px;font-weight:800;margin-top:4px;min-width:24px">📦 ${cnt}</span>`;
+      const extra = !isPickupOrder
+        ? '<br>' + badge + '<br><span style="font-size:10px;opacity:.7;margin-top:2px;display:inline-block">' + ship + ' ج شحن</span>'
+        : '<br>' + badge;
       const bc2=c.zm===2?'#10b981':c.zm===1?'#f59e0b':'var(--border)';
       const bg2=c.zm===2?'#ecfdf5':c.zm===1?'#fffbeb':'#fff';
       return '<button onclick="batchAssign('+c.id+')" style="padding:10px 12px;border-radius:10px;border:2px solid '+bc2+';background:'+bg2+';font-family:Cairo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;text-align:center">'+star+c.name+extra+'</button>';
-    }).join('')+'<button onclick="batchAssign(0)" style="padding:10px 12px;border-radius:10px;border:2px solid #6366f1;background:#fff;color:#6366f1;font-family:Cairo,sans-serif;font-size:13px;font-weight:700;cursor:pointer">🚚 بوسطة</button>';
+    }).join('')+'<button onclick="batchAssign(0)" style="padding:10px 12px;border-radius:10px;border:2px solid #6366f1;background:#fff;color:#6366f1;font-family:Cairo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;text-align:center">🚚 بوسطة<br><span style="display:inline-block;background:'+(bostaBatchCount>0?'#7c3aed':'#e5e7eb')+';color:'+(bostaBatchCount>0?'#fff':'#94a3b8')+';border-radius:11px;padding:2px 9px;font-size:11px;font-weight:800;margin-top:4px;min-width:24px">📦 '+bostaBatchCount+'</span></button>';
   }
 }
 
@@ -27161,6 +28074,8 @@ function goPage(el,page){
   if(page==='courier-orders')renderCourierOrdersPage();
   if(page==='problems')renderProblemsPage();
   if(page==='late-orders')renderLateOrdersPage();
+  if(page==='order-tracker')renderOrderTracker();
+  if(page==='manual-orders')loadManualOrders();
   if(page==='tasks'){ _tasksFilter='inbox'; loadTasks(); }
   if(page==='cart-audit') loadCartAudit();
   if(page==='import-excel')renderImportExcelPage();
