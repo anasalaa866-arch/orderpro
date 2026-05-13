@@ -609,6 +609,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="pos-sales" onclick="goPage(this,'pos-sales')"><span class="ni-icon">💰</span><span class="ni-label">مبيعات POS</span></div>
         <div class="ni" data-p="pos-team" onclick="goPage(this,'pos-team')"><span class="ni-icon">👨‍💼</span><span class="ni-label">فريق POS</span></div>
         <div class="ni" data-p="settlements" onclick="goPage(this,'settlements')"><span class="ni-icon">💵</span><span class="ni-label">سجل تصفيات الكاشيرز</span><span class="nbadge" id="nb-settlements" style="background:var(--warn)">0</span></div>
+        <div class="ni" data-p="cart-audit" onclick="goPage(this,'cart-audit')"><span class="ni-icon">🔍</span><span class="ni-label">مراقبة الكاشيرز</span><span class="nbadge" id="nb-cart-audit" style="background:var(--danger)">0</span></div>
         <div class="ni" data-p="pos-promo" onclick="goPage(this,'pos-promo')"><span class="ni-icon">🎟️</span><span class="ni-label">برومو كود</span></div>
         <div class="ni" data-p="store-offers" onclick="goPage(this,'store-offers')"><span class="ni-icon">🏷️</span><span class="ni-label">عروض المحلات</span></div>
         <div class="ni" data-p="stars-reviews" onclick="goPage(this,'stars-reviews')"><span class="ni-icon">⭐</span><span class="ni-label">مراجعات Stars</span><span class="nbadge" id="nb-stars-reviews" style="background:var(--warn)">0</span></div>
@@ -1377,6 +1378,54 @@ tr:hover td{background:#fafbff}
     </div>
   </div>
 
+  <!-- 🆕 v303: CART AUDIT PAGE - مراقبة الكاشيرز -->
+  <div class="page" id="page-cart-audit">
+    <div style="background:linear-gradient(135deg,#fef2f2 0%,#fff 100%);border:2px solid var(--danger);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:24px">🔍</span>
+      <div style="flex:1">
+        <div style="font-weight:800;color:#991b1b">مراقبة حركات الكاشيرز</div>
+        <div style="font-size:11px;color:var(--muted)">كل حركة في كارت Stars: إضافة / شيل / مسح / خصم / تعديل كمية - بيتسجل هنا تلقائياً</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-hd"><h3 style="margin:0">📊 ملخص آخر 7 أيام لكل كاشير</h3></div>
+      <div id="cart-audit-summary" style="padding:10px"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-body" style="padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="audit-store-filter" onchange="loadCartAudit()" style="font-family:Cairo,sans-serif;padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px">
+          <option value="">كل المحلات</option>
+        </select>
+        <select id="audit-cashier-filter" onchange="loadCartAudit()" style="font-family:Cairo,sans-serif;padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px">
+          <option value="">كل الكاشيرز</option>
+        </select>
+        <select id="audit-action-filter" onchange="loadCartAudit()" style="font-family:Cairo,sans-serif;padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px">
+          <option value="">كل الحركات</option>
+          <option value="add_item">➕ إضافة</option>
+          <option value="qty_increased">📈 زيادة كمية</option>
+          <option value="qty_decreased">📉 تقليل كمية</option>
+          <option value="remove_item">❌ شيل منتج</option>
+          <option value="clear_cart">🗑️ مسح السلة</option>
+          <option value="discount_applied">💸 تطبيق خصم</option>
+          <option value="sale_completed">✅ بيع تم</option>
+        </select>
+        <label style="font-size:11px;color:var(--muted)">من:</label>
+        <input type="date" id="audit-from" onchange="loadCartAudit()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+        <label style="font-size:11px;color:var(--muted)">إلى:</label>
+        <input type="date" id="audit-to" onchange="loadCartAudit()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+        <input id="audit-search" placeholder="ابحث (منتج/SKU/كاشير)..." oninput="loadCartAuditDebounced()" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:Cairo,sans-serif;width:200px">
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;margin-right:auto">
+          <input type="checkbox" id="audit-suspicious" onchange="loadCartAudit()"> ⚠️ المشبوهة فقط
+        </label>
+        <button class="btn btn-ghost btn-sm" onclick="loadCartAudit()">🔄 تحديث</button>
+      </div>
+    </div>
+
+    <div id="cart-audit-content"></div>
+  </div>
+
   <!-- ACCOUNTING -->
   <!-- CHECKS PAGE -->
   <div class="page" id="page-checks">
@@ -1399,7 +1448,7 @@ tr:hover td{background:#fafbff}
             <button class="chip" onclick="chkSetFilter('weekly',this)">📅 تقرير أسبوعي</button>
             <button class="chip" onclick="chkSetFilter('suppliers',this)">🏢 تقرير الموردين</button>
           </div>
-          <select id="chk-period-filter" onchange="renderChecksPage()" style="font-family:Cairo,sans-serif;padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px">
+          <select id="chk-period-filter" onchange="chkOnFilterChange()" style="font-family:Cairo,sans-serif;padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px">
             <option value="all">كل الفترات</option>
             <option value="week">هذا الأسبوع</option>
             <option value="month">هذا الشهر</option>
@@ -1408,11 +1457,11 @@ tr:hover td{background:#fafbff}
           </select>
           <div id="chk-date-range" style="display:none;gap:6px;align-items:center">
             <label style="font-size:11px;color:var(--muted)">من:</label>
-            <input type="date" id="chk-from" onchange="renderChecksPage()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+            <input type="date" id="chk-from" onchange="chkOnFilterChange()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
             <label style="font-size:11px;color:var(--muted)">إلى:</label>
-            <input type="date" id="chk-to" onchange="renderChecksPage()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+            <input type="date" id="chk-to" onchange="chkOnFilterChange()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
           </div>
-          <input id="chk-search" placeholder="ابحث..." oninput="renderChecksPage()" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:Cairo,sans-serif;width:150px">
+          <input id="chk-search" placeholder="ابحث..." oninput="chkOnFilterChange()" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:Cairo,sans-serif;width:150px">
           <div style="margin-right:auto;display:flex;gap:6px">
             <button class="btn btn-ghost btn-sm" onclick="printChecksReport()">🖨️ طباعة</button>
             <button class="btn btn-ghost btn-sm" style="color:#16a34a;border-color:#16a34a" onclick="exportChecksExcel()">📊 Excel</button>
@@ -5551,7 +5600,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','tasks':'✅ التاسكات',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','inventory':'📦 المخزون','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','inventory':'📦 المخزون','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -11330,6 +11379,248 @@ async function downloadTaskAttachment(taskId, attId, filename){
   } catch(e) { toast('❌ ' + e.message); }
 }
 
+// ============================================================
+// 🆕 v303: CART AUDIT - مراقبة حركات الكاشيرز
+// ============================================================
+let _cartAuditEvents = [];
+let _cartAuditDebounceTimer = null;
+
+const ACTION_CONFIG = {
+  add_item: { label: 'إضافة منتج', icon: '➕', color: '#16a34a', suspicious: false },
+  qty_increased: { label: 'زيادة كمية', icon: '📈', color: '#3b82f6', suspicious: false },
+  qty_decreased: { label: 'تقليل كمية', icon: '📉', color: '#f97316', suspicious: true },
+  remove_item: { label: 'شيل منتج', icon: '❌', color: '#ef4444', suspicious: true },
+  clear_cart: { label: 'مسح السلة كاملة', icon: '🗑️', color: '#dc2626', suspicious: true },
+  discount_applied: { label: 'تطبيق خصم', icon: '💸', color: '#a855f7', suspicious: true },
+  price_change: { label: 'تعديل سعر', icon: '💰', color: '#ec4899', suspicious: true },
+  cancel_sale: { label: 'إلغاء بيع', icon: '🚫', color: '#dc2626', suspicious: true },
+  sale_completed: { label: 'بيع تم', icon: '✅', color: '#16a34a', suspicious: false }
+};
+
+function loadCartAuditDebounced(){
+  clearTimeout(_cartAuditDebounceTimer);
+  _cartAuditDebounceTimer = setTimeout(loadCartAudit, 400);
+}
+
+async function loadCartAudit(){
+  if(!API_URL) return;
+  await loadCartAuditSummary();
+
+  // املأ filter dropdowns
+  await _fillCartAuditFilters();
+
+  const params = new URLSearchParams();
+  const storeFilter = $('audit-store-filter')?.value;
+  const cashierFilter = $('audit-cashier-filter')?.value;
+  const actionFilter = $('audit-action-filter')?.value;
+  const fromDate = $('audit-from')?.value;
+  const toDate = $('audit-to')?.value;
+  const search = $('audit-search')?.value?.trim();
+  const suspicious = $('audit-suspicious')?.checked;
+
+  if(storeFilter) params.append('store_id', storeFilter);
+  if(cashierFilter) params.append('cashier_id', cashierFilter);
+  if(actionFilter) params.append('action_type', actionFilter);
+  if(fromDate) params.append('from', fromDate);
+  if(toDate) params.append('to', toDate + 'T23:59:59');
+  if(search) params.append('search', search);
+  if(suspicious) params.append('suspicious', '1');
+  params.append('limit', '500');
+
+  try {
+    const r = await apiFetch('/api/cart-audit?' + params.toString());
+    _cartAuditEvents = r?.events || [];
+    renderCartAuditList();
+  } catch(e) {
+    $('cart-audit-content').innerHTML = `<div class="card"><div class="card-body" style="color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+async function _fillCartAuditFilters(){
+  // املأ stores
+  const storeSel = $('audit-store-filter');
+  if(storeSel && storeSel.options.length <= 1){
+    try {
+      const r = await apiFetch('/api/pos/stores');
+      const stores = r?.stores || [];
+      const cur = storeSel.value;
+      storeSel.innerHTML = '<option value="">كل المحلات</option>' + stores.map(s =>
+        `<option value="${s.id}">${escapeHtml(s.name)}</option>`
+      ).join('');
+      storeSel.value = cur;
+    } catch(e){}
+  }
+  // املأ cashiers من sysUsers + couriers
+  const cashierSel = $('audit-cashier-filter');
+  if(cashierSel){
+    try {
+      const r = await apiFetch('/api/couriers');
+      const couriers = r?.couriers || [];
+      const cur = cashierSel.value;
+      cashierSel.innerHTML = '<option value="">كل الكاشيرز</option>' + couriers.map(c =>
+        `<option value="${c.id}">${escapeHtml(c.name)}</option>`
+      ).join('');
+      cashierSel.value = cur;
+    } catch(e){}
+  }
+}
+
+async function loadCartAuditSummary(){
+  try {
+    const r = await apiFetch('/api/cart-audit/summary?days=7');
+    const summary = r?.summary || [];
+    const cont = $('cart-audit-summary');
+    if(!cont) return;
+    if(!summary.length){
+      cont.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">مفيش بيانات للأيام السبع الفائتة</div>';
+      return;
+    }
+    const html = `
+      <div class="tw" style="overflow-x:auto"><table style="width:100%;font-size:12px">
+        <thead><tr>
+          <th>الكاشير</th>
+          <th>المحل</th>
+          <th style="text-align:center">إجمالي</th>
+          <th style="text-align:center;background:#fee2e2">❌ شيل</th>
+          <th style="text-align:center;background:#fee2e2">🗑️ مسح</th>
+          <th style="text-align:center;background:#fee2e2">🚫 إلغاء</th>
+          <th style="text-align:center;background:#fef3c7">📉 تقليل</th>
+          <th style="text-align:center;background:#fef3c7">💸 خصم</th>
+          <th style="text-align:center;background:#fce7f3">💰 تعديل سعر</th>
+        </tr></thead>
+        <tbody>
+        ${summary.map(s => {
+          const suspicious = (s.removes||0) + (s.clears||0) + (s.cancels||0);
+          const flag = suspicious > 10 ? '🚨' : suspicious > 5 ? '⚠️' : '';
+          return `<tr style="${suspicious > 10 ? 'background:#fef2f2' : ''}">
+            <td><strong>${escapeHtml(s.cashier_name || '#'+s.cashier_id)}</strong> ${flag}</td>
+            <td>${escapeHtml(s.store_name || '-')}</td>
+            <td style="text-align:center;font-weight:700">${s.total_actions}</td>
+            <td style="text-align:center;${s.removes > 5 ? 'color:var(--danger);font-weight:700' : ''}">${s.removes}</td>
+            <td style="text-align:center;${s.clears > 3 ? 'color:var(--danger);font-weight:700' : ''}">${s.clears}</td>
+            <td style="text-align:center;${s.cancels > 3 ? 'color:var(--danger);font-weight:700' : ''}">${s.cancels}</td>
+            <td style="text-align:center;${s.qty_decreases > 5 ? 'color:#d97706;font-weight:700' : ''}">${s.qty_decreases}</td>
+            <td style="text-align:center;${s.discounts > 5 ? 'color:#d97706;font-weight:700' : ''}">${s.discounts}</td>
+            <td style="text-align:center;${s.price_changes > 0 ? 'color:#a855f7;font-weight:700' : ''}">${s.price_changes}</td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px;padding:6px">
+        💡 الأرقام الحمراء/البرتقالية = أعلى من المعدل الطبيعي. الإطار الأحمر = كاشير مشبوه.
+      </div>
+    `;
+    cont.innerHTML = html;
+  } catch(e){
+    console.warn('audit summary:', e);
+  }
+}
+
+function renderCartAuditList(){
+  const cont = $('cart-audit-content');
+  if(!cont) return;
+  if(!_cartAuditEvents.length){
+    cont.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:30px">
+      <div style="font-size:48px;opacity:.3">📋</div>
+      <div style="font-size:14px;color:var(--muted);margin-top:8px">مفيش حركات للعرض</div>
+    </div></div>`;
+    return;
+  }
+
+  // مجمع بالـ sale_id لو موجود
+  const rows = _cartAuditEvents.map(e => {
+    const cfg = ACTION_CONFIG[e.action_type] || { label: e.action_type, icon: '•', color: '#94a3b8' };
+    const time = new Date(e.created_at);
+    const timeStr = time.toLocaleString('ar-EG', {
+      year:'numeric', month:'2-digit', day:'2-digit',
+      hour:'2-digit', minute:'2-digit', second:'2-digit'
+    });
+    const productInfo = e.product_title
+      ? `<div style="font-weight:600">${escapeHtml(e.product_title)}${e.variant_title ? ' - '+escapeHtml(e.variant_title) : ''}</div>${e.sku ? `<div style="font-size:10px;color:var(--muted)">SKU: ${escapeHtml(e.sku)}</div>` : ''}`
+      : '<span style="color:var(--muted);font-size:11px">—</span>';
+
+    let detailsStr = '';
+    if(e.action_type === 'qty_increased' || e.action_type === 'qty_decreased'){
+      detailsStr = `من <strong>${e.old_qty}</strong> إلى <strong>${e.new_qty}</strong>`;
+    } else if(e.action_type === 'remove_item'){
+      detailsStr = `كانت كمية <strong>${e.old_qty}</strong> بـ ${parseFloat(e.old_price || 0).toFixed(0)} ج`;
+    } else if(e.action_type === 'clear_cart'){
+      try {
+        const d = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
+        if(d?.items?.length){
+          detailsStr = `<strong>${d.item_count}</strong> منتجات: ` + d.items.slice(0, 3).map(i => escapeHtml(i.productTitle)).join('، ');
+          if(d.items.length > 3) detailsStr += ` +${d.items.length - 3} تاني`;
+        }
+      } catch(e){}
+    } else if(e.action_type === 'discount_applied'){
+      try {
+        const d = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
+        if(d?.code) detailsStr = `كود: <strong>${escapeHtml(d.code)}</strong> - خصم ${parseFloat(d.discount_amount || 0).toFixed(0)} ج`;
+      } catch(e){}
+    } else if(e.action_type === 'sale_completed'){
+      try {
+        const d = typeof e.details === 'string' ? JSON.parse(e.details) : e.details;
+        if(d) detailsStr = `${d.items_count} منتجات بـ <strong>${parseFloat(d.total || 0).toFixed(0)} ج</strong> (${d.payment_method || '-'})`;
+      } catch(e){}
+    }
+
+    const isSuspicious = ACTION_CONFIG[e.action_type]?.suspicious;
+    return `
+      <tr style="${isSuspicious ? 'background:#fef2f2' : ''}">
+        <td style="font-size:11px;white-space:nowrap;font-family:monospace">${timeStr}</td>
+        <td><strong>${escapeHtml(e.cashier_name || '#'+e.cashier_id)}</strong><div style="font-size:10px;color:var(--muted)">${escapeHtml(e.store_name || '-')}</div></td>
+        <td><span style="background:${cfg.color};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap">${cfg.icon} ${cfg.label}</span></td>
+        <td>${productInfo}</td>
+        <td style="font-size:11px">${detailsStr || '—'}</td>
+        <td style="text-align:left;font-family:monospace;font-size:11px">
+          ${e.cart_total_before != null ? '<span style="color:var(--muted)">' + parseFloat(e.cart_total_before).toFixed(0) + '</span>' : ''}
+          ${e.cart_total_after != null && e.cart_total_before != null ? '<br>↓<br>' : ''}
+          ${e.cart_total_after != null ? '<strong>' + parseFloat(e.cart_total_after).toFixed(0) + ' ج</strong>' : ''}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  cont.innerHTML = `
+    <div class="card">
+      <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0">📜 السجل (${_cartAuditEvents.length} حركة)</h3>
+        <span style="font-size:11px;color:var(--muted)">آخر تحديث: ${new Date().toLocaleTimeString('ar-EG')}</span>
+      </div>
+      <div class="tw" style="overflow-x:auto;max-height:70vh;overflow-y:auto">
+        <table style="width:100%;font-size:12px">
+          <thead style="position:sticky;top:0;background:var(--card);z-index:1">
+            <tr>
+              <th>الوقت</th>
+              <th>الكاشير / المحل</th>
+              <th>الحركة</th>
+              <th>المنتج</th>
+              <th>التفاصيل</th>
+              <th style="text-align:left">إجمالي السلة</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// 🆕 v303: badge في الـ sidebar - عدد الحركات المشبوهة اليوم
+async function refreshCartAuditBadge(){
+  if(!API_URL) return;
+  try {
+    const today = new Date().toISOString().slice(0,10);
+    const params = new URLSearchParams({ suspicious: '1', from: today, limit: '50' });
+    const r = await apiFetch('/api/cart-audit?' + params.toString());
+    const count = r?.events?.length || 0;
+    const el = $('nb-cart-audit');
+    if(el) el.textContent = count || '';
+  } catch(e){}
+}
+setInterval(refreshCartAuditBadge, 5 * 60 * 1000);
+document.addEventListener('DOMContentLoaded', () => setTimeout(refreshCartAuditBadge, 3000));
+
 async function refreshTasksBadge(){
   if (!API_URL) return;
   try {
@@ -11738,6 +12029,14 @@ async function loadChks(){
     }
 
     if(dbBooks.length || dbChecks.length){
+      // 🆕 v302: نشيل الشيكات اللي اتحذفت محلياً (لسه ما اترفعتش للسيرفر)
+      let deletedIds = [];
+      try { deletedIds = JSON.parse(localStorage.getItem('chk_deleted_ids') || '[]'); } catch(e){}
+      const deletedSet = new Set(deletedIds);
+      const filteredChecks = deletedSet.size ? dbChecks.filter(c => !deletedSet.has(c.id)) : dbChecks;
+      if(deletedSet.size && filteredChecks.length < dbChecks.length){
+        console.log(`🗑️ شيلت ${dbChecks.length - filteredChecks.length} شيكات محذوفة من الـ DB response`);
+      }
       // الـ DB فيه بيانات — استخدمها وحدّث localStorage
       chkBooks = dbBooks.map(b=>({
         id:b.id, name:b.name, bank:b.bank||'', account:b.account||'',
@@ -11745,7 +12044,7 @@ async function loadChks(){
         firstNum:b.firstNum||b.first_num||1,
         lastNum:b.lastNum||b.last_num||null,
       }));
-      chkList = dbChecks.map(c=>({
+      chkList = filteredChecks.map(c=>({
         id:c.id, bookId:c.bookId||c.book_id, num:c.num,
         payee:c.payee||c.supplier||'',
         amount:parseFloat(c.amount)||0,
@@ -11806,8 +12105,18 @@ function saveChks(syncNow=true){
     clearTimeout(_saveChksTimer);
     _saveChksTimer=setTimeout(async ()=>{
       try{
-        const r = await apiFetch('/api/sync-checks','POST',{books:chkBooks,checks:chkList,suppliers:chkSuppliers});
+        // 🆕 v302: نبعت deleted_ids كمان عشان السيرفر يحذفها
+        let deleted_ids = [];
+        try { deleted_ids = JSON.parse(localStorage.getItem('chk_deleted_ids') || '[]'); } catch(e){}
+        const r = await apiFetch('/api/sync-checks','POST',{
+          books:chkBooks, checks:chkList, suppliers:chkSuppliers,
+          deleted_ids
+        });
         console.log('✅ Sync checks success:', r);
+        // لو الـ sync نجح والـ deleted_ids اترفعت، نمسحها
+        if(r && r.ok && deleted_ids.length){
+          try { localStorage.setItem('chk_deleted_ids', '[]'); } catch(e){}
+        }
       }catch(e){
         console.error('❌ Sync checks failed:', e);
         toast('⚠️ فشل حفظ الشيكات في السيرفر — البيانات محفوظة محلياً', 'error');
@@ -11833,8 +12142,36 @@ function chkSetFilter(f,btn){
   chkRenderActive();
 }
 
+// 🆕 v300: handler للـ period/search/date filters - يحترم الـ chip filter النشط
+function chkOnFilterChange(){
+  // لو إنت في weekly أو suppliers، الـ period/search مالهومش معنى - رجعنا للـ regular view
+  if(chkStatusFilter === 'weekly' || chkStatusFilter === 'suppliers'){
+    chkStatusFilter = 'all';
+    document.querySelectorAll('#chk-status-chips .chip').forEach(c=>{
+      c.classList.remove('on');
+      const m = (c.getAttribute('onclick') || '').match(/chkSetFilter\('([^']+)'/);
+      if(m && m[1] === 'all') c.classList.add('on');
+    });
+  }
+  // أظهر/خبي date range لو custom اتختار
+  const period = document.getElementById('chk-period-filter')?.value;
+  const dateRange = document.getElementById('chk-date-range');
+  if(dateRange) dateRange.style.display = period === 'custom' ? 'flex' : 'none';
+  chkRenderActive();
+}
+
 // 🆕 v250: يقرر إيه الـ render حسب الـ filter النشط
 function chkRenderActive(){
+  // 🔧 v300: تأكد إن الـ chip الصحيح ظاهر كـ active دايماً
+  // (في حالة الـ chips اتعملت reset بأي سبب)
+  try {
+    document.querySelectorAll('#chk-status-chips .chip').forEach(c=>{
+      c.classList.remove('on');
+      const onclick = c.getAttribute('onclick') || '';
+      const m = onclick.match(/chkSetFilter\('([^']+)'/);
+      if(m && m[1] === chkStatusFilter) c.classList.add('on');
+    });
+  } catch(e) {}
   if(chkStatusFilter==='weekly'){renderWeeklyReport();return;}
   if(chkStatusFilter==='suppliers'){renderSuppliersReport();return;}
   renderChecksPage();
@@ -12256,6 +12593,12 @@ async function chkMarkPending(id){
 async function deleteChk(id){
   if(!confirm('هتحذف الشيك ده؟'))return;
   chkList=chkList.filter(x=>x.id!==id);
+  // 🆕 v302: track deleted IDs عشان sync-checks يحذفها من السيرفر برضه
+  try {
+    const deletedIds = JSON.parse(localStorage.getItem('chk_deleted_ids') || '[]');
+    if(!deletedIds.includes(id)) deletedIds.push(id);
+    localStorage.setItem('chk_deleted_ids', JSON.stringify(deletedIds));
+  } catch(e){}
   saveChks(true);
   chkRenderActive();
   if(API_URL){
@@ -12263,6 +12606,12 @@ async function deleteChk(id){
       const r = await apiFetch('/api/checks/'+id,'DELETE');
       if(r){
         toast('🗑️ تم حذف الشيك');
+        // الـ DELETE نجح، نشيله من قائمة deleted_ids
+        try {
+          const deletedIds = JSON.parse(localStorage.getItem('chk_deleted_ids') || '[]');
+          const newList = deletedIds.filter(x => x !== id);
+          localStorage.setItem('chk_deleted_ids', JSON.stringify(newList));
+        } catch(e){}
       } else {
         toast('⏳ تم محلياً - هيتسجل لما النت يرجع');
         if(typeof addToOfflineQueue==='function'){
@@ -12463,8 +12812,9 @@ async function restoreCheckBook(bookId, idx){
       // أعد التحميل
       await loadChks();
       await loadCheckBookOrphans();
-      // برضه renderChecksPage عشان الواجهة تتحدث
-      if(typeof renderChecksPage === 'function') renderChecksPage();
+      // برضه نـ render عشان الواجهة تتحدث (مع احترام الفلتر النشط)
+      if(typeof chkRenderActive === 'function') chkRenderActive();
+      else if(typeof renderChecksPage === 'function') renderChecksPage();
     } else {
       toast('❌ ' + (r?.error || 'فشل الاستعادة'), 'error');
     }
@@ -26812,6 +27162,7 @@ function goPage(el,page){
   if(page==='problems')renderProblemsPage();
   if(page==='late-orders')renderLateOrdersPage();
   if(page==='tasks'){ _tasksFilter='inbox'; loadTasks(); }
+  if(page==='cart-audit') loadCartAudit();
   if(page==='import-excel')renderImportExcelPage();
   if(page==='accounting'){
     // 🆕 v236: تأكد إن rates map محملة قبل العرض (مهم للتسعير الصح)
@@ -29725,7 +30076,7 @@ function refreshAll(){
     case 'bosta': renderBostaPage(); break;
     case 'bosta-exported': renderBostaExportedPage(); break;
     case 'shop-accounting': renderShopAccounting(); break;
-    case 'checks': renderChecksPage(); break;
+    case 'checks': (typeof chkRenderActive==='function' ? chkRenderActive : renderChecksPage)(); break;
     case 'expiry': renderExpiryPage(); break;
     case 'courier-orders': renderCourierOrdersPage(); break;
     case 'accounting': renderAcc();renderAccDet(); break;
