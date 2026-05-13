@@ -2887,7 +2887,7 @@ tr:hover td{background:#fafbff}
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeM('m-supplier')">إلغاء</button>
-      <button class="btn btn-primary" onclick="saveSupplier()">💾 حفظ</button>
+      <button class="btn btn-primary" onclick="savePoSupplier()">💾 حفظ</button>
     </div>
   </div>
 </div>
@@ -11840,6 +11840,18 @@ function chkRenderActive(){
   renderChecksPage();
 }
 function renderChecksPage(){
+  // 🆕 v298: لو فيه عمليات pending في الـ queue، نـ process قبل ما نـ render
+  // عشان نضمن إن البيانات على السيرفر متطابقة مع المعروض
+  if(API_URL && typeof processOfflineQueue === 'function' && _offlineQueue && _offlineQueue.length){
+    processOfflineQueue().then(() => {
+      // بعد ما نرفع الـ queue، نرفش البيانات من السيرفر
+      if(typeof loadChks === 'function') loadChks();
+    }).catch(()=>{});
+  } else if(API_URL && typeof loadChks === 'function'){
+    // ارفش البيانات من السيرفر بشكل ساكت (silent refresh) - في background
+    loadChks().catch(()=>{});
+  }
+
   const now=new Date(new Date().toDateString());
   
   // 🔧 v219: حساب أسبوع الشيكات يبدأ من الجمعة لينتهي بالخميس
@@ -12179,23 +12191,93 @@ function saveChk(){
   saveChks(true);if(API_URL)apiFetch('/api/checks','POST',data).catch(()=>{});
   closeM('m-chk');chkRenderActive();toast('✅ تم حفظ الشيك');
 }
-function chkMarkDone(id){
+async function chkMarkDone(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
   c.status='done';c.doneAt=new Date().toISOString();
-  saveChks(true);if(API_URL)apiFetch('/api/checks','POST',c).catch(()=>{});
-  chkRenderActive();toast('✅ تم تحديد الشيك كمصروف');
+  saveChks(true);
+  chkRenderActive();
+  // 🔧 v298: await + غير في الـ queue لو فشل
+  if(API_URL){
+    try {
+      const r = await apiFetch('/api/checks','POST',c);
+      if(r){
+        toast('✅ تم تحديد الشيك كمصروف ومحفوظ على السيرفر');
+      } else {
+        // الـ apiFetch بترجع null لو فشل + بـ تـ enqueue تلقائياً
+        toast('⏳ تم محلياً - هيتسجل لما النت يرجع');
+        // تأكد إنها في الـ queue (في حالة الـ apiFetch مشتغلش enqueue)
+        if(typeof addToOfflineQueue==='function'){
+          // ما نضيفهاش لو موجودة بالفعل
+          const exists = _offlineQueue?.some(it => it.path==='/api/checks' && it.body?.id===c.id);
+          if(!exists) addToOfflineQueue('/api/checks','POST',c);
+        }
+      }
+    } catch(e) {
+      toast('⚠️ ' + (e.message || 'فشل الحفظ على السيرفر - محفوظ محلياً'));
+      if(typeof addToOfflineQueue==='function'){
+        const exists = _offlineQueue?.some(it => it.path==='/api/checks' && it.body?.id===c.id);
+        if(!exists) addToOfflineQueue('/api/checks','POST',c);
+      }
+    }
+  } else {
+    toast('✅ تم التحديد محلياً (مفيش سيرفر)');
+  }
 }
-function chkMarkPending(id){
+
+async function chkMarkPending(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
   c.status='pending';delete c.doneAt;
-  saveChks(true);if(API_URL)apiFetch('/api/checks','POST',c).catch(()=>{});
-  chkRenderActive();toast('↩️ تم إرجاع الشيك لغير مصروف');
+  saveChks(true);
+  chkRenderActive();
+  if(API_URL){
+    try {
+      const r = await apiFetch('/api/checks','POST',c);
+      if(r){
+        toast('↩️ تم إرجاع الشيك لغير مصروف');
+      } else {
+        toast('⏳ تم محلياً - هيتسجل لما النت يرجع');
+        if(typeof addToOfflineQueue==='function'){
+          const exists = _offlineQueue?.some(it => it.path==='/api/checks' && it.body?.id===c.id);
+          if(!exists) addToOfflineQueue('/api/checks','POST',c);
+        }
+      }
+    } catch(e) {
+      toast('⚠️ ' + (e.message || 'فشل الحفظ'));
+      if(typeof addToOfflineQueue==='function'){
+        const exists = _offlineQueue?.some(it => it.path==='/api/checks' && it.body?.id===c.id);
+        if(!exists) addToOfflineQueue('/api/checks','POST',c);
+      }
+    }
+  } else {
+    toast('↩️ تم محلياً (مفيش سيرفر)');
+  }
 }
-function deleteChk(id){
+
+async function deleteChk(id){
   if(!confirm('هتحذف الشيك ده؟'))return;
   chkList=chkList.filter(x=>x.id!==id);
-  saveChks(true);if(API_URL)apiFetch('/api/checks/'+id,'DELETE').catch(()=>{});
-  chkRenderActive();toast('🗑️ تم حذف الشيك');
+  saveChks(true);
+  chkRenderActive();
+  if(API_URL){
+    try {
+      const r = await apiFetch('/api/checks/'+id,'DELETE');
+      if(r){
+        toast('🗑️ تم حذف الشيك');
+      } else {
+        toast('⏳ تم محلياً - هيتسجل لما النت يرجع');
+        if(typeof addToOfflineQueue==='function'){
+          addToOfflineQueue('/api/checks/'+id,'DELETE',null);
+        }
+      }
+    } catch(e) {
+      toast('⚠️ ' + (e.message || 'فشل الحذف'));
+      if(typeof addToOfflineQueue==='function'){
+        addToOfflineQueue('/api/checks/'+id,'DELETE',null);
+      }
+    }
+  } else {
+    toast('🗑️ تم الحذف محلياً (مفيش سيرفر)');
+  }
 }
 
 // 🆕 v250: workflow الشيك الهالك
@@ -19639,7 +19721,7 @@ function editSupplier(id){
   openM('m-supplier');
 }
 
-async function saveSupplier(){
+async function savePoSupplier(){
   const id = document.getElementById('sup-id').value;
   const data = {
     name: document.getElementById('sup-name').value.trim(),
