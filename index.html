@@ -536,6 +536,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="late-orders" onclick="goPage(this,'late-orders')"><span class="ni-icon">⏰</span><span class="ni-label">طلبات متأخرة</span><span class="nbadge" id="nb-late-orders" style="background:var(--danger)">0</span></div>
         <div class="ni" data-p="order-tracker" onclick="goPage(this,'order-tracker')"><span class="ni-icon">📊</span><span class="ni-label">متابعة الأرقام</span><span class="nbadge" id="nb-tracker-gaps" style="background:var(--warn)">0</span></div>
         <div class="ni" data-p="manual-orders" onclick="goPage(this,'manual-orders')"><span class="ni-icon">📝</span><span class="ni-label">طلبات يدوية</span></div>
+        <div class="ni" data-p="sync-failures" onclick="goPage(this,'sync-failures')"><span class="ni-icon">🔄</span><span class="ni-label">بيعات لم تتزامن</span><span class="nbadge" id="nb-sync-failures" style="background:var(--danger)">0</span></div>
         <div class="ni" data-p="delivery-sheet" onclick="goPage(this,'delivery-sheet')"><span class="ni-icon">🖨️</span><span class="ni-label">ورقة التوصيل</span></div>
         <div class="ni" data-p="import-excel" onclick="goPage(this,'import-excel')"><span class="ni-icon">📥</span><span class="ni-label">استيراد Excel</span></div>
         <div class="ni" data-p="problems" onclick="goPage(this,'problems')"><span class="ni-icon">⚠️</span><span class="ni-label">طلبات مشكلة</span><span class="nbadge" id="nb-problems" style="background:var(--danger)"></span></div>
@@ -1345,6 +1346,19 @@ tr:hover td{background:#fafbff}
     </div>
 
     <div id="manual-orders-list"></div>
+  </div>
+
+  <!-- 🆕 v317: SYNC FAILURES PAGE -->
+  <div class="page" id="page-sync-failures">
+    <div style="background:linear-gradient(135deg,#fef2f2,#fff);border:1px solid var(--danger);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:24px">⚠️</span>
+      <div style="flex:1">
+        <div style="font-weight:800;color:#991b1b">بيعات الكاشير اللي فشل sync مع Shopify</div>
+        <div style="font-size:11px;color:var(--muted)">آخر 30 يوم - اضغط "أعد المحاولة" لكل بيعة عشان تحاول تاني، أو افحص الـ error</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="loadSyncFailures()">🔄 تحديث</button>
+    </div>
+    <div id="sync-failures-content"></div>
   </div>
 
   <!-- 🆕 v310: MANUAL ORDER MODAL -->
@@ -5773,7 +5787,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','inventory':'📦 المخزون','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','inventory':'📦 المخزون','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -11375,7 +11389,91 @@ function exportTrackerCSV(){
 }
 
 // ============================================================
-// 🆕 v310: MANUAL ORDERS - طلبات يدوية بتسجّل على Shopify
+// 🆕 v317: SYNC FAILURES - بيعات الكاشير اللي فشل sync مع Shopify
+// ============================================================
+let _syncFailures = [];
+
+async function loadSyncFailures(){
+  if(!API_URL) return;
+  try {
+    const r = await apiFetch('/api/pos/sales/sync-failures?limit=100');
+    _syncFailures = r?.sales || [];
+    renderSyncFailures();
+    if($('nb-sync-failures')) $('nb-sync-failures').textContent = _syncFailures.length || '';
+  } catch(e){
+    document.getElementById('sync-failures-content').innerHTML = `<div class="card"><div class="card-body" style="color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+function renderSyncFailures(){
+  const cont = document.getElementById('sync-failures-content');
+  if(!cont) return;
+  if(!_syncFailures.length){
+    cont.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:30px"><div style="font-size:42px;opacity:.3">✅</div><div style="font-size:14px;font-weight:700;margin-top:8px;color:#16a34a">مفيش بيعات فاشلة</div><div style="font-size:11px;color:var(--muted);margin-top:4px">كل البيعات اتزامنت تمام مع Shopify</div></div></div>';
+    return;
+  }
+  const rows = _syncFailures.map(s => {
+    const errShort = (s.sync_error || '').slice(0, 200);
+    const created = new Date(s.created_at).toLocaleString('ar-EG');
+    return `
+      <div class="card" style="margin-bottom:8px">
+        <div class="card-body" style="padding:12px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px">
+            <div style="flex:1">
+              <div style="font-weight:800;font-size:14px;font-family:monospace">${escapeHtml(s.sale_number)}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">${created} · ${escapeHtml(s.cashier_name || '-')}</div>
+            </div>
+            <div style="font-size:16px;font-weight:800;color:#16a34a">${parseFloat(s.total||0).toFixed(0)} ج</div>
+          </div>
+          <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:8px 10px;font-size:11px;color:#7f1d1d;direction:ltr;font-family:monospace;word-break:break-word;max-height:80px;overflow-y:auto">${escapeHtml(errShort)}</div>
+          <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end">
+            <button class="btn btn-secondary btn-sm" onclick="resyncSale(${s.id}, this)" style="background:#3b82f6;color:#fff;border-color:#3b82f6">🔄 أعد المحاولة</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  cont.innerHTML = `
+    <div style="margin-bottom:10px;font-size:12px;color:var(--muted)">إجمالي البيعات الفاشلة: <strong style="color:var(--danger)">${_syncFailures.length}</strong></div>
+    ${rows}
+  `;
+}
+
+async function resyncSale(saleId, btn){
+  if(!confirm('إعادة محاولة sync لـ Shopify؟')) return;
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ جاري...';
+  try {
+    const r = await apiFetch('/api/pos/sales/' + saleId + '/resync', 'POST', {});
+    if(r?.success){
+      toast(`✅ تم - رقم Shopify: ${r.shopifyOrderName}`, 'success');
+      loadSyncFailures();
+    } else {
+      toast('❌ لسه فشل: ' + (r?.error || 'unknown'), 'error');
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
+  } catch(e){
+    toast('❌ ' + e.message);
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+}
+
+// Badge refresh
+async function refreshSyncFailuresBadge(){
+  if(!API_URL) return;
+  try {
+    const r = await apiFetch('/api/pos/sales/sync-failures?limit=200');
+    const count = r?.sales?.length || 0;
+    if($('nb-sync-failures')) $('nb-sync-failures').textContent = count || '';
+  } catch(e){}
+}
+setInterval(refreshSyncFailuresBadge, 5 * 60 * 1000);
+document.addEventListener('DOMContentLoaded', () => setTimeout(refreshSyncFailuresBadge, 4000));
+
+
 // 🆕 v313: Customer picker
 // ============================================================
 let _moLineItems = []; // [{variantId, productTitle, variantTitle, sku, price, qty, imageUrl}]
@@ -28315,6 +28413,7 @@ function goPage(el,page){
   if(page==='late-orders')renderLateOrdersPage();
   if(page==='order-tracker')renderOrderTracker();
   if(page==='manual-orders')loadManualOrders();
+  if(page==='sync-failures')loadSyncFailures();
   if(page==='tasks'){ _tasksFilter='inbox'; loadTasks(); }
   if(page==='cart-audit') loadCartAudit();
   if(page==='import-excel')renderImportExcelPage();
