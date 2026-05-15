@@ -556,6 +556,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="shop-accounting" onclick="goPage(this,'shop-accounting')"><span class="ni-icon">🏪</span><span class="ni-label">محاسبة المحل</span></div>
         <div class="ni" data-p="treasury" onclick="goPage(this,'treasury')"><span class="ni-icon">🏦</span><span class="ni-label">الخزنة</span></div>
         <div class="ni" data-p="checks" onclick="goPage(this,'checks')"><span class="ni-icon">📋</span><span class="ni-label">الشيكات</span><span class="nbadge" id="nb-checks" style="background:var(--danger)"></span></div>
+        <div class="ni" data-p="payables" onclick="goPage(this,'payables')"><span class="ni-icon">💸</span><span class="ni-label">الدفعات</span><span class="nbadge" id="nb-payables" style="background:var(--danger)"></span></div>
         <div class="ni" data-p="statements" onclick="goPage(this,'statements')"><span class="ni-icon">💳</span><span class="ni-label">كشوف الفيزا</span></div>
         <div class="ni" data-p="settle-history" onclick="goPage(this,'settle-history')"><span class="ni-icon">📚</span><span class="ni-label">سجل التسويات</span></div>
         <div class="ni" data-p="shop-transfers" onclick="goPage(this,'shop-transfers')"><span class="ni-icon">🔄</span><span class="ni-label">تحويلات من المحل</span><span class="nbadge" id="nb-shop-transfers" style="background:var(--danger)">0</span></div>
@@ -1359,6 +1360,200 @@ tr:hover td{background:#fafbff}
       <button class="btn btn-ghost btn-sm" onclick="loadSyncFailures()">🔄 تحديث</button>
     </div>
     <div id="sync-failures-content"></div>
+  </div>
+
+  <!-- 🆕 v212: PAYABLES PAGE -->
+  <div class="page" id="page-payables">
+    <!-- Header + Summary -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">
+      <div style="background:linear-gradient(135deg,#fee2e2,#fff);border:1px solid #fca5a5;border-radius:10px;padding:12px">
+        <div style="font-size:11px;color:#7f1d1d;font-weight:700">🔴 متأخرة</div>
+        <div style="font-size:20px;font-weight:900;color:#dc2626;margin-top:4px" id="payable-sum-overdue">0 ج</div>
+        <div style="font-size:10px;color:var(--muted)" id="payable-sum-overdue-cnt">0 دفعة</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#fef3c7,#fff);border:1px solid #fbbf24;border-radius:10px;padding:12px">
+        <div style="font-size:11px;color:#78350f;font-weight:700">📅 الأسبوع ده</div>
+        <div style="font-size:20px;font-weight:900;color:#d97706;margin-top:4px" id="payable-sum-week">0 ج</div>
+        <div style="font-size:10px;color:var(--muted)" id="payable-sum-week-cnt">0 دفعة</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#dbeafe,#fff);border:1px solid #93c5fd;border-radius:10px;padding:12px">
+        <div style="font-size:11px;color:#1e3a8a;font-weight:700">📆 الشهر ده</div>
+        <div style="font-size:20px;font-weight:900;color:#2563eb;margin-top:4px" id="payable-sum-month">0 ج</div>
+        <div style="font-size:10px;color:var(--muted)" id="payable-sum-month-cnt">0 دفعة</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#dcfce7,#fff);border:1px solid #86efac;border-radius:10px;padding:12px">
+        <div style="font-size:11px;color:#14532d;font-weight:700">✅ مدفوعة الشهر</div>
+        <div style="font-size:20px;font-weight:900;color:#16a34a;margin-top:4px" id="payable-sum-paid">0 ج</div>
+        <div style="font-size:10px;color:var(--muted)" id="payable-sum-paid-cnt">0 دفعة</div>
+      </div>
+    </div>
+
+    <!-- Filters + Actions -->
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+      <button class="btn btn-primary btn-sm" onclick="openPayableModal()">+ دفعة جديدة</button>
+      <button class="btn btn-secondary btn-sm" onclick="openPayablesReport()" style="background:#3b82f6;color:#fff;border-color:#3b82f6">📊 التقرير الشامل</button>
+      <div style="flex:1"></div>
+      <select id="payable-filter-period" onchange="loadPayables()" class="form-input" style="max-width:160px;padding:6px 10px">
+        <option value="all">كل الدفعات</option>
+        <option value="overdue">🔴 متأخرة</option>
+        <option value="this_week">📅 الأسبوع ده</option>
+        <option value="this_month" selected>📆 الشهر ده</option>
+        <option value="pending">⏳ مش مدفوعة</option>
+        <option value="paid">✅ مدفوعة</option>
+      </select>
+      <select id="payable-filter-category" onchange="loadPayables()" class="form-input" style="max-width:140px;padding:6px 10px">
+        <option value="">كل الفئات</option>
+        <option value="rent">🏠 إيجار</option>
+        <option value="utilities">⚡ مرافق</option>
+        <option value="supplier">🏭 موردين</option>
+        <option value="salary">💰 رواتب</option>
+        <option value="tax">📋 ضرائب</option>
+        <option value="other">📌 أخرى</option>
+      </select>
+    </div>
+
+    <div id="payables-content"></div>
+  </div>
+
+  <!-- Payable Modal -->
+  <div id="m-payable" class="modal-overlay" style="display:none">
+    <div class="modal" style="max-width:580px">
+      <div class="modal-header">
+        <h3 style="margin:0" id="payable-modal-title">💸 دفعة جديدة</h3>
+        <button class="modal-close" onclick="closeM('m-payable')">×</button>
+      </div>
+      <div class="modal-body" style="padding:14px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="grid-column:1/-1">
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">العنوان *</label>
+            <input id="payable-title" class="form-input" placeholder="مثلاً: إيجار شهر مايو">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">الجهة (الـ Payee)</label>
+            <input id="payable-payee" class="form-input" placeholder="اسم المورد/المالك">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">الفئة *</label>
+            <select id="payable-category" class="form-input">
+              <option value="rent">🏠 إيجار</option>
+              <option value="utilities">⚡ مرافق (كهرباء/مياه/نت)</option>
+              <option value="supplier">🏭 مورد</option>
+              <option value="salary">💰 راتب</option>
+              <option value="tax">📋 ضرائب</option>
+              <option value="other" selected>📌 أخرى</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">المبلغ (ج) *</label>
+            <input id="payable-amount" type="number" min="0" step="0.01" class="form-input" placeholder="0">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">تاريخ الاستحقاق *</label>
+            <input id="payable-due-date" type="date" class="form-input">
+          </div>
+          <div style="grid-column:1/-1">
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">ملاحظات</label>
+            <textarea id="payable-notes" class="form-input" rows="2" placeholder="اختياري"></textarea>
+          </div>
+        </div>
+
+        <!-- Recurring section -->
+        <div style="margin-top:14px;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;font-size:13px">
+            <input type="checkbox" id="payable-recurring" onchange="togglePayableRecurring()">
+            🔁 دفعة متكررة
+          </label>
+          <div id="payable-recurring-options" style="display:none;margin-top:10px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div>
+                <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">نوع التكرار</label>
+                <select id="payable-recurrence-type" class="form-input">
+                  <option value="monthly">شهري</option>
+                  <option value="weekly">أسبوعي</option>
+                  <option value="quarterly">ربع سنوي (3 شهور)</option>
+                  <option value="yearly">سنوي</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">كل (interval)</label>
+                <input id="payable-recurrence-interval" type="number" min="1" value="1" class="form-input">
+              </div>
+              <div style="grid-column:1/-1">
+                <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">آخر تاريخ (اختياري)</label>
+                <input id="payable-recurrence-end" type="date" class="form-input">
+                <div style="font-size:10px;color:var(--muted);margin-top:3px">سيب فاضي لو مفيش تاريخ نهائي</div>
+              </div>
+              <div style="grid-column:1/-1">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px">
+                  <input type="checkbox" id="payable-auto-generate" checked>
+                  أنشئ كل الدفعات الجاية تلقائياً (حتى 12 دفعة)
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+          <button class="btn btn-ghost" onclick="closeM('m-payable')">إلغاء</button>
+          <button class="btn btn-primary" onclick="savePayable()" style="background:#16a34a">💾 حفظ</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pay Modal -->
+  <div id="m-pay-payable" class="modal-overlay" style="display:none">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <h3 style="margin:0">✅ تسجيل دفع</h3>
+        <button class="modal-close" onclick="closeM('m-pay-payable')">×</button>
+      </div>
+      <div class="modal-body" style="padding:14px">
+        <div id="pay-payable-info" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">طريقة الدفع</label>
+            <select id="pay-method" class="form-input">
+              <option value="cash">💵 كاش</option>
+              <option value="check">📋 شيك</option>
+              <option value="transfer">🏦 تحويل بنكي</option>
+              <option value="instapay">📱 انستاباي</option>
+              <option value="visa">💳 فيزا</option>
+              <option value="other">📌 أخرى</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">تاريخ الدفع</label>
+            <input id="pay-date" type="date" class="form-input">
+          </div>
+          <div style="grid-column:1/-1">
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">رقم المرجع (اختياري)</label>
+            <input id="pay-reference" class="form-input" placeholder="رقم الشيك / رقم التحويل / إلخ">
+          </div>
+          <div style="grid-column:1/-1">
+            <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">ملاحظات</label>
+            <textarea id="pay-notes" class="form-input" rows="2"></textarea>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+          <button class="btn btn-ghost" onclick="closeM('m-pay-payable')">إلغاء</button>
+          <button class="btn btn-primary" onclick="confirmPayPayable()" style="background:#16a34a">✅ تأكيد الدفع</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Payables Report Modal -->
+  <div id="m-payables-report" class="modal-overlay" style="display:none">
+    <div class="modal" style="max-width:1000px">
+      <div class="modal-header">
+        <h3 style="margin:0">📊 تقرير الدفعات + الشيكات</h3>
+        <button class="modal-close" onclick="closeM('m-payables-report')">×</button>
+      </div>
+      <div class="modal-body" style="padding:14px">
+        <div id="payables-report-content"></div>
+      </div>
+    </div>
   </div>
 
   <!-- 🆕 v310: MANUAL ORDER MODAL -->
@@ -5787,7 +5982,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','inventory':'📦 المخزون','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','inventory':'📦 المخزون','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -11393,6 +11588,501 @@ function exportTrackerCSV(){
 // ============================================================
 let _syncFailures = [];
 
+// ============================================================
+// 🆕 v212: PAYABLES - الدفعات
+// ============================================================
+let _payables = [];
+let _editingPayableId = null;
+let _payingPayable = null;
+
+const PAYABLE_CATEGORIES = {
+  rent: { icon: '🏠', label: 'إيجار', color: '#7c3aed' },
+  utilities: { icon: '⚡', label: 'مرافق', color: '#0891b2' },
+  supplier: { icon: '🏭', label: 'مورد', color: '#ea580c' },
+  salary: { icon: '💰', label: 'راتب', color: '#16a34a' },
+  tax: { icon: '📋', label: 'ضرائب', color: '#dc2626' },
+  other: { icon: '📌', label: 'أخرى', color: '#6b7280' }
+};
+
+async function loadPayables(){
+  if(!API_URL) return;
+  try {
+    // ملخص
+    const summary = await apiFetch('/api/payables/summary');
+    if(summary){
+      $('payable-sum-overdue').textContent = parseFloat(summary.overdue_total || 0).toFixed(0) + ' ج';
+      $('payable-sum-overdue-cnt').textContent = (summary.overdue_count || 0) + ' دفعة';
+      $('payable-sum-week').textContent = parseFloat(summary.week_total || 0).toFixed(0) + ' ج';
+      $('payable-sum-week-cnt').textContent = (summary.week_count || 0) + ' دفعة';
+      $('payable-sum-month').textContent = parseFloat(summary.month_total || 0).toFixed(0) + ' ج';
+      $('payable-sum-month-cnt').textContent = (summary.month_count || 0) + ' دفعة';
+      $('payable-sum-paid').textContent = parseFloat(summary.paid_this_month_amount || 0).toFixed(0) + ' ج';
+      $('payable-sum-paid-cnt').textContent = (summary.paid_this_month || 0) + ' دفعة';
+      if($('nb-payables')) $('nb-payables').textContent = (summary.overdue_count || 0) || '';
+    }
+
+    // قائمة بحسب الفلتر
+    const period = $('payable-filter-period').value;
+    const category = $('payable-filter-category').value;
+    let url = '/api/payables?';
+    if(period === 'overdue') url += 'period=overdue&';
+    else if(period === 'this_week') url += 'period=this_week&';
+    else if(period === 'this_month') url += 'period=this_month&';
+    else if(period === 'pending') url += 'status=pending&';
+    else if(period === 'paid') url += 'status=paid&';
+    if(category) url += 'category=' + category;
+
+    const r = await apiFetch(url);
+    _payables = r?.payables || [];
+    renderPayables();
+  } catch(e){
+    document.getElementById('payables-content').innerHTML = `<div class="card"><div class="card-body" style="color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+function renderPayables(){
+  const cont = document.getElementById('payables-content');
+  if(!cont) return;
+  if(!_payables.length){
+    cont.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:30px"><div style="font-size:42px;opacity:.3">💸</div><div style="font-size:14px;font-weight:700;margin-top:8px">مفيش دفعات</div><div style="font-size:11px;color:var(--muted);margin-top:4px">اضغط "+ دفعة جديدة" عشان تضيف</div></div></div>';
+    return;
+  }
+
+  const today = new Date().toISOString().slice(0,10);
+  cont.innerHTML = _payables.map(p => {
+    const cat = PAYABLE_CATEGORIES[p.category] || PAYABLE_CATEGORIES.other;
+    const isPaid = p.status === 'paid';
+    const isOverdue = !isPaid && p.due_date < today;
+    const dueDate = new Date(p.due_date);
+    const dueStr = dueDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
+    const daysDiff = Math.floor((dueDate - new Date(today)) / (1000*60*60*24));
+    let dueLabel = '';
+    if(isPaid) dueLabel = `✅ اتدفعت ${new Date(p.paid_at).toLocaleDateString('ar-EG')}`;
+    else if(daysDiff < 0) dueLabel = `⚠️ متأخرة ${Math.abs(daysDiff)} يوم`;
+    else if(daysDiff === 0) dueLabel = '⏰ اليوم';
+    else if(daysDiff <= 3) dueLabel = `🟠 خلال ${daysDiff} يوم`;
+    else dueLabel = `⏳ بعد ${daysDiff} يوم`;
+
+    return `
+      <div class="card" style="margin-bottom:8px;${isOverdue ? 'border-color:#fca5a5;background:#fef2f2' : ''}${isPaid ? 'opacity:.7' : ''}">
+        <div class="card-body" style="padding:12px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <span style="background:${cat.color};color:#fff;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:700">${cat.icon} ${cat.label}</span>
+                ${p.is_recurring ? '<span style="background:#3b82f6;color:#fff;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:700">🔁 متكررة</span>' : ''}
+                ${p.parent_id ? '<span style="background:#6b7280;color:#fff;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:700">📎 instance</span>' : ''}
+              </div>
+              <div style="font-weight:800;font-size:14px;margin-top:4px">${escapeHtml(p.title)}</div>
+              ${p.payee ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">إلى: ${escapeHtml(p.payee)}</div>` : ''}
+              <div style="font-size:11px;margin-top:4px;color:${isOverdue ? '#dc2626' : (isPaid ? '#16a34a' : 'var(--muted)')}">📅 ${dueStr} · ${dueLabel}</div>
+              ${p.notes ? `<div style="font-size:10px;color:var(--muted);margin-top:4px">${escapeHtml(p.notes)}</div>` : ''}
+              ${isPaid && p.paid_method ? `<div style="font-size:10px;color:#16a34a;margin-top:3px">دفع: ${p.paid_method}${p.paid_reference ? ' · ' + escapeHtml(p.paid_reference) : ''}</div>` : ''}
+            </div>
+            <div style="text-align:left">
+              <div style="font-size:18px;font-weight:900;color:${isOverdue ? '#dc2626' : (isPaid ? '#16a34a' : 'var(--text)')}">${parseFloat(p.amount).toFixed(0)} ج</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:5px;margin-top:10px">
+            ${!isPaid ? `<button class="btn btn-sm" onclick="openPayPayable('${p.id}')" style="background:#16a34a;color:#fff;border-color:#16a34a;flex:1">✅ تسجيل دفع</button>` : `<button class="btn btn-sm" onclick="unpayPayable('${p.id}')" style="background:#fbbf24;color:#000;flex:1">↩️ إلغاء الدفع</button>`}
+            <button class="btn btn-ghost btn-sm" onclick="editPayable('${p.id}')">✏️</button>
+            <button class="btn btn-ghost btn-sm" onclick="deletePayable('${p.id}', ${p.is_recurring})" style="color:var(--danger)">🗑️</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openPayableModal(){
+  _editingPayableId = null;
+  $('payable-modal-title').textContent = '💸 دفعة جديدة';
+  $('payable-title').value = '';
+  $('payable-payee').value = '';
+  $('payable-category').value = 'other';
+  $('payable-amount').value = '';
+  $('payable-due-date').value = new Date().toISOString().slice(0,10);
+  $('payable-notes').value = '';
+  $('payable-recurring').checked = false;
+  $('payable-recurrence-type').value = 'monthly';
+  $('payable-recurrence-interval').value = '1';
+  $('payable-recurrence-end').value = '';
+  $('payable-auto-generate').checked = true;
+  togglePayableRecurring();
+  openM('m-payable');
+}
+
+function togglePayableRecurring(){
+  const checked = $('payable-recurring').checked;
+  $('payable-recurring-options').style.display = checked ? 'block' : 'none';
+}
+
+async function editPayable(id){
+  const p = _payables.find(x => x.id === id);
+  if(!p) return;
+  _editingPayableId = id;
+  $('payable-modal-title').textContent = '✏️ تعديل دفعة';
+  $('payable-title').value = p.title || '';
+  $('payable-payee').value = p.payee || '';
+  $('payable-category').value = p.category || 'other';
+  $('payable-amount').value = p.amount || '';
+  $('payable-due-date').value = p.due_date ? p.due_date.slice(0,10) : '';
+  $('payable-notes').value = p.notes || '';
+  $('payable-recurring').checked = false; // مش نسمح بتحويل لـ recurring في الـ edit
+  togglePayableRecurring();
+  openM('m-payable');
+}
+
+async function savePayable(){
+  const title = $('payable-title').value.trim();
+  const payee = $('payable-payee').value.trim();
+  const category = $('payable-category').value;
+  const amount = parseFloat($('payable-amount').value);
+  const due_date = $('payable-due-date').value;
+  const notes = $('payable-notes').value.trim();
+  const is_recurring = $('payable-recurring').checked;
+  const recurrence_type = $('payable-recurrence-type').value;
+  const recurrence_interval = parseInt($('payable-recurrence-interval').value) || 1;
+  const recurrence_end_date = $('payable-recurrence-end').value || null;
+  const auto_generate_instances = $('payable-auto-generate').checked;
+
+  if(!title){ toast('❗ العنوان مطلوب'); return; }
+  if(!amount || amount <= 0){ toast('❗ المبلغ غير صحيح'); return; }
+  if(!due_date){ toast('❗ تاريخ الاستحقاق مطلوب'); return; }
+
+  try {
+    if(_editingPayableId){
+      const r = await apiFetch('/api/payables/' + _editingPayableId, 'PATCH', {
+        title, payee, category, amount, due_date, notes
+      });
+      if(r?.success){
+        toast('✅ تم التعديل');
+        closeM('m-payable');
+        loadPayables();
+      } else toast('❌ ' + (r?.error || 'فشل'));
+    } else {
+      const r = await apiFetch('/api/payables', 'POST', {
+        title, payee, category, amount, due_date, notes,
+        is_recurring, recurrence_type, recurrence_interval, recurrence_end_date,
+        auto_generate_instances
+      });
+      if(r?.success){
+        const msg = r.generatedCount > 0
+          ? `✅ تم - مع ${r.generatedCount} دفعة جاية`
+          : '✅ تم';
+        toast(msg);
+        closeM('m-payable');
+        loadPayables();
+      } else toast('❌ ' + (r?.error || 'فشل'));
+    }
+  } catch(e){ toast('❌ ' + e.message); }
+}
+
+function openPayPayable(id){
+  const p = _payables.find(x => x.id === id);
+  if(!p) return;
+  _payingPayable = p;
+  const cat = PAYABLE_CATEGORIES[p.category] || PAYABLE_CATEGORIES.other;
+  $('pay-payable-info').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:11px;color:var(--muted)">${cat.icon} ${cat.label}</div>
+        <div style="font-weight:800;font-size:14px;margin-top:2px">${escapeHtml(p.title)}</div>
+        ${p.payee ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${escapeHtml(p.payee)}</div>` : ''}
+      </div>
+      <div style="font-size:22px;font-weight:900;color:#16a34a">${parseFloat(p.amount).toFixed(0)} ج</div>
+    </div>
+  `;
+  $('pay-method').value = 'cash';
+  $('pay-date').value = new Date().toISOString().slice(0,10);
+  $('pay-reference').value = '';
+  $('pay-notes').value = '';
+  openM('m-pay-payable');
+}
+
+async function confirmPayPayable(){
+  if(!_payingPayable) return;
+  const paid_method = $('pay-method').value;
+  const paid_reference = $('pay-reference').value.trim();
+  const paid_notes = $('pay-notes').value.trim();
+  const paid_at = $('pay-date').value;
+
+  try {
+    const r = await apiFetch('/api/payables/' + _payingPayable.id + '/pay', 'POST', {
+      paid_method, paid_reference, paid_notes, paid_at
+    });
+    if(r?.success){
+      toast('✅ تم تسجيل الدفع');
+      closeM('m-pay-payable');
+      _payingPayable = null;
+      loadPayables();
+    } else toast('❌ ' + (r?.error || 'فشل'));
+  } catch(e){ toast('❌ ' + e.message); }
+}
+
+async function unpayPayable(id){
+  if(!confirm('متأكد إنك عايز ترجعها لـ مش مدفوعة؟')) return;
+  try {
+    const r = await apiFetch('/api/payables/' + id + '/unpay', 'POST', {});
+    if(r?.success){
+      toast('↩️ رجعت لـ مش مدفوعة');
+      loadPayables();
+    } else toast('❌ ' + (r?.error || 'فشل'));
+  } catch(e){ toast('❌ ' + e.message); }
+}
+
+async function deletePayable(id, isRecurring){
+  let alsoChildren = false;
+  if(isRecurring){
+    alsoChildren = confirm('دي دفعة متكررة. عايز تمسح كل الـ instances الجاية كمان؟\n\nاضغط OK لمسح الكل\nاضغط Cancel لمسح دي فقط');
+  } else {
+    if(!confirm('تأكيد المسح؟')) return;
+  }
+  try {
+    const url = '/api/payables/' + id + (alsoChildren ? '?also_children=true' : '');
+    const r = await apiFetch(url, 'DELETE');
+    if(r?.success){ toast('🗑️ اتمسحت'); loadPayables(); }
+    else toast('❌ ' + (r?.error || 'فشل'));
+  } catch(e){ toast('❌ ' + e.message); }
+}
+
+// ──── التقرير الشامل (دفعات + شيكات) - بنفس شكل تقرير الشيكات ────
+function openPayablesReport(){
+  openM('m-payables-report');
+  loadPayablesReport();
+}
+
+async function loadPayablesReport(){
+  const cont = document.getElementById('payables-report-content');
+  cont.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div>';
+  try {
+    // جيب كل الدفعات وكل الشيكات للسنة الحالية
+    const now = new Date();
+    const year = now.getFullYear();
+    const yearStartStr = year + '-01-01';
+    const yearEndStr = year + '-12-31';
+
+    const [payR, chkR] = await Promise.all([
+      apiFetch(`/api/payables?from=${yearStartStr}&to=${yearEndStr}`),
+      apiFetch('/api/checks')
+    ]);
+
+    const payables = (payR?.payables || []).filter(p => p.due_date && p.due_date >= yearStartStr && p.due_date <= yearEndStr);
+    const checks = (chkR?.checks || chkR || []).filter(c => c.date && c.date >= yearStartStr && c.date <= yearEndStr);
+
+    renderCombinedReport(payables, checks, year);
+  } catch(e) {
+    cont.innerHTML = `<div style="color:#dc2626;padding:14px">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderCombinedReport(payables, checks, year){
+  const cont = document.getElementById('payables-report-content');
+
+  // وحّد الـ items: { type, date, amount, status, label, category }
+  const items = [];
+  payables.forEach(p => {
+    items.push({
+      type: 'payable',
+      id: p.id,
+      date: p.due_date,
+      amount: parseFloat(p.amount || 0),
+      status: p.status === 'paid' ? 'done' : 'pending',
+      label: p.title,
+      payee: p.payee,
+      category: p.category
+    });
+  });
+  checks.forEach(c => {
+    items.push({
+      type: 'check',
+      id: c.id,
+      date: c.date,
+      amount: parseFloat(c.amount || 0),
+      status: c.status, // pending or done
+      label: 'شيك ' + (c.num || '') + ' - ' + (c.payee || ''),
+      payee: c.payee,
+      category: 'check',
+      num: c.num
+    });
+  });
+
+  // ━━━ ملخصات أعلى ━━━
+  const today = new Date(); today.setHours(0,0,0,0);
+  const todayStr = today.toISOString().slice(0,10);
+  const totalAll = items.reduce((s, i) => s + i.amount, 0);
+  const overdueItems = items.filter(i => i.status === 'pending' && i.date < todayStr);
+  const overdueTotal = overdueItems.reduce((s, i) => s + i.amount, 0);
+  const doneItems = items.filter(i => i.status === 'done');
+  const doneTotal = doneItems.reduce((s, i) => s + i.amount, 0);
+  const pendingItems = items.filter(i => i.status === 'pending');
+  const pendingTotal = pendingItems.reduce((s, i) => s + i.amount, 0);
+
+  // الأسبوع الحالي (الجمعة → الخميس)
+  const yearStartDate = new Date(year, 0, 1);
+  const yearStartDay = yearStartDate.getDay();
+  let daysToFirstFriday = (5 - yearStartDay + 7) % 7;
+  let firstFriday = new Date(year, 0, 1 + daysToFirstFriday - 7);
+
+  // أنشئ كل الأسابيع
+  const weeks = [];
+  for(let w = 1; w <= 53; w++){
+    const start = new Date(firstFriday);
+    start.setDate(firstFriday.getDate() + (w-1)*7);
+    start.setHours(0,0,0,0);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23,59,59,999);
+    if(start.getFullYear() > year) break;
+
+    const weekItems = items.filter(i => {
+      const d = new Date(i.date);
+      return d >= start && d <= end;
+    });
+    const total = weekItems.reduce((s, i) => s + i.amount, 0);
+    const pending = weekItems.filter(i => i.status === 'pending');
+    const done = weekItems.filter(i => i.status === 'done');
+    weeks.push({ w, start, end, items: weekItems, total, pending, done });
+  }
+
+  // ━━━ الملخص الشهري ━━━
+  const months = {};
+  for(let m = 1; m <= 12; m++) months[m] = { items: [], total: 0 };
+  items.forEach(i => {
+    const m = new Date(i.date).getMonth() + 1;
+    if(months[m]){ months[m].items.push(i); months[m].total += i.amount; }
+  });
+  const monthNames = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+
+  // ━━━ الـ HTML ━━━
+  let html = `
+    <!-- بطاقات الملخص -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px">
+      <div style="background:linear-gradient(135deg,#dbeafe,#fff);border:1px solid #93c5fd;border-radius:10px;padding:12px">
+        <div style="display:flex;align-items:center;gap:6px;color:#1e3a8a;font-weight:700;font-size:11px">📋 إجمالي غير مصروف</div>
+        <div style="font-size:22px;font-weight:900;color:#1e3a8a;margin-top:6px">${pendingTotal.toLocaleString()} ج</div>
+        <div style="font-size:10px;color:var(--muted)">${pendingItems.length} بند</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#fef3c7,#fff);border:1px solid #fbbf24;border-radius:10px;padding:12px">
+        <div style="display:flex;align-items:center;gap:6px;color:#78350f;font-weight:700;font-size:11px">📅 هذا الأسبوع</div>
+        <div style="font-size:22px;font-weight:900;color:#d97706;margin-top:6px" id="cur-week-total">—</div>
+        <div style="font-size:10px;color:var(--muted)" id="cur-week-range">—</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#fee2e2,#fff);border:1px solid #fca5a5;border-radius:10px;padding:12px">
+        <div style="display:flex;align-items:center;gap:6px;color:#7f1d1d;font-weight:700;font-size:11px">⚠️ متأخرة</div>
+        <div style="font-size:22px;font-weight:900;color:#dc2626;margin-top:6px">${overdueTotal.toLocaleString()} ج</div>
+        <div style="font-size:10px;color:var(--muted)">${overdueItems.length} بند</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#dcfce7,#fff);border:1px solid #86efac;border-radius:10px;padding:12px">
+        <div style="display:flex;align-items:center;gap:6px;color:#14532d;font-weight:700;font-size:11px">✅ تم صرفها</div>
+        <div style="font-size:22px;font-weight:900;color:#16a34a;margin-top:6px">${doneTotal.toLocaleString()} ج</div>
+        <div style="font-size:10px;color:var(--muted)">${doneItems.length} بند</div>
+      </div>
+    </div>
+
+    <div style="text-align:right;font-weight:700;color:var(--text);margin-bottom:8px">${items.length} بند</div>
+
+    <!-- الجدول -->
+    <table style="width:100%;border-collapse:collapse;font-size:12px;background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <thead>
+        <tr style="background:var(--bg);border-bottom:2px solid var(--border)">
+          <th style="padding:10px;text-align:right">الأسبوع</th>
+          <th style="padding:10px;text-align:right">من</th>
+          <th style="padding:10px;text-align:right">إلى</th>
+          <th style="padding:10px;text-align:right">عدد البنود</th>
+          <th style="padding:10px;text-align:right">إجمالي المستحق</th>
+          <th style="padding:10px;text-align:right">مصروف</th>
+          <th style="padding:10px;text-align:right">لم يُصرف</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  // ━━━ ملخص شهري ━━━
+  html += `<tr><td colspan="7" style="padding:10px;background:#fff8e1;font-weight:700;color:#d97706;font-size:13px">📆 ملخص شهري — ${year}</td></tr>`;
+  Object.entries(months).filter(([m,d]) => d.items.length > 0).forEach(([m,d]) => {
+    const pending = d.items.filter(i => i.status === 'pending').reduce((s,i) => s + i.amount, 0);
+    const done = d.items.filter(i => i.status === 'done').reduce((s,i) => s + i.amount, 0);
+    html += `<tr style="background:#fafafa">
+      <td colspan="3" style="padding:8px;font-weight:700;color:#d97706">${monthNames[m-1]}</td>
+      <td style="padding:8px">${d.items.length} بند</td>
+      <td style="padding:8px;font-weight:700">${d.total.toLocaleString()} ج</td>
+      <td style="padding:8px;color:#16a34a">${done.toLocaleString()} ج</td>
+      <td style="padding:8px;color:#dc2626">${pending.toLocaleString()} ج</td>
+    </tr>`;
+  });
+
+  // ━━━ تفاصيل أسبوعية ━━━
+  html += `<tr><td colspan="7" style="padding:10px;background:#fff8e1;font-weight:700;color:#d97706;font-size:13px">📅 تفاصيل أسبوعية — ${year}</td></tr>`;
+  const nowDate = new Date();
+  let curWeekIdx = -1;
+  weeks.forEach((w, idx) => {
+    const isNow = nowDate >= w.start && nowDate <= w.end;
+    if(isNow) curWeekIdx = idx;
+    const hasPast = w.end < nowDate;
+    const bg = isNow ? '#fff8e1' : (hasPast && w.pending.length > 0 ? '#fff5f5' : '');
+    const pendingAmt = w.pending.reduce((s,i) => s + i.amount, 0);
+    const doneAmt = w.done.reduce((s,i) => s + i.amount, 0);
+    html += `<tr style="background:${bg};${w.items.length === 0 ? 'opacity:.5' : ''}">
+      <td style="padding:8px"><strong style="color:${isNow ? '#d97706' : 'var(--text)'}">أسبوع ${w.w}${isNow ? ' ◀ الآن' : ''}</strong></td>
+      <td style="padding:8px;font-size:11px">${w.start.toLocaleDateString('ar-EG',{month:'short',day:'numeric'})}</td>
+      <td style="padding:8px;font-size:11px">${w.end.toLocaleDateString('ar-EG',{month:'short',day:'numeric'})}</td>
+      <td style="padding:8px">${w.items.length || '—'}</td>
+      <td style="padding:8px;font-weight:${w.total > 0 ? '700' : '400'};color:${w.total > 0 ? 'var(--text)' : 'var(--muted)'}">${w.total > 0 ? w.total.toLocaleString() + ' ج' : '—'}</td>
+      <td style="padding:8px;color:#16a34a">${doneAmt > 0 ? doneAmt.toLocaleString() + ' ج' : '—'}</td>
+      <td style="padding:8px;color:${pendingAmt > 0 ? '#dc2626' : 'var(--muted)'}">${pendingAmt > 0 ? pendingAmt.toLocaleString() + ' ج' : '—'}</td>
+    </tr>`;
+  });
+
+  html += `
+      </tbody>
+    </table>
+
+    <div style="margin-top:14px;text-align:left">
+      <button class="btn btn-secondary" onclick="exportCombinedReport()">📥 تصدير CSV</button>
+    </div>
+  `;
+
+  cont.innerHTML = html;
+
+  // املأ بطاقة الأسبوع الحالي
+  if(curWeekIdx >= 0){
+    const w = weeks[curWeekIdx];
+    const totalEl = document.getElementById('cur-week-total');
+    const rangeEl = document.getElementById('cur-week-range');
+    if(totalEl) totalEl.textContent = w.total > 0 ? w.total.toLocaleString() + ' ج' : '0 ج';
+    if(rangeEl) rangeEl.textContent = `${w.start.toLocaleDateString('ar-EG',{month:'short',day:'numeric'})} → ${w.end.toLocaleDateString('ar-EG',{month:'short',day:'numeric'})}`;
+  }
+
+  // خزّن للـ export
+  window._payablesReportData = { items, year, weeks, months };
+}
+
+function exportCombinedReport(){
+  const data = window._payablesReportData;
+  if(!data) return;
+  const rows = [['النوع', 'العنوان', 'الجهة', 'الفئة', 'التاريخ', 'المبلغ', 'الحالة']];
+  data.items.forEach(it => {
+    const catLabel = it.type === 'check' ? 'شيك' : (PAYABLE_CATEGORIES[it.category]?.label || it.category || '-');
+    rows.push([
+      it.type === 'check' ? 'شيك' : 'دفعة',
+      it.label || '',
+      it.payee || '',
+      catLabel,
+      it.date,
+      it.amount,
+      it.status === 'done' ? 'مصروف' : 'لم يُصرف'
+    ]);
+  });
+  const csv = '\ufeff' + rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `payables-checks-report-${data.year}.csv`;
+  a.click();
+}
+
+
 async function loadSyncFailures(){
   if(!API_URL) return;
   try {
@@ -11445,12 +12135,40 @@ async function resyncSale(saleId, btn){
   btn.disabled = true;
   btn.textContent = '⏳ جاري...';
   try {
-    const r = await apiFetch('/api/pos/sales/' + saleId + '/resync', 'POST', {});
-    if(r?.success){
+    // 🔧 v318: استخدم raw fetch عشان نشوف الـ error details
+    const baseUrl = (API_URL || BACKEND_URL || '').replace(/\/$/, '');
+    if(!baseUrl) throw new Error('مفيش API URL');
+    const headers = { 'Content-Type': 'application/json' };
+    if(window._adminToken) headers['Authorization'] = 'Bearer ' + window._adminToken;
+
+    const httpResp = await fetch(baseUrl + '/api/pos/sales/' + saleId + '/resync', {
+      method: 'POST', headers, mode: 'cors', body: '{}'
+    });
+    let r;
+    try { r = await httpResp.json(); } catch(e) { r = null; }
+
+    if(httpResp.ok && r?.success){
       toast(`✅ تم - رقم Shopify: ${r.shopifyOrderName}`, 'success');
       loadSyncFailures();
+    } else if (httpResp.status === 401) {
+      toast('❌ مش مسجل دخول - اعمل logout/login', 'error');
+      btn.disabled = false;
+      btn.textContent = origText;
     } else {
-      toast('❌ لسه فشل: ' + (r?.error || 'unknown'), 'error');
+      const errMsg = r?.error || `HTTP ${httpResp.status}`;
+      // popup كبير يعرض الـ error
+      const errOv = document.createElement('div');
+      errOv.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+      errOv.innerHTML = `
+        <div style="background:#fff;border-radius:12px;width:min(560px,95vw);max-height:90vh;overflow-y:auto;padding:20px;font-family:Cairo,sans-serif">
+          <div style="font-weight:800;color:#dc2626;font-size:16px;margin-bottom:10px">❌ resync فشل (HTTP ${httpResp.status})</div>
+          <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px;direction:ltr;text-align:left;font-family:monospace;word-break:break-word;max-height:300px;overflow-y:auto">${escapeHtml(errMsg)}</div>
+          <div style="font-size:11px;color:#666;margin-bottom:10px">💡 لو الـ error بـ يقول "phone already taken" → ده يعني server لسه على نسخة قديمة (محتاج deploy لـ v205 على Railway).</div>
+          <div style="text-align:left">
+            <button onclick="this.closest('div[style*=fixed]').remove()" style="padding:8px 16px;border-radius:7px;border:none;background:#3b82f6;color:#fff;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer">حسناً</button>
+          </div>
+        </div>`;
+      document.body.appendChild(errOv);
       btn.disabled = false;
       btn.textContent = origText;
     }
@@ -28414,6 +29132,7 @@ function goPage(el,page){
   if(page==='order-tracker')renderOrderTracker();
   if(page==='manual-orders')loadManualOrders();
   if(page==='sync-failures')loadSyncFailures();
+  if(page==='payables')loadPayables();
   if(page==='tasks'){ _tasksFilter='inbox'; loadTasks(); }
   if(page==='cart-audit') loadCartAudit();
   if(page==='import-excel')renderImportExcelPage();
