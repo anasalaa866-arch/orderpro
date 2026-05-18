@@ -12203,31 +12203,59 @@ async function printSettlement(id){
     </div>
   ` : parseFloat(s.instapay_amount||0) > 0 ? '<div class="recv"><strong>⏳ الانستاباي مش متأكد لسه</strong></div>' : ''}
 
-  <h3>🧾 البيعات (${sales.length})</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>#</th><th>رقم البيعة</th><th>Shopify</th><th>الوقت</th><th>العميل</th><th>طرق الدفع</th><th>الإجمالي</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${sales.map((sale, i) => {
-        const time = new Date(sale.created_at).toLocaleString('ar-EG', {dateStyle:'short',timeStyle:'short'});
-        const paysStr = (sale.payments||[]).filter(p=>p&&p.method).map(p => `${methodIcons[p.method]||'•'} ${parseFloat(p.amount).toFixed(0)}`).join(' + ');
-        return `
-          <tr>
-            <td>${i+1}</td>
-            <td style="font-family:monospace">${escapeHtml(sale.sale_number||'')}</td>
-            <td style="font-family:monospace;color:#16a34a">${escapeHtml(sale.shopify_order_name||'-')}</td>
-            <td style="font-size:9px">${time}</td>
-            <td>${escapeHtml(sale.customer_name||'-')}</td>
-            <td style="font-size:9px">${paysStr}</td>
-            <td style="font-weight:700;text-align:left">${parseFloat(sale.total||0).toLocaleString()}</td>
-          </tr>
-        `;
-      }).join('')}
-    </tbody>
-  </table>
+  <h3>🧾 البيعات مرتبة بطريقة الدفع (${sales.length})</h3>
+  ${(() => {
+    // group by primary method
+    const methodOrder = ['cash', 'visa', 'instapay', 'mixed', 'other'];
+    const methodTitles = {
+      cash: { icon: '💵', name: 'كاش', color: '#dcfce7', text: '#14532d' },
+      visa: { icon: '💳', name: 'فيزا', color: '#e0e7ff', text: '#312e81' },
+      instapay: { icon: '📱', name: 'انستاباي', color: '#ede9fe', text: '#5b21b6' },
+      mixed: { icon: '🔀', name: 'مدمج', color: '#fce7f3', text: '#9d174d' },
+      other: { icon: '📌', name: 'أخرى', color: '#f3f4f6', text: '#374151' }
+    };
+    const groups = r.byMethod || {};
+    let html = '';
+    let counter = 0;
+    for(const method of methodOrder){
+      const list = groups[method] || [];
+      if(!list.length) continue;
+      const m = methodTitles[method];
+      const groupTotal = list.reduce((t, s) => t + parseFloat(s.total||0), 0);
+      html += `
+        <div style="background:${m.color};color:${m.text};padding:6px 10px;font-weight:800;font-size:11px;border-radius:4px 4px 0 0;margin-top:8px;display:flex;justify-content:space-between">
+          <span>${m.icon} ${m.name} (${list.length} بيعة)</span>
+          <span>${groupTotal.toLocaleString()} ج</span>
+        </div>
+        <table style="margin-top:0">
+          <thead>
+            <tr>
+              <th>#</th><th>رقم البيعة</th><th>Shopify</th><th>الوقت</th><th>العميل</th><th>طرق الدفع</th><th>الإجمالي</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map(sale => {
+              counter++;
+              const time = new Date(sale.created_at).toLocaleString('ar-EG', {dateStyle:'short',timeStyle:'short'});
+              const paysStr = (sale.payments||[]).filter(p=>p&&p.method).map(p => `${methodIcons[p.method]||'•'} ${parseFloat(p.amount).toFixed(0)}`).join(' + ');
+              return `
+                <tr>
+                  <td>${counter}</td>
+                  <td style="font-family:monospace">${escapeHtml(sale.sale_number||'')}</td>
+                  <td style="font-family:monospace;color:#16a34a">${escapeHtml(sale.shopify_order_name||'-')}</td>
+                  <td style="font-size:9px">${time}</td>
+                  <td>${escapeHtml(sale.customer_name||'-')}</td>
+                  <td style="font-size:9px">${paysStr}</td>
+                  <td style="font-weight:700;text-align:left">${parseFloat(sale.total||0).toLocaleString()}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+    return html;
+  })()}
 
   ${s.notes ? `<h3>📝 ملاحظات</h3><div style="padding:8px;background:#f9fafb;border-radius:4px;border:1px solid #e5e7eb">${escapeHtml(s.notes)}</div>` : ''}
 
