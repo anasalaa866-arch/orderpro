@@ -1610,12 +1610,17 @@ tr:hover td{background:#fafbff}
       <div class="modal-body" style="padding:14px">
         <div id="receive-cash-info" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px"></div>
         <div style="margin-bottom:10px">
-          <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">المبلغ المُستلم (ج)</label>
+          <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">🏦 الخزنة <span style="color:#dc2626">*</span></label>
+          <select id="receive-cash-treasury" class="form-input" style="font-weight:700"></select>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">المبلغ هـ يضاف للخزنة دي (مربوطة بصفحة الخزنة)</div>
+        </div>
+        <div style="margin-bottom:10px">
+          <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">💵 المبلغ المُستلم (ج)</label>
           <input id="receive-cash-amount" type="number" min="0" step="0.01" class="form-input" style="font-size:18px;font-weight:800;text-align:center">
-          <div style="font-size:10px;color:var(--muted);margin-top:4px">سيب فاضي = استلم المبلغ المتوقع كاملاً</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">عدّل لو فيه نقص أو زيادة</div>
         </div>
         <div style="margin-bottom:12px">
-          <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">ملاحظات (اختياري)</label>
+          <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">📝 ملاحظات (اختياري)</label>
           <textarea id="receive-cash-notes" class="form-input" rows="2" placeholder="مثلاً: نقص 50 ج - الكاشير دفعهم بنفسه"></textarea>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -11753,7 +11758,7 @@ async function loadSettlementsReceipts(){
     }
 
     // التصفيات المنتظرة
-    const r = await apiFetch('/api/settlements/pending');
+    const r = await apiFetch('/api/accountant/settlements/pending');
     _pendingSettlements = r?.settlements || [];
 
     // احسب pending totals
@@ -11787,11 +11792,43 @@ function renderSettlementsReceipts(){
   const cont = document.getElementById('settlements-receipts-content');
   if(!cont) return;
   if(!_pendingSettlements.length){
-    cont.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:30px"><div style="font-size:42px">✅</div><div style="font-size:14px;font-weight:700;margin-top:8px">مفيش تصفيات في الانتظار</div><div style="font-size:11px;color:var(--muted);margin-top:4px">كل التصفيات اتستلمت</div></div></div>';
+    cont.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:30px"><div style="font-size:42px">📭</div><div style="font-size:14px;font-weight:700;margin-top:8px">مفيش تصفيات في آخر 30 يوم</div></div></div>';
     return;
   }
 
-  cont.innerHTML = _pendingSettlements.map(s => {
+  // فلتر: pending أو received (الفلتر بـ يتحفظ في window)
+  const filterMode = window._settlementsFilter || 'pending';
+
+  const isPending = (s) => {
+    const cashPending = !s.cash_received_at && parseFloat(s.cash_amount||0) > 0;
+    const instaPending = !s.instapay_confirmed_at && parseFloat(s.instapay_amount||0) > 0;
+    return cashPending || instaPending;
+  };
+
+  const pending = _pendingSettlements.filter(isPending);
+  const received = _pendingSettlements.filter(s => !isPending(s));
+
+  const list = filterMode === 'received' ? received : pending;
+
+  // Tabs للفلتر
+  let html = `
+    <div style="display:flex;gap:6px;margin-bottom:14px;background:var(--card);padding:6px;border-radius:10px;border:1px solid var(--border)">
+      <button onclick="setSettlementsFilter('pending')" style="flex:1;padding:10px;background:${filterMode==='pending'?'#d97706':'transparent'};color:${filterMode==='pending'?'#fff':'var(--text)'};border:none;border-radius:8px;font-family:Cairo,sans-serif;font-weight:800;cursor:pointer;font-size:13px">
+        ⏳ في الانتظار <span style="opacity:.85">(${pending.length})</span>
+      </button>
+      <button onclick="setSettlementsFilter('received')" style="flex:1;padding:10px;background:${filterMode==='received'?'#16a34a':'transparent'};color:${filterMode==='received'?'#fff':'var(--text)'};border:none;border-radius:8px;font-family:Cairo,sans-serif;font-weight:800;cursor:pointer;font-size:13px">
+        ✅ مستلمة <span style="opacity:.85">(${received.length})</span>
+      </button>
+    </div>
+  `;
+
+  if(!list.length){
+    html += `<div class="card"><div class="card-body" style="text-align:center;padding:30px;color:var(--muted)">${filterMode==='received'?'مفيش تصفيات مستلمة':'مفيش تصفيات في الانتظار - كله مستلم ✅'}</div></div>`;
+    cont.innerHTML = html;
+    return;
+  }
+
+  html += list.map(s => {
     const settledAt = new Date(s.settled_at);
     const dateStr = settledAt.toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' });
     const cashAmt = parseFloat(s.cash_amount || 0);
@@ -11802,13 +11839,14 @@ function renderSettlementsReceipts(){
     const instaPending = !s.instapay_confirmed_at && instaAmt > 0;
     const cashDone = s.cash_received_at;
     const instaDone = s.instapay_confirmed_at;
+    const treasuryName = s.cash_treasury_name ? escapeHtml(s.cash_treasury_name) : null;
 
     return `
       <div class="card" style="margin-bottom:10px">
         <div class="card-body" style="padding:12px">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
             <div style="flex:1">
-              <div style="font-weight:800;font-size:14px">👤 ${escapeHtml(s.cashier_name || '-')}</div>
+              <div style="font-weight:800;font-size:14px">👤 ${escapeHtml(s.cashier_name || '-')} <span style="font-size:11px;color:var(--muted);font-weight:600">#${s.id}</span></div>
               <div style="font-size:11px;color:var(--muted);margin-top:2px">🏪 ${escapeHtml(s.store_name || '-')} · 📅 ${dateStr}</div>
               <div style="font-size:11px;color:var(--muted);margin-top:2px">${s.sales_count || 0} بيعة · إجمالي: <strong style="color:var(--text)">${total.toLocaleString()} ج</strong></div>
               ${s.cash_difference && parseFloat(s.cash_difference) !== 0 ? `<div style="font-size:11px;color:#dc2626;margin-top:2px;font-weight:700">⚠️ فرق: ${parseFloat(s.cash_difference).toLocaleString()} ج</div>` : ''}
@@ -11820,14 +11858,21 @@ function renderSettlementsReceipts(){
               <div style="background:${cashDone ? '#dcfce7' : '#fef3c7'};border:1px solid ${cashDone ? '#86efac' : '#fbbf24'};border-radius:8px;padding:8px">
                 <div style="font-size:10px;color:${cashDone ? '#14532d' : '#78350f'};font-weight:700">💵 كاش</div>
                 <div style="font-size:16px;font-weight:900;color:${cashDone ? '#16a34a' : '#d97706'}">${cashAmt.toLocaleString()} ج</div>
-                ${cashDone ? `<div style="font-size:9px;color:#14532d;font-weight:700">✅ اتستلم ${new Date(s.cash_received_at).toLocaleDateString('ar-EG')}</div>` : '<div style="font-size:9px;color:#78350f;font-weight:700">⏳ مش متستلم</div>'}
+                ${cashDone ? `
+                  <div style="font-size:9px;color:#14532d;font-weight:700">✅ اتستلم ${new Date(s.cash_received_at).toLocaleDateString('ar-EG')}</div>
+                  ${treasuryName ? `<div style="font-size:9px;color:#14532d;margin-top:1px">🏦 ${treasuryName}</div>` : ''}
+                  ${s.cash_received_by ? `<div style="font-size:9px;color:var(--muted);margin-top:1px">بواسطة ${escapeHtml(s.cash_received_by)}</div>` : ''}
+                ` : '<div style="font-size:9px;color:#78350f;font-weight:700">⏳ مش متستلم</div>'}
               </div>
             ` : ''}
             ${instaAmt > 0 ? `
               <div style="background:${instaDone ? '#dcfce7' : '#e0e7ff'};border:1px solid ${instaDone ? '#86efac' : '#818cf8'};border-radius:8px;padding:8px">
                 <div style="font-size:10px;color:${instaDone ? '#14532d' : '#312e81'};font-weight:700">📱 انستاباي</div>
                 <div style="font-size:16px;font-weight:900;color:${instaDone ? '#16a34a' : '#4f46e5'}">${instaAmt.toLocaleString()} ج</div>
-                ${instaDone ? `<div style="font-size:9px;color:#14532d;font-weight:700">✅ متأكد ${new Date(s.instapay_confirmed_at).toLocaleDateString('ar-EG')}</div>` : '<div style="font-size:9px;color:#312e81;font-weight:700">⏳ مش متأكد</div>'}
+                ${instaDone ? `
+                  <div style="font-size:9px;color:#14532d;font-weight:700">✅ متأكد ${new Date(s.instapay_confirmed_at).toLocaleDateString('ar-EG')}</div>
+                  ${s.instapay_confirmed_by ? `<div style="font-size:9px;color:var(--muted);margin-top:1px">بواسطة ${escapeHtml(s.instapay_confirmed_by)}</div>` : ''}
+                ` : '<div style="font-size:9px;color:#312e81;font-weight:700">⏳ مش متأكد</div>'}
               </div>
             ` : ''}
             ${visaAmt > 0 ? `
@@ -11840,14 +11885,24 @@ function renderSettlementsReceipts(){
           </div>
 
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn btn-sm btn-ghost" onclick="openSettlementDetails(${s.id})" style="flex:1;min-width:140px">📋 تفاصيل البيعات</button>
+            <button class="btn btn-sm btn-ghost" onclick="openSettlementDetails(${s.id})" style="flex:1;min-width:120px">📋 تفاصيل</button>
+            <button class="btn btn-sm btn-ghost" onclick="printSettlement(${s.id})" style="flex:1;min-width:100px">🖨️ طباعة</button>
             ${cashPending ? `<button class="btn btn-sm" onclick="openReceiveCash(${s.id})" style="background:#16a34a;color:#fff;border-color:#16a34a;flex:1;min-width:140px">💵 استلم الكاش (${cashAmt.toLocaleString()})</button>` : ''}
             ${instaPending ? `<button class="btn btn-sm" onclick="confirmInstapay(${s.id})" style="background:#4f46e5;color:#fff;border-color:#4f46e5;flex:1;min-width:140px">📱 أكد الانستاباي</button>` : ''}
+            ${cashDone ? `<button class="btn btn-sm btn-ghost" onclick="unreceiveCash(${s.id})" style="color:#dc2626;border-color:#fecaca" title="ارجاع - يشيل من الخزنة">↩️ ارجاع الكاش</button>` : ''}
+            ${instaDone ? `<button class="btn btn-sm btn-ghost" onclick="unconfirmInstapay(${s.id})" style="color:#dc2626;border-color:#fecaca" title="ارجاع التأكيد">↩️ ارجاع الانستاباي</button>` : ''}
           </div>
         </div>
       </div>
     `;
   }).join('');
+
+  cont.innerHTML = html;
+}
+
+function setSettlementsFilter(mode){
+  window._settlementsFilter = mode;
+  renderSettlementsReceipts();
 }
 
 async function openSettlementDetails(id){
@@ -11855,7 +11910,7 @@ async function openSettlementDetails(id){
   cont.innerHTML = '<div style="text-align:center;padding:30px">⏳ جاري التحميل...</div>';
   openM('m-settlement-details');
   try {
-    const r = await apiFetch('/api/settlements/' + id + '/details');
+    const r = await apiFetch('/api/accountant/settlements/' + id + '/details');
     if(!r) return;
     _currentSettlementDetails = r;
     const s = r.settlement;
@@ -11931,11 +11986,19 @@ async function openSettlementDetails(id){
   }
 }
 
-function openReceiveCash(id){
+async function openReceiveCash(id){
   const s = _pendingSettlements.find(x => x.id === id);
   if(!s) return;
   _receivingCashFor = s;
   const cashAmt = parseFloat(s.cash_amount || 0);
+
+  // جيب الخزن من السيستم
+  let treasuries = [];
+  try {
+    const tR = await apiFetch('/api/treasuries');
+    treasuries = tR?.treasuries || [];
+  } catch(e){ console.warn('treasuries:', e.message); }
+
   $('receive-cash-info').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div>
@@ -11949,6 +12012,20 @@ function openReceiveCash(id){
       </div>
     </div>
   `;
+
+  // dropdown للخزن
+  const treasurySelect = $('receive-cash-treasury');
+  if(treasurySelect){
+    if(!treasuries.length){
+      treasurySelect.innerHTML = '<option value="">⚠️ مفيش خزن - لازم تضيف خزنة من صفحة الخزنة الأول</option>';
+    } else {
+      treasurySelect.innerHTML = '<option value="">— اختار الخزنة —</option>' +
+        treasuries.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('');
+      // لو فيه واحدة بس، اختارها تلقائياً
+      if(treasuries.length === 1) treasurySelect.value = treasuries[0].id;
+    }
+  }
+
   $('receive-cash-amount').value = cashAmt;
   $('receive-cash-notes').value = '';
   openM('m-receive-cash');
@@ -11958,12 +12035,16 @@ async function confirmReceiveCash(){
   if(!_receivingCashFor) return;
   const amount = parseFloat($('receive-cash-amount').value);
   const notes = $('receive-cash-notes').value.trim();
+  const treasuryId = $('receive-cash-treasury')?.value || '';
+
   if(isNaN(amount) || amount < 0){ toast('❗ المبلغ غير صحيح'); return; }
+  if(!treasuryId){ toast('❗ لازم تختار الخزنة'); return; }
 
   try {
-    const r = await apiFetch(`/api/settlements/${_receivingCashFor.id}/receive-cash`, 'POST', {
+    const r = await apiFetch(`/api/accountant/settlements/${_receivingCashFor.id}/receive-cash`, 'POST', {
       amount_received: amount,
-      notes
+      notes,
+      treasuryId
     });
     if(r?.success){
       const diff = amount - r.expected;
@@ -11971,7 +12052,7 @@ async function confirmReceiveCash(){
       if(Math.abs(diff) > 0.5){
         msg += diff > 0 ? ` (زيادة ${diff.toLocaleString()})` : ` (نقص ${Math.abs(diff).toLocaleString()})`;
       }
-      msg += ' - تم إضافته للخزنة';
+      msg += ` - دخل خزنة ${r.treasuryName}`;
       toast(msg);
       closeM('m-receive-cash');
       _receivingCashFor = null;
@@ -11986,7 +12067,7 @@ async function confirmInstapay(id){
   const amt = parseFloat(s.instapay_amount || 0);
   if(!confirm(`تأكيد استلام ${amt.toLocaleString()} ج انستاباي من ${s.cashier_name}؟\n\n(مش هيتضاف للخزنة - بيروح للبنك)`)) return;
   try {
-    const r = await apiFetch(`/api/settlements/${id}/confirm-instapay`, 'POST', { notes: '' });
+    const r = await apiFetch(`/api/accountant/settlements/${id}/confirm-instapay`, 'POST', { notes: '' });
     if(r?.success){
       toast(`✅ تم تأكيد استلام ${amt.toLocaleString()} ج انستاباي`);
       loadSettlementsReceipts();
@@ -11994,12 +12075,185 @@ async function confirmInstapay(id){
   } catch(e){ toast('❌ ' + e.message); }
 }
 
+// 🆕 v224: ارجاع استلام الكاش
+async function unreceiveCash(id){
+  const s = _pendingSettlements.find(x => x.id === id);
+  if(!s) return;
+  const amt = parseFloat(s.cash_received_amount || s.cash_amount || 0);
+  const reason = prompt(`ارجاع استلام كاش تصفية ${s.cashier_name} (${amt.toLocaleString()} ج)؟\n\nده هـ يخصم ${amt.toLocaleString()} ج من الخزنة "${s.cash_treasury_name || '-'}".\n\nسبب الإرجاع (اختياري):`);
+  if(reason === null) return; // user cancelled
+  try {
+    const r = await apiFetch(`/api/accountant/settlements/${id}/unreceive-cash`, 'POST', { reason });
+    if(r?.success){
+      toast(`✅ تم إرجاع ${amt.toLocaleString()} ج من الخزنة`);
+      loadSettlementsReceipts();
+    } else toast('❌ ' + (r?.error || 'فشل'));
+  } catch(e){ toast('❌ ' + e.message); }
+}
+
+async function unconfirmInstapay(id){
+  const s = _pendingSettlements.find(x => x.id === id);
+  if(!s) return;
+  if(!confirm(`ارجاع تأكيد انستاباي تصفية ${s.cashier_name}؟`)) return;
+  try {
+    const r = await apiFetch(`/api/accountant/settlements/${id}/unconfirm-instapay`, 'POST', {});
+    if(r?.success){
+      toast(`✅ تم إرجاع تأكيد الانستاباي`);
+      loadSettlementsReceipts();
+    } else toast('❌ ' + (r?.error || 'فشل'));
+  } catch(e){ toast('❌ ' + e.message); }
+}
+
+// 🆕 v224: طباعة تصفية
+async function printSettlement(id){
+  try {
+    const r = await apiFetch('/api/accountant/settlements/' + id + '/details');
+    if(!r || !r.settlement){ toast('❌ مش لاقي التصفية'); return; }
+    const s = r.settlement;
+    const sales = r.sales || [];
+    const settledAt = new Date(s.settled_at).toLocaleString('ar-EG');
+
+    const methodIcons = { cash: '💵', visa: '💳', instapay: '📱' };
+    const methodNames = { cash: 'كاش', visa: 'فيزا', instapay: 'انستاباي', mixed: 'مدمج' };
+
+    // طباعة HTML
+    const printHtml = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<title>تصفية #${s.id}</title>
+<style>
+  @page { size: A4; margin: 10mm; }
+  body { font-family: 'Cairo', Arial, sans-serif; direction: rtl; margin: 0; padding: 14px; color: #111; font-size: 12px }
+  h1 { font-size: 18px; margin: 0 0 4px; color: #d97706 }
+  h3 { font-size: 13px; margin: 12px 0 6px; padding: 4px 8px; background: #f3f4f6; border-radius: 4px }
+  .meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 10px 0; font-size: 11px }
+  .meta div { padding: 4px 8px; background: #f9fafb; border-radius: 4px; border: 1px solid #e5e7eb }
+  .meta strong { color: #374151 }
+  .summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 12px 0; text-align: center; font-size: 11px }
+  .summary div { padding: 6px 4px; border: 1px solid #e5e7eb; border-radius: 4px }
+  .summary div b { display: block; font-size: 14px; margin-top: 2px }
+  .cash { background: #dcfce7; color: #14532d }
+  .visa { background: #e0e7ff; color: #312e81 }
+  .insta { background: #ede9fe; color: #5b21b6 }
+  table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 6px }
+  th, td { padding: 4px 6px; border: 1px solid #d1d5db; text-align: right }
+  th { background: #f3f4f6; font-weight: 700 }
+  .recv { background: #fef3c7; padding: 8px; border-radius: 6px; margin: 10px 0; font-size: 11px }
+  .recv-good { background: #dcfce7 }
+  .footer { margin-top: 20px; padding-top: 10px; border-top: 1px dashed #9ca3af; font-size: 10px; color: #6b7280; text-align: center }
+</style>
+</head>
+<body>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div>
+      <h1>📋 إيصال تصفية كاشير #${s.id}</h1>
+      <div style="font-size:11px;color:#6b7280">CAFELAX</div>
+    </div>
+    <div style="text-align:left;font-size:10px;color:#6b7280">
+      طُبع: ${new Date().toLocaleString('ar-EG')}
+    </div>
+  </div>
+
+  <div class="meta">
+    <div><strong>الكاشير:</strong> ${escapeHtml(s.cashier_name || '-')}</div>
+    <div><strong>المحل:</strong> ${escapeHtml(s.store_name || '-')}</div>
+    <div><strong>المدير:</strong> ${escapeHtml(s.manager_name || '-')}</div>
+    <div><strong>تاريخ التصفية:</strong> ${settledAt}</div>
+    <div><strong>من:</strong> ${s.period_start ? new Date(s.period_start).toLocaleString('ar-EG') : '-'}</div>
+    <div><strong>إلى:</strong> ${s.period_end ? new Date(s.period_end).toLocaleString('ar-EG') : '-'}</div>
+  </div>
+
+  <h3>📊 الملخص المالي</h3>
+  <div class="summary">
+    <div><span>عدد البيعات</span><b>${s.sales_count || 0}</b></div>
+    <div><span>الإجمالي</span><b>${parseFloat(s.total_amount||0).toLocaleString()}</b></div>
+    <div class="cash"><span>💵 كاش</span><b>${parseFloat(s.cash_amount||0).toLocaleString()}</b></div>
+    <div class="visa"><span>💳 فيزا</span><b>${parseFloat(s.visa_amount||0).toLocaleString()}</b></div>
+    <div class="insta"><span>📱 انستاباي</span><b>${parseFloat(s.instapay_amount||0).toLocaleString()}</b></div>
+  </div>
+
+  ${parseFloat(s.cash_difference||0) !== 0 || parseFloat(s.visa_difference||0) !== 0 || parseFloat(s.instapay_difference||0) !== 0 ? `
+    <h3>⚠️ الفروقات</h3>
+    <table>
+      <thead><tr><th>الطريقة</th><th>المتوقع</th><th>المُسلّم</th><th>الفرق</th></tr></thead>
+      <tbody>
+        <tr><td>💵 كاش</td><td>${parseFloat(s.cash_amount||0).toLocaleString()}</td><td>${parseFloat(s.cash_collected||0).toLocaleString()}</td><td style="color:${parseFloat(s.cash_difference||0)<0?'#dc2626':'#16a34a'};font-weight:700">${parseFloat(s.cash_difference||0).toLocaleString()}</td></tr>
+        <tr><td>💳 فيزا</td><td>${parseFloat(s.visa_amount||0).toLocaleString()}</td><td>${parseFloat(s.visa_collected||0).toLocaleString()}</td><td style="color:${parseFloat(s.visa_difference||0)<0?'#dc2626':'#16a34a'};font-weight:700">${parseFloat(s.visa_difference||0).toLocaleString()}</td></tr>
+        <tr><td>📱 انستاباي</td><td>${parseFloat(s.instapay_amount||0).toLocaleString()}</td><td>${parseFloat(s.instapay_collected||0).toLocaleString()}</td><td style="color:${parseFloat(s.instapay_difference||0)<0?'#dc2626':'#16a34a'};font-weight:700">${parseFloat(s.instapay_difference||0).toLocaleString()}</td></tr>
+      </tbody>
+    </table>
+  ` : ''}
+
+  ${s.cash_received_at ? `
+    <div class="recv recv-good">
+      <strong>✅ استلام الكاش:</strong> ${parseFloat(s.cash_received_amount||0).toLocaleString()} ج
+      · بواسطة ${escapeHtml(s.cash_received_by||'-')}
+      · ${new Date(s.cash_received_at).toLocaleString('ar-EG')}
+      ${s.cash_received_notes ? `<br><strong>ملاحظات:</strong> ${escapeHtml(s.cash_received_notes)}` : ''}
+    </div>
+  ` : parseFloat(s.cash_amount||0) > 0 ? '<div class="recv"><strong>⏳ الكاش مش متستلم لسه</strong></div>' : ''}
+
+  ${s.instapay_confirmed_at ? `
+    <div class="recv recv-good">
+      <strong>✅ تأكيد الانستاباي:</strong> ${parseFloat(s.instapay_amount||0).toLocaleString()} ج
+      · بواسطة ${escapeHtml(s.instapay_confirmed_by||'-')}
+      · ${new Date(s.instapay_confirmed_at).toLocaleString('ar-EG')}
+    </div>
+  ` : parseFloat(s.instapay_amount||0) > 0 ? '<div class="recv"><strong>⏳ الانستاباي مش متأكد لسه</strong></div>' : ''}
+
+  <h3>🧾 البيعات (${sales.length})</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>رقم البيعة</th><th>Shopify</th><th>الوقت</th><th>العميل</th><th>طرق الدفع</th><th>الإجمالي</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${sales.map((sale, i) => {
+        const time = new Date(sale.created_at).toLocaleString('ar-EG', {dateStyle:'short',timeStyle:'short'});
+        const paysStr = (sale.payments||[]).filter(p=>p&&p.method).map(p => `${methodIcons[p.method]||'•'} ${parseFloat(p.amount).toFixed(0)}`).join(' + ');
+        return `
+          <tr>
+            <td>${i+1}</td>
+            <td style="font-family:monospace">${escapeHtml(sale.sale_number||'')}</td>
+            <td style="font-family:monospace;color:#16a34a">${escapeHtml(sale.shopify_order_name||'-')}</td>
+            <td style="font-size:9px">${time}</td>
+            <td>${escapeHtml(sale.customer_name||'-')}</td>
+            <td style="font-size:9px">${paysStr}</td>
+            <td style="font-weight:700;text-align:left">${parseFloat(sale.total||0).toLocaleString()}</td>
+          </tr>
+        `;
+      }).join('')}
+    </tbody>
+  </table>
+
+  ${s.notes ? `<h3>📝 ملاحظات</h3><div style="padding:8px;background:#f9fafb;border-radius:4px;border:1px solid #e5e7eb">${escapeHtml(s.notes)}</div>` : ''}
+
+  <div class="footer">
+    تم استخراج هذا الإيصال من نظام CAFELAX بتاريخ ${new Date().toLocaleString('ar-EG')}
+  </div>
+</body>
+</html>
+    `;
+
+    const w = window.open('', '_blank');
+    if(!w){ toast('❌ متصفحك بيمنع النوافذ المنبثقة'); return; }
+    w.document.write(printHtml);
+    w.document.close();
+    setTimeout(() => w.print(), 500);
+  } catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
 async function openSettlementsHistory(){
   const cont = document.getElementById('settlements-history-content');
   cont.innerHTML = '<div style="text-align:center;padding:30px">⏳ جاري التحميل...</div>';
   openM('m-settlements-history');
   try {
-    const r = await apiFetch('/api/settlements/history');
+    const r = await apiFetch('/api/accountant/settlements/history');
     const settlements = r?.settlements || [];
     if(!settlements.length){
       cont.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">مفيش تصفيات في السجل</div>';
