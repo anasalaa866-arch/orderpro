@@ -1,28 +1,33 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v334 — PICKUP IN SETTLEMENT DETAILS (2026-05-22)
+  OrderPro v335 — PREPARATION VISIBILITY + REPORTS (2026-05-22)
   ═══════════════════════════════════════════════════════════════════
-  ✨ تفاصيل تصفية الكاشير في OrderPro بقت تعرض الـ Pickup
+  ✨ Visibility كاملة لنظام التحضير في OrderPro
   
-  أضيف قسمين جدد في modal تفاصيل التصفية:
+  1. 📦 Badge حالة التحضير في جدول الطلبات:
+     • ✅ متحضّر (أخضر) - hover يبين مين حضّره
+     • 📦 بيتحضّر (أصفر) - hover يبين مين شغّال عليه
   
-  1. 📦 تسليم طلبات Pickup بـ COD (بفلوس):
-     - شريط برتقالي
-     - الطلبات اللي استلم الكاشير فلوسها (كاش/فيزا/انستا)
-     - بتدخل في إجمالي التصفية الفعلي
+  2. 🔍 3 chips فلتر جديدة فوق الجدول:
+     • 📦 لم يُحضَّر / ⏳ بيتحضّر / ✅ متحضّر
   
-  2. ✅ تسليم Pickup مدفوع أونلاين (للمراجعة فقط):
-     - شريط أخضر
-     - الطلبات اللي اتدفعت أونلاين قبل التسليم
-     - مفيش فلوس بتدخل في التصفية
-     - بنعرضها للـ accountability (مين سلّم إيه ومتى)
+  3. 📋 Banner ملوّن في modal "تاريخ الطلب":
+     • أخضر لما يكون متحضّر (مع اسم المحضّر + المدة)
+     • أصفر لما يكون قيد التحضير
+     • Icons + ترجمة للـ preparation actions
   
-  محتاج: server v246 (بيرجع pickupCollections و onlinePaidPickups)
+  4. 📦 صفحة جديدة "تقارير المحضرين":
+     • Summary cards + جدول لكل محضّر
+     • Date range filter + Export CSV
+     • Badge "أدمن" لما الأدمن يحضّر
   
+  محتاج: server v247
+  
+  من v334 (محفوظ):
+  - 🆕 pickup details + online-paid sections في modal التصفية
   من v333 (محفوظ):
   - 🆕 شريط فلاتر وذكي في modal "إنشاء طلب من مورد"
-  - 🆕 "املأ المعروض فقط" quick action
   ═══════════════════════════════════════════════════════════════════
 -->
 <html lang="ar" dir="rtl">
@@ -553,6 +558,8 @@ tr:hover td{background:#fafbff}
       <div class="nav-group-body">
         <div class="ni" data-p="couriers" onclick="goPage(this,'couriers')"><span class="ni-icon">🚴</span><span class="ni-label">المناديب</span></div>
         <div class="ni" data-p="couriers-dashboard" onclick="goPage(this,'couriers-dashboard')"><span class="ni-icon">📊</span><span class="ni-label">إنجازات المناديب</span></div>
+        <!-- 🆕 v335: تقارير المحضرين -->
+        <div class="ni" data-p="preparer-reports" onclick="goPage(this,'preparer-reports')"><span class="ni-icon">📦</span><span class="ni-label">تقارير المحضرين</span></div>
         <div class="ni" data-p="assign" onclick="goPage(this,'assign')"><span class="ni-icon">📍</span><span class="ni-label">توزيع الطلبات</span><span class="nbadge orange" id="nb-assign">0</span></div>
         <div class="ni" data-p="pickup" onclick="goPage(this,'pickup')"><span class="ni-icon">🏪</span><span class="ni-label">استلام من المحل</span><span class="nbadge" id="nb-pickup" style="background:var(--purple)">0</span></div>
         <div class="ni" data-p="transit" onclick="goPage(this,'transit')"><span class="ni-icon">🏭</span><span class="ni-label">مخزن العبور</span><span class="nbadge" id="nb-transit" style="background:var(--warn)">0</span></div>
@@ -960,6 +967,10 @@ tr:hover td{background:#fafbff}
           <button class="chip" onclick="filterSt(this,'جاري التوصيل')">جاري التوصيل</button>
           <button class="chip" onclick="filterType(this,'pickup')">🏪 استلام من المحل</button>
           <button class="chip" onclick="filterType(this,'express')">⚡ مستعجل</button>
+          <!-- 🆕 v335: filters لحالة التحضير -->
+          <button class="chip" onclick="filterPrep(this,'not_prepared')" title="مش متحضّر لسه">📦 لم يُحضَّر</button>
+          <button class="chip" onclick="filterPrep(this,'in_progress')" title="جاري التحضير">⏳ بيتحضّر</button>
+          <button class="chip" onclick="filterPrep(this,'completed')" title="تم تحضيره">✅ متحضّر</button>
           <button class="chip" onclick="filterSt(this,'مكتمل')">مكتمل</button>
           <button class="chip" onclick="filterSt(this,'ملغي')">ملغي</button>
           <button class="chip" onclick="filterSt(this,'cancelled-unassigned')" title="ملغية وليس لها مندوب">ملغي بدون توزيع</button>
@@ -1148,6 +1159,76 @@ tr:hover td{background:#fafbff}
     <div id="cdash-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;overflow-x:auto;padding-bottom:6px"></div>
     <!-- محتوى الـ dashboard -->
     <div id="cdash-content"></div>
+  </div>
+
+  <!-- 🆕 v335: PREPARER REPORTS PAGE -->
+  <div class="page" id="page-preparer-reports">
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-body" style="padding:14px 18px">
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+          <h2 style="margin:0;font-size:18px;flex:1">📦 تقارير المحضرين</h2>
+          <span style="font-size:12px;color:var(--muted)">إحصائيات تحضير الطلبات</span>
+        </div>
+        <!-- Date range filter -->
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--bg);padding:10px;border-radius:8px;border:1px solid var(--border)">
+          <span style="font-size:12px;color:var(--muted);font-weight:700">📅 الفترة:</span>
+          <input type="date" id="pr-from-date" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+          <span style="font-size:12px;color:var(--muted)">→</span>
+          <input type="date" id="pr-to-date" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+          <button class="btn btn-primary btn-sm" onclick="loadPreparerReports()">🔍 ابحث</button>
+          <button class="btn btn-ghost btn-sm" onclick="resetPreparerReportsDate()">↺ آخر 30 يوم</button>
+          <div style="flex:1"></div>
+          <button class="btn btn-ghost btn-sm" onclick="exportPreparerReportsCsv()" title="تصدير تفاصيل لـ CSV">📥 تصدير CSV</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Summary stats -->
+    <div id="pr-summary" style="margin-bottom:14px"></div>
+    
+    <!-- Preparers table -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-hd"><h3>👥 المحضرون</h3></div>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>المحضّر</th>
+              <th>بدأ</th>
+              <th>اكتمل</th>
+              <th>قيد التحضير</th>
+              <th>متوسط مدة التحضير</th>
+              <th>أسرع</th>
+              <th>أبطأ</th>
+              <th>آخر نشاط</th>
+            </tr>
+          </thead>
+          <tbody id="pr-preparers-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    
+    <!-- Details table -->
+    <div class="card">
+      <div class="card-hd"><h3>📋 تفاصيل عمليات التحضير</h3><span id="pr-details-count" style="font-size:12px;color:var(--muted)"></span></div>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>رقم الطلب</th>
+              <th>العميل</th>
+              <th>الإجمالي</th>
+              <th>المحضّر</th>
+              <th>ابتدأ</th>
+              <th>خلص</th>
+              <th>المدة</th>
+              <th>الحالة</th>
+            </tr>
+          </thead>
+          <tbody id="pr-details-tbody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- COURIER ORDERS PAGE -->
@@ -6324,7 +6405,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','inventory':'📦 المخزون','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','inventory':'📦 المخزون','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -6640,6 +6721,25 @@ function srcBadge(s){
   if(s==='manual') return '<span class="badge b-manual">✍️ Draft</span>';
   if(s==='shopify')return '<span class="badge b-shopify">🛍 Shopify</span>';
   return '<span class="badge b-manual">✍️ يدوي</span>';
+}
+
+// 🆕 v335: badge لحالة التحضير (للأدمن - visibility)
+// completed → أخضر "✅ متحضّر"
+// in_progress → أصفر "📦 بيتحضّر"
+// null → مفيش (مش بنعرض حاجة - الطلب لسه ما اتحضّرش وعادي)
+function prepBadge(o){
+  if(!o.preparationStatus) return '';
+  if(o.preparationStatus === 'completed'){
+    const name = o.preparationCompletedByName || o.preparationStartedByName || '';
+    const tooltip = name ? `حضّره: ${name}` : 'تم التحضير';
+    return `<span class="badge" style="background:#dcfce7;color:#166534;margin-right:3px;font-size:9px" title="${escapeHtml(tooltip)}">✅ متحضّر</span>`;
+  }
+  if(o.preparationStatus === 'in_progress'){
+    const name = o.preparationStartedByName || '';
+    const tooltip = name ? `بيحضّره: ${name}` : 'قيد التحضير';
+    return `<span class="badge" style="background:#fef3c7;color:#92400e;margin-right:3px;font-size:9px" title="${escapeHtml(tooltip)}">📦 بيتحضّر</span>`;
+  }
+  return '';
 }
 // 🆕 v203: Global error handlers — يلتقط أي خطأ مش متعالج
 // مش بيغير سلوك الـ catch blocks الموجودة، بس بيضمن إن مفيش خطأ بيحصل بدون ما نعرف
@@ -7626,6 +7726,10 @@ function renderOrders(){
   if(orderFilter==='all')list=list.filter(o=>o.status!=='مدمج'); // إخفاء المدمجة من القائمة الرئيسية
   if(orderFilter==='cancelled-unassigned')list=orders.filter(o=>o.status==='ملغي'&&!o.courierId);
   if(orderTypeFilter)list=list.filter(o=>deliveryType(o)===orderTypeFilter);
+  // 🆕 v335: prep filter
+  if(prepFilter==='not_prepared')list=list.filter(o=>!o.preparationStatus);
+  else if(prepFilter==='in_progress')list=list.filter(o=>o.preparationStatus==='in_progress');
+  else if(prepFilter==='completed')list=list.filter(o=>o.preparationStatus==='completed');
   if(searchQ)list=list.filter(o=>(o.id+o.name+o.area+o.phone).includes(searchQ));
 
   // Pagination
@@ -7671,7 +7775,7 @@ function renderOrders(){
       </div>`;
     }
 
-    return `<tr${settled?' style="background:#f0fdf4"':''}><td style="text-align:center" data-label=""><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"${settled && !canEditSettled()?' disabled':''}></td><td data-label="رقم الطلب"><strong>${o.id}</strong>${settledBadge}${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td data-label="المصدر">${srcBadge(o.src)}</td><td data-label="العميل">${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px" data-label="الهاتف">${o.phone}</td><td data-label="المنطقة">📍 ${o.area}</td><td data-label="نوع التوصيل">${deliveryBadge(o)}</td><td data-label="COD"><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn" data-label="الشحن">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td data-label="المندوب">${cName(o.courierId)}</td><td data-label="الحالة">${sBadge(o.status)}</td><td data-label="إجراءات">${actionsHtml}</td></tr>`;
+    return `<tr${settled?' style="background:#f0fdf4"':''}><td style="text-align:center" data-label=""><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"${settled && !canEditSettled()?' disabled':''}></td><td data-label="رقم الطلب"><strong>${o.id}</strong>${settledBadge}${prepBadge(o)}${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td data-label="المصدر">${srcBadge(o.src)}</td><td data-label="العميل">${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px" data-label="الهاتف">${o.phone}</td><td data-label="المنطقة">📍 ${o.area}</td><td data-label="نوع التوصيل">${deliveryBadge(o)}</td><td data-label="COD"><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn" data-label="الشحن">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td data-label="المندوب">${cName(o.courierId)}</td><td data-label="الحالة">${sBadge(o.status)}</td><td data-label="إجراءات">${actionsHtml}</td></tr>`;
   }).join('');
 
   // ارسم شريط pagination
@@ -7730,9 +7834,13 @@ function goToOrdersPage(p){
   if(t) t.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
-function filterSt(btn,f){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter=f;orderTypeFilter=null;ordersPage=1;renderOrders()}
+function filterSt(btn,f){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter=f;orderTypeFilter=null;prepFilter=null;ordersPage=1;renderOrders()}
 let orderTypeFilter=null;
-function filterType(btn,t){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter='all';orderTypeFilter=t;ordersPage=1;renderOrders()}
+function filterType(btn,t){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter='all';orderTypeFilter=t;prepFilter=null;ordersPage=1;renderOrders()}
+
+// 🆕 v335: prep filter
+let prepFilter=null;
+function filterPrep(btn,p){document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));btn.classList.add('on');orderFilter='all';orderTypeFilter=null;prepFilter=p;ordersPage=1;renderOrders()}
 function onSearch(q){
   searchQ=q;
   ordersPage=1;
@@ -7805,6 +7913,202 @@ function searchGoToOrders(){
 
 // 🆕 v201: لوحة إنجازات المناديب (نفس Stars dashboard لكل مندوب)
 let _cdashActiveCourierId = null;
+
+// ============================================================
+// 🆕 v335: PREPARER REPORTS PAGE
+// ============================================================
+let _preparerReportsCache = null;
+
+function _prDefaultFromDate(){
+  const d = new Date();
+  d.setDate(d.getDate() - 30);
+  return d.toISOString().slice(0, 10);
+}
+function _prDefaultToDate(){
+  return new Date().toISOString().slice(0, 10);
+}
+
+function openPreparerReports(){
+  // اضبط التواريخ الافتراضية لو فاضية
+  const fromEl = $('pr-from-date');
+  const toEl = $('pr-to-date');
+  if(fromEl && !fromEl.value) fromEl.value = _prDefaultFromDate();
+  if(toEl && !toEl.value) toEl.value = _prDefaultToDate();
+  
+  // حمّل البيانات
+  loadPreparerReports();
+}
+
+function resetPreparerReportsDate(){
+  const fromEl = $('pr-from-date');
+  const toEl = $('pr-to-date');
+  if(fromEl) fromEl.value = _prDefaultFromDate();
+  if(toEl) toEl.value = _prDefaultToDate();
+  loadPreparerReports();
+}
+
+async function loadPreparerReports(){
+  const fromDate = $('pr-from-date')?.value || _prDefaultFromDate();
+  const toDate = $('pr-to-date')?.value || _prDefaultToDate();
+  
+  const summaryEl = $('pr-summary');
+  const tbodyEl = $('pr-preparers-tbody');
+  const detailsEl = $('pr-details-tbody');
+  const countEl = $('pr-details-count');
+  
+  if(summaryEl) summaryEl.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div></div>';
+  if(tbodyEl) tbodyEl.innerHTML = '';
+  if(detailsEl) detailsEl.innerHTML = '';
+  if(countEl) countEl.textContent = '';
+  
+  try {
+    const r = await apiFetch(`/api/preparation/reports?from=${fromDate}&to=${toDate}`);
+    if(!r) throw new Error('فشل التحميل');
+    _preparerReportsCache = r;
+    renderPreparerReports(r);
+  } catch(e) {
+    if(summaryEl) summaryEl.innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:30px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+function renderPreparerReports(r){
+  const summary = r.summary || {};
+  const preparers = r.preparers || [];
+  const details = r.details || [];
+  
+  // Summary cards
+  const summaryEl = $('pr-summary');
+  if(summaryEl){
+    summaryEl.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
+        <div class="card"><div class="card-body" style="text-align:center;padding:18px">
+          <div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">👥 محضرون</div>
+          <div style="font-size:26px;font-weight:900;color:var(--accent)">${summary.totalPreparers || 0}</div>
+        </div></div>
+        <div class="card"><div class="card-body" style="text-align:center;padding:18px">
+          <div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">📦 طلبات بدأ تحضيرها</div>
+          <div style="font-size:26px;font-weight:900;color:#3b82f6">${summary.totalStarted || 0}</div>
+        </div></div>
+        <div class="card"><div class="card-body" style="text-align:center;padding:18px">
+          <div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">✅ تم تحضيرها</div>
+          <div style="font-size:26px;font-weight:900;color:#16a34a">${summary.totalCompleted || 0}</div>
+        </div></div>
+        <div class="card"><div class="card-body" style="text-align:center;padding:18px">
+          <div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">⏳ قيد التحضير</div>
+          <div style="font-size:26px;font-weight:900;color:#f59e0b">${summary.totalInProgress || 0}</div>
+        </div></div>
+      </div>
+    `;
+  }
+  
+  // Preparers table
+  const tbodyEl = $('pr-preparers-tbody');
+  if(tbodyEl){
+    if(!preparers.length){
+      tbodyEl.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--muted)">لا توجد بيانات في هذه الفترة</td></tr>';
+    } else {
+      tbodyEl.innerHTML = preparers.map(p => {
+        const completion = p.totalStarted > 0 ? Math.round((p.totalCompleted / p.totalStarted) * 100) : 0;
+        const avgStr = p.avgDurationMinutes != null ? _prFmtMinutes(p.avgDurationMinutes) : '—';
+        const fastestStr = p.fastestMinutes != null ? _prFmtMinutes(p.fastestMinutes) : '—';
+        const slowestStr = p.slowestMinutes != null ? _prFmtMinutes(p.slowestMinutes) : '—';
+        const lastActStr = p.lastActivity ? _prFmtDate(p.lastActivity) : '—';
+        return `<tr>
+          <td><strong>${escapeHtml(p.name)}</strong>${p.preparerId ? '' : ' <span class="badge" style="background:#fef3c7;color:#92400e;font-size:9px">أدمن</span>'}</td>
+          <td><strong style="color:#3b82f6">${p.totalStarted}</strong></td>
+          <td><strong style="color:#16a34a">${p.totalCompleted}</strong> <span style="font-size:11px;color:var(--muted)">(${completion}%)</span></td>
+          <td>${p.totalInProgress > 0 ? '<strong style="color:#f59e0b">' + p.totalInProgress + '</strong>' : '0'}</td>
+          <td>${avgStr}</td>
+          <td style="color:#16a34a">${fastestStr}</td>
+          <td style="color:#f59e0b">${slowestStr}</td>
+          <td style="font-size:11px;color:var(--muted)">${lastActStr}</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+  
+  // Details table
+  const detailsEl = $('pr-details-tbody');
+  const countEl = $('pr-details-count');
+  if(countEl) countEl.textContent = `(${details.length} عملية)`;
+  
+  if(detailsEl){
+    if(!details.length){
+      detailsEl.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--muted)">مفيش عمليات تحضير</td></tr>';
+    } else {
+      detailsEl.innerHTML = details.map(d => {
+        const statusBadge = d.preparationStatus === 'completed'
+          ? '<span class="badge" style="background:#dcfce7;color:#166534">✅ مكتمل</span>'
+          : '<span class="badge" style="background:#fef3c7;color:#92400e">⏳ بيتحضّر</span>';
+        const durStr = d.durationMinutes != null ? _prFmtMinutes(d.durationMinutes) : '—';
+        const completedName = d.completedByName || d.startedByName || '';
+        return `<tr>
+          <td><strong style="font-family:monospace;font-size:11px">${escapeHtml(d.orderId)}</strong>${d.shopifyId ? '<div style="font-size:9px;color:#22c55e">🛍 ' + escapeHtml(d.shopifyId) + '</div>' : ''}</td>
+          <td>${escapeHtml(d.customerName || '—')}</td>
+          <td><strong>${(d.total || 0).toLocaleString()} ج</strong></td>
+          <td>${escapeHtml(completedName)}</td>
+          <td style="font-size:11px">${_prFmtDate(d.startedAt)}</td>
+          <td style="font-size:11px">${d.completedAt ? _prFmtDate(d.completedAt) : '—'}</td>
+          <td><strong>${durStr}</strong></td>
+          <td>${statusBadge}</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+}
+
+function _prFmtMinutes(mins){
+  if(mins == null) return '—';
+  if(mins < 1) return Math.round(mins * 60) + ' ث';
+  if(mins < 60) return Math.round(mins) + ' د';
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  return h + 'س ' + m + 'د';
+}
+
+function _prFmtDate(ts){
+  if(!ts) return '—';
+  const d = new Date(ts);
+  return d.toLocaleDateString('ar-EG',{month:'short',day:'numeric'}) + ' ' +
+         d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
+}
+
+function exportPreparerReportsCsv(){
+  if(!_preparerReportsCache || !_preparerReportsCache.details?.length){
+    alert('مفيش بيانات للتصدير');
+    return;
+  }
+  const headers = ['رقم الطلب', 'Shopify ID', 'العميل', 'الإجمالي', 'المحضّر', 'ابتدأ', 'خلص', 'المدة (دقيقة)', 'الحالة'];
+  const rows = _preparerReportsCache.details.map(d => [
+    d.orderId,
+    d.shopifyId || '',
+    d.customerName || '',
+    d.total || 0,
+    d.completedByName || d.startedByName || '',
+    d.startedAt ? new Date(d.startedAt).toLocaleString('en-GB',{timeZone:'Africa/Cairo'}) : '',
+    d.completedAt ? new Date(d.completedAt).toLocaleString('en-GB',{timeZone:'Africa/Cairo'}) : '',
+    d.durationMinutes != null ? d.durationMinutes.toFixed(2) : '',
+    d.preparationStatus || ''
+  ]);
+  
+  const csv = '\ufeff' + [headers, ...rows]
+    .map(row => row.map(cell => {
+      const s = String(cell ?? '');
+      if(s.includes(',') || s.includes('"') || s.includes('\n')) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }).join(','))
+    .join('\n');
+  
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const from = $('pr-from-date')?.value || 'all';
+  const to = $('pr-to-date')?.value || 'all';
+  a.download = `preparer-reports-${from}-to-${to}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 async function openCouriersDashboard(){
   const tabsEl = $('cdash-tabs');
@@ -8685,20 +8989,70 @@ async function openOrderHistory(orderId){
       + ' ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
   };
 
+  // 🆕 v335: preparation status banner (لو في معلومات تحضير)
+  let prepBanner = '';
+  if(o && o.preparationStatus){
+    if(o.preparationStatus === 'completed'){
+      const completedName = o.preparationCompletedByName || o.preparationStartedByName || 'غير معروف';
+      const completedAt = o.preparationCompletedAt ? fmtTs(o.preparationCompletedAt) : '';
+      // حساب المدة
+      let durationStr = '';
+      if(o.preparationStartedAt && o.preparationCompletedAt){
+        const ms = new Date(o.preparationCompletedAt) - new Date(o.preparationStartedAt);
+        const mins = Math.round(ms / 60000);
+        if(mins < 60) durationStr = ` · مدة التحضير: ${mins} دقيقة`;
+        else durationStr = ` · مدة التحضير: ${Math.floor(mins/60)}س ${mins%60}د`;
+      }
+      prepBanner = `
+        <div style="background:linear-gradient(135deg,#dcfce7,#bbf7d0);border:1px solid #16a34a;border-radius:10px;padding:12px;margin-bottom:14px">
+          <div style="font-weight:800;color:#15803d;font-size:13px;margin-bottom:4px">✅ تم تحضير الطلب</div>
+          <div style="font-size:12px;color:#166534">👤 المحضّر: <strong>${escapeHtml(completedName)}</strong></div>
+          <div style="font-size:11px;color:#166534;margin-top:2px">🕐 ${completedAt}${durationStr}</div>
+        </div>
+      `;
+    } else if(o.preparationStatus === 'in_progress'){
+      const startedName = o.preparationStartedByName || 'غير معروف';
+      const startedAt = o.preparationStartedAt ? fmtTs(o.preparationStartedAt) : '';
+      // مدة تحت التحضير
+      let elapsedStr = '';
+      if(o.preparationStartedAt){
+        const ms = Date.now() - new Date(o.preparationStartedAt).getTime();
+        const mins = Math.round(ms / 60000);
+        if(mins < 60) elapsedStr = ` · من ${mins} دقيقة`;
+        else elapsedStr = ` · من ${Math.floor(mins/60)}س ${mins%60}د`;
+      }
+      prepBanner = `
+        <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1px solid #f59e0b;border-radius:10px;padding:12px;margin-bottom:14px">
+          <div style="font-weight:800;color:#92400e;font-size:13px;margin-bottom:4px">📦 جاري تحضير الطلب</div>
+          <div style="font-size:12px;color:#78350f">👤 يحضّره: <strong>${escapeHtml(startedName)}</strong></div>
+          <div style="font-size:11px;color:#78350f;margin-top:2px">🕐 ابتدا ${startedAt}${elapsedStr}</div>
+        </div>
+      `;
+    }
+  }
+
   const iconMap = {
     'إنشاء الطلب':'🆕', 'تغيير الحالة':'🔄', 'تعيين مندوب':'🚴',
     'تعديل البيانات':'✏️', 'تغيير حالة الدفع':'💳', 'إلغاء':'❌',
     'مكتمل':'✅', 'تسوية':'💰', 
     'printed':'🖨️', 'طباعة':'🖨️', // 🆕 v265
+    // 🆕 v335: preparation actions
+    'preparation_started':'📦',
+    'preparation_completed':'✅',
+    'barcode_scanned':'🔍',
     'default':'📌'
   };
 
   // 🆕 v265: ترجمة action 'printed' للعربية
   const actionLabels = {
-    'printed': 'طباعة'
+    'printed': 'طباعة',
+    // 🆕 v335: ترجمة preparation actions
+    'preparation_started': 'بدء التحضير',
+    'preparation_completed': 'تم التحضير',
+    'barcode_scanned': 'سكان باركود'
   };
 
-  if(content) content.innerHTML = all.map(h=>{
+  if(content) content.innerHTML = prepBanner + all.map(h=>{
     const displayAction = actionLabels[h.action] || h.action;
     const icon = iconMap[h.action] || iconMap[displayAction] || iconMap.default;
     const hasChange = h.oldValue && h.newValue && h.oldValue !== h.newValue;
@@ -31732,6 +32086,7 @@ function goPage(el,page){
     loadCourierRatesMap().then(() => renderAssignPage());
   }
   if(page==='couriers-dashboard')openCouriersDashboard();
+  if(page==='preparer-reports')openPreparerReports();
   if(page==='pickup')renderPickupPage();if(page==='transit')renderTransitPage();
   if(page==='bosta')renderBostaPage();
   if(page==='shop-accounting')renderShopAccounting();
