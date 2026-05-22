@@ -1,4 +1,27 @@
 <!DOCTYPE html>
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v329 — WATCHLIST SEARCH FIX (2026-05-22)
+  ═══════════════════════════════════════════════════════════════════
+  🛠️ إصلاح: "Cannot read properties of null (reading 'products')"
+  
+  السبب: كنت بستخدم /api/inventory (مش موجود)، الـ apiFetch بيرجع null،
+        و null.products بيعمل crash
+  
+  الحل:
+  - Backend v241: endpoint جديد مخصص /api/watchlist/search
+    • أسرع (مفيش JOIN على levels غير اللي نحتاجه)
+    • يدور في title + sku + barcode + extra_barcodes
+    • ترتيب ذكي (exact match → starts_with → contains)
+  - Frontend: defensive parsing مع null checks
+    • يعرض رسالة واضحة لو مفيش نتائج للـ query
+    • Stock badge بجنب كل نتيجة
+    • عرض variant_title لو موجود
+  
+  باقي الميزات الـ 6 شغّالة من v328:
+  ✅ Sparklines, Export, Cards, Deep Dive, Period Compare, Add-to-PO
+  ═══════════════════════════════════════════════════════════════════
+-->
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
@@ -577,6 +600,7 @@ tr:hover td{background:#fafbff}
       </div>
       <div class="nav-group-body">
         <div class="ni" data-p="inventory" onclick="goPage(this,'inventory')"><span class="ni-icon">📦</span><span class="ni-label">المخزون</span><span class="nbadge" id="nb-inv-low" style="background:var(--warn)">0</span></div>
+        <div class="ni" data-p="watchlist" onclick="goPage(this,'watchlist')"><span class="ni-icon">⭐</span><span class="ni-label">منتجاتي المهمة</span><span class="nbadge" id="nb-watchlist" style="background:var(--accent)">0</span></div>
         <div class="ni" data-p="stocktake" onclick="goPage(this,'stocktake')"><span class="ni-icon">🔍</span><span class="ni-label">الجرد</span></div>
         <div class="ni" data-p="transfers" onclick="goPage(this,'transfers')"><span class="ni-icon">🔄</span><span class="ni-label">تحويلات المخازن</span><span class="nbadge" id="nb-transfers" style="background:var(--warn)">0</span></div>
         <div class="ni" data-p="sales-velocity" onclick="goPage(this,'sales-velocity')"><span class="ni-icon">📊</span><span class="ni-label">سرعة المبيعات</span></div>
@@ -3670,6 +3694,82 @@ tr:hover td{background:#fafbff}
   
   <div class="card">
     <div id="sv-table-container" style="padding:14px;overflow-x:auto"></div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 🆕 v328: PRODUCT WATCHLIST PAGE                                -->
+<!-- منتجات بنحب نتابعها بشكل خاص — قائمة منفصلة عن الـ catalog     -->
+<!-- ============================================================ -->
+<div class="page" id="page-watchlist">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">⭐ منتجاتي المهمة <span id="wl-count-badge" style="background:var(--accent);color:#fff;font-size:13px;padding:3px 10px;border-radius:99px;font-weight:700;margin-right:8px;display:none"></span></h2>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="wlOpenAddModal()" style="font-weight:700">➕ ضيف منتج</button>
+      <button class="btn btn-ghost btn-sm" onclick="wlOpenImportModal()">📥 استيراد Excel</button>
+      <button class="btn btn-ghost btn-sm" onclick="wlExportExcel()">📤 تصدير Excel</button>
+      <button class="btn btn-ghost btn-sm" onclick="loadWatchlistPage()">🔄 تحديث</button>
+    </div>
+  </div>
+  
+  <!-- Stats Cards -->
+  <div id="wl-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px"></div>
+  
+  <!-- View toggle + filters -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="wl-filter on" data-cat="" onclick="wlSetFilter(this, '')" style="padding:6px 14px;background:var(--accent);color:#fff;border:none;border-radius:99px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">الكل</button>
+      <button class="wl-filter" data-cat="hot" onclick="wlSetFilter(this, 'hot')" style="padding:6px 14px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:99px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🔥 الأكثر بيعاً</button>
+      <button class="wl-filter" data-cat="normal" onclick="wlSetFilter(this, 'normal')" style="padding:6px 14px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:99px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">✓ عادي</button>
+      <button class="wl-filter" data-cat="slow" onclick="wlSetFilter(this, 'slow')" style="padding:6px 14px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:99px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🐌 بطيء</button>
+      <button class="wl-filter" data-cat="dead" onclick="wlSetFilter(this, 'dead')" style="padding:6px 14px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:99px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">💀 راكد</button>
+    </div>
+    
+    <!-- View mode toggle -->
+    <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <button id="wl-view-table" onclick="wlSetView('table')" style="padding:6px 14px;background:var(--accent);color:#fff;border:none;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer">📋 جدول</button>
+      <button id="wl-view-cards" onclick="wlSetView('cards')" style="padding:6px 14px;background:var(--bg);color:var(--text);border:none;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer">🖼️ كروت</button>
+    </div>
+  </div>
+  
+  <!-- Period comparison -->
+  <div style="background:linear-gradient(135deg,#ede9fe 0%,#ddd6fe 100%);border:1px solid #c4b5fd;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span style="font-size:12px;font-weight:700;color:#5b21b6">📈 مقارنة فترات:</span>
+    <select id="wl-compare-a" onchange="wlRenderProducts()" style="padding:5px 10px;background:#fff;color:var(--text);border:1px solid #c4b5fd;border-radius:6px;font-family:Cairo,sans-serif;font-size:12px;font-weight:600">
+      <option value="avg_7d">7 أيام</option>
+      <option value="avg_30d" selected>30 يوم</option>
+      <option value="avg_60d">60 يوم</option>
+      <option value="avg_90d">90 يوم</option>
+    </select>
+    <span style="font-size:14px;color:#7c3aed;font-weight:700">↔</span>
+    <select id="wl-compare-b" onchange="wlRenderProducts()" style="padding:5px 10px;background:#fff;color:var(--text);border:1px solid #c4b5fd;border-radius:6px;font-family:Cairo,sans-serif;font-size:12px;font-weight:600">
+      <option value="avg_7d" selected>7 أيام</option>
+      <option value="avg_30d">30 يوم</option>
+      <option value="avg_60d">60 يوم</option>
+      <option value="avg_90d">90 يوم</option>
+    </select>
+    <span style="font-size:11px;color:#7c3aed">— شوف لو المنتج صاعد أو نازل بين الفترتين</span>
+  </div>
+  
+  <!-- Sort -->
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+    <span style="font-size:12px;color:var(--muted)">ترتيب حسب:</span>
+    <select id="wl-sort" onchange="wlRenderProducts()" style="padding:5px 10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+      <option value="added_at">تاريخ الإضافة</option>
+      <option value="avg_30d">متوسط 30 يوم</option>
+      <option value="avg_7d">متوسط 7 أيام</option>
+      <option value="total_stock">المخزون</option>
+      <option value="days_remaining">أيام متبقية</option>
+      <option value="product_title">اسم المنتج</option>
+    </select>
+    <select id="wl-order" onchange="wlRenderProducts()" style="padding:5px 10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+      <option value="desc">↓ تنازلي</option>
+      <option value="asc">↑ تصاعدي</option>
+    </select>
+  </div>
+  
+  <div class="card">
+    <div id="wl-content-container" style="padding:14px;overflow-x:auto"></div>
   </div>
 </div>
 
@@ -24468,6 +24568,872 @@ function exportReorderPDF(){
 // ============================================================
 
 // ============================================================
+// 🆕 v328: PRODUCT WATCHLIST
+// منتجات بنحب نتابعها بشكل خاص — قائمة منفصلة عن الـ catalog
+// ============================================================
+let _wlData = null;          // البيانات المحملة من الـ server
+let _wlFilter = '';          // فلتر الـ category
+let _wlView = 'table';       // 'table' أو 'cards'
+
+async function loadWatchlistPage(){
+  const container = document.getElementById('wl-content-container');
+  if(!container) return;
+  
+  container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div>';
+  
+  try {
+    const r = await apiFetch('/api/watchlist');
+    _wlData = r;
+    
+    const stats = r.stats || {};
+    const products = r.products || [];
+    
+    // Badge في الـ sidebar
+    const navBadge = document.getElementById('nb-watchlist');
+    if(navBadge){
+      navBadge.textContent = products.length;
+      navBadge.style.display = products.length > 0 ? '' : 'none';
+    }
+    const titleBadge = document.getElementById('wl-count-badge');
+    if(titleBadge){
+      titleBadge.textContent = products.length + ' منتج';
+      titleBadge.style.display = products.length > 0 ? '' : 'none';
+    }
+    
+    // Stats cards
+    wlRenderStats(stats);
+    
+    // المنتجات (table أو cards)
+    wlRenderProducts();
+    
+  } catch(e) {
+    container.innerHTML = '<div style="text-align:center;padding:30px;color:var(--danger)">❌ فشل التحميل: ' + (e.message||'') + '</div>';
+  }
+}
+
+function wlRenderStats(stats){
+  const statsEl = document.getElementById('wl-stats');
+  if(!statsEl) return;
+  
+  if(!stats.total){
+    statsEl.innerHTML = '';
+    return;
+  }
+  
+  statsEl.innerHTML = `
+    <div style="background:linear-gradient(135deg,#fef3c7 0%,#fff 100%);border:1px solid #f59e0b;border-radius:10px;padding:14px;text-align:center">
+      <div style="font-size:11px;color:var(--muted)">⭐ الإجمالي</div>
+      <div style="font-size:24px;font-weight:800;color:#f59e0b">${stats.total || 0}</div>
+      <div style="font-size:10px;color:var(--muted)">منتج في القائمة</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#fee2e2 0%,#fff 100%);border:1px solid #ef4444;border-radius:10px;padding:14px;text-align:center">
+      <div style="font-size:11px;color:var(--muted)">🔥 الأكثر بيعاً</div>
+      <div style="font-size:24px;font-weight:800;color:#ef4444">${stats.hot || 0}</div>
+      <div style="font-size:10px;color:var(--muted)">> 5 قطع/يوم</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#dcfce7 0%,#fff 100%);border:1px solid #22c55e;border-radius:10px;padding:14px;text-align:center">
+      <div style="font-size:11px;color:var(--muted)">✓ عادي</div>
+      <div style="font-size:24px;font-weight:800;color:#22c55e">${stats.normal || 0}</div>
+      <div style="font-size:10px;color:var(--muted)">1-5 قطع/يوم</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#dbeafe 0%,#fff 100%);border:1px solid #3b82f6;border-radius:10px;padding:14px;text-align:center">
+      <div style="font-size:11px;color:var(--muted)">📈 صاعد</div>
+      <div style="font-size:24px;font-weight:800;color:#3b82f6">${stats.trending_up || 0}</div>
+      <div style="font-size:10px;color:var(--muted)">آخر 7 أيام</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#fff7ed 0%,#fff 100%);border:1px solid #f97316;border-radius:10px;padding:14px;text-align:center">
+      <div style="font-size:11px;color:var(--muted)">📉 هابط</div>
+      <div style="font-size:24px;font-weight:800;color:#f97316">${stats.trending_down || 0}</div>
+      <div style="font-size:10px;color:var(--muted)">آخر 7 أيام</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#ede9fe 0%,#fff 100%);border:1px solid #7c3aed;border-radius:10px;padding:14px;text-align:center">
+      <div style="font-size:11px;color:var(--muted)">⛔ نفد</div>
+      <div style="font-size:24px;font-weight:800;color:#7c3aed">${stats.out_of_stock || 0}</div>
+      <div style="font-size:10px;color:var(--muted)">من ${stats.total || 0}</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#fef3c7 0%,#fff 100%);border:1px solid #ef4444;border-radius:10px;padding:14px;text-align:center">
+      <div style="font-size:11px;color:var(--muted)">🚨 شبه نفد</div>
+      <div style="font-size:24px;font-weight:800;color:#ef4444">${stats.low_stock || 0}</div>
+      <div style="font-size:10px;color:var(--muted)">< 7 أيام</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#d1fae5 0%,#fff 100%);border:1px solid #10b981;border-radius:10px;padding:14px;text-align:center">
+      <div style="font-size:11px;color:var(--muted)">💰 قيمة المخزون</div>
+      <div style="font-size:20px;font-weight:800;color:#059669">${Math.round(stats.total_value || 0).toLocaleString('en-US')}</div>
+      <div style="font-size:10px;color:var(--muted)">ج تقريباً</div>
+    </div>
+  `;
+}
+
+function wlSetFilter(btn, cat){
+  _wlFilter = cat;
+  document.querySelectorAll('.wl-filter').forEach(b => {
+    b.classList.remove('on');
+    b.style.background = 'var(--bg)';
+    b.style.color = 'var(--text)';
+    b.style.border = '1px solid var(--border)';
+  });
+  btn.classList.add('on');
+  btn.style.background = 'var(--accent)';
+  btn.style.color = '#fff';
+  btn.style.border = 'none';
+  wlRenderProducts();
+}
+
+function wlSetView(view){
+  _wlView = view;
+  const tableBtn = document.getElementById('wl-view-table');
+  const cardsBtn = document.getElementById('wl-view-cards');
+  if(view === 'table'){
+    tableBtn.style.background = 'var(--accent)';
+    tableBtn.style.color = '#fff';
+    cardsBtn.style.background = 'var(--bg)';
+    cardsBtn.style.color = 'var(--text)';
+  } else {
+    cardsBtn.style.background = 'var(--accent)';
+    cardsBtn.style.color = '#fff';
+    tableBtn.style.background = 'var(--bg)';
+    tableBtn.style.color = 'var(--text)';
+  }
+  wlRenderProducts();
+}
+
+function wlRenderProducts(){
+  const container = document.getElementById('wl-content-container');
+  if(!container || !_wlData) return;
+  
+  let products = (_wlData.products || []).slice();
+  
+  // فلتر
+  if(_wlFilter){
+    products = products.filter(p => p.category === _wlFilter);
+  }
+  
+  // ترتيب
+  const sortBy = document.getElementById('wl-sort')?.value || 'added_at';
+  const order = document.getElementById('wl-order')?.value || 'desc';
+  products.sort((a, b) => {
+    let va = a[sortBy];
+    let vb = b[sortBy];
+    // نصوص (product_title)
+    if(typeof va === 'string'){
+      return order === 'asc' ? va.localeCompare(vb || '') : (vb || '').localeCompare(va);
+    }
+    // أرقام أو تواريخ
+    va = (sortBy === 'added_at') ? new Date(va).getTime() : (parseFloat(va) || 0);
+    vb = (sortBy === 'added_at') ? new Date(vb).getTime() : (parseFloat(vb) || 0);
+    return order === 'asc' ? va - vb : vb - va;
+  });
+  
+  if(!products.length){
+    container.innerHTML = `
+      <div style="text-align:center;padding:50px 20px;color:var(--muted)">
+        <div style="font-size:64px;opacity:.3;margin-bottom:10px">⭐</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:6px">قائمة المراقبة فاضية</div>
+        <div style="font-size:13px;margin-bottom:14px">ابدأ بإضافة المنتجات اللي تحب تراقبها</div>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="wlOpenAddModal()">➕ ضيف منتج</button>
+          <button class="btn btn-ghost btn-sm" onclick="wlOpenImportModal()">📥 استيراد Excel</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+  
+  if(_wlView === 'cards'){
+    container.innerHTML = wlRenderCards(products);
+  } else {
+    container.innerHTML = wlRenderTable(products);
+  }
+}
+
+function wlRenderTable(products){
+  const compareA = document.getElementById('wl-compare-a')?.value || 'avg_30d';
+  const compareB = document.getElementById('wl-compare-b')?.value || 'avg_7d';
+  const labelA = wlPeriodLabel(compareA);
+  const labelB = wlPeriodLabel(compareB);
+  
+  const catInfo = {
+    hot: { ico: '🔥', color: '#ef4444' },
+    normal: { ico: '✓', color: '#22c55e' },
+    slow: { ico: '🐌', color: '#fbbf24' },
+    dead: { ico: '💀', color: '#64748b' }
+  };
+  
+  const rows = products.map(p => {
+    const cat = catInfo[p.category] || catInfo.dead;
+    const avgA = parseFloat(p[compareA] || 0);
+    const avgB = parseFloat(p[compareB] || 0);
+    const diff = avgB - avgA;
+    const pct = avgA > 0 ? ((diff / avgA) * 100) : 0;
+    const diffColor = diff > 0 ? '#22c55e' : diff < 0 ? '#ef4444' : '#64748b';
+    const diffIco = diff > 0.05 ? '↗' : diff < -0.05 ? '↘' : '→';
+    
+    const daysRemColor = p.days_remaining < 7 ? '#ef4444' : p.days_remaining < 14 ? '#f59e0b' : '#22c55e';
+    
+    return `
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:8px 6px;text-align:center;width:50px">
+          ${p.image_url ? `<img src="${p.image_url}" style="width:42px;height:42px;border-radius:6px;object-fit:cover;border:1px solid var(--border)">` : '<div style="width:42px;height:42px;border-radius:6px;background:var(--bg);border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-size:18px">📦</div>'}
+        </td>
+        <td style="padding:8px 6px;min-width:180px">
+          <div style="font-weight:700;font-size:12px;line-height:1.3">${escapeHtml(p.product_title || '—')}</div>
+          ${p.variant_title ? `<div style="font-size:10px;color:var(--muted)">${escapeHtml(p.variant_title)}</div>` : ''}
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(p.sku || '')}${p.barcode ? ' · ' + escapeHtml(p.barcode) : ''}</div>
+          ${p.notes ? `<div style="font-size:10px;color:#7c3aed;margin-top:3px;font-style:italic">💬 ${escapeHtml(p.notes)}</div>` : ''}
+        </td>
+        <td style="padding:8px 6px;text-align:center">
+          <span style="background:${cat.color}22;color:${cat.color};padding:3px 8px;border-radius:99px;font-size:11px;font-weight:700">${cat.ico}</span>
+        </td>
+        <td style="padding:8px 6px;text-align:center;min-width:100px">
+          ${wlRenderSparkline(p)}
+        </td>
+        <td style="padding:8px 6px;text-align:center">
+          <div style="font-size:11px;color:var(--muted)">${labelA}</div>
+          <div style="font-weight:700;font-size:13px">${avgA.toFixed(2)}</div>
+          <div style="font-size:10px;color:var(--muted)">${labelB}</div>
+          <div style="font-weight:700;font-size:13px;color:${diffColor}">${diffIco} ${avgB.toFixed(2)} (${pct >= 0 ? '+' : ''}${pct.toFixed(0)}%)</div>
+        </td>
+        <td style="padding:8px 6px;text-align:center">
+          <div style="font-weight:800;font-size:14px;color:${p.total_stock === 0 ? '#ef4444' : 'var(--text)'}">${p.total_stock || 0}</div>
+          <div style="font-size:10px;color:${daysRemColor}">${p.days_remaining > 365 ? '∞' : p.days_remaining.toFixed(0)} يوم</div>
+        </td>
+        <td style="padding:8px 6px;text-align:center;white-space:nowrap">
+          <button onclick="wlOpenDeepDive('${p.variant_id}')" style="padding:5px 8px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-family:Cairo,sans-serif;font-size:11px;font-weight:700;cursor:pointer;margin:2px" title="تحليل عميق">🔍</button>
+          <button onclick="wlAddToPO('${p.variant_id}')" style="padding:5px 8px;background:#3b82f6;color:#fff;border:none;border-radius:6px;font-family:Cairo,sans-serif;font-size:11px;font-weight:700;cursor:pointer;margin:2px" title="ضيف لأمر شراء">📋</button>
+          <button onclick="wlRemoveProduct('${p.variant_id}', '${escapeHtml(p.product_title||'').replace(/'/g, "\\'")}')" style="padding:5px 8px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-family:Cairo,sans-serif;font-size:11px;font-weight:700;cursor:pointer;margin:2px" title="شيل من القائمة">🗑️</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+  
+  return `
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead>
+        <tr style="border-bottom:2px solid var(--border);background:var(--bg)">
+          <th style="padding:10px 6px;text-align:center">صورة</th>
+          <th style="padding:10px 6px;text-align:right">المنتج</th>
+          <th style="padding:10px 6px;text-align:center">الفئة</th>
+          <th style="padding:10px 6px;text-align:center">90 يوم</th>
+          <th style="padding:10px 6px;text-align:center">مقارنة الفترات</th>
+          <th style="padding:10px 6px;text-align:center">المخزون</th>
+          <th style="padding:10px 6px;text-align:center">إجراءات</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function wlRenderCards(products){
+  const catInfo = {
+    hot: { ico: '🔥', color: '#ef4444', name: 'الأكثر بيعاً' },
+    normal: { ico: '✓', color: '#22c55e', name: 'عادي' },
+    slow: { ico: '🐌', color: '#fbbf24', name: 'بطيء' },
+    dead: { ico: '💀', color: '#64748b', name: 'راكد' }
+  };
+  
+  const cards = products.map(p => {
+    const cat = catInfo[p.category] || catInfo.dead;
+    const trendIco = p.trend === 'up' ? '📈' : p.trend === 'down' ? '📉' : '➡️';
+    const trendColor = p.trend === 'up' ? '#22c55e' : p.trend === 'down' ? '#ef4444' : '#64748b';
+    const daysRemColor = p.days_remaining < 7 ? '#ef4444' : p.days_remaining < 14 ? '#f59e0b' : '#22c55e';
+    
+    return `
+      <div style="background:var(--card);border:2px solid ${p.total_stock === 0 ? '#ef4444' : 'var(--border)'};border-radius:12px;overflow:hidden;display:flex;flex-direction:column;transition:transform .15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+        <!-- Image -->
+        <div style="position:relative;height:160px;background:var(--bg);overflow:hidden">
+          ${p.image_url ? `<img src="${p.image_url}" style="width:100%;height:100%;object-fit:cover">` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:48px;color:var(--muted)">📦</div>'}
+          <div style="position:absolute;top:8px;right:8px;background:${cat.color};color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px">${cat.ico} ${cat.name}</div>
+          <div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.7);color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px">${trendIco}</div>
+        </div>
+        <!-- Body -->
+        <div style="padding:12px;flex:1;display:flex;flex-direction:column">
+          <div style="font-weight:800;font-size:13px;line-height:1.3;margin-bottom:4px">${escapeHtml(p.product_title || '—')}</div>
+          ${p.variant_title ? `<div style="font-size:11px;color:var(--muted);margin-bottom:4px">${escapeHtml(p.variant_title)}</div>` : ''}
+          <div style="font-size:10px;color:var(--muted);margin-bottom:8px">${escapeHtml(p.sku || '')}</div>
+          ${p.notes ? `<div style="font-size:11px;color:#7c3aed;font-style:italic;background:#ede9fe;border-radius:6px;padding:6px 8px;margin-bottom:8px">💬 ${escapeHtml(p.notes)}</div>` : ''}
+          
+          <!-- Sparkline chart -->
+          <div style="margin-bottom:8px">${wlRenderSparkline(p, 'large')}</div>
+          
+          <!-- Stats -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;font-size:11px">
+            <div style="background:var(--bg);border-radius:6px;padding:6px 8px;text-align:center">
+              <div style="color:var(--muted)">7 أيام/يوم</div>
+              <div style="font-weight:800;color:${trendColor}">${parseFloat(p.avg_7d || 0).toFixed(2)}</div>
+            </div>
+            <div style="background:var(--bg);border-radius:6px;padding:6px 8px;text-align:center">
+              <div style="color:var(--muted)">30 يوم/يوم</div>
+              <div style="font-weight:800">${parseFloat(p.avg_30d || 0).toFixed(2)}</div>
+            </div>
+            <div style="background:var(--bg);border-radius:6px;padding:6px 8px;text-align:center">
+              <div style="color:var(--muted)">المخزون</div>
+              <div style="font-weight:800;color:${p.total_stock === 0 ? '#ef4444' : 'var(--text)'}">${p.total_stock || 0}</div>
+            </div>
+            <div style="background:var(--bg);border-radius:6px;padding:6px 8px;text-align:center">
+              <div style="color:var(--muted)">أيام متبقية</div>
+              <div style="font-weight:800;color:${daysRemColor}">${p.days_remaining > 365 ? '∞' : p.days_remaining.toFixed(0)}</div>
+            </div>
+          </div>
+          
+          <!-- Actions -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-top:auto">
+            <button onclick="wlOpenDeepDive('${p.variant_id}')" style="padding:7px 4px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-family:Cairo,sans-serif;font-size:11px;font-weight:700;cursor:pointer" title="تحليل عميق">🔍 تحليل</button>
+            <button onclick="wlAddToPO('${p.variant_id}')" style="padding:7px 4px;background:#3b82f6;color:#fff;border:none;border-radius:6px;font-family:Cairo,sans-serif;font-size:11px;font-weight:700;cursor:pointer" title="ضيف لأمر شراء">📋 طلب</button>
+            <button onclick="wlRemoveProduct('${p.variant_id}', '${escapeHtml(p.product_title||'').replace(/'/g, "\\'")}')" style="padding:7px 4px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-family:Cairo,sans-serif;font-size:11px;font-weight:700;cursor:pointer" title="شيل">🗑️</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">${cards}</div>`;
+}
+
+// Sparkline SVG: رسم بياني صغير من 4 نقط (7d, 30d, 60d, 90d)
+// 🆕 v328: بسيط ونظيف، بدون أي library
+function wlRenderSparkline(p, size){
+  const values = [
+    parseFloat(p.avg_90d || 0),
+    parseFloat(p.avg_60d || 0),
+    parseFloat(p.avg_30d || 0),
+    parseFloat(p.avg_7d || 0)
+  ];
+  const max = Math.max(...values, 0.01);
+  const w = size === 'large' ? 240 : 90;
+  const h = size === 'large' ? 40 : 26;
+  const padding = 2;
+  const stepX = (w - padding * 2) / 3;
+  
+  const points = values.map((v, i) => {
+    const x = padding + i * stepX;
+    const y = h - padding - (v / max) * (h - padding * 2);
+    return { x, y, v };
+  });
+  
+  const pathD = 'M ' + points.map(pt => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' L ');
+  
+  // اللون: مقارنة avg_7d بـ avg_30d
+  const trend = values[3] > values[2] * 1.1 ? 'up' : values[3] < values[2] * 0.9 ? 'down' : 'stable';
+  const color = trend === 'up' ? '#22c55e' : trend === 'down' ? '#ef4444' : '#64748b';
+  
+  const labels = ['90', '60', '30', '7'];
+  const labelTags = size === 'large' ? points.map((pt, i) => `<text x="${pt.x}" y="${h - 1}" text-anchor="middle" font-size="8" fill="#94a3b8">${labels[i]}d</text>`).join('') : '';
+  
+  return `
+    <svg width="${w}" height="${size === 'large' ? h + 12 : h}" style="overflow:visible">
+      <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      ${points.map(pt => `<circle cx="${pt.x}" cy="${pt.y}" r="2.5" fill="${color}"><title>${pt.v.toFixed(2)} قطعة/يوم</title></circle>`).join('')}
+      ${labelTags}
+    </svg>
+  `;
+}
+
+function wlPeriodLabel(key){
+  const map = { avg_7d: '7 أيام', avg_30d: '30 يوم', avg_60d: '60 يوم', avg_90d: '90 يوم' };
+  return map[key] || key;
+}
+
+// ─── Add/Remove ───
+
+async function wlRemoveProduct(variantId, name){
+  if(!confirm(`متأكد إنك عايز تشيل "${name}" من قائمة المراقبة؟\n\nالمنتج هيختفي من هنا بس مش هيتمسح من النظام.`)) return;
+  try {
+    await apiFetch('/api/watchlist/' + encodeURIComponent(variantId), 'DELETE');
+    toast('✅ اتشال من القائمة', 'success');
+    loadWatchlistPage();
+  } catch(e){
+    toast('❌ ' + e.message, 'error');
+  }
+}
+
+function wlOpenAddModal(){
+  const existing = document.getElementById('wl-add-modal');
+  if(existing) existing.remove();
+  
+  const modal = document.createElement('div');
+  modal.id = 'wl-add-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML = `
+    <div style="background:var(--card);border-radius:14px;padding:20px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h3 style="margin:0;color:var(--accent);font-size:16px">⭐ ضيف منتج للمراقبة</h3>
+        <button onclick="document.getElementById('wl-add-modal').remove()" style="background:transparent;border:none;color:var(--muted);font-size:24px;cursor:pointer">×</button>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:700">🔍 ابحث بالباركود، الـ SKU، أو الاسم</label>
+        <input id="wl-search-input" type="text" placeholder="مثلاً: 8003753158556 أو Kimbo..." oninput="wlSearchProducts(this.value)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-family:Cairo,sans-serif;font-size:13px">
+      </div>
+      <div id="wl-search-results" style="max-height:380px;overflow-y:auto;background:var(--bg);border-radius:8px;padding:6px">
+        <div style="text-align:center;padding:30px;color:var(--muted);font-size:12px">ابدأ الكتابة للبحث...</div>
+      </div>
+      <div style="margin-top:14px;padding:10px;background:var(--bg);border-radius:8px;font-size:11px;color:var(--muted);line-height:1.6">
+        💡 لو عندك ليست كبيرة، استخدم <strong>"📥 استيراد Excel"</strong> بدلاً من الإضافة واحد واحد
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  setTimeout(() => document.getElementById('wl-search-input')?.focus(), 100);
+}
+
+let _wlSearchTimer = null;
+async function wlSearchProducts(query){
+  query = (query || '').trim();
+  const resultsEl = document.getElementById('wl-search-results');
+  if(!resultsEl) return;
+  
+  if(query.length < 2){
+    resultsEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-size:12px">اكتب على الأقل حرفين...</div>';
+    return;
+  }
+  
+  // debounce
+  clearTimeout(_wlSearchTimer);
+  _wlSearchTimer = setTimeout(async () => {
+    resultsEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">⏳ جاري البحث...</div>';
+    try {
+      // 🛠️ v329: استخدام endpoint مخصص للـ watchlist (أسرع + null-safe)
+      const r = await apiFetch('/api/watchlist/search?q=' + encodeURIComponent(query) + '&limit=20');
+      // 🛠️ v329: defensive parsing - الـ apiFetch ممكن يرجع null لو في خطأ
+      const products = (r && Array.isArray(r.products)) ? r.products : [];
+      
+      if(!products.length){
+        resultsEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">⚠️ مفيش نتائج للبحث "' + escapeHtml(query) + '"</div>';
+        return;
+      }
+      
+      // اعرف اللي موجودين في الـ watchlist عشان نظهر علامة
+      const inWatchlist = new Set((_wlData?.products || []).map(p => String(p.variant_id)));
+      
+      resultsEl.innerHTML = products.map(p => {
+        const vid = String(p.variant_id || '');
+        const isIn = inWatchlist.has(vid);
+        const stockBadge = p.total_stock === 0 
+          ? '<span style="background:#fee2e2;color:#dc2626;font-size:9px;font-weight:700;padding:2px 6px;border-radius:99px;margin-right:4px">نفد</span>'
+          : `<span style="background:#dbeafe;color:#1e40af;font-size:9px;font-weight:700;padding:2px 6px;border-radius:99px;margin-right:4px">${p.total_stock}</span>`;
+        return `
+          <div style="display:flex;align-items:center;gap:10px;padding:8px;background:${isIn ? '#f0fdf4' : 'var(--card)'};border:1px solid ${isIn ? '#86efac' : 'var(--border)'};border-radius:8px;margin-bottom:4px">
+            ${p.image_url ? `<img src="${p.image_url}" style="width:38px;height:38px;border-radius:6px;object-fit:cover;border:1px solid var(--border)">` : '<div style="width:38px;height:38px;border-radius:6px;background:var(--bg);display:inline-flex;align-items:center;justify-content:center;font-size:18px">📦</div>'}
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(p.product_title || '')}${p.variant_title ? ' — <span style="color:var(--muted);font-weight:400">' + escapeHtml(p.variant_title) + '</span>' : ''}</div>
+              <div style="font-size:10px;color:var(--muted)">${stockBadge}${escapeHtml(p.sku || '')}${p.barcode ? ' · ' + escapeHtml(p.barcode) : ''}</div>
+            </div>
+            ${isIn 
+              ? '<span style="background:#22c55e;color:#fff;font-size:10px;font-weight:700;padding:4px 8px;border-radius:99px">✓ موجود</span>'
+              : `<button onclick="wlAddProduct('${vid}', this)" style="padding:5px 10px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-family:Cairo,sans-serif;font-size:11px;font-weight:700;cursor:pointer">+ ضيف</button>`
+            }
+          </div>
+        `;
+      }).join('');
+    } catch(e){
+      resultsEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--danger);font-size:12px">❌ ' + escapeHtml(e.message || 'فشل البحث') + '</div>';
+    }
+  }, 300);
+}
+
+async function wlAddProduct(variantId, btn){
+  if(btn){ btn.disabled = true; btn.textContent = '⏳'; }
+  try {
+    await apiFetch('/api/watchlist', 'POST', { variantId });
+    if(btn){
+      btn.outerHTML = '<span style="background:#22c55e;color:#fff;font-size:10px;font-weight:700;padding:4px 8px;border-radius:99px">✓ تم</span>';
+    }
+    toast('✅ المنتج اتضاف للمراقبة', 'success');
+    // refresh الـ data في الخلفية
+    apiFetch('/api/watchlist').then(r => { _wlData = r; }).catch(()=>{});
+  } catch(e){
+    if(btn){ btn.disabled = false; btn.textContent = '+ ضيف'; }
+    toast('❌ ' + e.message, 'error');
+  }
+}
+
+// ─── Excel Import ───
+
+function wlOpenImportModal(){
+  const existing = document.getElementById('wl-import-modal');
+  if(existing) existing.remove();
+  
+  const modal = document.createElement('div');
+  modal.id = 'wl-import-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML = `
+    <div style="background:var(--card);border-radius:14px;padding:20px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h3 style="margin:0;color:var(--accent);font-size:16px">📥 استيراد منتجات من Excel</h3>
+        <button onclick="document.getElementById('wl-import-modal').remove()" style="background:transparent;border:none;color:var(--muted);font-size:24px;cursor:pointer">×</button>
+      </div>
+      
+      <div style="background:#dbeafe;border:1px solid #3b82f6;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;color:#1e40af;line-height:1.7">
+        <strong>📋 المطلوب في ملف Excel:</strong><br>
+        • العمود الأول لازم يحتوي على <strong>الباركود</strong> أو الـ <strong>SKU</strong><br>
+        • النظام يدعم header (عناوين أعمدة) أو بدون<br>
+        • يقبل comma-separated في الباركود (مثلاً <code>8711,8003,8005</code>)<br>
+        • يقبل الباركودات الإضافية اللي ضفتها لأي منتج
+      </div>
+      
+      <div style="border:2px dashed var(--border);border-radius:10px;padding:30px;text-align:center;margin-bottom:14px">
+        <div style="font-size:48px;margin-bottom:8px;opacity:.5">📊</div>
+        <div style="font-weight:700;margin-bottom:4px">اضغط لاختيار ملف Excel</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">.xlsx أو .xls</div>
+        <input type="file" id="wl-excel-file" accept=".xlsx,.xls" style="display:none" onchange="wlHandleExcelFile(this)">
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('wl-excel-file').click()">📁 اختر ملف</button>
+      </div>
+      
+      <div id="wl-import-preview" style="display:none"></div>
+      
+      <div style="margin-top:14px;padding:10px;background:var(--bg);border-radius:8px;font-size:11px;color:var(--muted);line-height:1.6">
+        💡 المنتجات اللي مش هتلاقي بياناتها في النظام هتظهر في قائمة "مش موجودة" بعد الاستيراد
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function wlHandleExcelFile(input){
+  const file = input.files[0];
+  if(!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
+      
+      // استخرج الباركودات من العمود الأول (تخطّى الـ header لو موجود)
+      const identifiers = [];
+      for(let i = 0; i < rows.length; i++){
+        const cell = rows[i][0];
+        if(cell == null || cell === '') continue;
+        const str = String(cell).trim();
+        // skip headers بكلمات شائعة
+        if(i === 0 && /barcode|باركود|sku|كود|product/i.test(str)) continue;
+        identifiers.push(str);
+      }
+      
+      wlShowImportPreview(identifiers);
+    } catch(err){
+      toast('❌ خطأ في قراءة الملف: ' + err.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function wlShowImportPreview(identifiers){
+  const preview = document.getElementById('wl-import-preview');
+  if(!preview) return;
+  
+  if(!identifiers.length){
+    preview.style.display = 'block';
+    preview.innerHTML = '<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:12px;color:#92400e">⚠️ مفيش بيانات في الملف</div>';
+    return;
+  }
+  
+  preview.style.display = 'block';
+  preview.innerHTML = `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--accent)">📊 ملاحظات الاستيراد</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">لقيت <strong style="color:var(--text)">${identifiers.length}</strong> صف في الملف. هتتم محاولة إضافتهم كلهم.</div>
+      <details style="margin-bottom:10px;font-size:11px">
+        <summary style="cursor:pointer;color:var(--accent);font-weight:700">👁️ معاينة (أول 10)</summary>
+        <div style="margin-top:6px;padding:8px;background:var(--card);border-radius:6px;max-height:160px;overflow-y:auto;font-family:Roboto,sans-serif">
+          ${identifiers.slice(0, 10).map(id => `<div style="padding:3px 0;border-bottom:1px dashed var(--border)">${escapeHtml(id)}</div>`).join('')}
+          ${identifiers.length > 10 ? `<div style="padding:6px;text-align:center;color:var(--muted)">... و ${identifiers.length - 10} أكتر</div>` : ''}
+        </div>
+      </details>
+      <button id="wl-import-confirm" class="btn btn-primary" onclick='wlConfirmImport(${JSON.stringify(identifiers).replace(/"/g, "&quot;")})' style="width:100%;font-weight:700">
+        🚀 ابدأ الاستيراد (${identifiers.length} منتج)
+      </button>
+    </div>
+  `;
+}
+
+async function wlConfirmImport(identifiers){
+  const btn = document.getElementById('wl-import-confirm');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ جاري الاستيراد...'; }
+  
+  try {
+    const r = await apiFetch('/api/watchlist/bulk-import', 'POST', { identifiers });
+    const res = r.results || {};
+    
+    // اعرض النتيجة
+    const preview = document.getElementById('wl-import-preview');
+    if(preview){
+      preview.innerHTML = `
+        <div style="background:#dcfce7;border:1px solid #22c55e;border-radius:8px;padding:14px">
+          <div style="font-weight:800;font-size:14px;color:#15803d;margin-bottom:10px">✅ خلص الاستيراد!</div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;font-size:12px">
+            <div style="background:#fff;border-radius:6px;padding:8px;text-align:center">
+              <div style="color:var(--muted);font-size:11px">✅ اتضاف</div>
+              <div style="font-weight:800;font-size:18px;color:#22c55e">${res.added || 0}</div>
+            </div>
+            <div style="background:#fff;border-radius:6px;padding:8px;text-align:center">
+              <div style="color:var(--muted);font-size:11px">↪ موجود قبل</div>
+              <div style="font-weight:800;font-size:18px;color:#3b82f6">${res.alreadyIn || 0}</div>
+            </div>
+          </div>
+          ${res.notFound && res.notFound.length ? `
+            <details style="margin-top:10px;font-size:11px">
+              <summary style="cursor:pointer;color:#dc2626;font-weight:700">❌ مش لاقي (${res.notFound.length})</summary>
+              <div style="margin-top:6px;padding:8px;background:#fff;border-radius:6px;max-height:140px;overflow-y:auto;font-family:Roboto,sans-serif">
+                ${res.notFound.map(id => `<div style="padding:2px 0;border-bottom:1px dashed #fca5a5">${escapeHtml(id)}</div>`).join('')}
+              </div>
+            </details>
+          ` : ''}
+          ${res.errors && res.errors.length ? `
+            <details style="margin-top:6px;font-size:11px">
+              <summary style="cursor:pointer;color:#dc2626;font-weight:700">⚠️ أخطاء (${res.errors.length})</summary>
+              <div style="margin-top:6px;padding:8px;background:#fff;border-radius:6px;max-height:140px;overflow-y:auto">
+                ${res.errors.map(e => `<div style="padding:2px 0;font-size:10px;border-bottom:1px dashed #fca5a5"><strong>${escapeHtml(e.identifier)}</strong>: ${escapeHtml(e.error||'')}</div>`).join('')}
+              </div>
+            </details>
+          ` : ''}
+        </div>
+        <button class="btn btn-primary" onclick="document.getElementById('wl-import-modal').remove();loadWatchlistPage()" style="width:100%;margin-top:10px">✓ خلصت</button>
+      `;
+    }
+    
+    toast(`✅ اتضاف ${res.added || 0} منتج`, 'success');
+  } catch(e){
+    if(btn){ btn.disabled = false; btn.textContent = '🚀 ابدأ الاستيراد'; }
+    toast('❌ ' + e.message, 'error');
+  }
+}
+
+// ─── Excel Export ───
+
+function wlExportExcel(){
+  if(!_wlData?.products?.length){
+    toast('⚠️ مفيش منتجات للتصدير', 'warn');
+    return;
+  }
+  
+  const products = _wlData.products;
+  const rows = products.map(p => ({
+    'الباركود': p.barcode || '',
+    'SKU': p.sku || '',
+    'المنتج': p.product_title || '',
+    'النسخة': p.variant_title || '',
+    'الفئة': p.category === 'hot' ? 'الأكثر بيعاً' : p.category === 'normal' ? 'عادي' : p.category === 'slow' ? 'بطيء' : 'راكد',
+    'الاتجاه': p.trend === 'up' ? 'صاعد' : p.trend === 'down' ? 'هابط' : 'مستقر',
+    'مبيع 7 أيام': p.sold_7d || 0,
+    'متوسط 7 أيام/يوم': parseFloat(p.avg_7d || 0).toFixed(2),
+    'مبيع 30 يوم': p.sold_30d || 0,
+    'متوسط 30 يوم/يوم': parseFloat(p.avg_30d || 0).toFixed(2),
+    'مبيع 60 يوم': p.sold_60d || 0,
+    'متوسط 60 يوم/يوم': parseFloat(p.avg_60d || 0).toFixed(2),
+    'مبيع 90 يوم': p.sold_90d || 0,
+    'متوسط 90 يوم/يوم': parseFloat(p.avg_90d || 0).toFixed(2),
+    'المخزون': p.total_stock || 0,
+    'أيام متبقية': p.days_remaining > 365 ? '∞' : p.days_remaining,
+    'السعر': p.price || '',
+    'المورد': p.vendor || '',
+    'ملاحظات': p.notes || '',
+    'تاريخ الإضافة': p.added_at ? new Date(p.added_at).toLocaleString('ar-EG') : ''
+  }));
+  
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'منتجات المراقبة');
+  
+  const fname = 'Watchlist_' + new Date().toLocaleDateString('en-GB').replace(/\//g, '-') + '.xlsx';
+  XLSX.writeFile(wb, fname);
+  toast('✅ تم تصدير ' + products.length + ' منتج', 'success');
+}
+
+// ─── Deep Dive ───
+
+async function wlOpenDeepDive(variantId){
+  const existing = document.getElementById('wl-deep-modal');
+  if(existing) existing.remove();
+  
+  const modal = document.createElement('div');
+  modal.id = 'wl-deep-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto';
+  modal.innerHTML = `
+    <div style="background:var(--card);border-radius:14px;padding:20px;max-width:760px;width:100%;max-height:90vh;overflow-y:auto;border:1px solid var(--border)">
+      <div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري تحميل التحليل العميق...</div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  
+  try {
+    const r = await apiFetch('/api/watchlist/' + encodeURIComponent(variantId) + '/deep-dive');
+    wlRenderDeepDive(r);
+  } catch(e){
+    modal.querySelector('div').innerHTML = `
+      <div style="text-align:center;padding:30px">
+        <div style="color:#dc2626;font-weight:700;margin-bottom:12px">❌ ${e.message}</div>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('wl-deep-modal').remove()">إغلاق</button>
+      </div>
+    `;
+  }
+}
+
+function wlRenderDeepDive(data){
+  const modal = document.getElementById('wl-deep-modal');
+  if(!modal) return;
+  
+  const p = data.product;
+  const v = data.velocity || {};
+  const daily = data.dailySales || [];
+  const stockByWh = data.stockByWarehouse || [];
+  const recent = data.recentSales || [];
+  
+  // Daily trend chart
+  const dailyChart = wlRenderDailyChart(daily);
+  
+  modal.querySelector('div').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:10px">
+      <div style="flex:1;display:flex;gap:12px;align-items:center">
+        ${p.image_url ? `<img src="${p.image_url}" style="width:64px;height:64px;border-radius:10px;object-fit:cover;border:1px solid var(--border)">` : ''}
+        <div style="flex:1;min-width:0">
+          <h3 style="margin:0 0 4px 0;color:var(--accent);font-size:16px;line-height:1.3">🔍 ${escapeHtml(p.product_title || '')}</h3>
+          ${p.variant_title ? `<div style="font-size:12px;color:var(--muted)">${escapeHtml(p.variant_title)}</div>` : ''}
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${escapeHtml(p.sku || '')}${p.barcode ? ' · ' + escapeHtml(p.barcode) : ''}</div>
+        </div>
+      </div>
+      <button onclick="document.getElementById('wl-deep-modal').remove()" style="background:transparent;border:none;color:var(--muted);font-size:24px;cursor:pointer">×</button>
+    </div>
+    
+    <!-- Velocity stats -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
+      <div style="background:linear-gradient(135deg,#fee2e2,#fff);border:1px solid #ef4444;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--muted)">7 أيام</div>
+        <div style="font-size:18px;font-weight:800;color:#ef4444">${v.sold_7d || 0}</div>
+        <div style="font-size:10px;color:var(--muted)">${parseFloat(v.avg_7d || 0).toFixed(2)}/يوم</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#fef3c7,#fff);border:1px solid #f59e0b;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--muted)">30 يوم</div>
+        <div style="font-size:18px;font-weight:800;color:#f59e0b">${v.sold_30d || 0}</div>
+        <div style="font-size:10px;color:var(--muted)">${parseFloat(v.avg_30d || 0).toFixed(2)}/يوم</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#dbeafe,#fff);border:1px solid #3b82f6;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--muted)">60 يوم</div>
+        <div style="font-size:18px;font-weight:800;color:#3b82f6">${v.sold_60d || 0}</div>
+        <div style="font-size:10px;color:var(--muted)">${parseFloat(v.avg_60d || 0).toFixed(2)}/يوم</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#dcfce7,#fff);border:1px solid #22c55e;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--muted)">90 يوم</div>
+        <div style="font-size:18px;font-weight:800;color:#22c55e">${v.sold_90d || 0}</div>
+        <div style="font-size:10px;color:var(--muted)">${parseFloat(v.avg_90d || 0).toFixed(2)}/يوم</div>
+      </div>
+    </div>
+    
+    <!-- Daily chart -->
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px;color:var(--accent)">📈 المبيعات اليومية (آخر 90 يوم)</div>
+      ${dailyChart}
+    </div>
+    
+    <!-- Stock by warehouse -->
+    ${stockByWh.length ? `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+        <div style="font-weight:700;font-size:13px;margin-bottom:10px;color:var(--accent)">📦 المخزون حسب المخزن</div>
+        ${stockByWh.map(w => `
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);font-size:12px">
+            <span>${escapeHtml(w.warehouse_name || '—')}</span>
+            <strong style="color:${w.qty === 0 ? '#ef4444' : 'var(--text)'}">${w.qty || 0}</strong>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+    
+    <!-- Recent sales -->
+    ${recent.length ? `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+        <div style="font-weight:700;font-size:13px;margin-bottom:10px;color:var(--accent)">📋 آخر ${recent.length} بيعة</div>
+        <div style="max-height:200px;overflow-y:auto">
+          ${recent.map(s => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--card);border-radius:6px;margin-bottom:4px;font-size:11px">
+              <div>
+                <span style="background:${s.source === 'online' ? '#dbeafe' : '#fef3c7'};color:${s.source === 'online' ? '#1e40af' : '#92400e'};padding:2px 6px;border-radius:99px;font-weight:700">${s.source === 'online' ? '🌐 Online' : '🏪 POS'}</span>
+                <span style="margin-right:6px;color:var(--muted)">${new Date(s.created_at).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })}</span>
+              </div>
+              <strong>${s.qty || 0} قطعة</strong>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+    
+    <!-- Actions -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button onclick="wlAddToPO('${p.shopify_variant_id}');document.getElementById('wl-deep-modal').remove()" class="btn btn-primary" style="font-weight:700">📋 ضيف لأمر شراء</button>
+      <button onclick="document.getElementById('wl-deep-modal').remove()" class="btn btn-ghost">إغلاق</button>
+    </div>
+  `;
+}
+
+// Daily chart - SVG bars
+function wlRenderDailyChart(daily){
+  if(!daily.length) return '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">⚠️ مفيش بيانات</div>';
+  
+  const values = daily.map(d => parseInt(d.qty) || 0);
+  const max = Math.max(...values, 1);
+  const w = 680;
+  const h = 120;
+  const barW = (w - 20) / daily.length;
+  
+  const bars = daily.map((d, i) => {
+    const v = parseInt(d.qty) || 0;
+    const barH = (v / max) * (h - 30);
+    const x = 10 + i * barW;
+    const y = h - 20 - barH;
+    const color = v === 0 ? '#e5e7eb' : v >= max * 0.7 ? '#ef4444' : v >= max * 0.4 ? '#f59e0b' : '#22c55e';
+    const date = new Date(d.date).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' });
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW * 0.8).toFixed(1)}" height="${barH.toFixed(1)}" fill="${color}" rx="1.5"><title>${date}: ${v} قطعة</title></rect>`;
+  }).join('');
+  
+  // Y-axis label (max value)
+  const yLabel = `<text x="2" y="10" font-size="9" fill="#94a3b8">${max}</text>`;
+  
+  // X-axis labels (every ~15 days)
+  const xLabels = daily.filter((_, i) => i % 15 === 0).map((d, idx) => {
+    const i = idx * 15;
+    const x = 10 + i * barW + (barW * 0.4);
+    const date = new Date(d.date).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' });
+    return `<text x="${x.toFixed(1)}" y="${h - 4}" font-size="8" fill="#94a3b8" text-anchor="middle">${date}</text>`;
+  }).join('');
+  
+  return `
+    <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;max-height:${h}px">
+      ${yLabel}
+      ${bars}
+      ${xLabels}
+    </svg>
+  `;
+}
+
+// ─── Add to Purchase Order ───
+// يستخدم الـ pending PO الموجود أو ينشئ واحد جديد
+async function wlAddToPO(variantId){
+  // الـ implementation البسيط: روح لصفحة purchase orders بـ pre-selected variant
+  // (لأن إنشاء PO فيها تفاصيل كتيرة عن supplier وغيره)
+  const product = (_wlData?.products || []).find(p => String(p.variant_id) === String(variantId));
+  if(!product){ toast('❌ المنتج مش موجود', 'error'); return; }
+  
+  // خزّن في sessionStorage عشان لما تفتح صفحة الـ PO تستخدمها
+  try {
+    const queue = JSON.parse(sessionStorage.getItem('_poQuickAdd') || '[]');
+    if(!queue.find(q => q.variant_id === product.variant_id)){
+      queue.push({
+        variant_id: product.variant_id,
+        product_title: product.product_title,
+        sku: product.sku,
+        vendor: product.vendor,
+        suggested_qty: Math.ceil((parseFloat(product.avg_30d || 0) * 30) || 10) // 30 يوم تغطية
+      });
+      sessionStorage.setItem('_poQuickAdd', JSON.stringify(queue));
+    }
+    toast(`✅ "${product.product_title}" انضاف لقائمة أمر الشراء (${queue.length} منتج)\nروح لـ "أوامر الشراء" عشان تكمّل`, 'success');
+  } catch(e){
+    toast('⚠️ فشل الإضافة: ' + e.message, 'error');
+  }
+}
+
+// ============================================================
 // 🆕 v268: SALES VELOCITY ANALYTICS
 // ============================================================
 let _svFilter = '';
@@ -24571,6 +25537,7 @@ async function loadSalesVelocityPage(){
             <th style="padding:8px;text-align:center">أيام متبقية</th>
             <th style="padding:8px;text-align:center">الفئة</th>
             <th style="padding:8px;text-align:center">اتجاه</th>
+            <th style="padding:8px;text-align:center">⭐</th>
           </tr>
         </thead>
         <tbody>
@@ -24601,6 +25568,9 @@ async function loadSalesVelocityPage(){
                 <td style="padding:8px;text-align:center">
                   <span style="color:${trend.color};font-size:14px">${trend.ico}</span>
                 </td>
+                <td style="padding:8px;text-align:center">
+                  <button onclick="svAddToWatchlist(this, '${p.variant_id}')" title="ضيف لقائمة المراقبة" style="background:transparent;border:1px solid #f59e0b;color:#f59e0b;border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;padding:0">⭐</button>
+                </td>
               </tr>
             `;
           }).join('')}
@@ -24609,6 +25579,23 @@ async function loadSalesVelocityPage(){
     `;
   } catch(e) {
     container.innerHTML = `<div style="color:var(--danger);padding:14px;text-align:center">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// 🆕 v328: ضيف للـ watchlist من جدول sales-velocity
+async function svAddToWatchlist(btn, variantId){
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  try {
+    await apiFetch('/api/watchlist', 'POST', { variantId });
+    btn.style.background = '#f59e0b';
+    btn.style.color = '#fff';
+    btn.textContent = '✓';
+    toast('✅ اتضاف للمراقبة', 'success');
+  } catch(e){
+    btn.disabled = false;
+    btn.textContent = '⭐';
+    toast('❌ ' + e.message, 'error');
   }
 }
 
@@ -29896,6 +30883,7 @@ function goPage(el,page){
   if(page==='purchase-orders') loadPurchaseOrdersPage();
   if(page==='suppliers') loadSuppliersPage();
   if(page==='sales-velocity') loadSalesVelocityPage();
+  if(page==='watchlist') loadWatchlistPage();
   if(page==='replenishment') loadReplenishmentDashboard();
   if(page==='snapshots') loadSnapshotsPage();
   if(page==='zero-stocks') initZeroStocksPage();
