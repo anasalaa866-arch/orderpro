@@ -1,25 +1,28 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v329 — WATCHLIST SEARCH FIX (2026-05-22)
+  OrderPro v334 — PICKUP IN SETTLEMENT DETAILS (2026-05-22)
   ═══════════════════════════════════════════════════════════════════
-  🛠️ إصلاح: "Cannot read properties of null (reading 'products')"
+  ✨ تفاصيل تصفية الكاشير في OrderPro بقت تعرض الـ Pickup
   
-  السبب: كنت بستخدم /api/inventory (مش موجود)، الـ apiFetch بيرجع null،
-        و null.products بيعمل crash
+  أضيف قسمين جدد في modal تفاصيل التصفية:
   
-  الحل:
-  - Backend v241: endpoint جديد مخصص /api/watchlist/search
-    • أسرع (مفيش JOIN على levels غير اللي نحتاجه)
-    • يدور في title + sku + barcode + extra_barcodes
-    • ترتيب ذكي (exact match → starts_with → contains)
-  - Frontend: defensive parsing مع null checks
-    • يعرض رسالة واضحة لو مفيش نتائج للـ query
-    • Stock badge بجنب كل نتيجة
-    • عرض variant_title لو موجود
+  1. 📦 تسليم طلبات Pickup بـ COD (بفلوس):
+     - شريط برتقالي
+     - الطلبات اللي استلم الكاشير فلوسها (كاش/فيزا/انستا)
+     - بتدخل في إجمالي التصفية الفعلي
   
-  باقي الميزات الـ 6 شغّالة من v328:
-  ✅ Sparklines, Export, Cards, Deep Dive, Period Compare, Add-to-PO
+  2. ✅ تسليم Pickup مدفوع أونلاين (للمراجعة فقط):
+     - شريط أخضر
+     - الطلبات اللي اتدفعت أونلاين قبل التسليم
+     - مفيش فلوس بتدخل في التصفية
+     - بنعرضها للـ accountability (مين سلّم إيه ومتى)
+  
+  محتاج: server v246 (بيرجع pickupCollections و onlinePaidPickups)
+  
+  من v333 (محفوظ):
+  - 🆕 شريط فلاتر وذكي في modal "إنشاء طلب من مورد"
+  - 🆕 "املأ المعروض فقط" quick action
   ═══════════════════════════════════════════════════════════════════
 -->
 <html lang="ar" dir="rtl">
@@ -3572,6 +3575,7 @@ tr:hover td{background:#fafbff}
         <div style="font-weight:700;color:var(--accent);font-size:12px;margin-bottom:6px">⚡ Quick Actions:</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn btn-secondary btn-xs" onclick="reorderFillSuggested()" title="املأ كل الكميات بالمقترح">⚡ املأ بالمقترح</button>
+          <button class="btn btn-secondary btn-xs" onclick="reorderFillVisibleOnly()" title="املأ الكميات المعروضة فقط (بعد الفلتر) بالمقترح" style="background:#7c3aed;border-color:#7c3aed;color:#fff">👁️ املأ المعروض فقط</button>
           <button class="btn btn-secondary btn-xs" onclick="reorderFillCriticalOnly()" title="فقط المنتجات الحرجة">🔴 العاجل فقط</button>
           <button class="btn btn-ghost btn-xs" onclick="reorderClearAll()" style="color:var(--danger);border-color:var(--danger)">❌ امسح الكل</button>
           <button class="btn btn-ghost btn-xs" onclick="copyFromLastPO()" style="color:#3b82f6;border-color:#3b82f6">📋 نسخ من آخر طلب</button>
@@ -3602,6 +3606,61 @@ tr:hover td{background:#fafbff}
           <span><strong style="color:#fbbf24">🟡 متوسط</strong> - أقل من 30 يوم</span>
           <span><strong style="color:#22c55e">🟢 كافي</strong></span>
           <span><strong style="color:#94a3b8">💀 راكد</strong> - آخر القائمة</span>
+        </div>
+      </div>
+      
+      <!-- 🆕 v333: شريط فلاتر سريع للجدول -->
+      <div id="reorder-filter-bar" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+          <!-- Search -->
+          <div style="flex:1;min-width:180px;position:relative">
+            <label style="font-size:10px;color:var(--muted);font-weight:700;display:block;margin-bottom:3px">🔍 بحث</label>
+            <input id="reorder-f-search" type="text" placeholder="اسم المنتج أو SKU..." oninput="reorderOnFilterChange()" style="width:100%;padding:6px 10px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+          </div>
+          
+          <!-- Priority filter -->
+          <div>
+            <label style="font-size:10px;color:var(--muted);font-weight:700;display:block;margin-bottom:3px">الأولوية</label>
+            <select id="reorder-f-priority" onchange="reorderOnFilterChange()" style="padding:6px 8px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+              <option value="">— الكل —</option>
+              <option value="critical">🔴 نفد + 🚨 عاجل</option>
+              <option value="urgent">⚠️ قريب فقط</option>
+              <option value="medium">🟡 متوسط فقط</option>
+              <option value="ok">🟢 كافي فقط</option>
+              <option value="dead">💀 راكد فقط</option>
+            </select>
+          </div>
+          
+          <!-- Request status filter -->
+          <div>
+            <label style="font-size:10px;color:var(--muted);font-weight:700;display:block;margin-bottom:3px">حالة الطلب</label>
+            <select id="reorder-f-status" onchange="reorderOnFilterChange()" style="padding:6px 8px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+              <option value="">— الكل —</option>
+              <option value="requested">✅ ضفت كمية</option>
+              <option value="not_requested">⏳ مش ضفت كمية</option>
+              <option value="suggested">💡 اللي عليها اقتراح</option>
+            </select>
+          </div>
+          
+          <!-- Sort -->
+          <div>
+            <label style="font-size:10px;color:var(--muted);font-weight:700;display:block;margin-bottom:3px">ترتيب</label>
+            <select id="reorder-f-sort" onchange="reorderOnFilterChange()" style="padding:6px 8px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+              <option value="priority">الأولوية (افتراضي)</option>
+              <option value="days_remaining_asc">أيام متبقية ↑</option>
+              <option value="total_stock_asc">المخزون ↑</option>
+              <option value="avg_30d_desc">مبيع 30 يوم ↓</option>
+              <option value="suggested_desc">المقترح ↓</option>
+              <option value="requested_desc">المطلوب ↓</option>
+              <option value="title_asc">اسم المنتج (أ-ي)</option>
+            </select>
+          </div>
+          
+          <!-- Reset -->
+          <button onclick="reorderResetFilters()" style="padding:6px 10px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:11px;font-weight:700;cursor:pointer" title="مسح كل الفلاتر">↺ صفّر</button>
+          
+          <!-- Showing count -->
+          <div id="reorder-showing-count" style="margin-right:auto;font-size:11px;color:var(--muted);font-weight:600;padding:6px 0"></div>
         </div>
       </div>
       
@@ -3715,62 +3774,134 @@ tr:hover td{background:#fafbff}
   <!-- Stats Cards -->
   <div id="wl-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px"></div>
   
-  <!-- View toggle + filters -->
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <button class="wl-filter on" data-cat="" onclick="wlSetFilter(this, '')" style="padding:6px 14px;background:var(--accent);color:#fff;border:none;border-radius:99px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">الكل</button>
-      <button class="wl-filter" data-cat="hot" onclick="wlSetFilter(this, 'hot')" style="padding:6px 14px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:99px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🔥 الأكثر بيعاً</button>
-      <button class="wl-filter" data-cat="normal" onclick="wlSetFilter(this, 'normal')" style="padding:6px 14px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:99px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">✓ عادي</button>
-      <button class="wl-filter" data-cat="slow" onclick="wlSetFilter(this, 'slow')" style="padding:6px 14px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:99px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🐌 بطيء</button>
-      <button class="wl-filter" data-cat="dead" onclick="wlSetFilter(this, 'dead')" style="padding:6px 14px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:99px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">💀 راكد</button>
+  <!-- 🆕 v331: Sticky Filter Bar - يفضل ظاهر مع الـ scroll -->
+  <div id="wl-filter-bar" style="position:sticky;top:0;z-index:50;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.05)">
+    
+    <!-- Row 1: Search + View toggle + Reset -->
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+      <div style="flex:1;min-width:200px;position:relative">
+        <input id="wl-search" type="text" placeholder="🔍 ابحث بالاسم، الـ SKU، أو الباركود..." oninput="wlOnSearchInput(this.value)" style="width:100%;padding:8px 12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">
+        <button id="wl-search-clear" onclick="wlClearSearch()" style="display:none;position:absolute;left:8px;top:50%;transform:translateY(-50%);background:var(--bg);border:1px solid var(--border);border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:14px;color:var(--muted);padding:0;line-height:1">×</button>
+      </div>
+      
+      <!-- View toggle -->
+      <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+        <button id="wl-view-table" onclick="wlSetView('table')" style="padding:8px 14px;background:var(--accent);color:#fff;border:none;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer">📋 جدول</button>
+        <button id="wl-view-cards" onclick="wlSetView('cards')" style="padding:8px 14px;background:var(--bg);color:var(--text);border:none;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer">🖼️ كروت</button>
+      </div>
+      
+      <button onclick="wlResetAllFilters()" style="padding:8px 12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer">↺ إعادة تعيين</button>
     </div>
     
-    <!-- View mode toggle -->
-    <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-      <button id="wl-view-table" onclick="wlSetView('table')" style="padding:6px 14px;background:var(--accent);color:#fff;border:none;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer">📋 جدول</button>
-      <button id="wl-view-cards" onclick="wlSetView('cards')" style="padding:6px 14px;background:var(--bg);color:var(--text);border:none;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer">🖼️ كروت</button>
+    <!-- Row 2: Filters - Category | Trend | Stock Status | Warehouse -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:10px">
+      <div>
+        <label style="font-size:10px;color:var(--muted);font-weight:700;display:block;margin-bottom:3px">الفئة</label>
+        <select id="wl-f-category" onchange="wlOnFilterChange()" style="width:100%;padding:6px 8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+          <option value="">— الكل —</option>
+          <option value="hot">🔥 الأكثر بيعاً</option>
+          <option value="normal">✓ عادي</option>
+          <option value="slow">🐌 بطيء</option>
+          <option value="dead">💀 راكد</option>
+        </select>
+      </div>
+      
+      <div>
+        <label style="font-size:10px;color:var(--muted);font-weight:700;display:block;margin-bottom:3px">الاتجاه</label>
+        <select id="wl-f-trend" onchange="wlOnFilterChange()" style="width:100%;padding:6px 8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+          <option value="">— الكل —</option>
+          <option value="up">📈 صاعد</option>
+          <option value="stable">➡️ مستقر</option>
+          <option value="down">📉 هابط</option>
+        </select>
+      </div>
+      
+      <div>
+        <label style="font-size:10px;color:var(--muted);font-weight:700;display:block;margin-bottom:3px">حالة المخزون</label>
+        <select id="wl-f-stock" onchange="wlOnFilterChange()" style="width:100%;padding:6px 8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+          <option value="">— الكل —</option>
+          <option value="instock">✅ متوفر</option>
+          <option value="low">🚨 شبه نفد (&lt; 7 أيام)</option>
+          <option value="out">⛔ نفد</option>
+        </select>
+      </div>
+      
+      <div>
+        <label style="font-size:10px;color:var(--muted);font-weight:700;display:block;margin-bottom:3px">المخزن (يحتوي على)</label>
+        <select id="wl-f-warehouse" onchange="wlOnFilterChange()" style="width:100%;padding:6px 8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+          <option value="">— كل المخازن —</option>
+        </select>
+      </div>
     </div>
+    
+    <!-- Row 3: Sort + Period Comparison + Page Size -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <div>
+        <label style="font-size:10px;color:var(--muted);font-weight:700;display:block;margin-bottom:3px">ترتيب حسب</label>
+        <select id="wl-sort" onchange="wlOnFilterChange()" style="padding:6px 8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+          <option value="added_at">تاريخ الإضافة</option>
+          <option value="product_title">اسم المنتج</option>
+          <option value="avg_7d">مبيع 7 أيام/يوم</option>
+          <option value="avg_30d">مبيع 30 يوم/يوم</option>
+          <option value="avg_60d">مبيع 60 يوم/يوم</option>
+          <option value="avg_90d">مبيع 90 يوم/يوم</option>
+          <option value="sold_30d">إجمالي مبيع 30 يوم</option>
+          <option value="total_stock">المخزون الكلي</option>
+          <option value="days_remaining">أيام متبقية</option>
+          <option value="price">السعر</option>
+          <option value="trend_pct">نسبة التغيّر %</option>
+        </select>
+      </div>
+      
+      <div>
+        <label style="font-size:10px;color:var(--muted);font-weight:700;display:block;margin-bottom:3px">الترتيب</label>
+        <select id="wl-order" onchange="wlOnFilterChange()" style="padding:6px 8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+          <option value="desc">↓ تنازلي</option>
+          <option value="asc">↑ تصاعدي</option>
+        </select>
+      </div>
+      
+      <div style="background:linear-gradient(135deg,#ede9fe 0%,#ddd6fe 100%);border:1px solid #c4b5fd;border-radius:8px;padding:6px 10px;display:flex;align-items:center;gap:6px">
+        <span style="font-size:10px;font-weight:700;color:#5b21b6">📈 مقارنة:</span>
+        <select id="wl-compare-a" onchange="wlOnFilterChange()" style="padding:4px 6px;background:#fff;color:var(--text);border:1px solid #c4b5fd;border-radius:4px;font-family:Cairo,sans-serif;font-size:11px;font-weight:600">
+          <option value="avg_7d">7d</option>
+          <option value="avg_30d" selected>30d</option>
+          <option value="avg_60d">60d</option>
+          <option value="avg_90d">90d</option>
+        </select>
+        <span style="color:#7c3aed;font-weight:700">↔</span>
+        <select id="wl-compare-b" onchange="wlOnFilterChange()" style="padding:4px 6px;background:#fff;color:var(--text);border:1px solid #c4b5fd;border-radius:4px;font-family:Cairo,sans-serif;font-size:11px;font-weight:600">
+          <option value="avg_7d" selected>7d</option>
+          <option value="avg_30d">30d</option>
+          <option value="avg_60d">60d</option>
+          <option value="avg_90d">90d</option>
+        </select>
+      </div>
+      
+      <div style="margin-right:auto">
+        <label style="font-size:10px;color:var(--muted);font-weight:700;display:block;margin-bottom:3px">صفحة</label>
+        <select id="wl-page-size" onchange="wlChangePageSize()" style="padding:6px 8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+          <option value="25">25 منتج</option>
+          <option value="50" selected>50 منتج</option>
+          <option value="100">100 منتج</option>
+          <option value="200">200 منتج</option>
+        </select>
+      </div>
+    </div>
+    
+    <!-- Active filters indicator -->
+    <div id="wl-active-filters" style="margin-top:8px;font-size:11px;color:var(--muted);display:none"></div>
   </div>
   
-  <!-- Period comparison -->
-  <div style="background:linear-gradient(135deg,#ede9fe 0%,#ddd6fe 100%);border:1px solid #c4b5fd;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span style="font-size:12px;font-weight:700;color:#5b21b6">📈 مقارنة فترات:</span>
-    <select id="wl-compare-a" onchange="wlRenderProducts()" style="padding:5px 10px;background:#fff;color:var(--text);border:1px solid #c4b5fd;border-radius:6px;font-family:Cairo,sans-serif;font-size:12px;font-weight:600">
-      <option value="avg_7d">7 أيام</option>
-      <option value="avg_30d" selected>30 يوم</option>
-      <option value="avg_60d">60 يوم</option>
-      <option value="avg_90d">90 يوم</option>
-    </select>
-    <span style="font-size:14px;color:#7c3aed;font-weight:700">↔</span>
-    <select id="wl-compare-b" onchange="wlRenderProducts()" style="padding:5px 10px;background:#fff;color:var(--text);border:1px solid #c4b5fd;border-radius:6px;font-family:Cairo,sans-serif;font-size:12px;font-weight:600">
-      <option value="avg_7d" selected>7 أيام</option>
-      <option value="avg_30d">30 يوم</option>
-      <option value="avg_60d">60 يوم</option>
-      <option value="avg_90d">90 يوم</option>
-    </select>
-    <span style="font-size:11px;color:#7c3aed">— شوف لو المنتج صاعد أو نازل بين الفترتين</span>
-  </div>
-  
-  <!-- Sort -->
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-    <span style="font-size:12px;color:var(--muted)">ترتيب حسب:</span>
-    <select id="wl-sort" onchange="wlRenderProducts()" style="padding:5px 10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
-      <option value="added_at">تاريخ الإضافة</option>
-      <option value="avg_30d">متوسط 30 يوم</option>
-      <option value="avg_7d">متوسط 7 أيام</option>
-      <option value="total_stock">المخزون</option>
-      <option value="days_remaining">أيام متبقية</option>
-      <option value="product_title">اسم المنتج</option>
-    </select>
-    <select id="wl-order" onchange="wlRenderProducts()" style="padding:5px 10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
-      <option value="desc">↓ تنازلي</option>
-      <option value="asc">↑ تصاعدي</option>
-    </select>
-  </div>
+  <!-- Results count -->
+  <div id="wl-results-info" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
   
   <div class="card">
     <div id="wl-content-container" style="padding:14px;overflow-x:auto"></div>
   </div>
+  
+  <!-- Pagination -->
+  <div id="wl-pagination" style="margin-top:14px;display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap"></div>
 </div>
 
 <!-- ============================================================ -->
@@ -12080,6 +12211,98 @@ async function openSettlementDetails(id){
       `;
     }
 
+    // 🆕 v334: تسليمات pickup بـ COD (بفلوس)
+    const pickupColl = r.pickupCollections || [];
+    if(pickupColl.length){
+      const methodLabels2 = {
+        cash: { icon: '💵', label: 'كاش', color: '#16a34a' },
+        visa: { icon: '💳', label: 'فيزا', color: '#6366f1' },
+        instapay: { icon: '📱', label: 'انستاباي', color: '#4f46e5' },
+        mixed: { icon: '🔀', label: 'مدمج', color: '#a855f7' }
+      };
+      const pickupTotal = pickupColl.reduce((t, p) => t + p.amount_collected, 0);
+      html += `
+        <div style="margin-bottom:14px;margin-top:18px;padding-top:14px;border-top:2px dashed #f97316">
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#f97316;color:#fff;padding:8px 12px;border-radius:8px 8px 0 0;font-weight:800">
+            <span>📦 تسليم طلبات Pickup بـ COD <span style="opacity:.85;font-weight:600">(${pickupColl.length} طلب)</span></span>
+            <span>${pickupTotal.toLocaleString()} ج</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;overflow:hidden">
+            <thead>
+              <tr style="background:var(--bg)">
+                <th style="padding:6px 8px;text-align:right">رقم الطلب</th>
+                <th style="padding:6px 8px;text-align:right">الوقت</th>
+                <th style="padding:6px 8px;text-align:right">العميل</th>
+                <th style="padding:6px 8px;text-align:right">طريقة الدفع</th>
+                <th style="padding:6px 8px;text-align:left">المبلغ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pickupColl.map(p => {
+                const time = new Date(p.collected_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'});
+                const m = methodLabels2[p.primary_method] || { icon: '•', label: p.primary_method || '—', color: '#6b7280' };
+                const paysStr = (p.payments || []).map(pp => {
+                  const mi = methodLabels2[pp.method]?.icon || '•';
+                  return `${mi} ${parseFloat(pp.amount).toFixed(0)}`;
+                }).join(' + ');
+                return `
+                  <tr style="border-top:1px solid var(--border)">
+                    <td style="padding:6px 8px;font-family:monospace;font-size:11px">SH-${escapeHtml(String(p.order_id))}</td>
+                    <td style="padding:6px 8px">${time}</td>
+                    <td style="padding:6px 8px">${escapeHtml(p.customer_name || '-')}</td>
+                    <td style="padding:6px 8px;font-size:11px">${paysStr || (m.icon + ' ' + m.label)}</td>
+                    <td style="padding:6px 8px;text-align:left;font-weight:700">${p.amount_collected.toLocaleString()} ج</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+    
+    // 🆕 v334: طلبات pickup مدفوعة أونلاين (للمراجعة فقط - مفيش فلوس)
+    const onlinePaidP = r.onlinePaidPickups || [];
+    if(onlinePaidP.length){
+      const onlinePaidTotal = onlinePaidP.reduce((t, p) => t + p.order_total, 0);
+      html += `
+        <div style="margin-bottom:14px;margin-top:18px;padding-top:14px;border-top:2px dashed #22c55e">
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#22c55e;color:#fff;padding:8px 12px;border-radius:8px 8px 0 0;font-weight:800">
+            <span>✅ تسليم Pickup مدفوع أونلاين <span style="opacity:.85;font-weight:600">(${onlinePaidP.length} طلب)</span></span>
+            <span style="font-size:12px;font-weight:600">قيمة: ${onlinePaidTotal.toLocaleString()} ج</span>
+          </div>
+          <div style="background:#dcfce7;border:1px solid #86efac;border-top:none;padding:8px 12px;font-size:12px;color:#166534;line-height:1.6">
+            ℹ️ الطلبات دي اتدفعت أونلاين قبل التسليم — <strong>مفيش فلوس بتدخل في التصفية</strong>. السجل هنا للمراجعة فقط (مين سلّم إيه ومتى).
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;overflow:hidden">
+            <thead>
+              <tr style="background:var(--bg)">
+                <th style="padding:6px 8px;text-align:right">رقم الطلب</th>
+                <th style="padding:6px 8px;text-align:right">الوقت</th>
+                <th style="padding:6px 8px;text-align:right">العميل</th>
+                <th style="padding:6px 8px;text-align:right">تليفون</th>
+                <th style="padding:6px 8px;text-align:left">قيمة الطلب</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${onlinePaidP.map(p => {
+                const time = new Date(p.collected_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'});
+                return `
+                  <tr style="border-top:1px solid var(--border)">
+                    <td style="padding:6px 8px;font-family:monospace;font-size:11px;color:#16a34a">SH-${escapeHtml(String(p.order_id))}</td>
+                    <td style="padding:6px 8px">${time}</td>
+                    <td style="padding:6px 8px">${escapeHtml(p.customer_name || '-')}</td>
+                    <td style="padding:6px 8px;font-family:Roboto,sans-serif;font-size:11px">${escapeHtml(p.customer_phone || '-')}</td>
+                    <td style="padding:6px 8px;text-align:left;font-weight:700;color:#16a34a">${p.order_total.toLocaleString()} ج</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
     cont.innerHTML = html;
   } catch(e) {
     cont.innerHTML = `<div style="color:#dc2626;padding:14px">❌ ${escapeHtml(e.message)}</div>`;
@@ -20179,8 +20402,12 @@ function renderWeeklyReport(){
       const bg=isNow?'#fff8e1':hasPast&&w.pending.length>0?'#fff5f5':'';
       const pendingAmt=w.pending.reduce((s,c)=>s+Number(c.amount),0);
       const doneAmt=w.done.reduce((s,c)=>s+Number(c.amount),0);
-      return`<tr style="background:${bg}">
-        <td><strong style="color:${isNow?'var(--warn)':'var(--text)'}">أسبوع ${w.w}${isNow?' ◀ الآن':''}</strong></td>
+      // 🆕 v332: لو الأسبوع فيه شيكات، خليه قابل للضغط
+      const hasChecks = w.checks.length > 0;
+      const clickHandler = hasChecks ? `onclick="openWeekChecksModal(${w.w})" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${bg}'"` : '';
+      const cursor = hasChecks ? 'cursor:pointer' : '';
+      return`<tr style="background:${bg};${cursor}" ${clickHandler} ${hasChecks ? 'title="اضغط لعرض الشيكات"' : ''}>
+        <td><strong style="color:${isNow?'var(--warn)':'var(--text)'}">أسبوع ${w.w}${isNow?' ◀ الآن':''}${hasChecks ? ' <span style="font-size:10px;color:var(--accent);font-weight:400">👁️</span>' : ''}</strong></td>
         <td style="font-size:11px">${w.start.toLocaleDateString('ar-EG',{month:'short',day:'numeric'})}</td>
         <td style="font-size:11px">${w.end.toLocaleDateString('ar-EG',{month:'short',day:'numeric'})}</td>
         <td>${w.checks.length||'—'}</td>
@@ -20189,6 +20416,189 @@ function renderWeeklyReport(){
         <td style="color:${pendingAmt>0?'var(--warn)':'var(--muted)'}">${pendingAmt>0?pendingAmt.toLocaleString()+' ج':'—'}</td>
       </tr>`;
     }).join('');
+}
+
+// 🆕 v332: فتح modal بتفاصيل شيكات أسبوع معين
+function openWeekChecksModal(weekNum){
+  const year = new Date().getFullYear();
+  
+  // اعد حساب نطاق الأسبوع (نفس الـ logic بتاع renderWeeklyReport)
+  const yearStart = new Date(year, 0, 1);
+  const yearStartDay = yearStart.getDay();
+  const daysToFirstFriday = (5 - yearStartDay + 7) % 7;
+  const firstFriday = new Date(year, 0, 1 + daysToFirstFriday - 7);
+  
+  const start = new Date(firstFriday);
+  start.setDate(firstFriday.getDate() + (weekNum - 1) * 7);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  
+  // فلتر الشيكات
+  const weekChecks = chkList.filter(c => {
+    const d = new Date(c.date);
+    return d >= start && d <= end;
+  });
+  
+  // إحصائيات
+  const total = weekChecks.reduce((s, c) => s + Number(c.amount), 0);
+  const pendingChks = weekChecks.filter(c => c.status === 'pending');
+  const doneChks = weekChecks.filter(c => c.status === 'done');
+  const voidChks = weekChecks.filter(c => c.status === 'void' || c.status === 'void_requested');
+  const pendingAmt = pendingChks.reduce((s, c) => s + Number(c.amount), 0);
+  const doneAmt = doneChks.reduce((s, c) => s + Number(c.amount), 0);
+  
+  // امسح modal قديم
+  const existing = document.getElementById('week-checks-modal');
+  if(existing) existing.remove();
+  
+  const modal = document.createElement('div');
+  modal.id = 'week-checks-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px)';
+  
+  // رتب الشيكات بـ status (pending أولاً، done أخيراً) ثم تاريخ
+  const sorted = weekChecks.slice().sort((a, b) => {
+    const order = { pending: 0, void_requested: 1, void: 2, done: 3 };
+    const oa = order[a.status] ?? 9;
+    const ob = order[b.status] ?? 9;
+    if(oa !== ob) return oa - ob;
+    return new Date(a.date) - new Date(b.date);
+  });
+  
+  const checksRows = sorted.map(c => {
+    const book = chkBooks.find(b => b.id === c.bookId);
+    const days = chkDaysUntil(c.date);
+    const isOverdue = c.status === 'pending' && days < 0;
+    const bg = c.status === 'done' ? '#f0fdf4' : c.status === 'void' || c.status === 'void_requested' ? '#f3f4f6' : isOverdue ? '#fef2f2' : '#fff';
+    const dayLbl = c.status === 'pending' 
+      ? (days < 0 ? `<span style="color:var(--danger);font-size:10px;font-weight:700">⚠️ ${Math.abs(days)} يوم تأخير</span>` 
+        : days <= 7 ? `<span style="color:var(--warn);font-size:10px">بعد ${days} أيام</span>` : '')
+      : '';
+    return `
+      <tr style="background:${bg};border-bottom:1px solid var(--border)">
+        <td style="padding:8px;font-weight:700">${c.num || '—'}</td>
+        <td style="padding:8px">
+          <strong>${escapeHtml(c.payee || '—')}</strong>
+          ${c.note ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(c.note)}</div>` : ''}
+        </td>
+        <td style="padding:8px;font-weight:700;font-size:13px">${chkFmtAmount(c.amount)} ج</td>
+        <td style="padding:8px;font-size:11px">${chkFmtDate(c.date)}<br>${dayLbl}</td>
+        <td style="padding:8px;font-size:11px;color:var(--muted)">${book ? escapeHtml(book.name) : '—'}</td>
+        <td style="padding:8px;font-size:11px;color:var(--muted)">${c.invoice ? escapeHtml(c.invoice) : '—'}</td>
+        <td style="padding:8px;text-align:center">${chkGetBadge(c)}</td>
+        <td style="padding:8px;text-align:center">
+          ${c.img ? `<button class="btn btn-ghost btn-xs" onclick="viewChkImg('${c.id}')" title="عرض الصورة">🖼️</button>` : '—'}
+        </td>
+        <td style="padding:8px">
+          <div style="display:flex;gap:3px;flex-wrap:wrap">
+            ${c.status === 'pending' ? `<button class="btn btn-xs" style="background:var(--success);color:#fff;border:none" onclick="chkMarkDone('${c.id}');closeWeekChecksModal();" title="ضع كمصروف">✅</button>` : ''}
+            ${c.status === 'done' ? `<button class="btn btn-ghost btn-xs" onclick="chkMarkPending('${c.id}');closeWeekChecksModal();" title="إلغاء الصرف">↩️</button>` : ''}
+            <button class="btn btn-ghost btn-xs" onclick="openEditChk('${c.id}');document.getElementById('week-checks-modal').remove();" title="تعديل">✏️</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+  
+  modal.innerHTML = `
+    <div style="background:var(--card);border-radius:14px;padding:0;max-width:1100px;width:100%;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;border:1px solid var(--border)">
+      
+      <!-- Header -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:var(--accent-light)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+          <div style="flex:1">
+            <h3 style="margin:0;color:var(--accent);font-size:18px;font-weight:900">📅 شيكات أسبوع ${weekNum}</h3>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">
+              ${start.toLocaleDateString('ar-EG', {weekday:'long', day:'numeric', month:'long'})} 
+              → 
+              ${end.toLocaleDateString('ar-EG', {weekday:'long', day:'numeric', month:'long', year:'numeric'})}
+            </div>
+          </div>
+          <button onclick="closeWeekChecksModal()" style="background:transparent;border:none;color:var(--muted);font-size:28px;cursor:pointer;line-height:1;padding:0">×</button>
+        </div>
+        
+        <!-- Stats Pills -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-top:12px">
+          <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:10px;color:var(--muted);font-weight:700">📋 إجمالي</div>
+            <div style="font-size:18px;font-weight:900">${weekChecks.length} شيك</div>
+            <div style="font-size:11px;color:var(--text);font-weight:700">${chkFmtAmount(total)} ج</div>
+          </div>
+          <div style="background:#fff8e1;border:1px solid #fbbf24;border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:10px;color:#92400e;font-weight:700">⏳ لم يُصرف</div>
+            <div style="font-size:18px;font-weight:900;color:var(--warn)">${pendingChks.length}</div>
+            <div style="font-size:11px;color:var(--warn);font-weight:700">${chkFmtAmount(pendingAmt)} ج</div>
+          </div>
+          <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:10px;color:#15803d;font-weight:700">✅ تم صرفه</div>
+            <div style="font-size:18px;font-weight:900;color:var(--success)">${doneChks.length}</div>
+            <div style="font-size:11px;color:var(--success);font-weight:700">${chkFmtAmount(doneAmt)} ج</div>
+          </div>
+          ${voidChks.length ? `
+            <div style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:10px;color:#374151;font-weight:700">⛔ هالك</div>
+              <div style="font-size:18px;font-weight:900;color:#6b7280">${voidChks.length}</div>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+      
+      <!-- Table -->
+      <div style="flex:1;overflow:auto;padding:0">
+        ${weekChecks.length === 0 ? `
+          <div style="text-align:center;padding:50px 20px;color:var(--muted)">
+            <div style="font-size:48px;opacity:.3;margin-bottom:8px">📭</div>
+            <div style="font-size:14px">مفيش شيكات في الأسبوع ده</div>
+          </div>
+        ` : `
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead style="position:sticky;top:0;background:var(--bg);z-index:1">
+              <tr style="border-bottom:2px solid var(--border)">
+                <th style="padding:10px 8px;text-align:right">رقم</th>
+                <th style="padding:10px 8px;text-align:right">لصالح</th>
+                <th style="padding:10px 8px;text-align:right">القيمة</th>
+                <th style="padding:10px 8px;text-align:right">الاستحقاق</th>
+                <th style="padding:10px 8px;text-align:right">الدفتر</th>
+                <th style="padding:10px 8px;text-align:right">فاتورة</th>
+                <th style="padding:10px 8px;text-align:center">الحالة</th>
+                <th style="padding:10px 8px;text-align:center">صورة</th>
+                <th style="padding:10px 8px;text-align:right">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody>${checksRows}</tbody>
+          </table>
+        `}
+      </div>
+      
+      <!-- Footer -->
+      <div style="padding:12px 20px;border-top:1px solid var(--border);background:var(--bg);display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div style="font-size:11px;color:var(--muted)">
+          💡 الـ ✅ لصرف الشيك, ↩️ لإلغاء الصرف, ✏️ للتعديل
+        </div>
+        <button onclick="closeWeekChecksModal()" class="btn btn-ghost btn-sm">إغلاق</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  // اقفل بـ Escape
+  document.addEventListener('keydown', _weekModalEscHandler);
+  // اقفل بالضغط على الـ overlay
+  modal.addEventListener('click', (e) => {
+    if(e.target === modal) closeWeekChecksModal();
+  });
+}
+
+function _weekModalEscHandler(e){
+  if(e.key === 'Escape') closeWeekChecksModal();
+}
+
+function closeWeekChecksModal(){
+  const modal = document.getElementById('week-checks-modal');
+  if(modal) modal.remove();
+  document.removeEventListener('keydown', _weekModalEscHandler);
 }
 
 function renderSuppliersReport(){
@@ -24078,6 +24488,8 @@ async function openSupplierReorder(supplierId){
     document.getElementById('reorder-table-wrapper').style.display = 'block';
     document.getElementById('reorder-totals').style.display = 'block';
     document.getElementById('reorder-legend').style.display = 'block';
+    // 🆕 v333: أظهر الـ filter bar
+    document.getElementById('reorder-filter-bar').style.display = 'block';
     
     // حساب الكميات المقترحة
     recalcSuggested();
@@ -24146,11 +24558,155 @@ function recalcSuggested(){
   updateReorderTotals();
 }
 
+// 🆕 v333: Filter state للجدول
+let _reorderFilters = {
+  search: '',
+  priority: '',
+  status: '',
+  sort: 'priority'
+};
+
+function reorderOnFilterChange(){
+  _reorderFilters.search = (document.getElementById('reorder-f-search')?.value || '').trim().toLowerCase();
+  _reorderFilters.priority = document.getElementById('reorder-f-priority')?.value || '';
+  _reorderFilters.status = document.getElementById('reorder-f-status')?.value || '';
+  _reorderFilters.sort = document.getElementById('reorder-f-sort')?.value || 'priority';
+  renderReorderTable();
+}
+
+function reorderResetFilters(){
+  document.getElementById('reorder-f-search').value = '';
+  document.getElementById('reorder-f-priority').value = '';
+  document.getElementById('reorder-f-status').value = '';
+  document.getElementById('reorder-f-sort').value = 'priority';
+  _reorderFilters = { search: '', priority: '', status: '', sort: 'priority' };
+  renderReorderTable();
+}
+
+// 🆕 v333: applyReorderFilters → بيرجع الـ filtered + sorted list مع indices أصلية
+// (الـ indices أصلية مهمة عشان الـ inputs بتربط بـ idx في الـ array الأصلي)
+function applyReorderFilters(){
+  // ابني array من {product, originalIdx}
+  let list = _reorderProducts.map((p, idx) => ({ p, idx }));
+  
+  // 1) Search
+  if(_reorderFilters.search){
+    const q = _reorderFilters.search;
+    list = list.filter(({p}) => {
+      const title = (p.product_title || '').toLowerCase();
+      const variant = (p.variant_title || '').toLowerCase();
+      const sku = (p.sku || '').toLowerCase();
+      const barcode = (p.barcode || '').toLowerCase();
+      return title.includes(q) || variant.includes(q) || sku.includes(q) || barcode.includes(q);
+    });
+  }
+  
+  // 2) Priority filter
+  if(_reorderFilters.priority){
+    list = list.filter(({p}) => {
+      const lbl = p.priority_label || '';
+      switch(_reorderFilters.priority){
+        case 'critical': return lbl.includes('نفد') || lbl.includes('عاجل');
+        case 'urgent':   return lbl.includes('قريب');
+        case 'medium':   return lbl.includes('متوسط');
+        case 'ok':       return lbl.includes('كافي');
+        case 'dead':     return lbl.includes('راكد');
+        default: return true;
+      }
+    });
+  }
+  
+  // 3) Request status filter
+  if(_reorderFilters.status){
+    list = list.filter(({p}) => {
+      switch(_reorderFilters.status){
+        case 'requested':     return (p.requested_qty || 0) > 0;
+        case 'not_requested': return (p.requested_qty || 0) === 0;
+        case 'suggested':     return ((p.ai_suggested_qty != null ? p.ai_suggested_qty : p.suggested_qty) || 0) > 0;
+        default: return true;
+      }
+    });
+  }
+  
+  // 4) Sort
+  const sortKey = _reorderFilters.sort;
+  list.sort((a, b) => {
+    const pa = a.p, pb = b.p;
+    switch(sortKey){
+      case 'priority':
+        // اللي عنده priority_score أقل، يطلع فوق (نفس الـ default logic)
+        return (pa.priority_score ?? 9999) - (pb.priority_score ?? 9999);
+      case 'days_remaining_asc':
+        return (parseFloat(pa.days_remaining) || 9999) - (parseFloat(pb.days_remaining) || 9999);
+      case 'total_stock_asc':
+        return (parseInt(pa.total_stock) || 0) - (parseInt(pb.total_stock) || 0);
+      case 'avg_30d_desc':
+        return (parseFloat(pb.avg_30d) || 0) - (parseFloat(pa.avg_30d) || 0);
+      case 'suggested_desc': {
+        const sa = (pa.ai_suggested_qty != null ? pa.ai_suggested_qty : pa.suggested_qty) || 0;
+        const sb = (pb.ai_suggested_qty != null ? pb.ai_suggested_qty : pb.suggested_qty) || 0;
+        return sb - sa;
+      }
+      case 'requested_desc':
+        return (parseInt(pb.requested_qty) || 0) - (parseInt(pa.requested_qty) || 0);
+      case 'title_asc':
+        return (pa.product_title || '').localeCompare(pb.product_title || '');
+      default:
+        return 0;
+    }
+  });
+  
+  return list;
+}
+
 function renderReorderTable(){
   const wrapper = document.getElementById('reorder-table-wrapper');
   
   if(!_reorderProducts.length){
     wrapper.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)"><div style="font-size:36px;opacity:.3">📦</div><div>مفيش منتجات في قائمة المورد ده</div><div style="font-size:11px;margin-top:4px">ضيف منتجات من زرار "➕ إضافة" فوق</div></div>';
+    // اخفي عداد العرض
+    const showingEl = document.getElementById('reorder-showing-count');
+    if(showingEl) showingEl.textContent = '';
+    return;
+  }
+  
+  // 🆕 v333: طبّق الفلاتر والترتيب
+  const filtered = applyReorderFilters();
+  
+  // عداد العرض
+  const showingEl = document.getElementById('reorder-showing-count');
+  if(showingEl){
+    if(filtered.length === _reorderProducts.length){
+      showingEl.textContent = `📊 عرض ${_reorderProducts.length} منتج`;
+    } else {
+      showingEl.innerHTML = `📊 ظاهر <strong style="color:var(--accent)">${filtered.length}</strong> من ${_reorderProducts.length} منتج`;
+    }
+  }
+  
+  // Empty state للفلتر
+  if(!filtered.length){
+    // Headers لسه بناخدها عشان structure
+    let headerCells = `<th style="padding:8px;text-align:right;background:#1e293b;color:#fff">المنتج</th>`;
+    _reorderWarehouses.forEach(w => {
+      headerCells += `<th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px">${escapeHtml(w.name.slice(0,12))}</th>`;
+    });
+    headerCells += `<th colspan="7" style="padding:8px;background:#1e293b"></th>`;
+    
+    wrapper.innerHTML = `
+      <table style="width:100%;font-size:12px;border-collapse:collapse">
+        <thead><tr>${headerCells}</tr></thead>
+        <tbody>
+          <tr>
+            <td colspan="${_reorderWarehouses.length + 8}" style="padding:40px;text-align:center;color:var(--muted)">
+              <div style="font-size:36px;opacity:.3;margin-bottom:8px">🔍</div>
+              <div style="font-size:13px;font-weight:700;margin-bottom:4px">مفيش نتائج للفلتر ده</div>
+              <div style="font-size:11px;margin-bottom:10px">جرّب تغير الفلاتر أو</div>
+              <button onclick="reorderResetFilters()" style="padding:6px 12px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-family:Cairo,sans-serif;font-size:11px;font-weight:700;cursor:pointer">↺ صفّر الفلاتر</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    `;
     return;
   }
   
@@ -24173,8 +24729,8 @@ function renderReorderTable(){
     <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px"></th>
   `;
   
-  // Body
-  const rows = _reorderProducts.map((p, idx) => {
+  // Body — استخدام filtered (مع idx الأصلي)
+  const rows = filtered.map(({p, idx}) => {
     // مخزون كل مخزن
     const whCells = _reorderWarehouses.map(w => {
       const inv = (p.inventory || []).find(i => i.warehouse_id === w.id);
@@ -24570,10 +25126,14 @@ function exportReorderPDF(){
 // ============================================================
 // 🆕 v328: PRODUCT WATCHLIST
 // منتجات بنحب نتابعها بشكل خاص — قائمة منفصلة عن الـ catalog
+// 🆕 v331: + filters, search, pagination
 // ============================================================
 let _wlData = null;          // البيانات المحملة من الـ server
-let _wlFilter = '';          // فلتر الـ category
 let _wlView = 'table';       // 'table' أو 'cards'
+let _wlCurrentPage = 1;      // الصفحة الحالية في الـ pagination
+let _wlPageSize = 50;        // عدد المنتجات في الصفحة
+let _wlSearchQuery = '';     // النص اللي في خانة البحث (debounced)
+let _wlFilterSearchTimer = null;   // debounce timer للبحث في الـ filter bar
 
 async function loadWatchlistPage(){
   const container = document.getElementById('wl-content-container');
@@ -24587,6 +25147,7 @@ async function loadWatchlistPage(){
     
     const stats = r.stats || {};
     const products = r.products || [];
+    const warehouses = r.warehouses || [];
     
     // Badge في الـ sidebar
     const navBadge = document.getElementById('nb-watchlist');
@@ -24600,8 +25161,21 @@ async function loadWatchlistPage(){
       titleBadge.style.display = products.length > 0 ? '' : 'none';
     }
     
+    // 🆕 v331: عبّي dropdown المخازن بأسماء المخازن النشطة
+    const whSelect = document.getElementById('wl-f-warehouse');
+    if(whSelect){
+      // احتفظ بالقيمة المختارة لو في
+      const prev = whSelect.value;
+      whSelect.innerHTML = '<option value="">— كل المخازن —</option>' +
+        warehouses.map(w => `<option value="${w.id}">${w.is_pos ? '🏪' : '📦'} ${escapeHtml(w.name || '')}</option>`).join('');
+      if(prev) whSelect.value = prev;
+    }
+    
     // Stats cards
     wlRenderStats(stats);
+    
+    // Reset لـ صفحة 1 لما يحصل refresh
+    _wlCurrentPage = 1;
     
     // المنتجات (table أو cards)
     wlRenderProducts();
@@ -24664,19 +25238,69 @@ function wlRenderStats(stats){
   `;
 }
 
-function wlSetFilter(btn, cat){
-  _wlFilter = cat;
-  document.querySelectorAll('.wl-filter').forEach(b => {
-    b.classList.remove('on');
-    b.style.background = 'var(--bg)';
-    b.style.color = 'var(--text)';
-    b.style.border = '1px solid var(--border)';
-  });
-  btn.classList.add('on');
-  btn.style.background = 'var(--accent)';
-  btn.style.color = '#fff';
-  btn.style.border = 'none';
+// 🆕 v331: Filter change handler (سواء dropdown أو search)
+function wlOnFilterChange(){
+  _wlCurrentPage = 1; // أي تغيير في الفلتر يرجعنا لصفحة 1
   wlRenderProducts();
+}
+
+// 🆕 v331: Search debounce - متعملش render مع كل حرف
+function wlOnSearchInput(value){
+  _wlSearchQuery = (value || '').trim().toLowerCase();
+  
+  // toggle clear button
+  const clearBtn = document.getElementById('wl-search-clear');
+  if(clearBtn) clearBtn.style.display = value ? '' : 'none';
+  
+  clearTimeout(_wlFilterSearchTimer);
+  _wlFilterSearchTimer = setTimeout(() => {
+    _wlCurrentPage = 1;
+    wlRenderProducts();
+  }, 250);
+}
+
+function wlClearSearch(){
+  const input = document.getElementById('wl-search');
+  if(input){ input.value = ''; input.focus(); }
+  _wlSearchQuery = '';
+  document.getElementById('wl-search-clear').style.display = 'none';
+  _wlCurrentPage = 1;
+  wlRenderProducts();
+}
+
+// 🆕 v331: Reset كل الفلاتر
+function wlResetAllFilters(){
+  document.getElementById('wl-search').value = '';
+  document.getElementById('wl-search-clear').style.display = 'none';
+  _wlSearchQuery = '';
+  document.getElementById('wl-f-category').value = '';
+  document.getElementById('wl-f-trend').value = '';
+  document.getElementById('wl-f-stock').value = '';
+  document.getElementById('wl-f-warehouse').value = '';
+  document.getElementById('wl-sort').value = 'added_at';
+  document.getElementById('wl-order').value = 'desc';
+  document.getElementById('wl-compare-a').value = 'avg_30d';
+  document.getElementById('wl-compare-b').value = 'avg_7d';
+  _wlCurrentPage = 1;
+  wlRenderProducts();
+  toast('✅ اتفلترت كل الإعدادات', 'success');
+}
+
+// 🆕 v331: تغيير عدد المنتجات في الصفحة
+function wlChangePageSize(){
+  const sel = document.getElementById('wl-page-size');
+  _wlPageSize = parseInt(sel?.value) || 50;
+  _wlCurrentPage = 1;
+  wlRenderProducts();
+}
+
+// 🆕 v331: الانتقال لصفحة معينة
+function wlGoToPage(page){
+  _wlCurrentPage = page;
+  wlRenderProducts();
+  // scroll للأعلى عشان نشوف الـ filter bar وأول منتجات الصفحة الجديدة
+  const filterBar = document.getElementById('wl-filter-bar');
+  if(filterBar) filterBar.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function wlSetView(view){
@@ -24697,34 +25321,96 @@ function wlSetView(view){
   wlRenderProducts();
 }
 
+// 🆕 v331: الـ render الرئيسية - بتطبق كل الفلاتر + الـ sort + pagination
 function wlRenderProducts(){
   const container = document.getElementById('wl-content-container');
   if(!container || !_wlData) return;
   
   let products = (_wlData.products || []).slice();
+  const totalLoaded = products.length;
   
-  // فلتر
-  if(_wlFilter){
-    products = products.filter(p => p.category === _wlFilter);
+  // ─── الفلاتر ───
+  
+  // 1) Search
+  if(_wlSearchQuery){
+    const q = _wlSearchQuery;
+    products = products.filter(p => {
+      const title = (p.product_title || '').toLowerCase();
+      const variant = (p.variant_title || '').toLowerCase();
+      const sku = (p.sku || '').toLowerCase();
+      const barcode = (p.barcode || '').toLowerCase();
+      const notes = (p.notes || '').toLowerCase();
+      return title.includes(q) || variant.includes(q) || sku.includes(q) || barcode.includes(q) || notes.includes(q);
+    });
   }
   
-  // ترتيب
+  // 2) Category
+  const fCat = document.getElementById('wl-f-category')?.value || '';
+  if(fCat) products = products.filter(p => p.category === fCat);
+  
+  // 3) Trend
+  const fTrend = document.getElementById('wl-f-trend')?.value || '';
+  if(fTrend) products = products.filter(p => p.trend === fTrend);
+  
+  // 4) Stock status
+  const fStock = document.getElementById('wl-f-stock')?.value || '';
+  if(fStock === 'out') products = products.filter(p => (p.total_stock || 0) === 0);
+  else if(fStock === 'low') products = products.filter(p => p.days_remaining < 7 && p.avg_30d > 0);
+  else if(fStock === 'instock') products = products.filter(p => (p.total_stock || 0) > 0);
+  
+  // 5) Warehouse - منتج له qty > 0 في المخزن ده
+  const fWh = document.getElementById('wl-f-warehouse')?.value || '';
+  if(fWh) products = products.filter(p => {
+    const stocks = p.stockByWarehouse || {};
+    return (stocks[fWh] || 0) > 0;
+  });
+  
+  // ─── الترتيب ───
   const sortBy = document.getElementById('wl-sort')?.value || 'added_at';
   const order = document.getElementById('wl-order')?.value || 'desc';
+  const compareA = document.getElementById('wl-compare-a')?.value || 'avg_30d';
+  const compareB = document.getElementById('wl-compare-b')?.value || 'avg_7d';
+  
   products.sort((a, b) => {
-    let va = a[sortBy];
-    let vb = b[sortBy];
-    // نصوص (product_title)
+    let va, vb;
+    
+    // sort خاص بنسبة التغيّر
+    if(sortBy === 'trend_pct'){
+      const aA = parseFloat(a[compareA] || 0);
+      const aB = parseFloat(a[compareB] || 0);
+      const bA = parseFloat(b[compareA] || 0);
+      const bB = parseFloat(b[compareB] || 0);
+      va = aA > 0 ? ((aB - aA) / aA) * 100 : 0;
+      vb = bA > 0 ? ((bB - bA) / bA) * 100 : 0;
+      return order === 'asc' ? va - vb : vb - va;
+    }
+    
+    va = a[sortBy];
+    vb = b[sortBy];
+    
+    // نصوص
     if(typeof va === 'string'){
       return order === 'asc' ? va.localeCompare(vb || '') : (vb || '').localeCompare(va);
     }
-    // أرقام أو تواريخ
-    va = (sortBy === 'added_at') ? new Date(va).getTime() : (parseFloat(va) || 0);
-    vb = (sortBy === 'added_at') ? new Date(vb).getTime() : (parseFloat(vb) || 0);
+    // تواريخ
+    if(sortBy === 'added_at'){
+      va = new Date(va).getTime();
+      vb = new Date(vb).getTime();
+    } else {
+      va = parseFloat(va) || 0;
+      vb = parseFloat(vb) || 0;
+    }
     return order === 'asc' ? va - vb : vb - va;
   });
   
-  if(!products.length){
+  const totalFiltered = products.length;
+  
+  // ─── معلومات النتائج + Active filters ───
+  wlUpdateResultsInfo(totalLoaded, totalFiltered);
+  wlUpdateActiveFiltersIndicator();
+  
+  // ─── Empty states ───
+  if(!totalLoaded){
     container.innerHTML = `
       <div style="text-align:center;padding:50px 20px;color:var(--muted)">
         <div style="font-size:64px;opacity:.3;margin-bottom:10px">⭐</div>
@@ -24736,14 +25422,143 @@ function wlRenderProducts(){
         </div>
       </div>
     `;
+    document.getElementById('wl-pagination').innerHTML = '';
     return;
   }
   
-  if(_wlView === 'cards'){
-    container.innerHTML = wlRenderCards(products);
-  } else {
-    container.innerHTML = wlRenderTable(products);
+  if(!totalFiltered){
+    container.innerHTML = `
+      <div style="text-align:center;padding:40px 20px;color:var(--muted)">
+        <div style="font-size:48px;opacity:.3;margin-bottom:10px">🔍</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:6px">مفيش نتائج</div>
+        <div style="font-size:12px;margin-bottom:14px">الفلاتر اللي اخترتها مش بترجع أي منتج</div>
+        <button class="btn btn-ghost btn-sm" onclick="wlResetAllFilters()">↺ صفّر الفلاتر</button>
+      </div>
+    `;
+    document.getElementById('wl-pagination').innerHTML = '';
+    return;
   }
+  
+  // ─── Pagination ───
+  const totalPages = Math.ceil(totalFiltered / _wlPageSize);
+  if(_wlCurrentPage > totalPages) _wlCurrentPage = 1; // safety
+  
+  const startIdx = (_wlCurrentPage - 1) * _wlPageSize;
+  const endIdx = startIdx + _wlPageSize;
+  const pageProducts = products.slice(startIdx, endIdx);
+  
+  // ─── Render ───
+  if(_wlView === 'cards'){
+    container.innerHTML = wlRenderCards(pageProducts);
+  } else {
+    container.innerHTML = wlRenderTable(pageProducts);
+  }
+  
+  // ─── Pagination buttons ───
+  wlRenderPagination(totalPages, totalFiltered);
+}
+
+// 🆕 v331: عرض معلومات النتائج
+function wlUpdateResultsInfo(totalLoaded, totalFiltered){
+  const el = document.getElementById('wl-results-info');
+  if(!el) return;
+  
+  const startIdx = (_wlCurrentPage - 1) * _wlPageSize + 1;
+  const endIdx = Math.min(_wlCurrentPage * _wlPageSize, totalFiltered);
+  
+  if(totalFiltered === totalLoaded){
+    el.innerHTML = `📊 عرض <strong style="color:var(--text)">${startIdx}-${endIdx}</strong> من <strong style="color:var(--text)">${totalFiltered}</strong> منتج`;
+  } else {
+    el.innerHTML = `📊 عرض <strong style="color:var(--text)">${startIdx}-${endIdx}</strong> من <strong style="color:var(--accent)">${totalFiltered}</strong> مفلتر <span style="color:var(--muted)">(الإجمالي ${totalLoaded})</span>`;
+  }
+}
+
+// 🆕 v331: مؤشر الفلاتر الشغّالة
+function wlUpdateActiveFiltersIndicator(){
+  const el = document.getElementById('wl-active-filters');
+  if(!el) return;
+  
+  const filters = [];
+  if(_wlSearchQuery) filters.push(`🔍 "${_wlSearchQuery}"`);
+  
+  const fCat = document.getElementById('wl-f-category')?.value;
+  if(fCat){
+    const labels = { hot: '🔥 الأكثر بيعاً', normal: '✓ عادي', slow: '🐌 بطيء', dead: '💀 راكد' };
+    filters.push(labels[fCat] || fCat);
+  }
+  
+  const fTrend = document.getElementById('wl-f-trend')?.value;
+  if(fTrend){
+    const labels = { up: '📈 صاعد', down: '📉 هابط', stable: '➡️ مستقر' };
+    filters.push(labels[fTrend] || fTrend);
+  }
+  
+  const fStock = document.getElementById('wl-f-stock')?.value;
+  if(fStock){
+    const labels = { instock: '✅ متوفر', low: '🚨 شبه نفد', out: '⛔ نفد' };
+    filters.push(labels[fStock] || fStock);
+  }
+  
+  const fWh = document.getElementById('wl-f-warehouse')?.value;
+  if(fWh){
+    const wh = (_wlData?.warehouses || []).find(w => String(w.id) === String(fWh));
+    if(wh) filters.push(`📦 ${wh.name}`);
+  }
+  
+  if(filters.length){
+    el.style.display = '';
+    el.innerHTML = '🎯 الفلاتر النشطة: ' + filters.map(f => `<span style="display:inline-block;background:var(--accent);color:#fff;padding:2px 8px;border-radius:99px;margin:2px;font-weight:700">${escapeHtml(f)}</span>`).join('');
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+// 🆕 v331: pagination buttons
+function wlRenderPagination(totalPages, totalFiltered){
+  const el = document.getElementById('wl-pagination');
+  if(!el) return;
+  
+  if(totalPages <= 1){
+    el.innerHTML = '';
+    return;
+  }
+  
+  // عشان pagination تبان صحيح في RTL: السابق على اليمين
+  const cur = _wlCurrentPage;
+  
+  // ابني قائمة أرقام الصفحات المعروضة (window of 5 around current)
+  const pages = new Set();
+  pages.add(1);
+  pages.add(totalPages);
+  for(let i = cur - 1; i <= cur + 1; i++){
+    if(i >= 1 && i <= totalPages) pages.add(i);
+  }
+  const sortedPages = Array.from(pages).sort((a, b) => a - b);
+  
+  // ابني buttons
+  let html = '';
+  
+  // السابق
+  html += `<button onclick="wlGoToPage(${cur - 1})" ${cur === 1 ? 'disabled' : ''} style="padding:7px 12px;background:${cur === 1 ? 'var(--bg)' : 'var(--card)'};color:${cur === 1 ? 'var(--muted)' : 'var(--text)'};border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:${cur === 1 ? 'not-allowed' : 'pointer'}">السابق →</button>`;
+  
+  // أرقام الصفحات
+  let lastShown = 0;
+  for(const p of sortedPages){
+    if(p - lastShown > 1){
+      html += `<span style="color:var(--muted);padding:0 4px">...</span>`;
+    }
+    const isActive = p === cur;
+    html += `<button onclick="wlGoToPage(${p})" style="padding:7px 12px;background:${isActive ? 'var(--accent)' : 'var(--card)'};color:${isActive ? '#fff' : 'var(--text)'};border:1px solid ${isActive ? 'var(--accent)' : 'var(--border)'};border-radius:6px;font-family:Cairo,sans-serif;font-size:12px;font-weight:${isActive ? '800' : '700'};cursor:pointer;min-width:36px">${p}</button>`;
+    lastShown = p;
+  }
+  
+  // التالي
+  html += `<button onclick="wlGoToPage(${cur + 1})" ${cur === totalPages ? 'disabled' : ''} style="padding:7px 12px;background:${cur === totalPages ? 'var(--bg)' : 'var(--card)'};color:${cur === totalPages ? 'var(--muted)' : 'var(--text)'};border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:${cur === totalPages ? 'not-allowed' : 'pointer'}">← التالي</button>`;
+  
+  // معلومات: صفحة X من Y
+  html += `<span style="margin-right:10px;font-size:11px;color:var(--muted);align-self:center">صفحة <strong style="color:var(--text)">${cur}</strong> من <strong style="color:var(--text)">${totalPages}</strong></span>`;
+  
+  el.innerHTML = html;
 }
 
 function wlRenderTable(products){
@@ -24793,9 +25608,9 @@ function wlRenderTable(products){
           <div style="font-size:10px;color:var(--muted)">${labelB}</div>
           <div style="font-weight:700;font-size:13px;color:${diffColor}">${diffIco} ${avgB.toFixed(2)} (${pct >= 0 ? '+' : ''}${pct.toFixed(0)}%)</div>
         </td>
-        <td style="padding:8px 6px;text-align:center">
-          <div style="font-weight:800;font-size:14px;color:${p.total_stock === 0 ? '#ef4444' : 'var(--text)'}">${p.total_stock || 0}</div>
-          <div style="font-size:10px;color:${daysRemColor}">${p.days_remaining > 365 ? '∞' : p.days_remaining.toFixed(0)} يوم</div>
+        <td style="padding:8px 6px;text-align:center;min-width:140px">
+          ${wlRenderStockBreakdown(p, _wlData?.warehouses || [])}
+          <div style="font-size:10px;color:${daysRemColor};margin-top:3px">${p.days_remaining > 365 ? '∞' : p.days_remaining.toFixed(0)} يوم متبقي</div>
         </td>
         <td style="padding:8px 6px;text-align:center;white-space:nowrap">
           <button onclick="wlOpenDeepDive('${p.variant_id}')" style="padding:5px 8px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-family:Cairo,sans-serif;font-size:11px;font-weight:700;cursor:pointer;margin:2px" title="تحليل عميق">🔍</button>
@@ -24815,7 +25630,7 @@ function wlRenderTable(products){
           <th style="padding:10px 6px;text-align:center">الفئة</th>
           <th style="padding:10px 6px;text-align:center">90 يوم</th>
           <th style="padding:10px 6px;text-align:center">مقارنة الفترات</th>
-          <th style="padding:10px 6px;text-align:center">المخزون</th>
+          <th style="padding:10px 6px;text-align:center">المخزون حسب المخزن</th>
           <th style="padding:10px 6px;text-align:center">إجراءات</th>
         </tr>
       </thead>
@@ -24856,6 +25671,9 @@ function wlRenderCards(products){
           <!-- Sparkline chart -->
           <div style="margin-bottom:8px">${wlRenderSparkline(p, 'large')}</div>
           
+          <!-- 🆕 v330: Warehouse breakdown -->
+          <div style="margin-bottom:8px">${wlRenderStockBreakdown(p, _wlData?.warehouses || [], 'cards')}</div>
+          
           <!-- Stats -->
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;font-size:11px">
             <div style="background:var(--bg);border-radius:6px;padding:6px 8px;text-align:center">
@@ -24867,7 +25685,7 @@ function wlRenderCards(products){
               <div style="font-weight:800">${parseFloat(p.avg_30d || 0).toFixed(2)}</div>
             </div>
             <div style="background:var(--bg);border-radius:6px;padding:6px 8px;text-align:center">
-              <div style="color:var(--muted)">المخزون</div>
+              <div style="color:var(--muted)">إجمالي المخزون</div>
               <div style="font-weight:800;color:${p.total_stock === 0 ? '#ef4444' : 'var(--text)'}">${p.total_stock || 0}</div>
             </div>
             <div style="background:var(--bg);border-radius:6px;padding:6px 8px;text-align:center">
@@ -24888,6 +25706,61 @@ function wlRenderCards(products){
   }).join('');
   
   return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">${cards}</div>`;
+}
+
+// 🆕 v330: عرض المخزون مفصّل لكل مخزن
+// mode: 'table' (compact chips) أو 'cards' (rows مع أسماء المخازن كاملة)
+function wlRenderStockBreakdown(p, warehouses, mode){
+  mode = mode || 'table';
+  const stocks = p.stockByWarehouse || {};
+  const total = p.total_stock || 0;
+  
+  // فلتر المخازن اللي ليها قيمة حقيقية (أو كلها لو في cards mode)
+  const relevantWh = warehouses.filter(w => {
+    const qty = stocks[w.id] || 0;
+    return mode === 'cards' ? true : qty > 0;
+  });
+  
+  if(!relevantWh.length){
+    // مفيش مخزون في أي مخزن
+    return `<div style="font-weight:800;font-size:16px;color:#ef4444">0 <span style="font-size:10px;font-weight:400">(نفد)</span></div>`;
+  }
+  
+  if(mode === 'table'){
+    // Compact: chips صغيرة
+    const chips = relevantWh.map(w => {
+      const qty = stocks[w.id] || 0;
+      const color = qty === 0 ? '#94a3b8' : qty < 10 ? '#f59e0b' : '#22c55e';
+      const bg = qty === 0 ? '#f1f5f9' : qty < 10 ? '#fef3c7' : '#dcfce7';
+      // اسم المخزن مختصر (أول كلمة أو أول 8 حروف)
+      const shortName = (w.name || '').split(' ')[0].substring(0, 10);
+      return `<span title="${escapeHtml(w.name || '')}: ${qty} قطعة" style="display:inline-block;background:${bg};color:${color};font-size:10px;font-weight:700;padding:3px 7px;border-radius:99px;margin:1px;white-space:nowrap">${escapeHtml(shortName)}: <strong>${qty}</strong></span>`;
+    }).join('');
+    
+    return `
+      <div style="line-height:1.6">${chips}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px;font-weight:600">المجموع: <strong style="color:${total === 0 ? '#ef4444' : 'var(--text)'};font-size:13px">${total}</strong></div>
+    `;
+  }
+  
+  // Cards mode: قائمة كاملة بأسماء المخازن
+  const rows = relevantWh.map(w => {
+    const qty = stocks[w.id] || 0;
+    const color = qty === 0 ? '#94a3b8' : qty < 10 ? '#f59e0b' : '#22c55e';
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:var(--bg);border-radius:6px;font-size:11px">
+        <span style="color:var(--text);font-weight:600">${w.is_pos ? '🏪' : '📦'} ${escapeHtml(w.name || '')}</span>
+        <strong style="color:${color};font-size:13px">${qty}</strong>
+      </div>
+    `;
+  }).join('');
+  
+  return `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px;display:flex;flex-direction:column;gap:3px">
+      <div style="font-size:10px;color:var(--muted);font-weight:700;padding:0 4px 2px">📍 توزيع المخزون</div>
+      ${rows}
+    </div>
+  `;
 }
 
 // Sparkline SVG: رسم بياني صغير من 4 نقط (7d, 30d, 60d, 90d)
@@ -26131,6 +27004,32 @@ function reorderFillSuggested(){
   renderReorderTable();
   updateReorderTotals();
   toast(`✅ تم ملء ${count} منتج بالكميات المقترحة`, 'success');
+}
+
+// 🆕 v333: ملأ المنتجات الظاهرة بعد الفلتر فقط
+function reorderFillVisibleOnly(){
+  const visible = applyReorderFilters();
+  if(!visible.length){
+    toast('⚠️ مفيش منتجات معروضة دلوقتي', 'error');
+    return;
+  }
+  
+  let count = 0;
+  visible.forEach(({p}) => {
+    const sug = (p.ai_suggested_qty != null ? p.ai_suggested_qty : p.suggested_qty) || 0;
+    if(sug > 0){
+      p.requested_qty = sug;
+      count++;
+    }
+  });
+  renderReorderTable();
+  updateReorderTotals();
+  
+  if(count > 0){
+    toast(`✅ تم ملء ${count} من ${visible.length} منتج معروض بالمقترح`, 'success');
+  } else {
+    toast(`⚠️ المنتجات المعروضة (${visible.length}) مفيش عندها كميات مقترحة`, 'error');
+  }
 }
 
 function reorderFillCriticalOnly(){
