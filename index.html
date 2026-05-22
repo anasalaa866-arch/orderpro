@@ -1,33 +1,38 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v335 — PREPARATION VISIBILITY + REPORTS (2026-05-22)
+  OrderPro v336 — SHOPIFY INVENTORY SYNC ON PO RECEIVE (2026-05-22)
   ═══════════════════════════════════════════════════════════════════
-  ✨ Visibility كاملة لنظام التحضير في OrderPro
+  ✨ ربط أوامر الشراء بـ Shopify Inventory
   
-  1. 📦 Badge حالة التحضير في جدول الطلبات:
-     • ✅ متحضّر (أخضر) - hover يبين مين حضّره
-     • 📦 بيتحضّر (أصفر) - hover يبين مين شغّال عليه
+  📦 الـ Flow الجديد:
+  1. اعمل PO عادي في OrderPro
+  2. لما البضاعة توصل، اعمل receive
+  3. النظام تلقائياً يبعت Inventory Adjustment لـ Shopify
+  4. Shopify بيحدّث الـ inventory في الـ location المربوطة
+  5. Webhook بيرجع التحديث لـ OrderPro
   
-  2. 🔍 3 chips فلتر جديدة فوق الجدول:
-     • 📦 لم يُحضَّر / ⏳ بيتحضّر / ✅ متحضّر
+  ⚠️ مهم: لو حصل خطأ في Shopify (إنترنت/credentials):
+  - تم تنفيذ Rollback كامل في OrderPro
+  - مفيش حاجة بتتسجل
+  - error واضح للمستخدم
   
-  3. 📋 Banner ملوّن في modal "تاريخ الطلب":
-     • أخضر لما يكون متحضّر (مع اسم المحضّر + المدة)
-     • أصفر لما يكون قيد التحضير
-     • Icons + ترجمة للـ preparation actions
+  🔗 صفحة جديدة: "ربط المخازن بـ Shopify"
+  - زرار في شاشة المخزون
+  - تربط كل warehouse في OrderPro بـ Shopify location
+  - بدون الربط: مينفعش تعمل receive لـ POs
   
-  4. 📦 صفحة جديدة "تقارير المحضرين":
-     • Summary cards + جدول لكل محضّر
-     • Date range filter + Export CSV
-     • Badge "أدمن" لما الأدمن يحضّر
+  📊 PO Receive Dialog محسّن:
+  - بيبين status Shopify sync مباشرة
+  - بيعرض الـ adjustment group ID
+  - بيعرض المنتجات اللي اتعدّيت (لو فيه inventory_item_id ناقص)
   
-  محتاج: server v247
+  محتاج: server v248
   
+  من v335 (محفوظ):
+  - 🆕 preparation visibility + reports
   من v334 (محفوظ):
-  - 🆕 pickup details + online-paid sections في modal التصفية
-  من v333 (محفوظ):
-  - 🆕 شريط فلاتر وذكي في modal "إنشاء طلب من مورد"
+  - 🆕 pickup details في settlement modal
   ═══════════════════════════════════════════════════════════════════
 -->
 <html lang="ar" dir="rtl">
@@ -2875,6 +2880,7 @@ tr:hover td{background:#fafbff}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">📦 المخزون</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="openWarehouseLocationManager()" title="ربط مخازن OrderPro بـ Shopify locations">🔗 ربط المخازن بـ Shopify</button>
       <button class="btn btn-ghost btn-sm" onclick="syncInventoryLevels()">🔄 مزامنة الكميات</button>
       <button class="btn btn-primary btn-sm" onclick="syncInventoryFull()">🔁 مزامنة كاملة</button>
     </div>
@@ -3456,6 +3462,26 @@ tr:hover td{background:#fafbff}
   <div class="card">
     <div class="card-header"><h3 style="margin:0">📋 قائمة الموردين</h3></div>
     <div id="suppliers-list" style="padding:14px"></div>
+  </div>
+</div>
+
+<!-- 🆕 v336: Warehouse-Location Linker Modal -->
+<div id="m-wh-locations" class="overlay" style="display:none">
+  <div class="modal" style="width:min(720px,96vw);max-height:88vh;overflow-y:auto">
+    <div class="mhd">
+      <h3>🔗 ربط المخازن بـ Shopify Locations</h3>
+      <button class="xbtn" onclick="closeM('m-wh-locations')">✕</button>
+    </div>
+    <div style="padding:16px">
+      <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#78350f;line-height:1.6">
+        ⚠️ <strong>مهم:</strong> الربط ده ضروري عشان أوامر الشراء تقدر تحدّث Shopify لما تستلم البضاعة.
+        كل مخزن لازم يكون مربوط بـ location في Shopify (واحد لواحد).
+      </div>
+      
+      <div id="wh-locations-content">
+        <div style="padding:30px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -21313,6 +21339,179 @@ function invGoToPage(page){
   document.getElementById('inv-table-container')?.scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
+// 🆕 v336: WAREHOUSE-LOCATION LINKER
+let _whLocationsCache = { warehouses: [], locations: [] };
+
+async function openWarehouseLocationManager(){
+  document.getElementById('m-wh-locations').style.display = 'flex';
+  const content = document.getElementById('wh-locations-content');
+  content.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">⏳ جاري تحميل المخازن والـ locations...</div>';
+  
+  try {
+    // حمل الـ data بالتوازي
+    const [whR, locR] = await Promise.all([
+      apiFetch('/api/inventory/warehouses'),
+      apiFetch('/api/shopify/locations').catch(e => ({ error: e.message }))
+    ]);
+    
+    if(locR?.error){
+      content.innerHTML = `
+        <div style="background:#fef2f2;border:1px solid #ef4444;border-radius:8px;padding:14px;color:#991b1b;text-align:center">
+          <div style="font-weight:800;margin-bottom:6px">❌ فشل تحميل Shopify locations</div>
+          <div style="font-size:12px">${escapeHtml(locR.error || 'unknown')}</div>
+          <div style="font-size:11px;margin-top:8px;opacity:0.8">تأكد من إعدادات Shopify credentials في الـ settings</div>
+        </div>
+      `;
+      return;
+    }
+    
+    const warehouses = Array.isArray(whR) ? whR : (whR?.warehouses || []);
+    const locations = locR?.locations || [];
+    _whLocationsCache = { warehouses, locations };
+    renderWarehouseLocationManager();
+  } catch(e) {
+    content.innerHTML = `<div style="padding:20px;text-align:center;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderWarehouseLocationManager(){
+  const { warehouses, locations } = _whLocationsCache;
+  const content = document.getElementById('wh-locations-content');
+  
+  // اعمل map: location_id → location
+  const locById = {};
+  locations.forEach(l => { locById[String(l.id)] = l; });
+  
+  // اعمل قائمة الـ locations المربوطة بالفعل (عشان نمنع double-mapping)
+  const usedLocations = new Set();
+  warehouses.forEach(w => {
+    if(w.shopify_location_id) usedLocations.add(String(w.shopify_location_id));
+  });
+  
+  if(!warehouses.length){
+    content.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">مفيش مخازن نشطة</div>';
+    return;
+  }
+  
+  let html = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12px;color:var(--muted)">
+      <span>📊 ${warehouses.length} مخزن في OrderPro</span>
+      <span>•</span>
+      <span>🛍 ${locations.length} location في Shopify</span>
+    </div>
+    
+    <div style="display:flex;flex-direction:column;gap:10px">
+  `;
+  
+  warehouses.forEach(w => {
+    const linkedLoc = w.shopify_location_id ? locById[String(w.shopify_location_id)] : null;
+    const isLinked = !!linkedLoc;
+    const linkedButMissing = w.shopify_location_id && !linkedLoc; // مربوط بـ location مش موجودة في Shopify
+    
+    html += `
+      <div style="border:2px solid ${isLinked ? '#16a34a' : (linkedButMissing ? '#ef4444' : 'var(--border)')};border-radius:10px;padding:12px;background:${isLinked ? '#f0fdf4' : (linkedButMissing ? '#fef2f2' : 'var(--bg)')}">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="font-weight:800;font-size:14px">${w.is_pos ? '🏪' : '📦'} ${escapeHtml(w.name || '')}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">
+              ${escapeHtml(w.city || '')}${w.city && w.address ? ' • ' : ''}${escapeHtml(w.address || '')}
+            </div>
+          </div>
+          
+          <div style="flex:1.5;min-width:240px">
+            <select 
+              id="wh-loc-sel-${w.id}" 
+              class="form-input" 
+              style="width:100%;font-size:12px"
+              onchange="_whLocOnChange(${w.id})">
+              <option value="">— غير مربوط —</option>
+              ${locations.map(l => {
+                const isUsedByOther = usedLocations.has(String(l.id)) && String(l.id) !== String(w.shopify_location_id || '');
+                const selected = String(l.id) === String(w.shopify_location_id || '');
+                return `<option value="${l.id}" ${selected ? 'selected' : ''} ${isUsedByOther ? 'disabled' : ''}>
+                  ${escapeHtml(l.name)}${isUsedByOther ? ' (مربوط بمخزن آخر)' : ''}${l.fulfillsOnlineOrders ? ' 🌐' : ''}
+                </option>`;
+              }).join('')}
+            </select>
+          </div>
+          
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-primary btn-xs" onclick="saveWarehouseLocation(${w.id})">💾 احفظ</button>
+            ${isLinked ? `<button class="btn btn-ghost btn-xs" onclick="unlinkWarehouseLocation(${w.id})" style="color:#dc2626;border-color:#dc2626">↺ افصل</button>` : ''}
+          </div>
+        </div>
+        
+        ${linkedButMissing ? `
+          <div style="margin-top:8px;padding:6px 10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;font-size:11px;color:#991b1b">
+            ⚠️ الـ location المربوط (ID: ${escapeHtml(String(w.shopify_location_id))}) مش موجود في Shopify دلوقتي. ممكن يكون اتحذف.
+          </div>
+        ` : ''}
+        
+        ${isLinked && linkedLoc ? `
+          <div style="margin-top:8px;font-size:11px;color:#15803d">
+            ✅ مربوط بـ <strong>${escapeHtml(linkedLoc.name)}</strong>
+            ${linkedLoc.city ? ' • ' + escapeHtml(linkedLoc.city) : ''}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  });
+  
+  html += '</div>';
+  
+  content.innerHTML = html;
+}
+
+function _whLocOnChange(warehouseId){
+  // مفيش حاجة دلوقتي، بس placeholder للـ future
+}
+
+async function saveWarehouseLocation(warehouseId){
+  const sel = document.getElementById('wh-loc-sel-' + warehouseId);
+  if(!sel) return;
+  const locId = sel.value || null;
+  
+  try {
+    const r = await apiFetch(`/api/warehouses/${warehouseId}/shopify-location`, 'PUT', {
+      shopifyLocationId: locId
+    });
+    if(r?.success){
+      toast(locId ? '✅ تم الربط' : '✅ تم الفصل');
+      // أعد التحميل
+      const wh = _whLocationsCache.warehouses.find(w => w.id === warehouseId);
+      if(wh){
+        wh.shopify_location_id = locId;
+        renderWarehouseLocationManager();
+      }
+    } else {
+      toast('❌ ' + (r?.error || 'فشل الحفظ'));
+    }
+  } catch(e) {
+    toast('❌ ' + e.message);
+  }
+}
+
+async function unlinkWarehouseLocation(warehouseId){
+  if(!confirm('فصل الربط؟ مش هتقدر تعمل receive للـ POs بتاعت المخزن ده بعد كده')) return;
+  try {
+    const r = await apiFetch(`/api/warehouses/${warehouseId}/shopify-location`, 'PUT', {
+      shopifyLocationId: null
+    });
+    if(r?.success){
+      toast('✅ تم الفصل');
+      const wh = _whLocationsCache.warehouses.find(w => w.id === warehouseId);
+      if(wh){
+        wh.shopify_location_id = null;
+        renderWarehouseLocationManager();
+      }
+    } else {
+      toast('❌ ' + (r?.error || 'فشل الفصل'));
+    }
+  } catch(e) {
+    toast('❌ ' + e.message);
+  }
+}
+
 async function syncInventoryLevels(){
   if(!confirm('مزامنة الكميات من Shopify؟')) return;
   toast('🔄 جاري المزامنة...');
@@ -24414,22 +24613,58 @@ async function confirmReceive(){
   const notes = document.getElementById('po-receive-notes').value.trim();
   
   try {
+    // 🆕 v336: indicator دامج بيقول إن البضاعة بترفع على Shopify
+    toast('⏳ جاري التحديث في OrderPro + Shopify...', 'info');
+    
     const r = await apiFetch('/api/purchase-orders/' + _currentPO.order.id + '/receive', 'POST', {
       items, notes
     });
     
     if(r?.success){
-      toast('✅ تم الاستلام', 'success');
-      
-      // تذكير عن Shopify
-      setTimeout(() => {
-        alert('⚠️ مهم!\n\nلازم تحدّث الكميات في Shopify عشان النظام يستقبل التحديث عبر webhook.\n\nمن Shopify: Inventory → عدّل الكميات في المخزن المختار.');
-      }, 500);
+      // 🆕 v336: عرض تفاصيل sync Shopify
+      const sync = r.shopifySync;
+      if(sync?.status === 'success'){
+        toast(`✅ تم الاستلام + تحديث Shopify (${sync.itemsPushed} منتج)`, 'success');
+        
+        // alert نظيف بدل التذكير القديم
+        const skippedMsg = (sync.skipped && sync.skipped.length)
+          ? `\n\n⚠️ ${sync.skipped.length} منتج اتعداه (مفيش inventory_item_id):\n${sync.skipped.slice(0,5).map(s => '• ' + (s.sku || s.productTitle || 'unknown')).join('\n')}`
+          : '';
+        
+        setTimeout(() => {
+          alert(
+            `✅ تم بنجاح\n\n` +
+            `• OrderPro: تم تسجيل الاستلام\n` +
+            `• Shopify: تم تحديث المخزون (${sync.itemsPushed} منتج)\n` +
+            `• Reason: "${sync.reasonText}"\n` +
+            `• Group: ${sync.adjustmentGroupId || '—'}` +
+            skippedMsg
+          );
+        }, 300);
+      } else {
+        toast('✅ تم الاستلام', 'success');
+      }
       
       closeM('m-po-receive');
       loadPurchaseOrdersPage();
     }
-  } catch(e) { toast('❌ ' + e.message); }
+  } catch(e) {
+    // 🆕 v336: error handling محسّن - يميز بين أخطاء Shopify و OrderPro
+    const errMsg = e.message || 'فشل';
+    if(errMsg.includes('Shopify') || errMsg.includes('location')){
+      alert(
+        `❌ فشل تحديث Shopify\n\n` +
+        `${errMsg}\n\n` +
+        `⚠️ تم إلغاء الـ receive بالكامل في OrderPro (rollback).\n` +
+        `جرب تاني بعد ما تتأكد:\n` +
+        `• الإنترنت شغال\n` +
+        `• المخزن مربوط بـ Shopify location (🔗 ربط المخازن بـ Shopify)\n` +
+        `• كل المنتجات synced من Shopify`
+      );
+    } else {
+      toast('❌ ' + errMsg);
+    }
+  }
 }
 
 // Suggestions
