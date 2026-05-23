@@ -1,38 +1,39 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v336 — SHOPIFY INVENTORY SYNC ON PO RECEIVE (2026-05-22)
+  OrderPro v337 — PO MODAL: SHOPIFY-STYLE FULLSCREEN (2026-05-23)
   ═══════════════════════════════════════════════════════════════════
-  ✨ ربط أوامر الشراء بـ Shopify Inventory (Invisible)
+  ✨ إعادة تصميم كاملة لـ modal أمر الشراء بشكل Shopify
   
-  📦 الـ Flow الجديد:
-  1. اعمل PO عادي في OrderPro
-  2. لما البضاعة توصل، اعمل receive
-  3. النظام تلقائياً يبعت Inventory Adjustment لـ Shopify
-  4. Shopify بيحدّث الـ inventory في الـ location المربوطة
-  5. Webhook بيرجع التحديث لـ OrderPro
+  📐 التصميم الجديد:
+  - Full-screen layout (مش modal صغير في النص)
+  - Top bar فيه: زرار رجوع + Title + (إلغاء/حفظ كمسودة/حفظ وإرسال)
+  - Layout 2-column: Main content + Sticky sidebar للـ Cost summary
   
-  🔗 الربط بين المخازن:
-  - بيحصل تلقائياً وقت "مزامنة كاملة" (مفيش UI خاصة بيه)
-  - بيدوّر على المخازن بنفس الاسم ويربطها تلقائياً
-  - مفيش زرار "ربط المخازن" - النظام بيتعامل مع نفسه
+  📦 Main content:
+  • Supplier + Destination في كارد واحد
+  • Payment terms + Expected date
+  • Products table (Shopify-style):
+    - Quantity & cost editable inline في الجدول مباشرة
+    - Total لكل سطر بيتحسب فوراً
+    - Remove button (✕) واضح
+  • Additional details (notes)
   
-  ⚠️ مهم: لو حصل خطأ في Shopify (إنترنت/credentials):
-  - تم تنفيذ Rollback كامل في OrderPro
-  - مفيش حاجة بتتسجل
-  - error واضح للمستخدم مع توجيه للـ "مزامنة كاملة"
+  💰 Sidebar (sticky على اليمين):
+  • Cost summary card فيه:
+    - Subtotal (تلقائي)
+    - Tax (editable inline)
+    - Shipping (editable inline)
+    - Total (واضح + كبير)
+  • Info card بيوضح إن الـ PO هيتربط بـ Shopify تلقائياً
   
-  📊 PO Receive Dialog محسّن:
-  - بيبين status Shopify sync مباشرة
-  - بيعرض الـ adjustment group ID
-  - بيعرض المنتجات اللي اتعدّيت (لو فيه inventory_item_id ناقص)
+  📱 Responsive: على شاشات < 900px، الـ 2-column يبقى single
   
-  محتاج: server v248
-  
+  من v336 (محفوظ):
+  - 🆕 Shopify Inventory Sync on PO Receive (server v248)
+  - 🆕 Auto-link warehouses to Shopify locations
   من v335 (محفوظ):
   - 🆕 preparation visibility + reports
-  من v334 (محفوظ):
-  - 🆕 pickup details في settlement modal
   ═══════════════════════════════════════════════════════════════════
 -->
 <html lang="ar" dir="rtl">
@@ -173,6 +174,15 @@ tr:hover td{background:#fafbff}
 /* 🔧 v246: modal-overlay بيستخدم flex لما يفتح (JS بيحدد display) */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px);display:none}
 .modal-overlay[style*="flex"]{display:flex !important}
+
+/* 🆕 v337: PO Fullscreen modal (Shopify-style) */
+#m-po.modal-overlay{padding:0 !important;align-items:stretch !important;justify-content:stretch !important}
+#m-po .po-fullscreen-modal{max-width:none !important;width:100%;border-radius:0;padding:0;background:#f6f6f7;height:100vh;overflow-y:auto}
+@media(max-width:900px){
+  #m-po .po-content-grid{grid-template-columns:1fr !important;padding:16px !important}
+  #m-po .po-sidebar{position:static !important}
+  #m-po .po-supdest-grid{grid-template-columns:1fr !important}
+}
 .modal-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--card);z-index:1}
 .modal-header h3{font-size:14px;font-weight:700;margin:0}
 .modal-body{padding:18px}
@@ -4087,119 +4097,177 @@ tr:hover td{background:#fafbff}
 </div>
 
 <!-- PO Modal (Create/Edit) -->
-<div id="m-po" class="modal-overlay" style="display:none">
-  <div class="modal" style="max-width:900px">
-    <div class="modal-header">
-      <h3 style="margin:0" id="po-modal-title">📋 أمر شراء جديد</h3>
-      <button class="modal-close" onclick="closeM('m-po')">×</button>
+<!-- 🆕 v337: PO Modal - Shopify-style fullscreen layout -->
+<div id="m-po" class="modal-overlay" style="display:none;background:#f6f6f7;padding:0;overflow-y:auto;align-items:flex-start;justify-content:stretch">
+  <div class="po-fullscreen-modal" style="width:100%;max-width:none;background:#f6f6f7;min-height:100vh;padding:0;border-radius:0;display:flex;flex-direction:column">
+    
+    <!-- Top bar (Shopify-style) -->
+    <div style="background:#fff;border-bottom:1px solid #e1e3e5;padding:14px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:10;box-shadow:0 1px 2px rgba(0,0,0,0.04)">
+      <button onclick="closeM('m-po')" class="btn btn-ghost btn-sm" style="padding:6px 12px;border:1px solid #c9cccf;background:#fff" title="رجوع">
+        ← رجوع
+      </button>
+      <div style="flex:1">
+        <div style="font-size:11px;color:#6d7175;font-weight:500" id="po-breadcrumb">أوامر الشراء › أمر شراء جديد</div>
+        <div style="font-size:18px;font-weight:700;color:#1a1c1d;margin-top:2px" id="po-modal-title">📋 أمر شراء جديد</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="closeM('m-po')" style="border:1px solid #c9cccf;color:#5c5f62;font-weight:600">إلغاء</button>
+        <button class="btn btn-secondary" onclick="savePO('draft')" style="background:#fff;border:1px solid #c9cccf;color:#1a1c1d;font-weight:600">💾 حفظ كمسودة</button>
+        <button class="btn btn-primary" onclick="savePO('sent')" style="background:#1a1c1d;border-color:#1a1c1d;color:#fff;font-weight:600">📤 حفظ وإرسال</button>
+      </div>
     </div>
-    <div class="modal-body">
-      <input type="hidden" id="po-id">
+    
+    <!-- Main content - 2 columns (main + sidebar) -->
+    <div style="flex:1;max-width:1200px;margin:0 auto;padding:24px;width:100%;display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start" class="po-content-grid">
       
-      <!-- بيانات أساسية -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="form-group">
-          <label>المورد *</label>
-          <select id="po-supplier" class="form-input" onchange="onPOSupplierChange()">
-            <option value="">-- اختار من القائمة --</option>
-            <option value="custom">📝 مورد جديد (حر)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>المخزن *</label>
-          <select id="po-warehouse" class="form-input"></select>
-        </div>
-      </div>
-      
-      <!-- مورد حر -->
-      <div id="po-custom-supplier" style="display:none;background:var(--bg);border:1px dashed var(--border);border-radius:8px;padding:12px;margin-bottom:14px">
-        <div style="font-weight:700;color:var(--accent);margin-bottom:8px;font-size:13px">📝 بيانات المورد الجديد</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div>
-            <label style="font-size:11px">اسم المورد *</label>
-            <input id="po-supplier-name" class="form-input" type="text">
+      <!-- LEFT COLUMN - Main content -->
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <input type="hidden" id="po-id">
+        
+        <!-- Supplier + Destination (Shopify-style top cards) -->
+        <div style="background:#fff;border:1px solid #e1e3e5;border-radius:10px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,0.04)">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px" class="po-supdest-grid">
+            <div>
+              <label style="display:block;font-weight:600;font-size:13px;color:#1a1c1d;margin-bottom:6px">المورد *</label>
+              <select id="po-supplier" class="form-input" onchange="onPOSupplierChange()" style="width:100%">
+                <option value="">— اختار من القائمة —</option>
+                <option value="custom">📝 مورد جديد (حر)</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-weight:600;font-size:13px;color:#1a1c1d;margin-bottom:6px">المخزن (Destination) *</label>
+              <select id="po-warehouse" class="form-input" style="width:100%"></select>
+            </div>
           </div>
-          <div>
-            <label style="font-size:11px">تليفون</label>
-            <input id="po-supplier-phone" class="form-input" type="text">
+          
+          <!-- مورد حر (collapsed by default) -->
+          <div id="po-custom-supplier" style="display:none;background:#fafbfb;border:1px dashed #c9cccf;border-radius:8px;padding:14px;margin-top:14px">
+            <div style="font-weight:700;color:#1a1c1d;margin-bottom:10px;font-size:13px">📝 بيانات المورد الجديد</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div>
+                <label style="font-size:12px;font-weight:600;color:#5c5f62;display:block;margin-bottom:4px">اسم المورد *</label>
+                <input id="po-supplier-name" class="form-input" type="text" style="width:100%">
+              </div>
+              <div>
+                <label style="font-size:12px;font-weight:600;color:#5c5f62;display:block;margin-bottom:4px">تليفون</label>
+                <input id="po-supplier-phone" class="form-input" type="text" style="width:100%">
+              </div>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;cursor:pointer;color:#5c5f62">
+              <input type="checkbox" id="po-save-supplier"> 
+              <span>احفظ المورد للقائمة بعد الحفظ</span>
+            </label>
           </div>
-        </div>
-        <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;cursor:pointer">
-          <input type="checkbox" id="po-save-supplier"> 
-          <span>احفظ المورد للقائمة بعد الحفظ</span>
-        </label>
-      </div>
-      
-      <div class="form-group">
-        <label>📅 تاريخ التوريد المتوقع</label>
-        <input id="po-expected-date" type="date" class="form-input">
-      </div>
-      
-      <!-- المنتجات -->
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <div style="font-weight:800;color:var(--accent)">📦 المنتجات</div>
-          <button class="btn btn-secondary btn-sm" onclick="openPOAddItem()">➕ منتج</button>
         </div>
         
-        <div id="po-items-list">
-          <div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">مفيش منتجات - اضغط ➕</div>
+        <!-- Payment terms + Currency -->
+        <div style="background:#fff;border:1px solid #e1e3e5;border-radius:10px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,0.04)">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+            <div>
+              <label style="display:block;font-weight:600;font-size:13px;color:#1a1c1d;margin-bottom:6px">طريقة الدفع</label>
+              <select id="po-payment-method" class="form-input" style="width:100%">
+                <option value="">— اختار —</option>
+                <option value="cash">💵 نقدي</option>
+                <option value="bank_transfer">🏦 تحويل بنكي</option>
+                <option value="check">🧾 شيك</option>
+                <option value="credit_30">📅 آجل 30 يوم</option>
+                <option value="credit_60">📅 آجل 60 يوم</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-weight:600;font-size:13px;color:#1a1c1d;margin-bottom:6px">📅 التوريد المتوقع</label>
+              <input id="po-expected-date" type="date" class="form-input" style="width:100%">
+            </div>
+          </div>
+        </div>
+        
+        <!-- Products (Shopify-style table) -->
+        <div style="background:#fff;border:1px solid #e1e3e5;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,0.04);overflow:hidden">
+          <div style="padding:16px 20px;border-bottom:1px solid #e1e3e5;display:flex;justify-content:space-between;align-items:center;gap:10px">
+            <div style="font-weight:700;color:#1a1c1d;font-size:15px">📦 المنتجات</div>
+            <button class="btn btn-secondary btn-sm" onclick="openPOAddItem()" style="background:#fff;border:1px solid #c9cccf;color:#1a1c1d;font-weight:600">➕ إضافة منتج</button>
+          </div>
+          
+          <!-- Products table header -->
+          <div id="po-items-header" style="display:none;background:#fafbfb;border-bottom:1px solid #e1e3e5;padding:10px 20px;font-size:11px;font-weight:700;color:#6d7175;text-transform:uppercase;letter-spacing:0.4px">
+            <div style="display:grid;grid-template-columns:1fr 80px 100px 100px 90px 30px;gap:12px;align-items:center">
+              <div>المنتج</div>
+              <div style="text-align:center">الكمية</div>
+              <div style="text-align:left">سعر الوحدة</div>
+              <div style="text-align:left">الإجمالي</div>
+              <div></div>
+              <div></div>
+            </div>
+          </div>
+          
+          <div id="po-items-list">
+            <div style="text-align:center;padding:40px 20px;color:#6d7175;font-size:13px">
+              <div style="font-size:32px;margin-bottom:8px">📦</div>
+              <div>مفيش منتجات</div>
+              <div style="font-size:11px;margin-top:4px;color:#8c9196">اضغط "➕ إضافة منتج" تبدأ</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Additional details -->
+        <div style="background:#fff;border:1px solid #e1e3e5;border-radius:10px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,0.04)">
+          <div style="font-weight:700;color:#1a1c1d;font-size:15px;margin-bottom:14px">📝 تفاصيل إضافية</div>
+          <label style="display:block;font-weight:600;font-size:12px;color:#5c5f62;margin-bottom:6px">ملاحظات (تظهر للمورد على الـ PDF)</label>
+          <textarea id="po-notes" class="form-input" rows="3" style="width:100%;resize:vertical" placeholder="مثلاً: التسليم في الصباح، أو ملاحظات للمورد..."></textarea>
         </div>
       </div>
       
-      <!-- الإجماليات -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
-        <div class="form-group">
-          <label>🚚 شحن</label>
-          <input id="po-shipping" type="number" min="0" step="0.01" value="0" class="form-input" onchange="updatePOTotals()">
+      <!-- RIGHT COLUMN - Cost Summary (sticky sidebar) -->
+      <div style="display:flex;flex-direction:column;gap:16px;position:sticky;top:80px" class="po-sidebar">
+        
+        <!-- Cost summary card (Shopify-style) -->
+        <div style="background:#fff;border:1px solid #e1e3e5;border-radius:10px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,0.04)">
+          <div style="font-weight:700;color:#1a1c1d;font-size:15px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #e1e3e5">💰 ملخص التكاليف</div>
+          
+          <div style="display:flex;flex-direction:column;gap:10px;font-size:13px">
+            <div style="display:flex;justify-content:space-between;color:#5c5f62">
+              <span>المجموع الفرعي:</span>
+              <span style="font-weight:700;color:#1a1c1d;font-family:monospace" id="po-subtotal-display">0.00 ج</span>
+            </div>
+            
+            <!-- Tax -->
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+              <label style="color:#5c5f62">💰 الضريبة:</label>
+              <input id="po-tax" type="number" min="0" step="0.01" value="0" class="form-input" onchange="updatePOTotals()" style="width:100px;text-align:left;font-family:monospace;padding:4px 8px;font-size:12px">
+            </div>
+            
+            <!-- Shipping -->
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+              <label style="color:#5c5f62">🚚 الشحن:</label>
+              <input id="po-shipping" type="number" min="0" step="0.01" value="0" class="form-input" onchange="updatePOTotals()" style="width:100px;text-align:left;font-family:monospace;padding:4px 8px;font-size:12px">
+            </div>
+            
+            <!-- Hidden subtotal & tax displays for compat -->
+            <div style="display:none">
+              <span id="po-shipping-display">0 ج</span>
+              <span id="po-tax-display">0 ج</span>
+            </div>
+            
+            <!-- Total -->
+            <div style="border-top:2px solid #1a1c1d;padding-top:12px;margin-top:6px;display:flex;justify-content:space-between;align-items:center">
+              <span style="font-weight:800;font-size:15px;color:#1a1c1d">الإجمالي:</span>
+              <span style="font-weight:800;font-size:18px;color:#1a1c1d;font-family:monospace" id="po-total-display">0.00 ج</span>
+            </div>
+          </div>
         </div>
-        <div class="form-group">
-          <label>💰 ضريبة</label>
-          <input id="po-tax" type="number" min="0" step="0.01" value="0" class="form-input" onchange="updatePOTotals()">
+        
+        <!-- Quick info card -->
+        <div style="background:#f0f9ff;border:1px solid #0ea5e9;border-radius:10px;padding:14px;font-size:12px;color:#0c4a6e;line-height:1.6">
+          <div style="font-weight:700;margin-bottom:6px">💡 معلومة</div>
+          <div>الـ PO هيتربط بـ Shopify تلقائياً. لما تستلم البضاعة، Shopify المخزون يتحدث في الـ destination المختار.</div>
         </div>
       </div>
-      
-      <div class="form-group">
-        <label>طريقة الدفع</label>
-        <select id="po-payment-method" class="form-input">
-          <option value="">-- اختار --</option>
-          <option value="cash">💵 نقدي</option>
-          <option value="bank_transfer">🏦 تحويل بنكي</option>
-          <option value="check">🧾 شيك</option>
-          <option value="credit_30">📅 آجل 30 يوم</option>
-          <option value="credit_60">📅 آجل 60 يوم</option>
-        </select>
-      </div>
-      
-      <div class="form-group">
-        <label>ملاحظات</label>
-        <textarea id="po-notes" class="form-input" rows="2"></textarea>
-      </div>
-      
-      <!-- الإجمالي -->
-      <div style="background:linear-gradient(135deg,#dbeafe 0%,#fff 100%);border:2px solid #3b82f6;border-radius:10px;padding:14px;margin-top:14px">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
-          <div>المجموع الفرعي:</div>
-          <div style="text-align:left;font-weight:700" id="po-subtotal-display">0 ج</div>
-          <div>الشحن:</div>
-          <div style="text-align:left;font-weight:700" id="po-shipping-display">0 ج</div>
-          <div>الضريبة:</div>
-          <div style="text-align:left;font-weight:700" id="po-tax-display">0 ج</div>
-          <div style="font-weight:800;font-size:16px;color:#1e40af;border-top:2px solid #3b82f6;padding-top:6px">الإجمالي:</div>
-          <div style="font-weight:800;font-size:18px;color:#1e40af;border-top:2px solid #3b82f6;padding-top:6px;text-align:left" id="po-total-display">0 ج</div>
-        </div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeM('m-po')">إلغاء</button>
-      <button class="btn btn-secondary" onclick="savePO('draft')">💾 حفظ كمسودة</button>
-      <button class="btn btn-primary" onclick="savePO('sent')">📤 حفظ وإرسال</button>
     </div>
   </div>
 </div>
 
 <!-- Add Item to PO Modal -->
-<div id="m-po-add-item" class="modal-overlay" style="display:none">
+<div id="m-po-add-item" class="modal-overlay" style="display:none;z-index:1100">
   <div class="modal" style="max-width:600px">
     <div class="modal-header">
       <h3 style="margin:0">➕ إضافة منتج للأمر</h3>
@@ -23831,29 +23899,74 @@ function onPOSupplierChange(){
 
 function renderPOItems(){
   const list = document.getElementById('po-items-list');
+  const header = document.getElementById('po-items-header');
   if(!list) return;
   
   if(!_poItems.length){
-    list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">مفيش منتجات - اضغط ➕</div>';
+    if(header) header.style.display = 'none';
+    list.innerHTML = `
+      <div style="text-align:center;padding:40px 20px;color:#6d7175;font-size:13px">
+        <div style="font-size:32px;margin-bottom:8px">📦</div>
+        <div>مفيش منتجات</div>
+        <div style="font-size:11px;margin-top:4px;color:#8c9196">اضغط "➕ إضافة منتج" تبدأ</div>
+      </div>
+    `;
     return;
   }
   
+  // 🆕 v337: Shopify-style table layout
+  if(header) header.style.display = 'block';
+  
   list.innerHTML = _poItems.map((it, i) => `
-    <div style="background:var(--elev);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:6px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-        <div style="flex:1">
-          <div style="font-weight:700;font-size:13px">${escapeHtml(it.productTitle)}${it.variantTitle ? ' - '+escapeHtml(it.variantTitle) : ''}</div>
-          ${it.sku ? `<div style="font-size:10px;color:var(--muted);font-family:monospace">SKU: ${escapeHtml(it.sku)}</div>` : ''}
-          <div style="font-size:11px;margin-top:4px">
-            <span>الكمية: <strong>${it.orderedQty}</strong></span> · 
-            <span>السعر: <strong>${parseFloat(it.unitCost).toFixed(2)} ج</strong></span> ·
-            <span style="color:var(--accent)">الإجمالي: <strong>${(it.orderedQty * it.unitCost).toFixed(2)} ج</strong></span>
+    <div style="padding:14px 20px;border-bottom:1px solid #e1e3e5;display:grid;grid-template-columns:1fr 80px 100px 100px 90px 30px;gap:12px;align-items:center;font-size:13px" onmouseover="this.style.background='#fafbfb'" onmouseout="this.style.background='transparent'">
+      <!-- Product info -->
+      <div style="min-width:0">
+        <div style="font-weight:600;color:#1a1c1d;font-size:13px;line-height:1.4;word-break:break-word">${escapeHtml(it.productTitle)}${it.variantTitle ? ' - '+escapeHtml(it.variantTitle) : ''}</div>
+        ${it.sku || it.barcode ? `
+          <div style="font-size:11px;color:#6d7175;margin-top:3px;font-family:monospace">
+            ${it.sku ? 'SKU: ' + escapeHtml(it.sku) : ''}${it.sku && it.barcode ? ' · ' : ''}${it.barcode ? escapeHtml(it.barcode) : ''}
           </div>
-        </div>
-        <button class="btn btn-ghost btn-xs" onclick="removePOItem(${i})" style="color:var(--danger)">🗑️</button>
+        ` : ''}
+      </div>
+      
+      <!-- Quantity (editable inline) -->
+      <div>
+        <input type="number" min="1" value="${it.orderedQty}" 
+          onchange="updatePOItemField(${i}, 'orderedQty', parseInt(this.value)||1)" 
+          class="form-input" 
+          style="width:100%;text-align:center;padding:6px 4px;font-size:13px;font-family:monospace">
+      </div>
+      
+      <!-- Unit cost (editable inline) -->
+      <div>
+        <input type="number" min="0" step="0.01" value="${parseFloat(it.unitCost).toFixed(2)}" 
+          onchange="updatePOItemField(${i}, 'unitCost', parseFloat(this.value)||0)" 
+          class="form-input" 
+          style="width:100%;text-align:left;padding:6px 4px;font-size:13px;font-family:monospace">
+      </div>
+      
+      <!-- Line total -->
+      <div style="text-align:left;font-weight:700;font-family:monospace;color:#1a1c1d">
+        ${(it.orderedQty * it.unitCost).toFixed(2)} ج
+      </div>
+      
+      <!-- Reserved column (for tax/extras future) -->
+      <div></div>
+      
+      <!-- Remove -->
+      <div>
+        <button onclick="removePOItem(${i})" style="background:transparent;border:none;cursor:pointer;color:#d72c0d;font-size:18px;padding:4px 6px;border-radius:4px" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='transparent'" title="حذف">✕</button>
       </div>
     </div>
   `).join('');
+}
+
+// 🆕 v337: تعديل قيمة من inside الـ table مباشرة
+function updatePOItemField(idx, field, value){
+  if(!_poItems[idx]) return;
+  _poItems[idx][field] = value;
+  renderPOItems();
+  updatePOTotals();
 }
 
 function removePOItem(idx){
@@ -23868,10 +23981,10 @@ function updatePOTotals(){
   const tax = parseFloat(document.getElementById('po-tax').value) || 0;
   const total = subtotal + shipping + tax;
   
-  document.getElementById('po-subtotal-display').textContent = subtotal.toFixed(0) + ' ج';
-  document.getElementById('po-shipping-display').textContent = shipping.toFixed(0) + ' ج';
-  document.getElementById('po-tax-display').textContent = tax.toFixed(0) + ' ج';
-  document.getElementById('po-total-display').textContent = total.toFixed(0) + ' ج';
+  document.getElementById('po-subtotal-display').textContent = subtotal.toFixed(2) + ' ج';
+  document.getElementById('po-shipping-display').textContent = shipping.toFixed(2) + ' ج';
+  document.getElementById('po-tax-display').textContent = tax.toFixed(2) + ' ج';
+  document.getElementById('po-total-display').textContent = total.toFixed(2) + ' ج';
 }
 
 function openPOAddItem(){
