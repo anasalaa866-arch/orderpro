@@ -1,39 +1,39 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v337 — PO MODAL: SHOPIFY-STYLE FULLSCREEN (2026-05-23)
+  OrderPro v338 — FEFO BATCHES SYSTEM (2026-05-23)
   ═══════════════════════════════════════════════════════════════════
-  ✨ إعادة تصميم كاملة لـ modal أمر الشراء بشكل Shopify
+  ✨ نظام Batches لتواريخ الصلاحية (First Expired First Out)
   
-  📐 التصميم الجديد:
-  - Full-screen layout (مش modal صغير في النص)
-  - Top bar فيه: زرار رجوع + Title + (إلغاء/حفظ كمسودة/حفظ وإرسال)
-  - Layout 2-column: Main content + Sticky sidebar للـ Cost summary
+  📦 المفهوم:
+  - كل منتج يقدر يكون له عدة batches بتواريخ صلاحية مختلفة
+  - مثال: 20 قطعة تاريخ A + 20 قطعة تاريخ B + 60 قطعة تاريخ C
+  - النظام تلقائياً يخصم من الـ batch الأقدم (FEFO)
+  - الـ Untracked: لو فيه كميات بدون batch، تباع عادي
   
-  📦 Main content:
-  • Supplier + Destination في كارد واحد
-  • Payment terms + Expected date
-  • Products table (Shopify-style):
-    - Quantity & cost editable inline في الجدول مباشرة
-    - Total لكل سطر بيتحسب فوراً
-    - Remove button (✕) واضح
-  • Additional details (notes)
+  🔄 الـ Flow:
+  1. تضيف batches للمنتج من صفحة "تواريخ الصلاحية"
+  2. لما طلب يدخل من Shopify webhook، النظام يخصم من الأقدم
+  3. لو batch خلص → status='depleted_pending' + alert
+  4. المدير يراجع الـ batches المنتظرة ويأكد أو يرجع كمية
+  5. لو طلب اتلغى → النظام يرجع الكميات للـ batches
   
-  💰 Sidebar (sticky على اليمين):
-  • Cost summary card فيه:
-    - Subtotal (تلقائي)
-    - Tax (editable inline)
-    - Shipping (editable inline)
-    - Total (واضح + كبير)
-  • Info card بيوضح إن الـ PO هيتربط بـ Shopify تلقائياً
+  📊 صفحة جديدة (page-expiry):
+  - 2 tabs: "Batches نشطة" / "⚠️ منتظرة تأكيد"
+  - الـ products مجمعة بشكل cards (مش جدول)
+  - كل product card فيها list of batches بتواريخهم
+  - زر "+ Batch" بجانب كل منتج لإضافة batch جديد
   
-  📱 Responsive: على شاشات < 900px، الـ 2-column يبقى single
+  📋 في تفاصيل الطلب (modal):
+  - banner جديد "📦 Batches المخصومة لهذا الطلب"
+  - يبين الـ batch IDs + التواريخ + الكميات
+  - تحذير برتقالي لو في batch تاريخه قريب (< 60 يوم)
   
-  من v336 (محفوظ):
-  - 🆕 Shopify Inventory Sync on PO Receive (server v248)
-  - 🆕 Auto-link warehouses to Shopify locations
-  من v335 (محفوظ):
-  - 🆕 preparation visibility + reports
+  محتاج: server v249
+  
+  من v337 (محفوظ):
+  - 🆕 Shopify-style PO modal fullscreen + barcode quick-add
+  - 🆕 Expiry modal synced with Shopify products
   ═══════════════════════════════════════════════════════════════════
 -->
 <html lang="ar" dir="rtl">
@@ -173,7 +173,8 @@ tr:hover td{background:#fafbff}
 /* 🆕 v243: aliases لـ CSS classes اللي ضيفتها لـ Inventory و HR pages */
 /* 🔧 v246: modal-overlay بيستخدم flex لما يفتح (JS بيحدد display) */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px);display:none}
-.modal-overlay[style*="flex"]{display:flex !important}
+/* 🔧 v337: استخدم data attribute بدل style match عشان نتفادى false matches مع flex-start/flex-end */
+.modal-overlay[data-open="true"]{display:flex !important}
 
 /* 🆕 v337: PO Fullscreen modal (Shopify-style) */
 #m-po.modal-overlay{padding:0 !important;align-items:stretch !important;justify-content:stretch !important}
@@ -4185,7 +4186,28 @@ tr:hover td{background:#fafbff}
         <div style="background:#fff;border:1px solid #e1e3e5;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,0.04);overflow:hidden">
           <div style="padding:16px 20px;border-bottom:1px solid #e1e3e5;display:flex;justify-content:space-between;align-items:center;gap:10px">
             <div style="font-weight:700;color:#1a1c1d;font-size:15px">📦 المنتجات</div>
-            <button class="btn btn-secondary btn-sm" onclick="openPOAddItem()" style="background:#fff;border:1px solid #c9cccf;color:#1a1c1d;font-weight:600">➕ إضافة منتج</button>
+            <button class="btn btn-secondary btn-sm" onclick="openPOAddItem()" style="background:#fff;border:1px solid #c9cccf;color:#1a1c1d;font-weight:600">➕ إضافة منتج (بحث)</button>
+          </div>
+          
+          <!-- 🆕 v337: Barcode Quick-Add Bar -->
+          <div style="padding:14px 20px;background:linear-gradient(135deg,#eff6ff,#fff);border-bottom:1px solid #e1e3e5">
+            <div style="display:flex;gap:10px;align-items:center">
+              <div style="font-size:24px">📷</div>
+              <div style="flex:1">
+                <label style="display:block;font-weight:700;font-size:12px;color:#1e40af;margin-bottom:4px">سكان سريع بالباركود</label>
+                <input 
+                  id="po-barcode-quickadd" 
+                  type="text" 
+                  class="form-input" 
+                  placeholder="📡 امسح أو اكتب الباركود (يتضاف تلقائياً)..."
+                  oninput="handleBarcodeInput()"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();handleBarcodeQuickAdd();}"
+                  style="width:100%;padding:10px 14px;font-size:14px;font-family:monospace;border:2px solid #3b82f6;background:#fff"
+                  autocomplete="off">
+                <div style="font-size:10px;color:#6d7175;margin-top:3px">💡 امسح المنتج بالباركود — يتضاف تلقائياً للجدول بدون Enter</div>
+              </div>
+              <div id="po-barcode-status" style="min-width:80px;text-align:center;font-size:11px;font-weight:700;padding:6px 10px;border-radius:6px;display:none"></div>
+            </div>
           </div>
           
           <!-- Products table header -->
@@ -4204,7 +4226,7 @@ tr:hover td{background:#fafbff}
             <div style="text-align:center;padding:40px 20px;color:#6d7175;font-size:13px">
               <div style="font-size:32px;margin-bottom:8px">📦</div>
               <div>مفيش منتجات</div>
-              <div style="font-size:11px;margin-top:4px;color:#8c9196">اضغط "➕ إضافة منتج" تبدأ</div>
+              <div style="font-size:11px;margin-top:4px;color:#8c9196">امسح باركود من فوق، أو اضغط "➕ إضافة منتج" للبحث بالاسم</div>
             </div>
           </div>
         </div>
@@ -5485,6 +5507,16 @@ tr:hover td{background:#fafbff}
 <!-- ===== EXPIRY PAGE ===== -->
 <div class="page" id="page-expiry">
 
+  <!-- 🆕 v249: Tabs (Active vs Pending Confirmation) -->
+  <div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:2px solid var(--border)">
+    <button id="exp-tab-active" class="exp-tab on" onclick="expSwitchTab('active')" style="padding:10px 16px;background:transparent;border:none;border-bottom:3px solid transparent;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;font-size:13px">
+      📦 Batches نشطة
+    </button>
+    <button id="exp-tab-pending" class="exp-tab" onclick="expSwitchTab('pending')" style="padding:10px 16px;background:transparent;border:none;border-bottom:3px solid transparent;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;color:var(--muted)">
+      ⚠️ منتظرة تأكيد <span id="exp-pending-badge" style="display:none;background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;border-radius:99px;margin-right:4px">0</span>
+    </button>
+  </div>
+
   <!-- Stats Bar -->
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
     <div class="sc" style="border-right:4px solid var(--danger)">
@@ -5494,16 +5526,16 @@ tr:hover td{background:#fafbff}
     </div>
     <div class="sc" style="border-right:4px solid var(--warn)">
       <div class="sc-icon">🟡</div>
-      <div class="sc-label">تنتهي خلال 30 يوم</div>
+      <div class="sc-label">تنتهي خلال 60 يوم</div>
       <div class="sc-val" id="exp-stat-soon" style="color:var(--warn)">0</div>
     </div>
     <div class="sc" style="border-right:4px solid var(--info)">
-      <div class="sc-icon">🔵</div>
-      <div class="sc-label">تنتهي خلال 90 يوم</div>
+      <div class="sc-icon">📦</div>
+      <div class="sc-label">Batches نشطة</div>
       <div class="sc-val" id="exp-stat-ok" style="color:var(--info)">0</div>
     </div>
     <div class="sc" style="border-right:4px solid var(--success)">
-      <div class="sc-icon">✅</div>
+      <div class="sc-icon">📊</div>
       <div class="sc-label">إجمالي المنتجات</div>
       <div class="sc-val" id="exp-stat-total" style="color:var(--success)">0</div>
     </div>
@@ -5513,69 +5545,92 @@ tr:hover td{background:#fafbff}
   <div class="card" style="margin-bottom:14px">
     <div class="card-body" style="padding:10px 14px">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <!-- Filter chips -->
-        <div style="display:flex;gap:5px;flex-wrap:wrap" id="exp-filter-chips">
-          <button class="chip on" onclick="expSetFilter('all',this)">الكل</button>
-          <button class="chip" onclick="expSetFilter('expired',this)" style="color:var(--danger)">🔴 منتهية</button>
-          <button class="chip" onclick="expSetFilter('soon',this)" style="color:var(--warn)">🟡 خلال 30 يوم</button>
-          <button class="chip" onclick="expSetFilter('ok',this)" style="color:var(--info)">🔵 خلال 90 يوم</button>
-          <button class="chip" onclick="expSetFilter('safe',this)" style="color:var(--success)">✅ آمنة</button>
-        </div>
         <!-- Search -->
-        <input id="exp-search" placeholder="ابحث عن منتج..." oninput="renderExpiryPage()"
-          style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;width:180px">
-        <!-- Alert days -->
-        <div style="display:flex;align-items:center;gap:6px;font-size:12px">
-          <label style="color:var(--muted)">تنبيه قبل:</label>
-          <input id="exp-alert-days" type="number" value="30" min="1" max="365" onchange="saveExpSettings()"
-            style="width:55px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;text-align:center">
-          <span style="color:var(--muted)">يوم</span>
-        </div>
+        <input id="exp-search" placeholder="🔍 ابحث عن منتج..." oninput="renderBatchesPage()"
+          style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;width:240px">
+        <span id="exp-count" style="font-size:11px;color:var(--muted)"></span>
         <div style="margin-right:auto;display:flex;gap:6px">
-          <button class="btn btn-ghost btn-sm" onclick="syncExpiryFromShopify()">🔄 مزامنة Shopify</button>
-          <button class="btn btn-ghost btn-sm" onclick="printExpiryReport()">🖨️ طباعة التصفية</button>
-          <button class="btn btn-primary btn-sm" onclick="openAddExpiry()">+ إضافة منتج</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadBatchesPage()">🔄 تحديث</button>
+          <button class="btn btn-primary btn-sm" onclick="openAddExpiry()">+ Batch جديد</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Table -->
-  <div class="card">
-    <div class="card-hd">
-      <h3>⏳ قائمة الصلاحيات</h3>
-      <span id="exp-count" style="font-size:12px;color:var(--muted)"></span>
-      <button class="btn btn-ghost btn-sm" onclick="expBulkDelete()" style="margin-right:auto;color:var(--danger)">🗑️ حذف المحددة</button>
+  <!-- Active Batches Tab Content -->
+  <div id="exp-tab-active-content">
+    <div id="exp-products-container" style="display:flex;flex-direction:column;gap:12px">
+      <div style="padding:40px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div>
     </div>
-    <div class="tbl-wrap"><table>
-      <thead><tr>
-        <th style="width:30px"><input type="checkbox" id="exp-check-all" onchange="expToggleAll(this.checked)"></th>
-        <th>المنتج</th>
-        <th>الباركود / SKU</th>
-        <th>الكمية</th>
-        <th>تاريخ الانتهاء</th>
-        <th>الأيام المتبقية</th>
-        <th>الحالة</th>
-        <th>إجراءات</th>
-      </tr></thead>
-      <tbody id="exp-tbody"></tbody>
-    </table></div>
+  </div>
+
+  <!-- Pending Confirmation Tab Content -->
+  <div id="exp-tab-pending-content" style="display:none">
+    <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:10px;padding:14px;margin-bottom:14px;font-size:13px;color:#78350f;line-height:1.6">
+      ⚠️ <strong>الـ batches دي خلصت تلقائياً من البيع.</strong> 
+      أكد إنها فعلاً خلصت (وقفت تباع) أو رجّع كمية لو لسه فيها قطع.
+    </div>
+    <div id="exp-pending-container" style="display:flex;flex-direction:column;gap:10px">
+      <div style="padding:40px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div>
+    </div>
   </div>
 </div>
 
 <!-- MODAL: إضافة/تعديل منتج -->
+<!-- 🆕 v337: Expiry modal - synced with Shopify products -->
 <div class="overlay" id="m-expiry">
-  <div class="modal" style="width:500px">
-    <div class="mhd"><h3 id="exp-modal-title">➕ إضافة منتج</h3><button class="xbtn" onclick="closeM('m-expiry')">✕</button></div>
+  <div class="modal" style="width:min(560px,96vw);max-height:90vh;overflow-y:auto">
+    <div class="mhd"><h3 id="exp-modal-title">➕ إضافة منتج للصلاحيات</h3><button class="xbtn" onclick="closeM('m-expiry')">✕</button></div>
     <div class="mbody">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="fg" style="grid-column:1/-1"><label>اسم المنتج *</label><input id="exp-name" placeholder="مثال: نسكافيه جولد 200 جرام"></div>
-        <div class="fg"><label>SKU / باركود</label><input id="exp-sku" placeholder="اختياري"></div>
-        <div class="fg"><label>الكمية</label><input id="exp-qty" type="number" value="1" min="0"></div>
-        <div class="fg"><label>تاريخ الانتهاء *</label><input id="exp-date" type="date"></div>
-        <div class="fg"><label>الفئة</label><input id="exp-category" placeholder="مثال: قهوة، شاي..."></div>
-        <div class="fg" style="grid-column:1/-1"><label>ملاحظات</label><textarea id="exp-note" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px"></textarea></div>
+      
+      <!-- Step 1: اختار منتج من Shopify (سكان أو بحث) -->
+      <div style="background:linear-gradient(135deg,#eff6ff,#fff);border:1px solid #3b82f6;border-radius:10px;padding:12px;margin-bottom:14px">
+        <div style="font-weight:700;font-size:12px;color:#1e40af;margin-bottom:6px">🔍 اختار المنتج من Shopify</div>
+        <input 
+          id="exp-modal-search" 
+          type="text" 
+          class="form-input" 
+          placeholder="📡 امسح باركود، أو اكتب اسم/SKU..."
+          oninput="handleExpiryInput()"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();handleExpirySearchEnter();}"
+          style="width:100%;padding:10px 12px;font-size:14px;font-family:monospace;border:2px solid #3b82f6"
+          autocomplete="off">
+        <div id="exp-search-results" style="max-height:240px;overflow-y:auto;background:#fff;border:1px solid var(--border);border-radius:8px;margin-top:6px;display:none"></div>
+        <div id="exp-search-status" style="margin-top:6px;font-size:11px;display:none"></div>
       </div>
+      
+      <!-- المنتج المختار -->
+      <div id="exp-selected" style="display:none;background:#dcfce7;border:1px solid #16a34a;border-radius:10px;padding:12px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;color:#15803d;font-size:14px" id="exp-selected-name"></div>
+            <div style="font-size:11px;color:#166534;margin-top:3px;font-family:monospace" id="exp-selected-info"></div>
+          </div>
+          <button onclick="clearExpirySelection()" style="background:transparent;border:none;cursor:pointer;color:#dc2626;font-size:14px" title="إلغاء الاختيار">✕</button>
+        </div>
+      </div>
+      
+      <!-- باقي الحقول -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="fg">
+          <label>📅 تاريخ الانتهاء *</label>
+          <input id="exp-date" type="date" class="form-input" style="width:100%">
+        </div>
+        <div class="fg">
+          <label>📦 الكمية</label>
+          <input id="exp-qty" type="number" value="1" min="0" class="form-input" style="width:100%">
+        </div>
+      </div>
+      
+      <div class="fg" style="margin-top:12px">
+        <label>📝 ملاحظات (اختياري)</label>
+        <textarea id="exp-note" rows="2" class="form-input" style="width:100%;resize:vertical" placeholder="مثلاً: علبة فيها كسر بسيط..."></textarea>
+      </div>
+      
+      <!-- Hidden fields (compat مع saveExpiry القديمة) -->
+      <input type="hidden" id="exp-name">
+      <input type="hidden" id="exp-sku">
+      <input type="hidden" id="exp-category">
     </div>
     <div class="mft">
       <button class="btn btn-ghost" onclick="closeM('m-expiry')">إلغاء</button>
@@ -7156,8 +7211,10 @@ function openM(id){
   const el = $(id);
   if(!el) return;
   // 🔧 v246: support both .overlay (old) and .modal-overlay (new)
+  // 🔧 v337: استخدم data-open بدل style.display عشان نتفادى false-match مع flex-start
   if(el.classList.contains('modal-overlay')){
-    el.style.display = 'flex';
+    el.setAttribute('data-open', 'true');
+    el.style.display = 'flex'; // backward compatibility
   } else {
     el.classList.add('open');
   }
@@ -7167,6 +7224,7 @@ function closeM(id){
   if(!el) return;
   // 🔧 v246: support both styles
   if(el.classList.contains('modal-overlay')){
+    el.removeAttribute('data-open');
     el.style.display = 'none';
   } else {
     el.classList.remove('open');
@@ -7552,6 +7610,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if(btn.dataset.ordersRange === String(range)){
       btn.classList.add('orders-range-btn-active');
     }
+  });
+  
+  // 🔧 v337: safety - اقفل أي modal مفتوح بالغلط بعد reload
+  // (لو حصل false-match مع CSS selector قديم أو في session storage بقايا)
+  document.querySelectorAll('.modal-overlay').forEach(m => {
+    m.removeAttribute('data-open');
+    m.style.display = 'none';
   });
 });
 
@@ -9109,6 +9174,66 @@ async function openOrderHistory(orderId){
     }
   }
 
+  // 🆕 v249: batch deductions banner (لو الطلب خصم من batches)
+  let batchBanner = '';
+  if(o && API_URL){
+    try {
+      const bR = await apiFetch('/api/orders/' + encodeURIComponent(orderId) + '/batches');
+      const deductions = bR?.deductions || [];
+      if(Array.isArray(deductions) && deductions.length){
+        // group by variantId
+        const byVariant = {};
+        deductions.forEach(d => {
+          const key = d.variantId;
+          if(!byVariant[key]) byVariant[key] = { items: [], totalQty: 0 };
+          byVariant[key].items.push(d);
+          byVariant[key].totalQty += parseInt(d.qty) || 0;
+        });
+        
+        const today = new Date();
+        let hasUrgent = false;
+        
+        const variantBlocks = Object.entries(byVariant).map(([vid, group]) => {
+          return group.items.map(d => {
+            const expDate = d.batchInfo?.exp_date || d.expDate;
+            const dateFmt = expDate ? new Date(expDate).toLocaleDateString('ar-EG', {year:'numeric',month:'short',day:'numeric'}) : '—';
+            const daysLeft = expDate ? Math.ceil((new Date(expDate) - today) / (1000*60*60*24)) : null;
+            const isUrgent = daysLeft !== null && daysLeft <= 60;
+            if(isUrgent) hasUrgent = true;
+            const title = d.batchInfo?.product_title ? (d.batchInfo.product_title + (d.batchInfo.variant_title ? ' - ' + d.batchInfo.variant_title : '')) : 'منتج';
+            
+            return `
+              <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;padding:8px 10px;background:#fff;border-radius:6px;font-size:12px;align-items:center;${isUrgent ? 'border-right:3px solid #f59e0b' : ''}">
+                <div>
+                  <div style="font-weight:700;color:#1a1c1d">${escapeHtml(title)}</div>
+                  <div style="font-size:10px;color:#6d7175;font-family:monospace">Batch #${d.batchId}</div>
+                </div>
+                <div style="text-align:center">
+                  <div style="font-weight:700;color:${isUrgent ? '#f59e0b' : '#15803d'}">${dateFmt}</div>
+                  ${daysLeft !== null ? `<div style="font-size:10px;color:${isUrgent ? '#f59e0b' : '#6d7175'}">${daysLeft < 0 ? 'منتهي' : 'بعد '+daysLeft+' يوم'}</div>` : ''}
+                </div>
+                <div style="text-align:center;font-weight:800;font-size:14px;color:#1a1c1d">×${d.qty}</div>
+              </div>
+            `;
+          }).join('');
+        }).join('');
+        
+        batchBanner = `
+          <div style="background:${hasUrgent ? 'linear-gradient(135deg,#fef3c7,#fff)' : 'linear-gradient(135deg,#dbeafe,#fff)'};border:1px solid ${hasUrgent ? '#f59e0b' : '#3b82f6'};border-radius:10px;padding:12px;margin-bottom:14px">
+            <div style="font-weight:800;color:${hasUrgent ? '#92400e' : '#1e40af'};font-size:13px;margin-bottom:8px">
+              📦 Batches المخصومة لهذا الطلب
+              ${hasUrgent ? '<span style="font-size:11px;font-weight:600;background:#fbbf24;color:#78350f;padding:2px 8px;border-radius:99px;margin-right:6px">⚠️ يحتوي تواريخ قريبة</span>' : ''}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              ${variantBlocks}
+            </div>
+            ${hasUrgent ? `<div style="font-size:11px;color:#92400e;margin-top:8px">💡 المحضّر لازم يأكد إنه أخد الكميات من الـ batches دي</div>` : ''}
+          </div>
+        `;
+      }
+    } catch(e){ /* batch info optional */ }
+  }
+  
   const iconMap = {
     'إنشاء الطلب':'🆕', 'تغيير الحالة':'🔄', 'تعيين مندوب':'🚴',
     'تعديل البيانات':'✏️', 'تغيير حالة الدفع':'💳', 'إلغاء':'❌',
@@ -9130,7 +9255,7 @@ async function openOrderHistory(orderId){
     'barcode_scanned': 'سكان باركود'
   };
 
-  if(content) content.innerHTML = prepBanner + all.map(h=>{
+  if(content) content.innerHTML = prepBanner + batchBanner + all.map(h=>{
     const displayAction = actionLabels[h.action] || h.action;
     const icon = iconMap[h.action] || iconMap[displayAction] || iconMap.default;
     const hasChange = h.oldValue && h.newValue && h.oldValue !== h.newValue;
@@ -23886,10 +24011,22 @@ async function openNewPO(){
   document.getElementById('po-custom-supplier').style.display = 'none';
   
   _poItems = [];
+  _poJustAddedIdx = -1;
   renderPOItems();
   updatePOTotals();
   
+  // 🆕 v337: فضّي الـ barcode input + اخفي status
+  const bcInput = document.getElementById('po-barcode-quickadd');
+  if(bcInput) bcInput.value = '';
+  const bcStatus = document.getElementById('po-barcode-status');
+  if(bcStatus) bcStatus.style.display = 'none';
+  
   openM('m-po');
+  
+  // 🆕 v337: focus على barcode input بعد ما الـ modal يفتح
+  setTimeout(() => {
+    if(bcInput) bcInput.focus();
+  }, 150);
 }
 
 function onPOSupplierChange(){
@@ -23908,7 +24045,7 @@ function renderPOItems(){
       <div style="text-align:center;padding:40px 20px;color:#6d7175;font-size:13px">
         <div style="font-size:32px;margin-bottom:8px">📦</div>
         <div>مفيش منتجات</div>
-        <div style="font-size:11px;margin-top:4px;color:#8c9196">اضغط "➕ إضافة منتج" تبدأ</div>
+        <div style="font-size:11px;margin-top:4px;color:#8c9196">امسح باركود من فوق، أو اضغط "➕ إضافة منتج" للبحث بالاسم</div>
       </div>
     `;
     return;
@@ -23917,8 +24054,14 @@ function renderPOItems(){
   // 🆕 v337: Shopify-style table layout
   if(header) header.style.display = 'block';
   
-  list.innerHTML = _poItems.map((it, i) => `
-    <div style="padding:14px 20px;border-bottom:1px solid #e1e3e5;display:grid;grid-template-columns:1fr 80px 100px 100px 90px 30px;gap:12px;align-items:center;font-size:13px" onmouseover="this.style.background='#fafbfb'" onmouseout="this.style.background='transparent'">
+  list.innerHTML = _poItems.map((it, i) => {
+    // 🆕 v337: highlight السطر اللي اتضاف من شوية (yellow flash)
+    const isJustAdded = (i === _poJustAddedIdx);
+    const bgColor = isJustAdded ? '#fef9c3' : 'transparent';
+    const borderColor = isJustAdded ? '#facc15' : '#e1e3e5';
+    
+    return `
+    <div data-poitem-row="${i}" style="padding:14px 20px;border-bottom:1px solid ${borderColor};display:grid;grid-template-columns:1fr 80px 100px 100px 90px 30px;gap:12px;align-items:center;font-size:13px;background:${bgColor};transition:background 0.6s" onmouseover="this.style.background='#fafbfb'" onmouseout="this.style.background='${bgColor}'">
       <!-- Product info -->
       <div style="min-width:0">
         <div style="font-weight:600;color:#1a1c1d;font-size:13px;line-height:1.4;word-break:break-word">${escapeHtml(it.productTitle)}${it.variantTitle ? ' - '+escapeHtml(it.variantTitle) : ''}</div>
@@ -23932,6 +24075,7 @@ function renderPOItems(){
       <!-- Quantity (editable inline) -->
       <div>
         <input type="number" min="1" value="${it.orderedQty}" 
+          data-poitem-qty="${i}"
           onchange="updatePOItemField(${i}, 'orderedQty', parseInt(this.value)||1)" 
           class="form-input" 
           style="width:100%;text-align:center;padding:6px 4px;font-size:13px;font-family:monospace">
@@ -23940,9 +24084,10 @@ function renderPOItems(){
       <!-- Unit cost (editable inline) -->
       <div>
         <input type="number" min="0" step="0.01" value="${parseFloat(it.unitCost).toFixed(2)}" 
+          data-poitem-cost="${i}"
           onchange="updatePOItemField(${i}, 'unitCost', parseFloat(this.value)||0)" 
           class="form-input" 
-          style="width:100%;text-align:left;padding:6px 4px;font-size:13px;font-family:monospace">
+          style="width:100%;text-align:left;padding:6px 4px;font-size:13px;font-family:monospace${isJustAdded ? ';border-color:#f59e0b;border-width:2px' : ''}">
       </div>
       
       <!-- Line total -->
@@ -23957,8 +24102,28 @@ function renderPOItems(){
       <div>
         <button onclick="removePOItem(${i})" style="background:transparent;border:none;cursor:pointer;color:#d72c0d;font-size:18px;padding:4px 6px;border-radius:4px" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='transparent'" title="حذف">✕</button>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
+  
+  // 🆕 v337: لو فيه سطر اتضاف، شيل الـ highlight بعد ثانية
+  if(_poJustAddedIdx >= 0){
+    const addedIdx = _poJustAddedIdx;
+    setTimeout(() => {
+      if(_poJustAddedIdx === addedIdx){
+        _poJustAddedIdx = -1;
+        // re-render بدون highlight (لكن مش render كامل عشان مايلخبطش الـ focus)
+        const row = list.querySelector(`[data-poitem-row="${addedIdx}"]`);
+        if(row){
+          row.style.background = 'transparent';
+          const costInp = row.querySelector(`[data-poitem-cost="${addedIdx}"]`);
+          if(costInp){
+            costInp.style.borderColor = '#c9cccf';
+            costInp.style.borderWidth = '1px';
+          }
+        }
+      }
+    }, 1500);
+  }
 }
 
 // 🆕 v337: تعديل قيمة من inside الـ table مباشرة
@@ -23997,6 +24162,181 @@ function openPOAddItem(){
   document.getElementById('po-item-notes').value = '';
   openM('m-po-add-item');
 }
+
+// 🆕 v337: Barcode quick-add في الـ PO
+// flow: امسح barcode → يدور على المنتج → يضيفه (أو يزود qty لو موجود) → focus على cost field
+let _poBarcodeBusy = false;
+
+// 🆕 v337: auto-trigger detection
+// لو الـ user وقف عن الكتابة لـ 400ms ومعاه على الأقل 4 حروف → اعتبره خلاص وزود
+let _poBarcodeTimer = null;
+let _poBarcodeLastInput = 0;
+function handleBarcodeInput(){
+  const input = document.getElementById('po-barcode-quickadd');
+  const val = (input.value || '').trim();
+  _poBarcodeLastInput = Date.now();
+  
+  // إلغاء أي timer قديم
+  if(_poBarcodeTimer) clearTimeout(_poBarcodeTimer);
+  
+  // مفيش value → خلاص
+  if(!val) return;
+  
+  // قصير جداً → استنى أكتر
+  if(val.length < 4) return;
+  
+  // استنى 400ms بدون كتابة جديدة → اعتبره خلاص
+  _poBarcodeTimer = setTimeout(() => {
+    // double-check إن مفيش keystroke حصل في خلال الـ delay (defensive)
+    if(Date.now() - _poBarcodeLastInput >= 350){
+      handleBarcodeQuickAdd();
+    }
+  }, 400);
+}
+
+async function handleBarcodeQuickAdd(){
+  if(_poBarcodeBusy) return; // منع double-call
+  
+  // إلغاء الـ auto-timer لو موجود (عشان مايضربش مرتين)
+  if(_poBarcodeTimer){
+    clearTimeout(_poBarcodeTimer);
+    _poBarcodeTimer = null;
+  }
+  
+  const input = document.getElementById('po-barcode-quickadd');
+  const statusEl = document.getElementById('po-barcode-status');
+  const barcode = (input.value || '').trim();
+  
+  if(!barcode){
+    return;
+  }
+  
+  _poBarcodeBusy = true;
+  
+  // اعرض status "جاري البحث"
+  statusEl.style.display = 'block';
+  statusEl.style.background = '#fef3c7';
+  statusEl.style.color = '#92400e';
+  statusEl.textContent = '⏳ جاري...';
+  
+  try {
+    // ابحث بالباركود
+    const r = await apiFetch('/api/inventory/search?q=' + encodeURIComponent(barcode) + '&limit=5');
+    const results = r?.results || [];
+    
+    // دور على exact match بالباركود الأول
+    let match = results.find(p => 
+      (p.barcode || '').trim() === barcode || 
+      (p.sku || '').trim() === barcode
+    );
+    
+    // لو مش لاقي exact، خد أول نتيجة (لو واحدة بس)
+    if(!match && results.length === 1) match = results[0];
+    
+    if(!match){
+      // مفيش match
+      statusEl.style.background = '#fef2f2';
+      statusEl.style.color = '#991b1b';
+      statusEl.textContent = '❌ مش موجود';
+      input.style.borderColor = '#dc2626';
+      
+      // beep بسيط (لو في audio context)
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 200;
+        gain.gain.value = 0.15;
+        osc.start();
+        setTimeout(() => { osc.stop(); ctx.close(); }, 200);
+      } catch(e){}
+      
+      setTimeout(() => {
+        statusEl.style.display = 'none';
+        input.style.borderColor = '#3b82f6';
+        input.select(); // اختار الـ text عشان scanner التاني يكتب فوقه
+      }, 1500);
+      
+      _poBarcodeBusy = false;
+      return;
+    }
+    
+    // ✅ لاقي المنتج - تأكد لو موجود بالفعل في الـ PO
+    const existingIdx = _poItems.findIndex(it => 
+      String(it.variantId) === String(match.variant_id) ||
+      (it.barcode && match.barcode && it.barcode === match.barcode)
+    );
+    
+    if(existingIdx >= 0){
+      // موجود → زود qty
+      _poItems[existingIdx].orderedQty = (_poItems[existingIdx].orderedQty || 0) + 1;
+      _poJustAddedIdx = existingIdx;
+      
+      statusEl.style.background = '#dbeafe';
+      statusEl.style.color = '#1e40af';
+      statusEl.textContent = `🔁 +1 (الآن ${_poItems[existingIdx].orderedQty})`;
+    } else {
+      // جديد → أضف
+      _poItems.push({
+        variantId: match.variant_id,
+        productTitle: match.product_title,
+        variantTitle: match.variant_title || '',
+        sku: match.sku || '',
+        barcode: match.barcode || '',
+        orderedQty: 1,
+        unitCost: 0,
+        notes: ''
+      });
+      _poJustAddedIdx = _poItems.length - 1;
+      
+      statusEl.style.background = '#dcfce7';
+      statusEl.style.color = '#166534';
+      statusEl.textContent = '✅ تمت إضافته';
+    }
+    
+    renderPOItems();
+    updatePOTotals();
+    
+    // beep نجاح
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 800;
+      gain.gain.value = 0.1;
+      osc.start();
+      setTimeout(() => { osc.stop(); ctx.close(); }, 100);
+    } catch(e){}
+    
+    // فضّي الـ input وركّز عليه للـ scan التالي
+    input.value = '';
+    input.focus();
+    
+    // اختفي الـ status بعد ثانية
+    setTimeout(() => { 
+      statusEl.style.display = 'none'; 
+    }, 1200);
+    
+    // 🎯 focus على cost field للمنتج المضاف (يتحط delay صغير عشان renderPOItems تخلص)
+    // لكن مش بنقفل الـ focus من الـ barcode input — الـ user يضغط Tab لو عايز يعدل cost
+    
+  } catch(e) {
+    console.error('Barcode quick-add error:', e);
+    statusEl.style.background = '#fef2f2';
+    statusEl.style.color = '#991b1b';
+    statusEl.textContent = '❌ خطأ: ' + (e.message || 'فشل');
+    setTimeout(() => { statusEl.style.display = 'none'; }, 2000);
+  } finally {
+    _poBarcodeBusy = false;
+  }
+}
+
+// 🆕 v337: حفظ index آخر منتج اتضاف عشان نـ highlight السطر
+let _poJustAddedIdx = -1;
 
 let _poSearchTimer = null;
 async function searchPOItem(){
@@ -31374,6 +31714,336 @@ async function loadMonthlyReport(){
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// 🆕 v249: BATCHES SYSTEM (FEFO)
+// ═══════════════════════════════════════════════════════════════════
+let _batchesData = { products: [] };
+let _batchesPendingData = [];
+let _expCurrentTab = 'active';
+
+async function loadBatchesPage(){
+  // حمل الـ stats
+  try {
+    const stats = await apiFetch('/api/batches/stats');
+    if(stats){
+      if($('exp-stat-soon')) $('exp-stat-soon').textContent = stats.soon_count || 0;
+      if($('exp-stat-expired')) $('exp-stat-expired').textContent = stats.expired_count || 0;
+      if($('exp-stat-ok')) $('exp-stat-ok').textContent = stats.active_count || 0;
+      
+      // update pending tab badge
+      const badge = document.getElementById('exp-pending-badge');
+      if(badge){
+        if(stats.pending_count > 0){
+          badge.style.display = 'inline-block';
+          badge.textContent = stats.pending_count;
+        } else {
+          badge.style.display = 'none';
+        }
+      }
+      
+      // sidebar badge
+      const nbExp = document.getElementById('nb-expiry');
+      if(nbExp){
+        const total = (stats.expired_count||0) + (stats.soon_count||0) + (stats.pending_count||0);
+        nbExp.textContent = total || '';
+      }
+    }
+  } catch(e){ console.warn('batches stats failed:', e); }
+  
+  // حمل الـ active products
+  try {
+    const r = await apiFetch('/api/batches/grouped');
+    _batchesData = r || { products: [] };
+    if($('exp-stat-total')) $('exp-stat-total').textContent = _batchesData.products.length;
+    renderBatchesPage();
+  } catch(e) {
+    const c = document.getElementById('exp-products-container');
+    if(c) c.innerHTML = `<div style="padding:30px;text-align:center;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+  
+  // حمل الـ pending (للـ tab)
+  loadBatchesPending();
+}
+
+function expSwitchTab(tab){
+  _expCurrentTab = tab;
+  
+  // update tab buttons
+  document.querySelectorAll('.exp-tab').forEach(el => {
+    el.classList.remove('on');
+    el.style.borderBottomColor = 'transparent';
+    el.style.color = 'var(--muted)';
+  });
+  const activeBtn = document.getElementById('exp-tab-' + tab);
+  if(activeBtn){
+    activeBtn.classList.add('on');
+    activeBtn.style.borderBottomColor = 'var(--accent)';
+    activeBtn.style.color = 'var(--text)';
+  }
+  
+  // show/hide content
+  const activeC = document.getElementById('exp-tab-active-content');
+  const pendingC = document.getElementById('exp-tab-pending-content');
+  if(tab === 'active'){
+    if(activeC) activeC.style.display = 'block';
+    if(pendingC) pendingC.style.display = 'none';
+  } else {
+    if(activeC) activeC.style.display = 'none';
+    if(pendingC) pendingC.style.display = 'block';
+  }
+}
+
+function renderBatchesPage(){
+  const container = document.getElementById('exp-products-container');
+  if(!container) return;
+  
+  const search = ($('exp-search')?.value || '').toLowerCase().trim();
+  let products = _batchesData.products || [];
+  
+  if(search){
+    products = products.filter(p => 
+      (p.product_title || '').toLowerCase().includes(search) ||
+      (p.sku || '').toLowerCase().includes(search) ||
+      (p.barcode || '').toLowerCase().includes(search)
+    );
+  }
+  
+  if($('exp-count')) $('exp-count').textContent = products.length + ' منتج';
+  
+  if(!products.length){
+    container.innerHTML = `
+      <div style="padding:50px;text-align:center;color:var(--muted)">
+        <div style="font-size:40px;margin-bottom:10px">📦</div>
+        <div style="font-weight:700;margin-bottom:6px">مفيش batches</div>
+        <div style="font-size:12px">اضغط "+ Batch جديد" تبدأ تضيف منتجات بتواريخ صلاحية</div>
+      </div>
+    `;
+    return;
+  }
+  
+  container.innerHTML = products.map(p => {
+    const batches = Array.isArray(p.batches) ? p.batches : [];
+    const nearestExp = p.nearest_exp;
+    const daysLeft = nearestExp ? Math.ceil((new Date(nearestExp) - new Date()) / (1000*60*60*24)) : null;
+    const isUrgent = daysLeft !== null && daysLeft <= 60 && daysLeft >= 0;
+    const isExpired = daysLeft !== null && daysLeft < 0;
+    
+    return `
+      <div class="card" style="overflow:hidden;border-right:4px solid ${isExpired ? 'var(--danger)' : (isUrgent ? 'var(--warn)' : 'var(--success)')}">
+        <!-- Header -->
+        <div style="padding:14px 16px;background:var(--bg);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="font-weight:800;font-size:14px;color:var(--text)">📦 ${escapeHtml(p.product_title || '')}${p.variant_title ? ' - ' + escapeHtml(p.variant_title) : ''}</div>
+            <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:3px">
+              ${p.sku ? 'SKU: ' + escapeHtml(p.sku) : ''}${p.sku && p.barcode ? ' · ' : ''}${p.barcode ? escapeHtml(p.barcode) : ''}
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;font-size:12px">
+            <div style="text-align:center">
+              <div style="color:var(--muted);font-size:10px">المجموع</div>
+              <div style="font-weight:800;font-size:16px">${p.total_tracked || 0}</div>
+            </div>
+            <button class="btn btn-primary btn-xs" onclick='openAddBatchForProduct(${JSON.stringify({variant_id: p.variant_id, product_title: p.product_title, variant_title: p.variant_title, sku: p.sku, barcode: p.barcode}).replace(/'/g,"&apos;")})'>+ Batch</button>
+          </div>
+        </div>
+        
+        <!-- Batches list -->
+        <div style="padding:0">
+          ${batches.map((b, idx) => {
+            const dLeft = b.daysLeft;
+            const expColor = dLeft < 0 ? 'var(--danger)' : (dLeft <= 60 ? 'var(--warn)' : 'var(--success)');
+            const expLabel = dLeft < 0 ? 'منتهي منذ ' + Math.abs(dLeft) + ' يوم' : 
+                            dLeft === 0 ? 'النهاردة!' : 
+                            'بعد ' + dLeft + ' يوم';
+            const dateFmt = new Date(b.expDate).toLocaleDateString('ar-EG', {year:'numeric',month:'short',day:'numeric'});
+            const isPending = b.status === 'depleted_pending';
+            const isOldest = idx === 0 && b.status === 'active';
+            
+            return `
+              <div style="padding:10px 16px;border-top:1px solid var(--border);display:grid;grid-template-columns:auto 1fr auto auto;gap:14px;align-items:center;font-size:12px;${isPending ? 'background:#fef3c7' : (isOldest ? 'background:#f0fdf4' : '')}">
+                <div style="font-family:monospace;color:var(--muted);font-weight:700">#${b.id}</div>
+                <div>
+                  <div style="font-weight:700">${dateFmt}</div>
+                  <div style="font-size:11px;color:${expColor};margin-top:2px">${expLabel}${isOldest ? ' · 🎯 الـ batch الأقدم' : ''}${isPending ? ' · ⚠️ منتظر تأكيد' : ''}</div>
+                </div>
+                <div style="text-align:center">
+                  <div style="font-weight:800;font-size:14px;color:${b.currentQuantity === 0 ? 'var(--danger)' : 'var(--text)'}">${b.currentQuantity}</div>
+                  <div style="font-size:10px;color:var(--muted)">من ${b.originalQuantity}</div>
+                </div>
+                <div style="display:flex;gap:4px">
+                  <button class="btn btn-ghost btn-xs" onclick="editBatch(${b.id})" title="تعديل">✏️</button>
+                  <button class="btn btn-ghost btn-xs" onclick="deleteBatch(${b.id})" style="color:var(--danger)" title="حذف">🗑️</button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function loadBatchesPending(){
+  try {
+    const r = await apiFetch('/api/batches?status=depleted_pending');
+    _batchesPendingData = r?.batches || [];
+    renderBatchesPending();
+  } catch(e){
+    const c = document.getElementById('exp-pending-container');
+    if(c) c.innerHTML = `<div style="padding:30px;text-align:center;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderBatchesPending(){
+  const c = document.getElementById('exp-pending-container');
+  if(!c) return;
+  
+  if(!_batchesPendingData.length){
+    c.innerHTML = `
+      <div style="padding:50px;text-align:center;color:var(--muted)">
+        <div style="font-size:40px;margin-bottom:10px">✅</div>
+        <div style="font-weight:700">مفيش batches منتظرة تأكيد</div>
+      </div>
+    `;
+    return;
+  }
+  
+  c.innerHTML = _batchesPendingData.map(b => {
+    const dateFmt = new Date(b.exp_date).toLocaleDateString('ar-EG', {year:'numeric',month:'short',day:'numeric'});
+    const depletedFmt = b.depleted_at ? new Date(b.depleted_at).toLocaleString('ar-EG') : '—';
+    
+    return `
+      <div class="card" style="overflow:hidden;border-right:4px solid var(--warn)">
+        <div style="padding:14px 16px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+            <div style="flex:1;min-width:200px">
+              <div style="font-weight:800;font-size:14px">⚠️ ${escapeHtml(b.product_title || '')}${b.variant_title ? ' - ' + escapeHtml(b.variant_title) : ''}</div>
+              <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:3px">
+                Batch #${b.id} · ${b.sku ? 'SKU: ' + escapeHtml(b.sku) : ''}${b.barcode ? ' · ' + escapeHtml(b.barcode) : ''}
+              </div>
+              <div style="display:flex;gap:14px;margin-top:8px;font-size:12px">
+                <div>📅 تاريخ الانتهاء: <strong>${dateFmt}</strong></div>
+                <div>📦 الكمية الأصلية: <strong>${b.original_quantity}</strong></div>
+                <div>⏱️ خلصت في: <strong>${depletedFmt}</strong></div>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" onclick="confirmBatchDepleted(${b.id})">✅ أكد إنه خلص</button>
+              <button class="btn btn-ghost btn-sm" onclick="restoreBatch(${b.id})" style="color:var(--warn)">↺ لسه فيه كمية</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function confirmBatchDepleted(batchId){
+  if(!confirm('متأكد إن الـ batch ده فعلاً خلص؟ هيتشال من القائمة.')) return;
+  try {
+    const r = await apiFetch(`/api/batches/${batchId}/confirm-depleted`, 'POST', {});
+    if(r?.success){
+      toast('✅ تم التأكيد');
+      loadBatchesPage();
+    }
+  } catch(e){ toast('❌ ' + e.message); }
+}
+
+async function restoreBatch(batchId){
+  const qty = prompt('فيه كام قطعة موجودة فعلاً؟');
+  if(!qty) return;
+  const q = parseInt(qty);
+  if(!q || q < 1){ toast('❌ كمية غلط'); return; }
+  
+  try {
+    const r = await apiFetch(`/api/batches/${batchId}/restore`, 'POST', { quantity: q });
+    if(r?.success){
+      toast('✅ تم الاسترجاع');
+      loadBatchesPage();
+    }
+  } catch(e){ toast('❌ ' + e.message); }
+}
+
+async function deleteBatch(batchId){
+  if(!confirm('هتمسح الـ batch ده. متأكد؟')) return;
+  try {
+    const r = await apiFetch(`/api/batches/${batchId}`, 'DELETE');
+    if(r?.success){
+      toast('🗑️ تم الحذف');
+      loadBatchesPage();
+    }
+  } catch(e){ toast('❌ ' + e.message); }
+}
+
+async function editBatch(batchId){
+  // جيب الـ batch من _batchesData
+  let batch = null;
+  for(const p of (_batchesData.products || [])){
+    if(Array.isArray(p.batches)){
+      batch = p.batches.find(b => b.id === batchId);
+      if(batch){ batch._product = p; break; }
+    }
+  }
+  if(!batch){ toast('❌ batch مش موجود'); return; }
+  
+  const newDate = prompt('تاريخ الانتهاء الجديد (YYYY-MM-DD):', batch.expDate ? batch.expDate.split('T')[0] : '');
+  if(!newDate) return;
+  
+  const newQty = prompt('الكمية:', batch.currentQuantity);
+  if(newQty === null) return;
+  const q = parseInt(newQty);
+  if(isNaN(q) || q < 0){ toast('❌ كمية غلط'); return; }
+  
+  try {
+    const r = await apiFetch(`/api/batches/${batchId}`, 'PATCH', {
+      expDate: newDate,
+      quantity: q
+    });
+    if(r?.success){
+      toast('✅ تم التعديل');
+      loadBatchesPage();
+    }
+  } catch(e){ toast('❌ ' + e.message); }
+}
+
+// لما المستخدم يضغط "+ Batch" داخل منتج موجود
+function openAddBatchForProduct(productInfo){
+  editingExpiryId = null;
+  _expSelectedProduct = {
+    variant_id: productInfo.variant_id,
+    product_title: productInfo.product_title,
+    variant_title: productInfo.variant_title,
+    sku: productInfo.sku,
+    barcode: productInfo.barcode
+  };
+  
+  // فضي الـ fields
+  if($('exp-qty')) $('exp-qty').value = 1;
+  if($('exp-date')) $('exp-date').value = '';
+  if($('exp-note')) $('exp-note').value = '';
+  if($('exp-modal-search')) $('exp-modal-search').value = '';
+  
+  // اخفي search
+  const resEl = document.getElementById('exp-search-results');
+  if(resEl) resEl.style.display = 'none';
+  
+  showExpirySelected();
+  
+  if(document.getElementById('exp-modal-title')) {
+    document.getElementById('exp-modal-title').textContent = '➕ Batch جديد';
+  }
+  
+  openM('m-expiry');
+  
+  // focus على date
+  setTimeout(() => {
+    const dateInp = document.getElementById('exp-date');
+    if(dateInp) dateInp.focus();
+  }, 150);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+
 function renderExpiryPage(){
   const alertDays = expSettings.alertDays || 30;
   if($('exp-alert-days')) $('exp-alert-days').value = alertDays;
@@ -31438,19 +32108,55 @@ function renderExpiryPage(){
   }).join('');
 }
 
+// 🆕 v337: Expiry modal با مزامنة Shopify
+let _expSelectedProduct = null;
+let _expSearchTimer = null;
+let _expLastInput = 0;
+
 function openAddExpiry(){
   editingExpiryId = null;
-  if(document.getElementById('exp-modal-title')) document.getElementById('exp-modal-title').textContent = '➕ إضافة منتج';
-  ['exp-name','exp-sku','exp-category','exp-note'].forEach(id=>$(id)&&($(id).value=''));
+  _expSelectedProduct = null;
+  if(document.getElementById('exp-modal-title')) document.getElementById('exp-modal-title').textContent = '➕ إضافة منتج للصلاحيات';
+  
+  // فضي الكل (الـ filter بتاع الصفحة `exp-search` مش هنمسه)
+  ['exp-name','exp-sku','exp-category','exp-note','exp-modal-search'].forEach(id => {
+    const el = $(id);
+    if(el) el.value = '';
+  });
   if($('exp-qty')) $('exp-qty').value = 1;
   if($('exp-date')) $('exp-date').value = '';
+  
+  // اخفي selected + results
+  const selEl = document.getElementById('exp-selected');
+  if(selEl) selEl.style.display = 'none';
+  const resEl = document.getElementById('exp-search-results');
+  if(resEl) resEl.style.display = 'none';
+  const statusEl = document.getElementById('exp-search-status');
+  if(statusEl) statusEl.style.display = 'none';
+  
   openM('m-expiry');
+  
+  // focus على search input
+  setTimeout(() => {
+    const inp = document.getElementById('exp-modal-search');
+    if(inp) inp.focus();
+  }, 150);
 }
 
 function openEditExpiry(id){
   const p = expiryList.find(x=>x.id===id);
   if(!p) return;
   editingExpiryId = id;
+  
+  // restore الـ selected product info
+  _expSelectedProduct = {
+    variant_id: p.variantId || null,
+    product_title: p.name || '',
+    variant_title: p.variantTitle || '',
+    sku: p.sku || '',
+    barcode: p.barcode || ''
+  };
+  
   if(document.getElementById('exp-modal-title')) document.getElementById('exp-modal-title').textContent = '✏️ تعديل المنتج';
   if($('exp-name'))     $('exp-name').value     = p.name||'';
   if($('exp-sku'))      $('exp-sku').value       = p.sku||'';
@@ -31458,36 +32164,234 @@ function openEditExpiry(id){
   if($('exp-date'))     $('exp-date').value      = p.expDate||'';
   if($('exp-category')) $('exp-category').value  = p.category||'';
   if($('exp-note'))     $('exp-note').value      = p.note||'';
+  if($('exp-modal-search'))   $('exp-modal-search').value    = '';
+  
+  // عرض الـ selected card
+  showExpirySelected();
+  
   openM('m-expiry');
 }
 
-function saveExpiry(){
-  const name = $('exp-name')?.value.trim();
-  const date = $('exp-date')?.value;
-  if(!name) { toast('❗ أدخل اسم المنتج'); return; }
-  if(!date) { toast('❗ أدخل تاريخ الانتهاء'); return; }
-
-  const data = {
-    id: editingExpiryId || (Date.now()+'_exp'),
-    name, sku: $('exp-sku')?.value.trim()||'',
-    qty: parseInt($('exp-qty')?.value)||1,
-    expDate: date,
-    category: $('exp-category')?.value.trim()||'',
-    note: $('exp-note')?.value.trim()||'',
-    addedAt: editingExpiryId ? (expiryList.find(x=>x.id===editingExpiryId)?.addedAt||new Date().toISOString()) : new Date().toISOString()
-  };
-
-  if(editingExpiryId){
-    const idx = expiryList.findIndex(x=>x.id===editingExpiryId);
-    if(idx>=0) expiryList[idx] = data;
-  } else {
-    expiryList.push(data);
+// 🆕 v337: handle input في exp-modal-search مع auto-trigger (نفس فكرة PO)
+function handleExpiryInput(){
+  const input = document.getElementById('exp-modal-search');
+  const val = (input.value || '').trim();
+  _expLastInput = Date.now();
+  
+  if(_expSearchTimer) clearTimeout(_expSearchTimer);
+  
+  // فضي الـ results لو فاضي
+  if(!val){
+    const resEl = document.getElementById('exp-search-results');
+    if(resEl) resEl.style.display = 'none';
+    return;
   }
+  
+  if(val.length < 2) return;
+  
+  // ابحث مباشرة (بدون auto-add) - عشان expiry فيه manual selection
+  _expSearchTimer = setTimeout(async () => {
+    if(Date.now() - _expLastInput >= 250){
+      await searchExpiryProducts(val);
+    }
+  }, 300);
+}
 
-  saveExpiryData();
-  closeM('m-expiry');
-  renderExpiryPage();
-  toast('✅ تم حفظ: '+name);
+// لما يضغط Enter:
+// - لو في نتيجة exact match (barcode/sku) → اختاره فوراً
+// - لو في نتيجة واحدة بس → اختارها
+// - لو متعدد → سيب الـ user يختار
+async function handleExpirySearchEnter(){
+  const input = document.getElementById('exp-modal-search');
+  const q = (input.value || '').trim();
+  if(!q) return;
+  
+  if(_expSearchTimer){
+    clearTimeout(_expSearchTimer);
+    _expSearchTimer = null;
+  }
+  
+  await searchExpiryProducts(q, true); // tryExact = true
+}
+
+async function searchExpiryProducts(q, tryExact = false){
+  const resEl = document.getElementById('exp-search-results');
+  const statusEl = document.getElementById('exp-search-status');
+  
+  try {
+    const r = await apiFetch('/api/inventory/search?q=' + encodeURIComponent(q) + '&limit=20');
+    const results = r?.results || [];
+    
+    if(!results.length){
+      resEl.innerHTML = '<div style="padding:14px;text-align:center;color:#6d7175;font-size:12px">مفيش نتائج لـ "' + escapeHtml(q) + '"</div>';
+      resEl.style.display = 'block';
+      
+      // beep خطأ لو tryExact (يعني الـ user ضغط Enter أو scanner)
+      if(tryExact){
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.frequency.value = 200; gain.gain.value = 0.15;
+          osc.start();
+          setTimeout(() => { osc.stop(); ctx.close(); }, 200);
+        } catch(e){}
+      }
+      return;
+    }
+    
+    // لو tryExact: شوف لو في exact match
+    if(tryExact){
+      const exact = results.find(p => 
+        (p.barcode || '').trim() === q || 
+        (p.sku || '').trim() === q
+      );
+      if(exact){
+        selectExpiryProduct(exact);
+        return;
+      }
+      // لو واحدة بس
+      if(results.length === 1){
+        selectExpiryProduct(results[0]);
+        return;
+      }
+    }
+    
+    // اعرض القائمة
+    resEl.innerHTML = results.map((v, i) => `
+      <div onclick='selectExpiryProductByIndex(${i})' 
+        data-exp-idx='${i}'
+        style="padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px"
+        onmouseover="this.style.background='#fafbfb'" 
+        onmouseout="this.style.background='transparent'">
+        <div style="font-weight:700;color:#1a1c1d">${escapeHtml(v.product_title || '')}${v.variant_title ? ' - '+escapeHtml(v.variant_title) : ''}</div>
+        <div style="color:#6d7175;font-size:11px;margin-top:2px;font-family:monospace">
+          ${v.sku ? 'SKU: '+escapeHtml(v.sku) : ''}${v.sku && v.barcode ? ' · ' : ''}${v.barcode ? escapeHtml(v.barcode) : ''}
+        </div>
+      </div>
+    `).join('');
+    resEl.style.display = 'block';
+    
+    // cache results عشان الـ click handler يقدر يجيب الـ object
+    window._expSearchResults = results;
+  } catch(e) {
+    resEl.innerHTML = '<div style="padding:10px;color:#dc2626;font-size:12px">❌ ' + escapeHtml(e.message) + '</div>';
+    resEl.style.display = 'block';
+  }
+}
+
+function selectExpiryProductByIndex(idx){
+  const results = window._expSearchResults || [];
+  const product = results[idx];
+  if(!product) return;
+  selectExpiryProduct(product);
+}
+
+function selectExpiryProduct(product){
+  _expSelectedProduct = product;
+  
+  // املأ الـ hidden fields
+  if($('exp-name'))     $('exp-name').value     = product.product_title + (product.variant_title ? ' - ' + product.variant_title : '');
+  if($('exp-sku'))      $('exp-sku').value      = product.sku || '';
+  if($('exp-category')) $('exp-category').value = product.product_type || '';
+  
+  // فضي الـ search
+  if($('exp-modal-search')) $('exp-modal-search').value = '';
+  const resEl = document.getElementById('exp-search-results');
+  if(resEl) resEl.style.display = 'none';
+  
+  showExpirySelected();
+  
+  // beep نجاح
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 800; gain.gain.value = 0.1;
+    osc.start();
+    setTimeout(() => { osc.stop(); ctx.close(); }, 100);
+  } catch(e){}
+  
+  // focus على exp-date عشان أسرع flow
+  setTimeout(() => {
+    const dateInp = document.getElementById('exp-date');
+    if(dateInp && !dateInp.value) dateInp.focus();
+  }, 100);
+}
+
+function showExpirySelected(){
+  const selEl = document.getElementById('exp-selected');
+  const nameEl = document.getElementById('exp-selected-name');
+  const infoEl = document.getElementById('exp-selected-info');
+  
+  if(!_expSelectedProduct || !selEl) return;
+  
+  const p = _expSelectedProduct;
+  const fullName = (p.product_title || p.name || '') + (p.variant_title ? ' - ' + p.variant_title : '');
+  
+  if(nameEl) nameEl.textContent = fullName;
+  if(infoEl){
+    const parts = [];
+    if(p.sku) parts.push('SKU: ' + p.sku);
+    if(p.barcode) parts.push(p.barcode);
+    if(p.product_type) parts.push('📂 ' + p.product_type);
+    infoEl.textContent = parts.join(' · ');
+  }
+  selEl.style.display = 'block';
+}
+
+function clearExpirySelection(){
+  _expSelectedProduct = null;
+  ['exp-name','exp-sku','exp-category'].forEach(id => {
+    const el = $(id);
+    if(el) el.value = '';
+  });
+  const selEl = document.getElementById('exp-selected');
+  if(selEl) selEl.style.display = 'none';
+  const inp = document.getElementById('exp-modal-search');
+  if(inp){ inp.value = ''; inp.focus(); }
+}
+
+async function saveExpiry(){
+  // 🆕 v337: لازم منتج مختار من Shopify
+  if(!_expSelectedProduct){
+    toast('❗ اختار منتج من Shopify أولاً (ابحث أو امسح الباركود)');
+    return;
+  }
+  
+  const date = $('exp-date')?.value;
+  if(!date) { toast('❗ أدخل تاريخ الانتهاء'); return; }
+  
+  const qty = parseInt($('exp-qty')?.value) || 1;
+  if(qty < 1){ toast('❗ الكمية لازم > 0'); return; }
+
+  const p = _expSelectedProduct;
+  
+  // 🆕 v249: استخدم الـ batches API
+  try {
+    const r = await apiFetch('/api/batches', 'POST', {
+      variantId: p.variant_id,
+      productTitle: p.product_title,
+      variantTitle: p.variant_title || '',
+      sku: p.sku || '',
+      barcode: p.barcode || '',
+      expDate: date,
+      quantity: qty,
+      notes: $('exp-note')?.value.trim() || ''
+    });
+    
+    if(r?.success){
+      toast('✅ Batch جديد اتضاف');
+      closeM('m-expiry');
+      loadBatchesPage();
+    } else {
+      toast('❌ ' + (r?.error || 'فشل الحفظ'));
+    }
+  } catch(e) {
+    toast('❌ ' + e.message);
+  }
 }
 
 function deleteExpiry(id){
@@ -32281,7 +33185,7 @@ function goPage(el,page){
     }
   }
   if(page==='treasury'){loadTreasury().then(()=>{renderTreasuryList();if(_activeTreasuryId)selectTreasury(_activeTreasuryId);});}
-  if(page==='expiry')renderExpiryPage();
+  if(page==='expiry') loadBatchesPage();
   // 🆕 v240: Inventory pages
   if(page==='inventory') loadInventoryPage();
   if(page==='stocktake') loadStocktakePage();
@@ -35176,7 +36080,7 @@ function refreshAll(){
     case 'bosta-exported': renderBostaExportedPage(); break;
     case 'shop-accounting': renderShopAccounting(); break;
     case 'checks': (typeof chkRenderActive==='function' ? chkRenderActive : renderChecksPage)(); break;
-    case 'expiry': renderExpiryPage(); break;
+    case 'expiry': loadBatchesPage(); break;
     case 'courier-orders': renderCourierOrdersPage(); break;
     case 'accounting': renderAcc();renderAccDet(); break;
     case 'reports': renderReports(); break;
