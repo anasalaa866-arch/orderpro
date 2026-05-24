@@ -1,35 +1,27 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v343 — ACTIVE SHIFTS IN ADMIN (2026-05-23)
+  OrderPro v351 — FIX ACTIVE SHIFTS (2026-05-24)
   ═══════════════════════════════════════════════════════════════════
-  ✨ في صفحة "استلام التصفيات" (للأدمن):
+  🐛 إصلاحات في الـ Active Shifts endpoints:
   
-  🟢 cards جديدة فوق للشيفتات الشغالة دلوقتي:
-  - بتظهر الكاشيرز اللي لسه ما قفلوش شيفت
-  - بتعرض: اسم الكاشير، المحل، وقت البدء، المدة، عدد البيعات، الإجمالي
-  - breakdown بـ طريقة الدفع (كاش/فيزا/انستاباي)
-  - الـ opening cash
-  - مؤشر "🟢 شغّال" مع animation
+  المشكلة 1: 500 Internal Server Error في /api/admin/active-shifts/:id/details
+  السبب: الـ query كانت بتستخدم أعمدة غلط:
+    - ps.session_id (مش موجود - الـ table مفهاش session_id)
+    - ps.discount (الاسم الصحيح discount_total)
+    - pos_sale_payments (الجدول الصحيح pos_payments)
+  الحل: filter بـ cashier_id + opened_at + closed_at
   
-  📋 زر "تفاصيل البيعات (Live)":
-  - بيفتح نفس الـ modal الجميل بتاع settlement details
-  - بس بـ live data من السيرفر
-  - بيعرض كل البيعات مع: رقم البيعة، الوقت، العميل، طرق الدفع، المبلغ
-  - مجمّعة بـ payment method (نفس الـ UI)
-  - في الـ header: 🟢 شيفت شغّال — Live
+  المشكلة 2: مدير المحل مش بيظهر في الـ active shifts
+  السبب: كان بيـ JOIN على couriers بس، المديرين في users table
+  الحل: LEFT JOIN على الاتنين + COALESCE
   
-  🛠️ Backend endpoints جديدة:
-  - GET /api/admin/active-shifts → قائمة الشيفتات الـ open + summary
-  - GET /api/admin/active-shifts/:sessionId/details → bil details للـ modal
+  محتاج: server v262
   
-  محتاج: server v254
-  
-  من v342 (محفوظ):
-  - 🏠 Master Warehouse AI mode
-  - 🛒 Purchase Suggestions
-  - 🧠 Transfer Suggestions
-  - 🆕 FEFO Batches
+  من v350 (محفوظ):
+  - 🛡️ Batch Print Safety (Layer 1 + 3)
+  - 🐛 Shopify current_total_price fix
+  - 🔁 Invoice cache invalidation
   ═══════════════════════════════════════════════════════════════════
 -->
 <html lang="ar" dir="rtl">
@@ -1722,6 +1714,25 @@ tr:hover td{background:#fafbff}
     </div>
   </div>
 
+  <!-- 🆕 v257: إدارة المخازن - تحديد المخزن الرئيسي -->
+  <div id="m-manage-warehouses" class="modal-overlay" style="display:none">
+    <div class="modal" style="max-width:680px">
+      <div class="modal-header">
+        <h3 style="margin:0">⚙️ إدارة المخازن</h3>
+        <button class="modal-close" onclick="closeM('m-manage-warehouses')">×</button>
+      </div>
+      <div class="modal-body" style="padding:14px">
+        <div style="background:linear-gradient(135deg,#dcfce7 0%,#fff 100%);border:1px solid #16a34a;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;line-height:1.7;color:#14532d">
+          <strong>🏠 المخزن الرئيسي:</strong> ده المخزن اللي بيبيع منه online (Shopify orders). 
+          النظام بيستخدمه في حسابات الذكاء (Master Warehouse mode، MAX(A,B)، Transfer/Purchase Suggestions).
+          <br>
+          <strong>⚠️ مخزن واحد بس يقدر يكون رئيسي.</strong>
+        </div>
+        <div id="manage-warehouses-list"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Receive Cash Modal -->
   <div id="m-receive-cash" class="modal-overlay" style="display:none">
     <div class="modal" style="max-width:480px">
@@ -2878,6 +2889,44 @@ tr:hover td{background:#fafbff}
           </div>
           <div id="users-list-admin" style="padding:8px"></div>
         </div>
+        
+        <!-- 🆕 v260: Maintenance Tools -->
+        <div class="card" style="margin-top:14px">
+          <div class="card-hd">
+            <h3>🛠️ أدوات الصيانة</h3>
+          </div>
+          <div style="padding:14px">
+            <div style="background:linear-gradient(135deg,#fef3c7 0%,#fff 100%);border:1px solid #fbbf24;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;line-height:1.7;color:#78350f">
+              <strong style="color:#92400e">💡 مزامنة أسعار الطلبات من Shopify</strong><br>
+              لو في طلبات قديمة اتعدلت في Shopify لكن المبلغ في النظام لسه قديم،
+              الزرار ده بيـ resync الأسعار الفعلية من Shopify (current_total_price).
+              <br><br>
+              <strong>متى تستخدمه:</strong>
+              <ul style="margin:4px 16px 0;padding:0">
+                <li>لاحظت فروق بين Excel reports والـ Shopify Admin</li>
+                <li>طلبات أنقصت منها items في Shopify لكن النظام لسه شايف الإجمالي القديم</li>
+                <li>بعد deploy v260 — مرة واحدة عشان تتأكد كل طلب صحيح</li>
+              </ul>
+            </div>
+            
+            <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
+              <div class="fg" style="flex:1;min-width:140px">
+                <label style="font-size:11px;font-weight:700;color:var(--muted)">📅 آخر كام يوم؟</label>
+                <select id="backfill-days" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif">
+                  <option value="7">آخر 7 أيام</option>
+                  <option value="14">آخر 14 يوم</option>
+                  <option value="30" selected>آخر 30 يوم</option>
+                  <option value="60">آخر 60 يوم</option>
+                  <option value="90">آخر 90 يوم</option>
+                </select>
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="runBackfillCheck(true)">🔍 معاينة (Dry Run)</button>
+              <button class="btn btn-primary btn-sm" onclick="runBackfillCheck(false)">✅ تنفيذ المزامنة</button>
+            </div>
+            
+            <div id="backfill-result" style="margin-top:12px"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -2889,6 +2938,7 @@ tr:hover td{background:#fafbff}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">📦 المخزون</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="openManageWarehousesModal()" title="ضبط المخازن والمخزن الرئيسي">⚙️ إدارة المخازن</button>
       <button class="btn btn-ghost btn-sm" onclick="syncInventoryLevels()">🔄 مزامنة الكميات</button>
       <button class="btn btn-primary btn-sm" onclick="syncInventoryFull()">🔁 مزامنة كاملة</button>
     </div>
@@ -4713,7 +4763,6 @@ tr:hover td{background:#fafbff}
 <div class="page" id="page-zero-stocks">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">⛔ المنتجات اللي خلصت</h2>
-    <button class="btn btn-secondary btn-sm" onclick="exportZeroStocksList()" id="zs-export-btn" style="display:none">📥 تصدير القائمة</button>
   </div>
   
   <!-- Filters -->
@@ -4729,14 +4778,11 @@ tr:hover td{background:#fafbff}
           <input id="zs-to" type="date" class="form-input" style="font-size:13px">
         </div>
         <div class="form-group" style="margin:0">
-          <label style="font-size:11px;font-weight:700">📦 المخزن</label>
-          <select id="zs-warehouse" class="form-input" style="font-size:13px"></select>
-        </div>
-        <div class="form-group" style="margin:0">
-          <label style="font-size:11px;font-weight:700">🌍 نطاق الحساب</label>
-          <select id="zs-scope" class="form-input" style="font-size:13px" onchange="updateZSWarehouseRequired()">
-            <option value="warehouse">المخزن المختار فقط</option>
-            <option value="global">كل المخازن (لو خلص في الكل)</option>
+          <label style="font-size:11px;font-weight:700">📦 المخزن *</label>
+          <select id="zs-warehouse-combined" class="form-input" style="font-size:13px">
+            <option value="">-- اختار --</option>
+            <option value="__all__">🌍 كل المخازن (نفد في الكل)</option>
+            <!-- المخازن الفردية بـ تتعبأ من JS -->
           </select>
         </div>
         <button class="btn btn-primary" onclick="loadZeroStocks()" style="height:42px">🔍 ابحث</button>
@@ -4755,17 +4801,37 @@ tr:hover td{background:#fafbff}
   
   <!-- Info -->
   <div style="background:linear-gradient(135deg,#fef3c7 0%,#fff 100%);border:1px solid #fbbf24;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;line-height:1.7;color:#78350f">
-    <strong style="color:#92400e">💡 ايه الفرق بين النطاقين؟</strong><br>
-    • <strong>المخزن المختار فقط:</strong> لو المنتج خلص في Trivim بس لكن موجود في مخزن تاني، يظهر هنا<br>
-    • <strong>كل المخازن:</strong> لو المنتج خلص في الكل، يظهر هنا (نفد فعلياً من المنشأة كلها)
+    <strong style="color:#92400e">💡 ايه الفرق؟</strong><br>
+    • <strong>مخزن معين:</strong> لو المنتج خلص في المخزن ده بس (ممكن يكون موجود في مخزن تاني)<br>
+    • <strong>كل المخازن:</strong> لو المنتج خلص في كل المخازن (نفد فعلياً من المنشأة كلها)
   </div>
   
   <!-- Results -->
   <div class="card">
     <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
       <h3 style="margin:0" id="zs-results-title">📋 النتائج</h3>
-      <div id="zs-summary" style="font-size:12px;color:var(--muted)"></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div id="zs-summary" style="font-size:12px;color:var(--muted)"></div>
+        <button class="btn btn-secondary btn-sm" onclick="exportZeroStocksExcel()" id="zs-export-btn" style="display:none">📊 تصدير Excel</button>
+      </div>
     </div>
+    
+    <!-- 🆕 v256: فلتر النتائج (يظهر بعد البحث فقط) -->
+    <div id="zs-results-filters" style="display:none;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--bg)">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px">🔍 فلترة النتائج:</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="zs-filter-chips">
+        <button class="chip on" onclick="zsSetResultFilter('all', this)">
+          الكل (<span id="zs-cnt-all">0</span>)
+        </button>
+        <button class="chip" onclick="zsSetResultFilter('out_everywhere', this)" style="color:#ef4444">
+          ❌ نفد + مفيش رصيد في أي مخزن (<span id="zs-cnt-out">0</span>)
+        </button>
+        <button class="chip" onclick="zsSetResultFilter('available_elsewhere', this)" style="color:#0891b2">
+          📦 نفد + لسه فيه في مخزن تاني (<span id="zs-cnt-elsewhere">0</span>)
+        </button>
+      </div>
+    </div>
+    
     <div id="zs-results" style="padding:14px">
       <div style="text-align:center;padding:40px;color:var(--muted)">
         <div style="font-size:48px;opacity:.3">⛔</div>
@@ -9977,7 +10043,31 @@ async function printPackingSlip(orderId){
       if(testResp && testResp.ok){
         const w = window.open(invoiceUrl, '_blank', 'width=900,height=1000');
         if(w){
-          setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} }, 1500);
+          // 🆕 v259: انتظر signal "invoice-ready" من النافذة (الصور جاهزة فعلاً)
+          // بدل setTimeout(1500) اللي كان guess
+          let printed = false;
+          const tryPrint = () => {
+            if(printed) return;
+            printed = true;
+            try{ w.focus(); w.print(); }catch(e){}
+          };
+          
+          // listener للـ event
+          const onMsg = (ev) => {
+            if(ev.source !== w) return;
+            if(ev.data && ev.data.type === 'invoice-ready'){
+              window.removeEventListener('message', onMsg);
+              tryPrint();
+            }
+          };
+          window.addEventListener('message', onMsg);
+          
+          // safety timeout - 5 ثوان كحد أقصى (لو الـ signal فشل، نطبع برضو)
+          setTimeout(() => {
+            window.removeEventListener('message', onMsg);
+            tryPrint();
+          }, 5000);
+          
           // 🆕 v154: سجّل الطباعة
           _logPrintAction(orderId, 'invoice');
           return;
@@ -12775,22 +12865,13 @@ function renderSettlementsReceipts(){
   const cont = document.getElementById('settlements-receipts-content');
   if(!cont) return;
   
-  // 🆕 v254: الشيفتات الشغالة دلوقتي (cards فوق)
-  const activeShiftsHtml = (_activeShifts && _activeShifts.length) 
-    ? renderActiveShiftsSection() 
-    : '';
-  
   if(!_pendingSettlements.length && !_activeShifts.length){
     cont.innerHTML = '<div class="card"><div class="card-body" style="text-align:center;padding:30px"><div style="font-size:42px">📭</div><div style="font-size:14px;font-weight:700;margin-top:8px">مفيش تصفيات في آخر 30 يوم ولا شيفت شغّال دلوقتي</div></div></div>';
     return;
   }
-  
-  if(!_pendingSettlements.length){
-    cont.innerHTML = activeShiftsHtml;
-    return;
-  }
 
-  // فلتر: pending أو received (الفلتر بـ يتحفظ في window)
+  // فلتر: received / pending / active (default = pending)
+  // 🆕 v255: 3 tabs بترتيب جديد — مستلمة أولاً، تصفيات لسه ما اتأكدوش، شغالة دلوقتي
   const filterMode = window._settlementsFilter || 'pending';
 
   const isPending = (s) => {
@@ -12801,23 +12882,50 @@ function renderSettlementsReceipts(){
 
   const pending = _pendingSettlements.filter(isPending);
   const received = _pendingSettlements.filter(s => !isPending(s));
+  const activeCount = (_activeShifts || []).length;
 
-  const list = filterMode === 'received' ? received : pending;
-
-  // Tabs للفلتر
-  let html = activeShiftsHtml + `
-    <div style="display:flex;gap:6px;margin-bottom:14px;background:var(--card);padding:6px;border-radius:10px;border:1px solid var(--border)">
-      <button onclick="setSettlementsFilter('pending')" style="flex:1;padding:10px;background:${filterMode==='pending'?'#d97706':'transparent'};color:${filterMode==='pending'?'#fff':'var(--text)'};border:none;border-radius:8px;font-family:Cairo,sans-serif;font-weight:800;cursor:pointer;font-size:13px">
-        ⏳ في الانتظار <span style="opacity:.85">(${pending.length})</span>
-      </button>
-      <button onclick="setSettlementsFilter('received')" style="flex:1;padding:10px;background:${filterMode==='received'?'#16a34a':'transparent'};color:${filterMode==='received'?'#fff':'var(--text)'};border:none;border-radius:8px;font-family:Cairo,sans-serif;font-weight:800;cursor:pointer;font-size:13px">
+  // Tabs للفلتر — الترتيب: مستلمة | لسه ما اتأكدوش | شغالة دلوقتي
+  let html = `
+    <div style="display:flex;gap:6px;margin-bottom:14px;background:var(--card);padding:6px;border-radius:10px;border:1px solid var(--border);flex-wrap:wrap">
+      <button onclick="setSettlementsFilter('received')" style="flex:1;min-width:140px;padding:10px;background:${filterMode==='received'?'#16a34a':'transparent'};color:${filterMode==='received'?'#fff':'var(--text)'};border:none;border-radius:8px;font-family:Cairo,sans-serif;font-weight:800;cursor:pointer;font-size:13px">
         ✅ مستلمة <span style="opacity:.85">(${received.length})</span>
       </button>
+      <button onclick="setSettlementsFilter('pending')" style="flex:1;min-width:200px;padding:10px;background:${filterMode==='pending'?'#d97706':'transparent'};color:${filterMode==='pending'?'#fff':'var(--text)'};border:none;border-radius:8px;font-family:Cairo,sans-serif;font-weight:800;cursor:pointer;font-size:13px">
+        ⏳ تصفيات الأدمين لسه ما استلمهاش <span style="opacity:.85">(${pending.length})</span>
+      </button>
+      <button onclick="setSettlementsFilter('active')" style="flex:1;min-width:140px;padding:10px;background:${filterMode==='active'?'#16a34a':'transparent'};color:${filterMode==='active'?'#fff':'var(--text)'};border:none;border-radius:8px;font-family:Cairo,sans-serif;font-weight:800;cursor:pointer;font-size:13px;${filterMode==='active'?'':'position:relative'}">
+        ${filterMode==='active' ? '🟢' : '<span style="display:inline-block;width:8px;height:8px;background:#16a34a;border-radius:50%;animation:pulse 2s infinite;margin-left:4px;vertical-align:middle"></span>'} شغالة دلوقتي <span style="opacity:.85">(${activeCount})</span>
+      </button>
     </div>
+    <style>
+      @keyframes pulse {
+        0%,100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(1.3); }
+      }
+    </style>
   `;
 
+  // 🆕 v255: عرض حسب الـ tab المختار
+  if (filterMode === 'active') {
+    // الشيفتات الشغالة دلوقتي
+    if (!activeCount) {
+      html += `<div class="card"><div class="card-body" style="text-align:center;padding:30px;color:var(--muted)"><div style="font-size:42px;opacity:0.4">😴</div><div style="margin-top:8px;font-weight:700">مفيش شيفتات شغالة دلوقتي</div></div></div>`;
+      cont.innerHTML = html;
+      return;
+    }
+    html += renderActiveShiftsSection(true); // true = inside tab (skip outer wrapper)
+    cont.innerHTML = html;
+    return;
+  }
+
+  // pending أو received
+  const list = filterMode === 'received' ? received : pending;
+  
   if(!list.length){
-    html += `<div class="card"><div class="card-body" style="text-align:center;padding:30px;color:var(--muted)">${filterMode==='received'?'مفيش تصفيات مستلمة':'مفيش تصفيات في الانتظار - كله مستلم ✅'}</div></div>`;
+    const emptyMsg = filterMode === 'received' 
+      ? 'مفيش تصفيات مستلمة' 
+      : 'مفيش تصفيات في الانتظار - كله مستلم ✅';
+    html += `<div class="card"><div class="card-body" style="text-align:center;padding:30px;color:var(--muted)">${emptyMsg}</div></div>`;
     cont.innerHTML = html;
     return;
   }
@@ -12903,10 +13011,15 @@ function setSettlementsFilter(mode){
 // 🆕 v254: ACTIVE SHIFTS — الشيفتات الشغالة دلوقتي (للأدمن)
 // ═════════════════════════════════════════════════════════════════
 
-function renderActiveShiftsSection(){
+function renderActiveShiftsSection(insideTab){
   if(!_activeShifts || !_activeShifts.length) return '';
   
   const shiftsHtml = _activeShifts.map(s => renderActiveShiftCard(s)).join('');
+  
+  // 🆕 v255: لو جوه tab، شيل الـ header لإن الـ tab بقى هو الـ header
+  if (insideTab) {
+    return `<div style="margin-bottom:18px">${shiftsHtml}</div>`;
+  }
   
   return `
     <div style="margin-bottom:18px">
@@ -19182,6 +19295,362 @@ function getBatchName(){
 }
 
 // ===== BATCH INVOICE PRINTING =====
+// ═══════════════════════════════════════════════════════════════════
+// 🆕 v261: Batch Print Safety - Layer 1 (Pre-Print) + Layer 3 (Post-Print)
+// ═══════════════════════════════════════════════════════════════════
+// 
+// المشكلة: الـ orders array محلي. لو فيه طلب اتسند من بعد ما الـ user
+// فتح الصفحة، الطلب ده مش هيكون في الـ array، فلو طبع batch هيتعمل
+// طباعة ناقصة.
+//
+// الحل: قبل/بعد الطباعة، نسأل الـ backend عن الـ truth من الـ DB.
+// ═══════════════════════════════════════════════════════════════════
+
+// Layer 1: Pre-Print Verification
+// Compares the local orders array with the DB for selected batches
+// Returns: 'cancel' | 'refresh' | { dbOrderIds: [...] }
+async function _verifyBatchesBeforePrint(selectedBatchCodes, currentOrderIds, optSkipUnassigned){
+  if(!API_URL) return 'continue';  // لو مفيش backend، اتجاهل
+  
+  toast('🔍 جاري التحقق من البيانات...');
+  
+  try {
+    // اجمع البيانات من الـ DB لكل batch مختار
+    const allDbResults = [];
+    for(const code of selectedBatchCodes){
+      try {
+        const r = await apiFetch('/api/batches/' + encodeURIComponent(code) + '/verify');
+        if(r) allDbResults.push({ code, ...r });
+      } catch(e) {
+        console.warn('verify failed for batch', code, e);
+      }
+    }
+    
+    if(!allDbResults.length){
+      // الـ verification فشل - كمل بدون verification
+      console.warn('[v261] all verify calls failed, continuing without check');
+      return 'continue';
+    }
+    
+    // قارن الـ local vs الـ DB
+    const dbAssignedIds = new Set();
+    const dbAllIds = new Set();
+    allDbResults.forEach(r => {
+      (r.assigned_order_ids || []).forEach(id => dbAssignedIds.add(id));
+      (r.all_order_ids || []).forEach(id => dbAllIds.add(id));
+    });
+    
+    // فعّل الـ IDs اللي عندنا محلياً
+    const localIds = new Set(currentOrderIds);
+    
+    // الـ IDs في الـ DB لكن مش في الذاكرة
+    const missingFromMemory = [...dbAssignedIds].filter(id => !localIds.has(id));
+    // الـ IDs في الذاكرة لكن مش في الـ DB (rare - ممكن اتلغوا)
+    const extraInMemory = [...localIds].filter(id => !dbAllIds.has(id));
+    
+    // إجمالي إحصائيات
+    const stats = {
+      memoryCount: localIds.size,
+      dbAssignedCount: dbAssignedIds.size,
+      dbTotalCount: dbAllIds.size,
+      missingCount: missingFromMemory.length,
+      extraCount: extraInMemory.length,
+    };
+    
+    console.log('[v261] verification stats:', stats);
+    
+    // لو كله متطابق، كمل عادي
+    if(missingFromMemory.length === 0 && extraInMemory.length === 0){
+      toast(`✅ تم التحقق - ${stats.memoryCount} طلب جاهز للطباعة`);
+      return 'continue';
+    }
+    
+    // فيه فروق! اعرض dialog
+    return await new Promise((resolve) => {
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px';
+      
+      // breakdown للـ couriers اللي فيهم طلبات missing
+      const missingByCourier = {};
+      allDbResults.forEach(r => {
+        (r.couriers || []).forEach(c => {
+          const ms = c.order_ids.filter(id => missingFromMemory.includes(id));
+          if(ms.length){
+            const key = c.name;
+            missingByCourier[key] = (missingByCourier[key] || 0) + ms.length;
+          }
+        });
+      });
+      
+      const missingHtml = Object.entries(missingByCourier)
+        .sort((a,b)=>b[1]-a[1])
+        .slice(0, 10)
+        .map(([name, count]) => `
+          <div style="display:flex;justify-content:space-between;padding:6px 10px;background:#fef2f2;border-radius:6px;margin-bottom:4px;font-size:12px">
+            <span style="font-weight:700;color:#991b1b">${escapeHtml(name)}</span>
+            <span style="color:#dc2626;font-weight:800">+${count} طلب</span>
+          </div>
+        `).join('');
+      
+      ov.innerHTML = `
+        <div style="background:#fff;border-radius:14px;width:min(560px,95vw);max-height:85vh;overflow-y:auto;font-family:Cairo,sans-serif;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+          <div style="background:linear-gradient(135deg,#dc2626,#ea580c);color:#fff;padding:14px 18px;border-radius:14px 14px 0 0">
+            <div style="font-weight:800;font-size:16px">⚠️ توقف! في فرق بين الذاكرة والـ DB</div>
+            <div style="font-size:12px;opacity:.9;margin-top:3px">حماية: قبل ما نطبع، خلينا نتأكد</div>
+          </div>
+          
+          <div style="padding:18px">
+            <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;line-height:1.7;color:#78350f">
+              <strong>📦 في الذاكرة:</strong> ${stats.memoryCount} طلب<br>
+              <strong>🗄️ في الـ DB:</strong> ${stats.dbAssignedCount} طلب مسند
+              ${missingFromMemory.length > 0 ? `<br><strong style="color:#dc2626">⚠️ ${missingFromMemory.length} طلب جديد اتسند من بعد ما فتحت الصفحة!</strong>` : ''}
+              ${extraInMemory.length > 0 ? `<br><strong style="color:#9333ea">📋 ${extraInMemory.length} طلب في الذاكرة لكن مش في الـ DB (قد يكون اتلغى)</strong>` : ''}
+            </div>
+            
+            ${missingFromMemory.length > 0 ? `
+              <div style="margin-bottom:14px">
+                <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#991b1b">📋 الطلبات الناقصة (هتفوت لو طبعت دلوقتي):</div>
+                ${missingHtml}
+                ${Object.keys(missingByCourier).length > 10 ? `<div style="text-align:center;color:#666;font-size:11px;margin-top:6px">... و ${Object.keys(missingByCourier).length - 10} مندوب آخر</div>` : ''}
+              </div>
+            ` : ''}
+            
+            <div style="background:#f1f5f9;border-radius:8px;padding:12px;font-size:12px;color:#475569;margin-bottom:14px">
+              <strong>💡 إيه التصرف الصح؟</strong><br>
+              <strong>🔄 جدد البيانات:</strong> النظام هيـ reload الطلبات من الـ DB، ثم تضغط طباعة تاني (الأنسب)<br>
+              <strong>🖨️ اطبع كله من الـ DB:</strong> النظام هيستخدم الـ IDs من الـ DB مباشرة (الـ ${stats.dbAssignedCount} طلب)<br>
+              <strong>⚠️ اطبع الذاكرة فقط:</strong> هيطبع ${stats.memoryCount} طلب اللي في الذاكرة (الـ ${stats.missingCount} طلب الناقصين هيفوتوا)
+            </div>
+            
+            <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+              <button id="vbb-cancel" style="padding:9px 14px;border-radius:7px;border:1px solid #e5e5e5;background:#fff;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer;font-size:13px">إلغاء</button>
+              <button id="vbb-print-mem" style="padding:9px 14px;border-radius:7px;border:1px solid #fbbf24;background:#fef3c7;color:#92400e;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer;font-size:13px">⚠️ اطبع الذاكرة فقط (${stats.memoryCount})</button>
+              <button id="vbb-use-db" style="padding:9px 14px;border-radius:7px;border:none;background:#16a34a;color:#fff;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer;font-size:13px">🖨️ اطبع من الـ DB (${stats.dbAssignedCount})</button>
+              <button id="vbb-refresh" style="padding:9px 14px;border-radius:7px;border:none;background:#6366f1;color:#fff;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer;font-size:13px">🔄 جدد البيانات</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(ov);
+      
+      document.getElementById('vbb-cancel').onclick = () => { ov.remove(); resolve('cancel'); };
+      document.getElementById('vbb-refresh').onclick = () => { ov.remove(); resolve('refresh'); };
+      document.getElementById('vbb-print-mem').onclick = () => { ov.remove(); resolve('continue'); };
+      document.getElementById('vbb-use-db').onclick = () => { 
+        ov.remove(); 
+        // فلتر الـ DB IDs بناءً على optSkipUnassigned
+        const dbIds = optSkipUnassigned 
+          ? [...dbAssignedIds]   // الـ assigned فقط
+          : [...dbAllIds];        // كله بما فيه الـ unassigned
+        resolve({ dbOrderIds: dbIds }); 
+      };
+    });
+  } catch(e) {
+    console.warn('[v261] verification failed:', e);
+    toast('⚠️ تعذر التحقق - الطباعة هتكمل بدون verification');
+    return 'continue';
+  }
+}
+
+// Layer 3: Post-Print Audit
+// بعد ما الطباعة تخلص، نتحقق إن كل اللي في الـ DB اتطبع فعلاً
+async function _auditBatchPrintResults(selectedBatchCodes, printedOrderIds){
+  if(!API_URL) return;
+  
+  try {
+    // جيب الـ verification من الـ DB
+    const allDbResults = [];
+    for(const code of selectedBatchCodes){
+      try {
+        const r = await apiFetch('/api/batches/' + encodeURIComponent(code) + '/verify');
+        if(r) allDbResults.push({ code, ...r });
+      } catch(e){}
+    }
+    
+    if(!allDbResults.length) return;
+    
+    // الـ IDs اللي المفروض اتطبعوا (من الـ DB)
+    const expectedAssignedIds = new Set();
+    allDbResults.forEach(r => {
+      (r.assigned_order_ids || []).forEach(id => expectedAssignedIds.add(id));
+    });
+    
+    // الـ IDs اللي فعلاً اتطبعوا (من الـ frontend)
+    const actualPrinted = new Set(printedOrderIds);
+    
+    // اللي اتعمله print وعنده courier
+    const missedIds = [...expectedAssignedIds].filter(id => !actualPrinted.has(id));
+    
+    // breakdown بـ مندوب
+    const missedByCourier = {};
+    allDbResults.forEach(r => {
+      (r.couriers || []).forEach(c => {
+        const missed = c.order_ids.filter(id => missedIds.includes(id));
+        if(missed.length){
+          missedByCourier[c.name] = { count: missed.length, ids: missed };
+        }
+      });
+    });
+    
+    // print stats من الـ DB
+    let totalNeverPrinted = 0;
+    let totalDoublePrinted = 0;
+    allDbResults.forEach(r => {
+      totalNeverPrinted += (r.print_status?.never_printed || []).length;
+      totalDoublePrinted += (r.print_status?.double_printed || []).length;
+    });
+    
+    // اعرض الـ audit dialog
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px';
+    
+    const allGood = missedIds.length === 0;
+    const headerColor = allGood ? '#16a34a' : '#dc2626';
+    const headerIcon = allGood ? '✅' : '⚠️';
+    const headerText = allGood 
+      ? 'تمت الطباعة بنجاح!' 
+      : `${missedIds.length} طلب مش اتطبعوا!`;
+    
+    const missedHtml = Object.entries(missedByCourier)
+      .sort((a,b)=>b[1].count - a[1].count)
+      .slice(0, 15)
+      .map(([name, data]) => `
+        <div style="padding:8px 10px;background:#fef2f2;border-radius:6px;margin-bottom:4px;font-size:12px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:700;color:#991b1b">${escapeHtml(name)}</div>
+            <div style="font-size:10px;color:#dc2626;margin-top:2px;font-family:monospace">${data.ids.slice(0,3).join(', ')}${data.ids.length > 3 ? ` (+${data.ids.length-3})` : ''}</div>
+          </div>
+          <div style="background:#dc2626;color:#fff;padding:3px 10px;border-radius:99px;font-weight:800;font-size:11px">${data.count} طلب</div>
+        </div>
+      `).join('');
+    
+    ov.innerHTML = `
+      <div style="background:#fff;border-radius:14px;width:min(560px,95vw);max-height:85vh;overflow-y:auto;font-family:Cairo,sans-serif;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+        <div style="background:linear-gradient(135deg,${headerColor},${allGood ? '#22c55e' : '#ea580c'});color:#fff;padding:14px 18px;border-radius:14px 14px 0 0">
+          <div style="font-weight:800;font-size:16px">${headerIcon} ${headerText}</div>
+          <div style="font-size:12px;opacity:.9;margin-top:3px">تقرير ما بعد الطباعة</div>
+        </div>
+        
+        <div style="padding:18px">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:14px">
+            <div style="background:#dbeafe;border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:10px;color:#1e40af;font-weight:700">في الـ DB</div>
+              <div style="font-size:20px;font-weight:900;color:#1e3a8a">${expectedAssignedIds.size}</div>
+            </div>
+            <div style="background:${allGood?'#dcfce7':'#fef2f2'};border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:10px;color:${allGood?'#166534':'#991b1b'};font-weight:700">اتطبع فعلاً</div>
+              <div style="font-size:20px;font-weight:900;color:${allGood?'#16a34a':'#dc2626'}">${printedOrderIds.length}</div>
+            </div>
+            ${missedIds.length > 0 ? `
+              <div style="background:#fef2f2;border-radius:8px;padding:10px;text-align:center;border:2px solid #dc2626">
+                <div style="font-size:10px;color:#991b1b;font-weight:700">⚠️ ناقص</div>
+                <div style="font-size:20px;font-weight:900;color:#dc2626">${missedIds.length}</div>
+              </div>
+            ` : ''}
+            ${totalDoublePrinted > 0 ? `
+              <div style="background:#fef3c7;border-radius:8px;padding:10px;text-align:center;border:2px solid #f59e0b">
+                <div style="font-size:10px;color:#78350f;font-weight:700">🔁 اتطبع مرتين</div>
+                <div style="font-size:20px;font-weight:900;color:#d97706">${totalDoublePrinted}</div>
+              </div>
+            ` : ''}
+          </div>
+          
+          ${missedIds.length > 0 ? `
+            <div style="margin-bottom:14px">
+              <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#991b1b">📋 طلبات لم تتم طباعتها:</div>
+              ${missedHtml}
+              ${Object.keys(missedByCourier).length > 15 ? `<div style="text-align:center;color:#666;font-size:11px;margin-top:6px">... و ${Object.keys(missedByCourier).length - 15} مندوب آخر</div>` : ''}
+            </div>
+            
+            <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:10px;font-size:12px;color:#78350f;margin-bottom:14px">
+              <strong>⚠️ مهم:</strong> الطلبات دي مش هتروح مع المناديب. اضغط "🖨️ اطبع الناقصين" عشان تـ retry.
+            </div>
+          ` : `
+            <div style="background:#dcfce7;border:1px solid #16a34a;border-radius:8px;padding:12px;text-align:center;color:#14532d;margin-bottom:14px;font-weight:700">
+              ✅ كل الطلبات اتطبعت بنجاح
+            </div>
+          `}
+          
+          <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+            ${missedIds.length > 0 ? `
+              <button id="audit-retry" style="padding:9px 14px;border-radius:7px;border:none;background:#dc2626;color:#fff;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer;font-size:13px">🖨️ اطبع الـ ${missedIds.length} الناقصين</button>
+            ` : ''}
+            <button id="audit-close" style="padding:9px 14px;border-radius:7px;border:none;background:#16a34a;color:#fff;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer;font-size:13px">${allGood ? '✅ تمام' : 'إغلاق'}</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(ov);
+    
+    document.getElementById('audit-close').onclick = () => ov.remove();
+    if(missedIds.length > 0){
+      document.getElementById('audit-retry').onclick = async () => {
+        ov.remove();
+        // اطبع الناقصين عبر فتح نافذة طباعة جديدة مع الـ IDs دي بس
+        await _retryMissingPrints(missedIds);
+      };
+    }
+  } catch(e){
+    console.warn('[v261] post-print audit failed:', e);
+  }
+}
+
+// Helper: retry الطلبات اللي فاتت
+async function _retryMissingPrints(orderIds){
+  if(!orderIds.length) return;
+  if(!confirm(`هل تريد طباعة ${orderIds.length} طلب اللي فاتوا؟`)) return;
+  
+  toast(`⏳ جاري تحضير ${orderIds.length} فاتورة...`);
+  
+  try {
+    const sessionId = 'retry-' + Date.now();
+    const r = await apiFetch('/api/invoices/batch-html','POST',{ orderIds, sessionId });
+    if(!r || !r.invoices){
+      toast('❌ فشل التحضير');
+      return;
+    }
+    
+    const pages = [];
+    r.invoices.forEach(inv => {
+      if(inv.html){
+        const bodyMatch = inv.html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+        pages.push(bodyMatch ? bodyMatch[1] : inv.html);
+      }
+    });
+    
+    if(!pages.length){
+      toast('❌ مفيش فواتير جاهزة');
+      return;
+    }
+    
+    // افتح نافذة طباعة بسيطة
+    const w = window.open('','_blank','width=900,height=1000');
+    w.document.write(`<!DOCTYPE html><html lang="en"><head>
+      <meta charset="UTF-8"><title>Retry Print - ${pages.length} orders</title>
+      <style>
+        body{font-family:Cairo,sans-serif;margin:0;padding:0;color:#000}
+        .page{page-break-after:always;padding:0;position:relative}
+        .page:last-child{page-break-after:auto}
+        @page{size:A4;margin:8mm}
+        @media print{ .no-print{display:none!important} }
+      </style>
+    </head><body>
+      ${pages.map(p => `<div class="page">${p}</div>`).join('')}
+      <script>
+        window.addEventListener('load', () => setTimeout(() => window.print(), 500));
+      <\/script>
+    </body></html>`);
+    w.document.close();
+    
+    // سجل الطباعة لكل طلب
+    orderIds.forEach(id => _logPrintAction(id, 'invoice'));
+    
+    toast(`✅ تم تحضير ${pages.length} فاتورة`);
+  } catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
 async function printBatchInvoices(){
   // جيب كل الدفعات الموجودة
   const batches = {};
@@ -19441,16 +19910,100 @@ async function doBatchPrint(){
   });
   if(!confirmed) return;
 
+  // ═══════════════════════════════════════════════════════════════
+  // 🆕 v261 LAYER 1: Pre-Print Verification
+  // قبل ما نطبع، نتحقق من الـ DB إن الـ orders array مش stale
+  // ═══════════════════════════════════════════════════════════════
+  const verifyResult = await _verifyBatchesBeforePrint(selected, allOrderIds, optSkipUnassigned);
+  if(verifyResult === 'cancel') return;
+  
+  // لو الـ user اختار "جدد البيانات"، اعد التحميل و وقف
+  if(verifyResult === 'refresh'){
+    toast('🔄 جاري تحديث البيانات...');
+    try {
+      await loadOrders(); // reload orders from DB
+      toast('✅ تم التحديث - افتح زر الطباعة تاني');
+    } catch(e) {
+      toast('❌ فشل التحديث: ' + e.message);
+    }
+    return;
+  }
+  
+  // verifyResult === 'continue' → كمل الطباعة بالـ IDs الحالية
+  // أو verifyResult === 'use-db-ids' → استخدم الـ IDs من الـ DB
+  if(verifyResult && verifyResult.dbOrderIds){
+    // استبدل الـ allOrderIds بالـ IDs من الـ DB (الحقيقية)
+    allOrderIds.length = 0;
+    allOrderIds.push(...verifyResult.dbOrderIds);
+    console.log('[v261] using DB-verified order IDs:', allOrderIds.length);
+  }
+  // ═══════════════════════════════════════════════════════════════
+
   // ===== الخطوة 1: اطلب من السيرفر كل الفواتير في request واحد =====
-  toast(`⏳ تحضير ${allOrderIds.length} فاتورة...`);
+  // 🆕 v258: progress UI real-time مع polling
+  const sessionId = 'bp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  
+  // اعرض progress overlay
+  const progOv = document.createElement('div');
+  progOv.id = 'batch-progress-popup';
+  progOv.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  progOv.innerHTML = `
+    <div style="background:#fff;border-radius:16px;width:min(480px,95vw);padding:24px;font-family:Cairo,sans-serif;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="width:36px;height:36px;border:3px solid #6366f1;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div>
+        <div>
+          <div style="font-weight:800;font-size:15px">⏳ تحضير الفواتير</div>
+          <div style="font-size:11px;color:#666" id="bp-prog-label">جاري التحضير...</div>
+        </div>
+      </div>
+      <div style="background:#f1f5f9;border-radius:99px;overflow:hidden;height:10px;margin-bottom:8px">
+        <div id="bp-prog-bar" style="background:linear-gradient(90deg,#6366f1,#8b5cf6);height:100%;width:0%;transition:width 0.3s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:#666">
+        <span id="bp-prog-stats">0/${allOrderIds.length}</span>
+        <span id="bp-prog-time"></span>
+      </div>
+      <div style="margin-top:12px;font-size:10px;color:#94a3b8;text-align:center;line-height:1.5">
+        💡 لو طلباتك كتير ومش متخزنة من قبل، الأول مرة بتاخد دقيقتين<br>
+        لكن من المرة الجاية بتكون فورية بسبب الـ cache
+      </div>
+    </div>
+    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+  `;
+  document.body.appendChild(progOv);
+  
+  const updateProg = (done, total, label, completed) => {
+    const bar = document.getElementById('bp-prog-bar');
+    const stats = document.getElementById('bp-prog-stats');
+    const lbl = document.getElementById('bp-prog-label');
+    if(bar) bar.style.width = (total ? (done / total * 100) : 0) + '%';
+    if(stats) stats.textContent = `${done}/${total}`;
+    if(lbl && label) lbl.textContent = label;
+  };
+  
   const invoicesMap = {}; // orderId -> html
   let fetchStats = { tookSec: 0, missing: 0 };
+  
+  // poll progress في background
+  let pollInterval = null;
+  let pollStartTs = Date.now();
+  pollInterval = setInterval(async () => {
+    try {
+      const p = await apiFetch('/api/invoices/batch-progress?sessionId=' + sessionId);
+      if (p && p.active) {
+        updateProg(p.done || 0, p.total || allOrderIds.length, p.label);
+        const elapsed = Math.round((Date.now() - pollStartTs) / 1000);
+        const timeEl = document.getElementById('bp-prog-time');
+        if(timeEl) timeEl.textContent = `${elapsed}s`;
+      }
+    } catch(e) {}
+  }, 800);
 
   if(API_URL){
     try{
       const startTs = Date.now();
       // الـ endpoint الجديد يرجع كل الفواتير + يولّد المفقود تلقائياً
-      const r = await apiFetch('/api/invoices/batch-html','POST',{ orderIds: allOrderIds });
+      const r = await apiFetch('/api/invoices/batch-html','POST',{ orderIds: allOrderIds, sessionId });
       if(r && r.invoices){
         r.invoices.forEach(inv => {
           if(inv.html){
@@ -19461,7 +20014,9 @@ async function doBatchPrint(){
         });
         fetchStats = { tookSec: r.tookSec || 0, missing: r.missing || 0 };
         const took = ((Date.now() - startTs) / 1000).toFixed(1);
-        toast(`✅ ${allOrderIds.length - (r.missing||0)} فاتورة جاهزة في ${took}s`);
+        updateProg(allOrderIds.length, allOrderIds.length, `✅ تم في ${took}s`);
+        // أبق على الـ progress overlay لمدة 600ms عشان المستخدم يشوف "تم"
+        await new Promise(rs => setTimeout(rs, 600));
         console.log('batch-html:', r);
       }
     }catch(e){
@@ -19469,6 +20024,13 @@ async function doBatchPrint(){
       toast('⚠️ تعذر التحضير السريع — هيستخدم الطريقة القديمة');
     }
   }
+  
+  // وقف polling
+  if(pollInterval) clearInterval(pollInterval);
+  
+  // اقفل progress overlay
+  const ov2 = document.getElementById('batch-progress-popup');
+  if(ov2) ov2.remove();
 
   // ===== الخطوة 2: حضّر الصفحات =====
   toast('⏳ جاري بناء الصفحات...');
@@ -19676,6 +20238,16 @@ async function doBatchPrint(){
   </body></html>`);
   w.document.close();
   toast('✅ تم تجهيز '+allPages.length+' صفحة');
+  
+  // ═══════════════════════════════════════════════════════════════
+  // 🆕 v261 LAYER 3: Post-Print Audit
+  // بعد 4 ثوان (لما الـ print dialog يكون فتح)، نتحقق إن كله اتطبع
+  // ═══════════════════════════════════════════════════════════════
+  setTimeout(() => {
+    _auditBatchPrintResults(selected, allOrderIds).catch(e => 
+      console.warn('[v261] post-print audit error:', e.message)
+    );
+  }, 4000);
 }
 
 function renderBatchSummaryPage(batchCode, groups, sortedKeys){
@@ -21876,6 +22448,82 @@ function invGoToPage(page){
   renderInventoryTable();
   // Scroll to top of table
   document.getElementById('inv-table-container')?.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+// 🆕 v257: إدارة المخازن - تحديد المخزن الرئيسي
+async function openManageWarehousesModal(){
+  openM('m-manage-warehouses');
+  const listEl = document.getElementById('manage-warehouses-list');
+  listEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div>';
+  
+  try {
+    const warehouses = await apiFetch('/api/inventory/warehouses');
+    if (!warehouses || !warehouses.length) {
+      listEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">مفيش مخازن</div>';
+      return;
+    }
+    
+    renderManageWarehousesList(warehouses);
+  } catch(e) {
+    listEl.innerHTML = `<div style="color:var(--danger);padding:20px">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderManageWarehousesList(warehouses){
+  const listEl = document.getElementById('manage-warehouses-list');
+  if(!listEl) return;
+  
+  const rows = warehouses.map(w => {
+    const isMaster = !!w.is_master;
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:${isMaster ? 'linear-gradient(135deg,#dcfce7 0%,#fff 100%)' : 'var(--card)'};border:1px solid ${isMaster ? '#16a34a' : 'var(--border)'};border-radius:8px;margin-bottom:8px">
+        <div style="flex:1">
+          <div style="font-weight:800;font-size:14px;display:flex;align-items:center;gap:8px">
+            ${isMaster ? '🏠' : (w.is_pos ? '🏪' : '📦')} ${escapeHtml(w.name)}
+            ${isMaster ? '<span style="background:#16a34a;color:#fff;font-size:10px;padding:2px 8px;border-radius:99px;font-weight:700">المخزن الرئيسي</span>' : ''}
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">
+            ${w.is_pos ? '🏪 محل POS' : '📦 مخزن'}
+            ${w.city ? ' · ' + escapeHtml(w.city) : ''}
+            ${w.shopify_location_id ? ' · ✅ مربوط بـ Shopify' : ''}
+          </div>
+        </div>
+        <div>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:700">
+            <input type="checkbox" ${isMaster ? 'checked' : ''} 
+                   onchange="toggleWarehouseMaster(${w.id}, this.checked, this)"
+                   style="width:20px;height:20px;cursor:pointer;accent-color:#16a34a">
+            <span>🏠 رئيسي</span>
+          </label>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  listEl.innerHTML = rows;
+}
+
+async function toggleWarehouseMaster(warehouseId, isMaster, checkbox){
+  // disable checkbox during request
+  if(checkbox) checkbox.disabled = true;
+  
+  try {
+    const r = await apiFetch(`/api/warehouses/${warehouseId}/master`, 'PUT', { is_master: isMaster });
+    if (r && r.success) {
+      toast(isMaster ? `✅ ${r.name} بقى المخزن الرئيسي` : `✅ تم شيل ${r.name} كمخزن رئيسي`);
+      // اعد تحميل القائمة عشان نرى الـ exclusivity
+      const warehouses = await apiFetch('/api/inventory/warehouses');
+      renderManageWarehousesList(warehouses || []);
+    } else {
+      toast('❌ فشل التحديث');
+      if(checkbox) checkbox.checked = !isMaster;
+    }
+  } catch(e) {
+    toast('❌ ' + e.message);
+    if(checkbox) checkbox.checked = !isMaster;
+  } finally {
+    if(checkbox) checkbox.disabled = false;
+  }
 }
 
 async function syncInventoryLevels(){
@@ -28952,10 +29600,12 @@ async function initZeroStocksPage(){
     try { _zsWarehouses = await apiFetch('/api/inventory/warehouses') || []; } catch(e){}
   }
   
-  const sel = document.getElementById('zs-warehouse');
+  // 🆕 v256: dropdown موحّد - "كل المخازن" + المخازن الفردية
+  const sel = document.getElementById('zs-warehouse-combined');
   if(sel){
     sel.innerHTML = '<option value="">-- اختار --</option>' +
-      _zsWarehouses.map(w => `<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
+      '<option value="__all__">🌍 كل المخازن (نفد في الكل)</option>' +
+      _zsWarehouses.map(w => `<option value="${w.id}">📦 ${escapeHtml(w.name)}</option>`).join('');
   }
   
   // اعمل default للـ dates آخر 30 يوم
@@ -28969,21 +29619,11 @@ async function initZeroStocksPage(){
   if(!document.getElementById('zs-to').value){
     document.getElementById('zs-to').value = today.toISOString().slice(0, 10);
   }
-  
-  updateZSWarehouseRequired();
 }
 
+// 🆕 v256: استبدل updateZSWarehouseRequired (مش محتاجينه بقا)
 function updateZSWarehouseRequired(){
-  const scope = document.getElementById('zs-scope').value;
-  const whSel = document.getElementById('zs-warehouse');
-  
-  if(scope === 'warehouse'){
-    whSel.style.borderColor = '#fbbf24';
-    whSel.parentElement.querySelector('label').innerHTML = '📦 المخزن <span style="color:#ef4444">*</span>';
-  } else {
-    whSel.style.borderColor = 'var(--border)';
-    whSel.parentElement.querySelector('label').innerHTML = '📦 المخزن (اختياري)';
-  }
+  // legacy noop - الـ combined dropdown بيدير الحالة بنفسه
 }
 
 function setZSDateRange(days){
@@ -29015,16 +29655,20 @@ function setZSLastMonth(){
 async function loadZeroStocks(){
   const fromDate = document.getElementById('zs-from').value;
   const toDate = document.getElementById('zs-to').value;
-  const warehouseId = document.getElementById('zs-warehouse').value;
-  const scope = document.getElementById('zs-scope').value;
+  // 🆕 v256: قراءة من الـ combined dropdown
+  const combinedVal = document.getElementById('zs-warehouse-combined').value;
   
   if(!fromDate || !toDate){
     toast('❌ ادخل التواريخ'); return;
   }
   
-  if(scope === 'warehouse' && !warehouseId){
-    toast('❌ اختار مخزن أو غير النطاق إلى "كل المخازن"'); return;
+  if(!combinedVal){
+    toast('❌ اختار المخزن أو "كل المخازن"'); return;
   }
+  
+  // فك الـ scope + warehouseId من الـ value
+  const scope = combinedVal === '__all__' ? 'global' : 'warehouse';
+  const warehouseId = combinedVal === '__all__' ? '' : combinedVal;
   
   if(new Date(toDate) < new Date(fromDate)){
     toast('❌ تاريخ "إلى" لازم يكون بعد "من"'); return;
@@ -29098,10 +29742,13 @@ async function loadZeroStocks(){
     
     const r = await apiFetch('/api/inventory/zero-stocks?' + params.toString());
     _zsResults = r;
+    // 🆕 v256: ابدأ بفلتر "الكل"
+    _zsResultFilter = 'all';
     
     const products = r?.products || [];
     
-    document.getElementById('zs-export-btn').style.display = products.length ? 'block' : 'none';
+    document.getElementById('zs-export-btn').style.display = products.length ? 'inline-block' : 'none';
+    document.getElementById('zs-results-filters').style.display = products.length ? 'block' : 'none';
     
     // Period label
     const fromStr = new Date(fromDate).toLocaleDateString('ar-EG', {dateStyle:'medium'});
@@ -29110,9 +29757,9 @@ async function loadZeroStocks(){
     const scopeLabel = scope === 'global' ? '🌍 كل المخازن' : `📦 ${wh?.name || ''}`;
     
     document.getElementById('zs-results-title').innerHTML = `📋 النتائج · ${fromStr} → ${toStr} · ${scopeLabel}`;
-    summaryEl.innerHTML = `<strong style="color:${products.length > 0 ? '#ef4444' : '#22c55e'};font-size:14px">${products.length}</strong> منتج`;
     
     if(!products.length){
+      summaryEl.innerHTML = `<strong style="color:#22c55e;font-size:14px">0</strong> منتج`;
       resultsEl.innerHTML = `
         <div style="text-align:center;padding:40px">
           <div style="font-size:48px">✅</div>
@@ -29123,59 +29770,11 @@ async function loadZeroStocks(){
       return;
     }
     
-    // عرض القائمة
-    resultsEl.innerHTML = `
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:13px">
-          <thead>
-            <tr style="background:#1e293b;color:#fff">
-              <th style="padding:10px;text-align:right;width:40px">#</th>
-              <th style="padding:10px;text-align:right">📦 المنتج</th>
-              <th style="padding:10px;text-align:center;width:120px">📅 أول مرة خلص</th>
-              <th style="padding:10px;text-align:center;width:80px">🔁 خلص كم مرة</th>
-              <th style="padding:10px;text-align:center;width:100px">📊 المخزون الحالي</th>
-              <th style="padding:10px;text-align:center;width:60px">⚙️</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${products.map((p, i) => {
-              const dateStr = new Date(p.first_zero_date).toLocaleDateString('ar-EG', {dateStyle:'medium'});
-              const stockColor = p.current_stock === 0 ? '#ef4444' : p.current_stock < 5 ? '#f97316' : '#22c55e';
-              const eventColor = p.zero_event_count > 2 ? '#ef4444' : p.zero_event_count > 1 ? '#f97316' : '#64748b';
-              const datesTooltip = p.zero_dates.map(d => new Date(d).toLocaleDateString('ar-EG')).join('\n');
-              
-              return `
-                <tr style="border-bottom:1px solid var(--border)" 
-                    onmouseover="this.style.background='var(--bg)'" 
-                    onmouseout="this.style.background='transparent'">
-                  <td style="padding:8px;text-align:center;color:var(--muted);font-weight:700">${i+1}</td>
-                  <td style="padding:8px">
-                    <div style="font-weight:700">${escapeHtml(p.product_title || '-')}</div>
-                    ${p.sku ? `<div style="font-size:10px;color:var(--muted);font-family:monospace">SKU: ${escapeHtml(p.sku)}</div>` : ''}
-                  </td>
-                  <td style="padding:8px;text-align:center;font-weight:700;color:#ef4444">${dateStr}</td>
-                  <td style="padding:8px;text-align:center" title="${escapeHtml(datesTooltip)}">
-                    <span style="background:${eventColor}20;color:${eventColor};padding:3px 10px;border-radius:99px;font-weight:800;font-size:12px">
-                      ${p.zero_event_count}x
-                    </span>
-                  </td>
-                  <td style="padding:8px;text-align:center;font-weight:800;color:${stockColor}">
-                    ${p.current_stock}
-                  </td>
-                  <td style="padding:8px;text-align:center">
-                    <button onclick="showForecastDetail(${p.variant_id})" 
-                            style="background:transparent;border:1px solid #7c3aed;color:#7c3aed;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer" 
-                            title="شوف توقع البيع">
-                      📊
-                    </button>
-                  </td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
+    // 🆕 v256: حدّث الـ counts في الـ filter chips
+    zsUpdateFilterCounts();
+    
+    // ارسم النتائج (مع الفلتر الافتراضي)
+    renderZSResults();
   } catch(e) {
     console.error('zero-stocks load error:', e);
     resultsEl.innerHTML = `
@@ -29193,36 +29792,201 @@ async function loadZeroStocks(){
   }
 }
 
-function exportZeroStocksList(){
-  if(!_zsResults?.products?.length) return;
+// 🆕 v256: state للفلتر النتيجة
+let _zsResultFilter = 'all';
+
+// 🆕 v256: helper - جيب المنتجات بعد فلتر النتيجة الحالي
+function zsGetFilteredProducts(){
+  const all = _zsResults?.products || [];
+  if (_zsResultFilter === 'out_everywhere') {
+    return all.filter(p => (p.total_stock_all_warehouses || 0) === 0);
+  }
+  if (_zsResultFilter === 'available_elsewhere') {
+    return all.filter(p => (p.total_stock_all_warehouses || 0) > 0);
+  }
+  return all;
+}
+
+// 🆕 v256: حدّث counts في الـ filter chips
+function zsUpdateFilterCounts(){
+  const all = _zsResults?.products || [];
+  const outAll = all.filter(p => (p.total_stock_all_warehouses || 0) === 0).length;
+  const elsewhere = all.filter(p => (p.total_stock_all_warehouses || 0) > 0).length;
+  
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+  setText('zs-cnt-all', all.length);
+  setText('zs-cnt-out', outAll);
+  setText('zs-cnt-elsewhere', elsewhere);
+}
+
+// 🆕 v256: فلتر النتيجة
+function zsSetResultFilter(filter, btn){
+  _zsResultFilter = filter;
+  document.querySelectorAll('#zs-filter-chips .chip').forEach(c => c.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  renderZSResults();
+}
+
+// 🆕 v256: render الجدول من الـ filtered list
+function renderZSResults(){
+  const resultsEl = document.getElementById('zs-results');
+  const summaryEl = document.getElementById('zs-summary');
+  if(!resultsEl) return;
+  
+  const products = zsGetFilteredProducts();
+  const all = _zsResults?.products || [];
+  
+  // summary count
+  if(summaryEl){
+    const cnt = products.length;
+    const total = all.length;
+    if (_zsResultFilter === 'all') {
+      summaryEl.innerHTML = `<strong style="color:${cnt > 0 ? '#ef4444' : '#22c55e'};font-size:14px">${cnt}</strong> منتج`;
+    } else {
+      summaryEl.innerHTML = `<strong style="color:#ef4444;font-size:14px">${cnt}</strong> من <strong>${total}</strong> منتج`;
+    }
+  }
+  
+  if (!products.length) {
+    resultsEl.innerHTML = `
+      <div style="text-align:center;padding:30px;color:var(--muted)">
+        <div style="font-size:36px;opacity:0.4">🔍</div>
+        <div style="margin-top:8px;font-weight:700">مفيش منتجات بالفلتر ده</div>
+      </div>
+    `;
+    return;
+  }
+  
+  resultsEl.innerHTML = `
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:#1e293b;color:#fff">
+            <th style="padding:10px;text-align:right;width:40px">#</th>
+            <th style="padding:10px;text-align:right">📦 المنتج</th>
+            <th style="padding:10px;text-align:center;width:120px">📅 أول مرة خلص</th>
+            <th style="padding:10px;text-align:center;width:80px">🔁 خلص كم مرة</th>
+            <th style="padding:10px;text-align:center;width:130px">📊 الرصيد (المخزن المختار)</th>
+            <th style="padding:10px;text-align:center;width:130px">🌍 الرصيد (كل المخازن)</th>
+            <th style="padding:10px;text-align:center;width:60px">⚙️</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${products.map((p, i) => {
+            const dateStr = new Date(p.first_zero_date).toLocaleDateString('ar-EG', {dateStyle:'medium'});
+            const stockColor = p.current_stock === 0 ? '#ef4444' : p.current_stock < 5 ? '#f97316' : '#22c55e';
+            const totalAll = p.total_stock_all_warehouses || 0;
+            const totalColor = totalAll === 0 ? '#ef4444' : totalAll < 5 ? '#f97316' : '#22c55e';
+            const eventColor = p.zero_event_count > 2 ? '#ef4444' : p.zero_event_count > 1 ? '#f97316' : '#64748b';
+            const datesTooltip = (p.zero_dates || []).map(d => new Date(d).toLocaleDateString('ar-EG')).join('\n');
+            
+            return `
+              <tr style="border-bottom:1px solid var(--border)" 
+                  onmouseover="this.style.background='var(--bg)'" 
+                  onmouseout="this.style.background='transparent'">
+                <td style="padding:8px;text-align:center;color:var(--muted);font-weight:700">${i+1}</td>
+                <td style="padding:8px">
+                  <div style="font-weight:700">${escapeHtml(p.product_title || '-')}</div>
+                  ${p.sku ? `<div style="font-size:10px;color:var(--muted);font-family:monospace">SKU: ${escapeHtml(p.sku)}</div>` : ''}
+                </td>
+                <td style="padding:8px;text-align:center;font-weight:700;color:#ef4444">${dateStr}</td>
+                <td style="padding:8px;text-align:center" title="${escapeHtml(datesTooltip)}">
+                  <span style="background:${eventColor}20;color:${eventColor};padding:3px 10px;border-radius:99px;font-weight:800;font-size:12px">
+                    ${p.zero_event_count}x
+                  </span>
+                </td>
+                <td style="padding:8px;text-align:center;font-weight:800;color:${stockColor}">
+                  ${p.current_stock}
+                </td>
+                <td style="padding:8px;text-align:center;font-weight:800;color:${totalColor}">
+                  ${totalAll}
+                  ${totalAll === 0 ? '<div style="font-size:9px;color:#ef4444;font-weight:600">⚠️ نفد فعلياً</div>' : ''}
+                </td>
+                <td style="padding:8px;text-align:center">
+                  <button onclick="showForecastDetail(${p.variant_id})" 
+                          style="background:transparent;border:1px solid #7c3aed;color:#7c3aed;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer" 
+                          title="شوف توقع البيع">
+                    📊
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// 🆕 v256: Excel export (XLSX) للنتائج المفلترة
+function exportZeroStocksExcel(){
+  const products = zsGetFilteredProducts();
+  if(!products.length){ toast('❌ مفيش بيانات للتصدير'); return; }
   
   const fromDate = document.getElementById('zs-from').value;
   const toDate = document.getElementById('zs-to').value;
-  const scope = document.getElementById('zs-scope').value;
-  const wh = _zsWarehouses.find(w => w.id == document.getElementById('zs-warehouse').value);
+  const combinedVal = document.getElementById('zs-warehouse-combined').value;
+  const scope = combinedVal === '__all__' ? 'global' : 'warehouse';
+  const wh = _zsWarehouses.find(w => w.id == combinedVal);
   const scopeLabel = scope === 'global' ? 'كل المخازن' : (wh?.name || '');
   
-  // Build CSV
-  const header = '#,المنتج,SKU,أول مرة خلص,عدد المرات,المخزون الحالي\n';
-  const rows = _zsResults.products.map((p, i) => {
+  const filterLabel = _zsResultFilter === 'out_everywhere' ? '-نفد-في-الكل' 
+                    : _zsResultFilter === 'available_elsewhere' ? '-متاح-في-تاني' 
+                    : '';
+  
+  // لو SheetJS متاحة، استخدمها (لو لا، نستخدم CSV كـ fallback)
+  if (typeof XLSX !== 'undefined') {
+    const data = products.map((p, i) => ({
+      '#': i + 1,
+      'المنتج': p.product_title || '-',
+      'SKU': p.sku || '-',
+      'أول مرة خلص': new Date(p.first_zero_date).toLocaleDateString('ar-EG'),
+      'عدد المرات': p.zero_event_count,
+      'الرصيد (المخزن)': p.current_stock,
+      'الرصيد (كل المخازن)': p.total_stock_all_warehouses || 0,
+      'الحالة': (p.total_stock_all_warehouses || 0) === 0 ? 'نفد فعلياً' : 'متاح في مخزن تاني',
+    }));
+    
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws['!cols'] = [
+      {wch:5}, {wch:40}, {wch:18}, {wch:15}, {wch:12}, {wch:18}, {wch:18}, {wch:22}
+    ];
+    
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'منتجات نفدت');
+    
+    XLSX.writeFile(wb, `منتجات-خلصت-${scopeLabel}${filterLabel}-${fromDate}-${toDate}.xlsx`);
+    toast('✅ تم تنزيل ملف Excel');
+    return;
+  }
+  
+  // fallback: CSV
+  const header = '#,المنتج,SKU,أول مرة خلص,عدد المرات,الرصيد (المخزن),الرصيد (كل المخازن),الحالة\n';
+  const rows = products.map((p, i) => {
     const safeTitle = (p.product_title || '').replace(/"/g, '""');
     const safeSku = (p.sku || '').replace(/"/g, '""');
     const date = new Date(p.first_zero_date).toLocaleDateString('ar-EG');
-    return `${i+1},"${safeTitle}","${safeSku}","${date}",${p.zero_event_count},${p.current_stock}`;
+    const status = (p.total_stock_all_warehouses || 0) === 0 ? 'نفد فعلياً' : 'متاح في مخزن تاني';
+    return `${i+1},"${safeTitle}","${safeSku}","${date}",${p.zero_event_count},${p.current_stock},${p.total_stock_all_warehouses || 0},"${status}"`;
   }).join('\n');
   
-  const csv = '\uFEFF' + header + rows; // BOM للـ Arabic
-  
+  const csv = '\uFEFF' + header + rows;
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `zero-stocks-${scopeLabel}-${fromDate}-${toDate}.csv`;
+  a.download = `منتجات-خلصت-${scopeLabel}${filterLabel}-${fromDate}-${toDate}.csv`;
   a.click();
   URL.revokeObjectURL(url);
   
-  toast('✅ تم التحميل');
+  toast('✅ تم التحميل (CSV)');
 }
+
+// legacy alias (مستخدم في القديم)
+function exportZeroStocksList(){ return exportZeroStocksExcel(); }
 
 // ============================================================
 // END: ZERO STOCKS
@@ -33425,6 +34189,101 @@ function markRead(id){notifications=notifications.map(n=>n.id===id?{...n,read:tr
 function markAllRead(){notifications=notifications.map(n=>({...n,read:true}));updateStats();renderNotifs();toast('✅ تم تحديد الكل كمقروء')}
 
 function saveSettings(){defaultShip=+$('cfg-ship').value||50;toast('✅ تم حفظ الإعدادات')}
+
+// 🆕 v260: backfill totals من Shopify (للطلبات اللي اتعدلت)
+async function runBackfillCheck(dryRun){
+  const days = parseInt(document.getElementById('backfill-days').value) || 30;
+  const resultEl = document.getElementById('backfill-result');
+  
+  // Confirmation للـ non-dry-run
+  if (!dryRun) {
+    if (!confirm(`هل أنت متأكد من تنفيذ المزامنة لآخر ${days} يوم؟\n\nالطلبات اللي مبالغها مختلفة عن Shopify هتتحدث في النظام.`)) {
+      return;
+    }
+  }
+  
+  resultEl.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg);border-radius:8px;color:var(--muted)">
+      <div style="width:24px;height:24px;border:3px solid #6366f1;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div>
+      <span>⏳ جاري الفحص... (قد يستغرق دقيقة أو اتنين حسب عدد الطلبات)</span>
+    </div>
+    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+  `;
+  
+  try {
+    const r = await apiFetch('/api/shopify/backfill-totals', 'POST', {
+      days,
+      dryRun,
+      onlyMismatched: true,
+    });
+    
+    if (!r) {
+      resultEl.innerHTML = `<div style="color:var(--danger);padding:12px">❌ فشل الاتصال بالـ السيرفر</div>`;
+      return;
+    }
+    
+    const mismatched = r.mismatched || [];
+    const headerColor = mismatched.length === 0 ? '#16a34a' : (dryRun ? '#f59e0b' : '#16a34a');
+    const headerIcon = mismatched.length === 0 ? '✅' : (dryRun ? '⚠️' : '✅');
+    const headerMsg = mismatched.length === 0 
+      ? `كل الطلبات مظبوطة! (${r.checked} طلب اتفحص)`
+      : (dryRun 
+        ? `${mismatched.length} طلب فيهم فرق (معاينة فقط — اضغط "تنفيذ المزامنة" للتحديث)`
+        : `تم تحديث ${r.updated} طلب من Shopify (${r.tookSec}s)`);
+    
+    let html = `
+      <div style="background:linear-gradient(135deg,${headerColor}15 0%,#fff 100%);border:1px solid ${headerColor};border-radius:8px;padding:12px;margin-bottom:10px">
+        <div style="font-weight:800;font-size:14px;color:${headerColor};margin-bottom:4px">${headerIcon} ${headerMsg}</div>
+        <div style="font-size:11px;color:var(--muted)">تم فحص ${r.checked} طلب · استغرق ${r.tookSec || 0} ثانية</div>
+      </div>
+    `;
+    
+    if (mismatched.length > 0) {
+      html += `
+        <div style="font-weight:700;font-size:13px;margin-bottom:8px">📋 الطلبات اللي فيها فرق:</div>
+        <div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead>
+              <tr style="background:#1e293b;color:#fff;position:sticky;top:0">
+                <th style="padding:8px;text-align:right">#</th>
+                <th style="padding:8px;text-align:right">رقم الطلب</th>
+                <th style="padding:8px;text-align:center">في النظام</th>
+                <th style="padding:8px;text-align:center">في Shopify</th>
+                <th style="padding:8px;text-align:center">الفرق</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${mismatched.slice(0, 50).map((m, i) => {
+                const diff = (m.shopifyTotal - m.dbTotal).toFixed(2);
+                const diffColor = parseFloat(diff) < 0 ? '#ef4444' : '#16a34a';
+                return `
+                  <tr style="border-top:1px solid var(--border)">
+                    <td style="padding:6px 8px;color:var(--muted)">${i+1}</td>
+                    <td style="padding:6px 8px;font-family:monospace">${escapeHtml(m.orderId)}</td>
+                    <td style="padding:6px 8px;text-align:center;font-weight:700">${m.dbTotal.toLocaleString()} ج</td>
+                    <td style="padding:6px 8px;text-align:center;font-weight:700;color:${diffColor}">${m.shopifyTotal.toLocaleString()} ج</td>
+                    <td style="padding:6px 8px;text-align:center;font-weight:800;color:${diffColor}">${diff > 0 ? '+' : ''}${diff} ج</td>
+                  </tr>
+                `;
+              }).join('')}
+              ${mismatched.length > 50 ? `<tr><td colspan="5" style="padding:10px;text-align:center;color:var(--muted)">... و ${mismatched.length - 50} طلب آخر</td></tr>` : ''}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+    
+    resultEl.innerHTML = html;
+    
+    // toast
+    if (mismatched.length === 0) toast('✅ كل الطلبات مظبوطة');
+    else if (dryRun) toast(`⚠️ ${mismatched.length} طلب فيهم فرق`);
+    else toast(`✅ تم تحديث ${r.updated} طلب`);
+    
+  } catch(e) {
+    resultEl.innerHTML = `<div style="color:var(--danger);padding:12px">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
 
 function selDays(btn, days) {
   document.querySelectorAll('#days-btns .chip').forEach(b => b.classList.remove('on'));
