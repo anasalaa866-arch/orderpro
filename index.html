@@ -1,27 +1,32 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v351 — FIX ACTIVE SHIFTS (2026-05-24)
+  OrderPro v358 — FULL STOCKTAKE REPORT (2026-05-25)
   ═══════════════════════════════════════════════════════════════════
-  🐛 إصلاحات في الـ Active Shifts endpoints:
+  ✨ تقرير الجرد بقى شامل وكامل:
   
-  المشكلة 1: 500 Internal Server Error في /api/admin/active-shifts/:id/details
-  السبب: الـ query كانت بتستخدم أعمدة غلط:
-    - ps.session_id (مش موجود - الـ table مفهاش session_id)
-    - ps.discount (الاسم الصحيح discount_total)
-    - pos_sale_payments (الجدول الصحيح pos_payments)
-  الحل: filter بـ cashier_id + opened_at + closed_at
+  المشكلة قبل:
+  - التقرير كان بـ يعرض الفروقات فقط (490 من 1161 معدود)
+  - المنتجات المطابقة (counted = system) ما كانتش بتظهر
+  - مفيش separation بين عجز/فائض
   
-  المشكلة 2: مدير المحل مش بيظهر في الـ active shifts
-  السبب: كان بيـ JOIN على couriers بس، المديرين في users table
-  الحل: LEFT JOIN على الاتنين + COALESCE
+  ✅ الحل الجديد:
+  - 5 stat boxes (إجمالي/معدود/مطابق/فروقات/لم يُعد)
+  - 4 sections منفصلة في التقرير:
+    🔴 عجز - أحمر فاتح (counted < system)
+    🟢 فائض - أخضر فاتح (counted > system)
+    ✓ مطابق - رمادي فاتح (counted == system)
+    ⚠️ لم يُعد - أصفر فاتح (counted == null)
+  - Legend بيوضح الترميز الألواني
+  - كل section بـ table منفصل بـ rows ملونة
+  - الـ uncounted بقى يعرض كل المنتجات (مش 50)
   
-  محتاج: server v262
+  Backend Endpoint:
+  GET /api/stocktake/sessions/:id/report
+  - الـ response دلوقتي فيه items.matching (الجديد)
+  - stats.matchingCount (الجديد)
   
-  من v350 (محفوظ):
-  - 🛡️ Batch Print Safety (Layer 1 + 3)
-  - 🐛 Shopify current_total_price fix
-  - 🔁 Invoice cache invalidation
+  محتاج: server v271
   ═══════════════════════════════════════════════════════════════════
 -->
 <html lang="ar" dir="rtl">
@@ -2925,6 +2930,44 @@ tr:hover td{background:#fafbff}
             </div>
             
             <div id="backfill-result" style="margin-top:12px"></div>
+          </div>
+        </div>
+        
+        <!-- 🆕 v357: Shopify Duplicates Cleanup Tool -->
+        <div class="card" style="margin-top:14px">
+          <div class="card-hd">
+            <h3>🔍 فحص duplicates في Shopify</h3>
+          </div>
+          <div style="padding:14px">
+            <div style="background:linear-gradient(135deg,#fee2e2 0%,#fff 100%);border:1px solid #ef4444;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;line-height:1.7;color:#991b1b">
+              <strong style="color:#b91c1c">⚠️ مهم - دا للمراجعة فقط</strong><br>
+              في حالات نادرة (انقطاع نت + retry سريع)، POS sale واحد ممكن يـ create 2 orders في Shopify.
+              <br><br>
+              <strong>الأداة دي بـ:</strong>
+              <ol style="margin:4px 16px 0;padding:0">
+                <li>تـ scan الـ POS sales في آخر N أيام</li>
+                <li>تبحث في Shopify بـ <code style="background:#fee2e2;padding:1px 4px;border-radius:3px">tag:uuid:&lt;client_uuid&gt;</code></li>
+                <li>لو لقت &gt; 1 order بنفس الـ UUID → duplicate</li>
+                <li>اعرض الـ duplicates للمدير عشان يقرر أي order يـ cancel</li>
+              </ol>
+              <br>
+              <strong style="color:#dc2626">الـ Cancel بـ يعمل: refund + restock للـ inventory.</strong>
+            </div>
+            
+            <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
+              <div class="fg" style="flex:1;min-width:140px">
+                <label style="font-size:11px;font-weight:700;color:var(--muted)">📅 آخر كام يوم؟</label>
+                <select id="dup-days" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif">
+                  <option value="3">آخر 3 أيام</option>
+                  <option value="7" selected>آخر 7 أيام</option>
+                  <option value="14">آخر 14 يوم</option>
+                  <option value="30">آخر 30 يوم</option>
+                </select>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="scanShopifyDuplicates()">🔍 ابدأ الفحص</button>
+            </div>
+            
+            <div id="dup-scan-result" style="margin-top:12px"></div>
           </div>
         </div>
       </div>
@@ -12812,6 +12855,7 @@ let _syncFailures = [];
 // ============================================================
 let _pendingSettlements = [];
 let _activeShifts = []; // 🆕 v254: الشيفتات الشغالة دلوقتي
+let _pendingSessions = []; // 🆕 v263: الشيفتات المستنية المدير
 let _currentSettlementDetails = null;
 let _receivingCashFor = null;
 
@@ -12825,14 +12869,16 @@ async function loadSettlementsReceipts(){
       $('treasury-flow').textContent = `دخل: ${parseFloat(balR.total_in||0).toLocaleString()} · خرج: ${parseFloat(balR.total_out||0).toLocaleString()}`;
     }
 
-    // 🆕 v254: التصفيات + الشيفتات الشغالة بالتوازي
-    const [pendingR, activeR] = await Promise.all([
+    // 🆕 v263: التصفيات + الشيفتات الشغالة + الشيفتات المستنية المدير
+    const [pendingR, activeR, pendingSessionsR] = await Promise.all([
       apiFetch('/api/accountant/settlements/pending'),
       apiFetch('/api/admin/active-shifts').catch(() => ({ shifts: [] })),
+      apiFetch('/api/admin/pending-sessions').catch(() => ({ sessions: [] })),
     ]);
     
     _pendingSettlements = pendingR?.settlements || [];
     _activeShifts = activeR?.shifts || [];
+    _pendingSessions = pendingSessionsR?.sessions || [];
 
     // احسب pending totals
     let pendingCashTotal = 0, pendingCashCount = 0;
@@ -12883,6 +12929,10 @@ function renderSettlementsReceipts(){
   const pending = _pendingSettlements.filter(isPending);
   const received = _pendingSettlements.filter(s => !isPending(s));
   const activeCount = (_activeShifts || []).length;
+  const pendingSessionsCount = (_pendingSessions || []).length; // 🆕 v263
+  
+  // 🆕 v263: الـ count الكلي في tab "لسه ما استلمهاش" = settlements + pending sessions
+  const totalPendingCount = pending.length + pendingSessionsCount;
 
   // Tabs للفلتر — الترتيب: مستلمة | لسه ما اتأكدوش | شغالة دلوقتي
   let html = `
@@ -12891,7 +12941,8 @@ function renderSettlementsReceipts(){
         ✅ مستلمة <span style="opacity:.85">(${received.length})</span>
       </button>
       <button onclick="setSettlementsFilter('pending')" style="flex:1;min-width:200px;padding:10px;background:${filterMode==='pending'?'#d97706':'transparent'};color:${filterMode==='pending'?'#fff':'var(--text)'};border:none;border-radius:8px;font-family:Cairo,sans-serif;font-weight:800;cursor:pointer;font-size:13px">
-        ⏳ تصفيات الأدمين لسه ما استلمهاش <span style="opacity:.85">(${pending.length})</span>
+        ⏳ تصفيات الأدمين لسه ما استلمهاش <span style="opacity:.85">(${totalPendingCount})</span>
+        ${pendingSessionsCount > 0 ? `<span style="background:#fbbf24;color:#78350f;padding:1px 6px;border-radius:99px;font-size:9px;margin-right:4px;vertical-align:middle">🟡 ${pendingSessionsCount} مستني المدير</span>` : ''}
       </button>
       <button onclick="setSettlementsFilter('active')" style="flex:1;min-width:140px;padding:10px;background:${filterMode==='active'?'#16a34a':'transparent'};color:${filterMode==='active'?'#fff':'var(--text)'};border:none;border-radius:8px;font-family:Cairo,sans-serif;font-weight:800;cursor:pointer;font-size:13px;${filterMode==='active'?'':'position:relative'}">
         ${filterMode==='active' ? '🟢' : '<span style="display:inline-block;width:8px;height:8px;background:#16a34a;border-radius:50%;animation:pulse 2s infinite;margin-left:4px;vertical-align:middle"></span>'} شغالة دلوقتي <span style="opacity:.85">(${activeCount})</span>
@@ -12921,11 +12972,22 @@ function renderSettlementsReceipts(){
   // pending أو received
   const list = filterMode === 'received' ? received : pending;
   
-  if(!list.length){
+  // 🆕 v263: لو في pending sessions، اعرضهم فوق في الـ pending tab
+  if (filterMode === 'pending' && pendingSessionsCount > 0) {
+    html += renderPendingSessionsSection();
+  }
+  
+  if(!list.length && (filterMode === 'received' || pendingSessionsCount === 0)){
     const emptyMsg = filterMode === 'received' 
       ? 'مفيش تصفيات مستلمة' 
       : 'مفيش تصفيات في الانتظار - كله مستلم ✅';
     html += `<div class="card"><div class="card-body" style="text-align:center;padding:30px;color:var(--muted)">${emptyMsg}</div></div>`;
+    cont.innerHTML = html;
+    return;
+  }
+  
+  // 🆕 v263: لو الـ list فاضي بس في pending sessions، اطبع الـ HTML وbreak
+  if (!list.length) {
     cont.innerHTML = html;
     return;
   }
@@ -13008,6 +13070,684 @@ function setSettlementsFilter(mode){
 }
 
 // ═════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════
+// 🆕 v355: طباعة A4 لتفاصيل التصفية (pending أو active)
+// ═════════════════════════════════════════════════════════════════
+// 
+// kind = 'pending' | 'active'
+// sessionId = الـ session ID
+// 
+// بـ يستخدم _currentSettlementDetails (المحفوظة من openPendingSessionDetails
+// أو openActiveShiftDetails) - يتجنّب fetch إضافي
+async function printSettlementA4(kind, sessionId){
+  if(!_currentSettlementDetails || !_currentSettlementDetails.settlement){
+    toast('❌ مفيش بيانات للطباعة');
+    return;
+  }
+  
+  const r = _currentSettlementDetails;
+  const s = r.settlement;
+  
+  // الـ user اللي بـ يطبع
+  const printedBy = (typeof currentUser !== 'undefined' && currentUser) 
+    ? (currentUser.name || currentUser.username || 'مستخدم')
+    : (localStorage.getItem('op_user_name') || 'مستخدم');
+  const printedAt = new Date().toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' });
+  
+  const isPending = kind === 'pending';
+  const statusBadge = isPending 
+    ? '<span style="background:#fbbf24;color:#78350f;padding:3px 10px;border-radius:4px;font-weight:800">🟡 مستني المدير</span>'
+    : '<span style="background:#16a34a;color:#fff;padding:3px 10px;border-radius:4px;font-weight:800">🟢 شغّال (Live)</span>';
+  
+  const methodLabels = {
+    cash:     { icon: '💵', label: 'كاش',     color: '#d97706' },
+    visa:     { icon: '💳', label: 'فيزا',    color: '#6366f1' },
+    instapay: { icon: '📱', label: 'انستاباي', color: '#4f46e5' },
+    mixed:    { icon: '🔀', label: 'مدمج',    color: '#a855f7' },
+    other:    { icon: '📌', label: 'أخرى',    color: '#6b7280' }
+  };
+  
+  const openedAt = s.opened_at ? new Date(s.opened_at).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+  const closedAt = s.cashier_closed_at ? new Date(s.cashier_closed_at).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : (isPending ? '—' : 'لسه شغّال');
+  
+  // جداول بـ payment method
+  let tablesHtml = '';
+  for(const [methodKey, sales] of Object.entries(r.byMethod || {})){
+    if(!sales || !sales.length) continue;
+    const m = methodLabels[methodKey] || methodLabels.other;
+    const groupTotal = sales.reduce((t, sale) => t + (parseFloat(sale.total) || 0), 0);
+    
+    tablesHtml += `
+      <div class="group">
+        <div class="group-hd" style="background:${m.color}">
+          <span>${m.icon} ${m.label} (${sales.length} بيعة)</span>
+          <span>${groupTotal.toLocaleString()} ج</span>
+        </div>
+        <table class="sales-table">
+          <thead>
+            <tr>
+              <th>رقم البيعة</th>
+              <th>الوقت</th>
+              <th>العميل</th>
+              <th>طرق الدفع</th>
+              <th>المبلغ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sales.map(sale => {
+              const time = new Date(sale.created_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'});
+              const isPickup = sale.is_pickup === true;
+              const paysStr = (sale.payments || []).filter(p => p && p.method).map(p => {
+                const mi = methodLabels[p.method]?.icon || '•';
+                return `${mi} ${parseFloat(p.amount).toFixed(0)}`;
+              }).join(' + ');
+              return `
+                <tr class="${isPickup ? 'pickup-row' : ''}">
+                  <td style="font-family:monospace;font-size:10px">${escapeHtml(sale.sale_number || '#'+sale.id)}${isPickup ? ' <span class="pickup-badge">pickup</span>' : ''}</td>
+                  <td>${time}</td>
+                  <td>${escapeHtml(sale.customer_name || 'عميل عام')}</td>
+                  <td style="font-size:10px">${paysStr}</td>
+                  <td style="text-align:left;font-weight:700">${parseFloat(sale.total).toLocaleString()} ج</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+  
+  // Counted comparison (لو pending session)
+  const countedHtml = isPending && (s.counted_cash || s.counted_visa || s.counted_instapay) ? `
+    <div class="card">
+      <div class="card-title">📝 المعدود من الكاشير</div>
+      <table class="info-table">
+        <tr><td>💵 كاش (معدود)</td><td><strong>${parseFloat(s.counted_cash || 0).toLocaleString()} ج</strong></td></tr>
+        <tr><td>💳 فيزا (معدود)</td><td><strong>${parseFloat(s.counted_visa || 0).toLocaleString()} ج</strong></td></tr>
+        <tr><td>📱 انستاباي (معدود)</td><td><strong>${parseFloat(s.counted_instapay || 0).toLocaleString()} ج</strong></td></tr>
+      </table>
+    </div>
+  ` : '';
+  
+  const html = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>تصفية ${escapeHtml(s.cashier_name || '')} - ${printedAt}</title>
+<style>
+  @page { size: A4; margin: 12mm 10mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Cairo', 'Arial', sans-serif;
+    color: #000;
+    margin: 0;
+    padding: 0;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .page-header {
+    border-bottom: 3px solid #000;
+    padding-bottom: 10px;
+    margin-bottom: 16px;
+  }
+  .brand {
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    color: #1e293b;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #475569;
+    margin-top: 4px;
+  }
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .meta-box {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 8px 10px;
+    background: #f8fafc;
+  }
+  .meta-box .lbl {
+    font-size: 9px;
+    color: #64748b;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .meta-box .val {
+    font-size: 13px;
+    font-weight: 800;
+    margin-top: 2px;
+  }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .stat-box {
+    text-align: center;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 10px 6px;
+  }
+  .stat-box .lbl {
+    font-size: 10px;
+    color: #64748b;
+    font-weight: 700;
+  }
+  .stat-box .val {
+    font-size: 16px;
+    font-weight: 900;
+    margin-top: 4px;
+  }
+  .stat-box.cash { background: #fef9c3; }
+  .stat-box.visa { background: #e0e7ff; }
+  .stat-box.insta { background: #ddd6fe; }
+  .stat-box.cash .val { color: #a16207; }
+  .stat-box.visa .val { color: #3730a3; }
+  .stat-box.insta .val { color: #5b21b6; }
+  .stat-box.total { background: #1e293b; color: #fff; }
+  .stat-box.total .lbl { color: #cbd5e1; }
+  .stat-box.total .val { color: #fff; }
+  .card {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .card-title {
+    background: #f1f5f9;
+    padding: 6px 10px;
+    font-weight: 800;
+    font-size: 12px;
+    border-bottom: 1px solid #cbd5e1;
+  }
+  .info-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .info-table td {
+    padding: 5px 10px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .group {
+    margin-bottom: 14px;
+    page-break-inside: avoid;
+  }
+  .group-hd {
+    color: #fff;
+    padding: 6px 10px;
+    font-weight: 800;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 6px 6px 0 0;
+  }
+  .sales-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+    border: 1px solid #cbd5e1;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    overflow: hidden;
+  }
+  .sales-table thead tr {
+    background: #f1f5f9;
+  }
+  .sales-table th {
+    padding: 5px 8px;
+    text-align: right;
+    font-weight: 800;
+    font-size: 10px;
+    color: #475569;
+    border-bottom: 1px solid #cbd5e1;
+  }
+  .sales-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .sales-table tr.pickup-row {
+    background: #fef3c7;
+  }
+  .pickup-badge {
+    display: inline-block;
+    background: #d97706;
+    color: #fff;
+    padding: 1px 5px;
+    border-radius: 99px;
+    font-size: 8px;
+    font-weight: 700;
+    margin-right: 4px;
+  }
+  .signatures {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin-top: 30px;
+    page-break-inside: avoid;
+  }
+  .sig-block {
+    text-align: center;
+  }
+  .sig-block .role {
+    font-size: 11px;
+    color: #64748b;
+    margin-bottom: 30px;
+  }
+  .sig-line {
+    border-top: 1px solid #000;
+    padding-top: 4px;
+    font-size: 10px;
+    color: #475569;
+  }
+  .footer {
+    margin-top: 24px;
+    padding-top: 10px;
+    border-top: 1px dashed #94a3b8;
+    text-align: center;
+    font-size: 9px;
+    color: #64748b;
+  }
+  .footer .printed-by {
+    font-style: italic;
+    margin-top: 3px;
+  }
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="brand">CAFELAX</div>
+        <div class="subtitle">تقرير تصفية شيفت كاشير</div>
+      </div>
+      <div style="text-align:left">
+        ${statusBadge}
+      </div>
+    </div>
+  </div>
+  
+  <div class="meta-grid">
+    <div class="meta-box">
+      <div class="lbl">الكاشير</div>
+      <div class="val">${escapeHtml(s.cashier_name || '—')}</div>
+    </div>
+    <div class="meta-box">
+      <div class="lbl">المحل</div>
+      <div class="val">${escapeHtml(s.store_name || '—')}</div>
+    </div>
+    <div class="meta-box">
+      <div class="lbl">رقم الشيفت</div>
+      <div class="val">#${s.id || '—'}</div>
+    </div>
+    <div class="meta-box">
+      <div class="lbl">فُتح في</div>
+      <div class="val" style="font-size:11px">${openedAt}</div>
+    </div>
+    <div class="meta-box">
+      <div class="lbl">قُفل في</div>
+      <div class="val" style="font-size:11px">${closedAt}</div>
+    </div>
+    <div class="meta-box">
+      <div class="lbl">رصيد الافتتاح</div>
+      <div class="val">${parseFloat(s.opening_cash || 0).toLocaleString()} ج</div>
+    </div>
+  </div>
+  
+  <div class="summary-grid">
+    <div class="stat-box">
+      <div class="lbl">عدد البيعات</div>
+      <div class="val">${s.sales_count || 0}${s.pickup_count > 0 ? ` <span style="font-size:11px;color:#d97706"> + ${s.pickup_count} 📦</span>` : ''}</div>
+    </div>
+    <div class="stat-box cash">
+      <div class="lbl">💵 كاش</div>
+      <div class="val">${parseFloat(s.cash_amount || 0).toLocaleString()} ج</div>
+    </div>
+    <div class="stat-box visa">
+      <div class="lbl">💳 فيزا</div>
+      <div class="val">${parseFloat(s.visa_amount || 0).toLocaleString()} ج</div>
+    </div>
+    <div class="stat-box insta">
+      <div class="lbl">📱 انستاباي</div>
+      <div class="val">${parseFloat(s.instapay_amount || 0).toLocaleString()} ج</div>
+    </div>
+    <div class="stat-box total">
+      <div class="lbl">الإجمالي</div>
+      <div class="val">${parseFloat(s.total_amount || 0).toLocaleString()} ج</div>
+    </div>
+  </div>
+  
+  ${countedHtml}
+  
+  ${tablesHtml}
+  
+  <div class="signatures">
+    <div class="sig-block">
+      <div class="role">المدير</div>
+      <div class="sig-line">التوقيع و التاريخ</div>
+    </div>
+    <div class="sig-block">
+      <div class="role">الكاشير</div>
+      <div class="sig-line">التوقيع و التاريخ</div>
+    </div>
+  </div>
+  
+  <div class="footer">
+    <div>تم الطباعة في: ${printedAt}</div>
+    <div class="printed-by">Printed by: ${escapeHtml(printedBy)}</div>
+    <div style="margin-top:4px">CAFELAX · cafelax.com · info@cafelax.com</div>
+  </div>
+  
+  <script>
+    window.addEventListener('load', function(){
+      setTimeout(function(){ window.print(); }, 500);
+    });
+  <\/script>
+</body>
+</html>`;
+  
+  const w = window.open('', '_blank', 'width=900,height=1000');
+  if(!w){
+    toast('❌ المتصفح حجب نافذة الطباعة');
+    return;
+  }
+  w.document.write(html);
+  w.document.close();
+  
+  // log الـ print action (optional - مش بنوقف لو فشل)
+  if(s.id){
+    apiFetch('/api/admin/settlement-print-log', 'POST', {
+      kind,
+      session_id: s.id,
+      printed_by: printedBy,
+    }).catch(() => {});
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════
+// 🆕 v263: PENDING SESSIONS — الشيفتات اللي قفلها الكاشير
+//          و لسه المدير ما عمل لها settlement
+// ═════════════════════════════════════════════════════════════════
+
+function renderPendingSessionsSection(){
+  if(!_pendingSessions || !_pendingSessions.length) return '';
+  
+  const sessionsHtml = _pendingSessions.map(s => renderPendingSessionCard(s)).join('');
+  
+  return `
+    <div style="margin-bottom:18px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:10px;background:linear-gradient(135deg,#fef3c7,#fff);border:1px solid #fbbf24;border-radius:8px">
+        <span style="font-size:20px">🟡</span>
+        <div style="flex:1">
+          <div style="font-weight:800;font-size:14px;color:#78350f">شيفتات قفلها الكاشير ومستنية المدير يصفّيها (${_pendingSessions.length})</div>
+          <div style="font-size:11px;color:#92400e;margin-top:2px">دي مش في الـ DB كـ settlements بعد - المدير لازم يدخل Stars ويصفّيها عشان تظهر هنا كتصفية كاملة</div>
+        </div>
+      </div>
+      ${sessionsHtml}
+    </div>
+  `;
+}
+
+function renderPendingSessionCard(s){
+  const closedAt = s.cashier_closed_at ? new Date(s.cashier_closed_at) : null;
+  const closedStr = closedAt ? closedAt.toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+  const totalAmt = parseFloat(s.total_amount || 0);
+  const cashAmt = parseFloat(s.by_method?.cash?.total || 0);
+  const visaAmt = parseFloat(s.by_method?.visa?.total || 0);
+  const instaAmt = parseFloat(s.by_method?.instapay?.total || 0);
+  
+  const hours = s.hours_since_closed || 0;
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  const sinceStr = days > 0 ? `${days} يوم ${remHours}س` : `${hours}س`;
+  
+  // اللون يتغير حسب لما اتأخر
+  const urgencyColor = hours > 48 ? '#dc2626' : hours > 24 ? '#ea580c' : '#d97706';
+  const urgencyBg = hours > 48 ? '#fee2e2' : hours > 24 ? '#ffedd5' : '#fef3c7';
+  
+  return `
+    <div class="card" style="margin-bottom:10px;border-right:4px solid ${urgencyColor};background:linear-gradient(to left, ${urgencyBg} 0%, transparent 30%)">
+      <div class="card-body" style="padding:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
+          <div style="flex:1">
+            <div style="font-weight:800;font-size:14px">
+              👤 ${escapeHtml(s.cashier_name || '-')} 
+              <span style="font-size:10px;background:${urgencyColor};color:#fff;padding:2px 6px;border-radius:99px;margin-right:4px">🟡 مستني المدير</span>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:3px">🏪 ${escapeHtml(s.store_name || '-')} · 🔒 قفل من ${closedStr} · ⏱️ منذ ${sinceStr}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">
+              ${s.sales_count || 0} بيعة POS
+              ${s.pickup_count > 0 ? ` · 📦 ${s.pickup_count} pickup` : ''}
+              · إجمالي: <strong style="color:var(--text)">${totalAmt.toLocaleString()} ج</strong>
+            </div>
+          </div>
+        </div>
+        
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:10px">
+          ${cashAmt > 0 ? `
+            <div style="background:#fff;border:1px solid #fbbf24;border-radius:8px;padding:8px">
+              <div style="font-size:10px;color:#78350f;font-weight:700">💵 كاش (بيعات)</div>
+              <div style="font-size:15px;font-weight:900;color:#d97706">${cashAmt.toLocaleString()} ج</div>
+              ${s.counted_cash !== null && s.counted_cash !== undefined ? `
+                <div style="font-size:9px;color:var(--muted);margin-top:2px">عدّ الكاشير: <strong>${parseFloat(s.counted_cash).toLocaleString()} ج</strong></div>
+              ` : ''}
+            </div>
+          ` : ''}
+          ${visaAmt > 0 ? `
+            <div style="background:#fff;border:1px solid #c7d2fe;border-radius:8px;padding:8px">
+              <div style="font-size:10px;color:#312e81;font-weight:700">💳 فيزا</div>
+              <div style="font-size:15px;font-weight:900;color:#6366f1">${visaAmt.toLocaleString()} ج</div>
+              ${s.counted_visa !== null && s.counted_visa !== undefined ? `
+                <div style="font-size:9px;color:var(--muted);margin-top:2px">عدّ الكاشير: <strong>${parseFloat(s.counted_visa).toLocaleString()} ج</strong></div>
+              ` : ''}
+            </div>
+          ` : ''}
+          ${instaAmt > 0 ? `
+            <div style="background:#fff;border:1px solid #c7d2fe;border-radius:8px;padding:8px">
+              <div style="font-size:10px;color:#312e81;font-weight:700">📱 انستاباي</div>
+              <div style="font-size:15px;font-weight:900;color:#4f46e5">${instaAmt.toLocaleString()} ج</div>
+              ${s.counted_instapay !== null && s.counted_instapay !== undefined ? `
+                <div style="font-size:9px;color:var(--muted);margin-top:2px">عدّ الكاشير: <strong>${parseFloat(s.counted_instapay).toLocaleString()} ج</strong></div>
+              ` : ''}
+            </div>
+          ` : ''}
+        </div>
+        
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-sm btn-primary" onclick="openPendingSessionDetails(${s.id})" style="flex:1;min-width:140px">
+            📋 تفاصيل البيعات
+          </button>
+          <button class="btn btn-sm btn-ghost" onclick="loadSettlementsReceipts()" style="min-width:100px" title="تحديث">
+            🔄 تحديث
+          </button>
+        </div>
+        
+        <div style="margin-top:8px;padding:6px 10px;background:#fffbeb;border:1px dashed #fbbf24;border-radius:6px;font-size:11px;color:#78350f">
+          💡 المدير لازم يدخل Stars بـ login ويصفّي الشيفت ده عشان تظهر هنا كتصفية كاملة
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// 🆕 v356: Helper - يـ render section لـ pickup orders المدفوعة أونلاين
+// دي مالهاش collection (مفيش فلوس) لكن مهم تظهر للمراجعة
+function _renderOnlinePaidPickupsSection(onlinePaidPickups){
+  if(!Array.isArray(onlinePaidPickups) || !onlinePaidPickups.length) return '';
+  
+  const total = onlinePaidPickups.reduce((sum, p) => sum + (parseFloat(p.order_total) || 0), 0);
+  
+  return `
+    <div style="margin-bottom:14px;border:1px dashed #16a34a;border-radius:8px;background:linear-gradient(135deg,#dcfce7 0%,#fff 100%);padding:0;overflow:hidden">
+      <div style="background:#16a34a;color:#fff;padding:8px 12px;font-weight:800;display:flex;justify-content:space-between;align-items:center">
+        <span>📦 Pickup مدفوعة أونلاين (${onlinePaidPickups.length}) <span style="font-size:10px;opacity:.85;font-weight:600">— مفيش فلوس مع الكاشير</span></span>
+        <span style="font-size:12px;opacity:.9">قيمة الطلبات: ${total.toLocaleString()} ج</span>
+      </div>
+      <div style="padding:8px 12px;background:#f0fdf4;font-size:11px;color:#166534;border-bottom:1px solid #bbf7d0">
+        💡 الطلبات دي اتدفعت أونلاين قبل التسليم — مفيش فلوس بتتدخل في تصفية الكاشير. بنعرضها هنا للمراجعة فقط (مين سلّم إيه ومتى).
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:#f0fdf4">
+            <th style="padding:6px 8px;text-align:right;font-size:10px;color:#166534">رقم الطلب</th>
+            <th style="padding:6px 8px;text-align:right;font-size:10px;color:#166534">وقت التسليم</th>
+            <th style="padding:6px 8px;text-align:right;font-size:10px;color:#166534">العميل</th>
+            <th style="padding:6px 8px;text-align:left;font-size:10px;color:#166534">قيمة الطلب</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${onlinePaidPickups.map(p => {
+            const time = new Date(p.created_at).toLocaleString('ar-EG', {dateStyle:'short', timeStyle:'short'});
+            return `
+              <tr style="border-top:1px solid #bbf7d0">
+                <td style="padding:6px 8px;font-family:monospace;font-size:11px">
+                  ${escapeHtml(p.order_id || ('#'+p.pickup_id))}
+                  <span style="font-size:9px;background:#16a34a;color:#fff;padding:1px 5px;border-radius:99px;margin-right:4px">paid online</span>
+                </td>
+                <td style="padding:6px 8px;font-size:11px">${time}</td>
+                <td style="padding:6px 8px">${escapeHtml(p.customer_name || 'عميل عام')}</td>
+                <td style="padding:6px 8px;text-align:left;font-weight:700;color:#16a34a">${parseFloat(p.order_total || 0).toLocaleString()} ج</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function openPendingSessionDetails(sessionId){
+  const cont = document.getElementById('settlement-details-content');
+  cont.innerHTML = '<div style="text-align:center;padding:30px">⏳ جاري التحميل...</div>';
+  openM('m-settlement-details');
+  
+  try {
+    const r = await apiFetch('/api/admin/pending-sessions/' + sessionId + '/details');
+    if(!r) return;
+    _currentSettlementDetails = r;
+    const s = r.settlement;
+    
+    $('settlement-details-title').textContent = `🟡 شيفت مستني المدير — ${s.cashier_name || ''}`;
+
+    const methodLabels = {
+      cash: { icon: '💵', label: 'كاش', color: '#d97706' },
+      visa: { icon: '💳', label: 'فيزا', color: '#6366f1' },
+      instapay: { icon: '📱', label: 'انستاباي', color: '#4f46e5' },
+      mixed: { icon: '🔀', label: 'مدمج', color: '#a855f7' },
+      other: { icon: '📌', label: 'أخرى', color: '#6b7280' }
+    };
+
+    let html = `
+      <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:10px">
+        <button onclick="printSettlementA4('pending', ${sessionId})" style="padding:8px 14px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer;font-size:12px">
+          🖨️ طباعة A4
+        </button>
+      </div>
+      <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px;color:#78350f;display:flex;align-items:center;gap:8px">
+        <span style="font-size:20px">🟡</span>
+        <span><strong>شيفت مستني المدير</strong> · الكاشير قفل الشيفت وعدّ المبالغ، لكن المدير لسه ما عمللهاش settlement. لازم المدير يدخل Stars ويصفّيه عشان يظهر كتصفية كاملة هنا.</span>
+      </div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:14px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;text-align:center">
+          <div><div style="font-size:10px;color:var(--muted)">عدد البيعات</div><div style="font-size:16px;font-weight:800">${s.sales_count}${s.pickup_count > 0 ? `<span style="font-size:10px;color:#d97706"> +${s.pickup_count}📦</span>` : ''}${s.online_paid_pickup_count > 0 ? `<span style="font-size:10px;color:#16a34a"> +${s.online_paid_pickup_count}🌐</span>` : ''}</div></div>
+          <div><div style="font-size:10px;color:var(--muted)">الإجمالي</div><div style="font-size:16px;font-weight:800">${parseFloat(s.total_amount).toLocaleString()} ج</div></div>
+          <div><div style="font-size:10px;color:#d97706">💵 كاش</div><div style="font-size:16px;font-weight:800;color:#d97706">${parseFloat(s.cash_amount).toLocaleString()} ج</div></div>
+          <div><div style="font-size:10px;color:#6366f1">💳 فيزا</div><div style="font-size:16px;font-weight:800;color:#6366f1">${parseFloat(s.visa_amount).toLocaleString()} ج</div></div>
+          <div><div style="font-size:10px;color:#4f46e5">📱 انستاباي</div><div style="font-size:16px;font-weight:800;color:#4f46e5">${parseFloat(s.instapay_amount).toLocaleString()} ج</div></div>
+        </div>
+      </div>
+      
+      ${s.counted_cash || s.counted_visa || s.counted_instapay ? `
+        <div style="background:#dbeafe;border:1px solid #6366f1;border-radius:8px;padding:10px;margin-bottom:14px">
+          <div style="font-weight:700;font-size:12px;color:#1e3a8a;margin-bottom:6px">📊 المبالغ اللي عدّها الكاشير:</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;text-align:center;font-size:11px">
+            <div><div style="color:#475569">💵 كاش</div><div style="font-weight:800;font-size:13px">${parseFloat(s.counted_cash || 0).toLocaleString()} ج</div></div>
+            <div><div style="color:#475569">💳 فيزا</div><div style="font-weight:800;font-size:13px">${parseFloat(s.counted_visa || 0).toLocaleString()} ج</div></div>
+            <div><div style="color:#475569">📱 انستاباي</div><div style="font-weight:800;font-size:13px">${parseFloat(s.counted_instapay || 0).toLocaleString()} ج</div></div>
+          </div>
+        </div>
+      ` : ''}
+    `;
+    
+    if (!s.sales_count) {
+      html += `
+        <div style="text-align:center;padding:30px;color:var(--muted)">
+          <div style="font-size:42px;opacity:0.4">🛒</div>
+          <div style="font-weight:700;margin-top:8px">الشيفت ما عملش بيعات</div>
+        </div>
+      `;
+      cont.innerHTML = html;
+      return;
+    }
+
+    // group بـ payment method
+    for(const [methodKey, sales] of Object.entries(r.byMethod)){
+      if(!sales.length) continue;
+      const m = methodLabels[methodKey];
+      const groupTotal = sales.reduce((t, sale) => t + parseFloat(sale.total || 0), 0);
+      html += `
+        <div style="margin-bottom:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;background:${m.color};color:#fff;padding:8px 12px;border-radius:8px 8px 0 0;font-weight:800">
+            <span>${m.icon} ${m.label} <span style="opacity:.85;font-weight:600">(${sales.length} بيعة)</span></span>
+            <span>${groupTotal.toLocaleString()} ج</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;overflow:hidden">
+            <thead>
+              <tr style="background:var(--bg)">
+                <th style="padding:6px 8px;text-align:right">رقم البيعة</th>
+                <th style="padding:6px 8px;text-align:right">الوقت</th>
+                <th style="padding:6px 8px;text-align:right">العميل</th>
+                <th style="padding:6px 8px;text-align:right">طرق الدفع</th>
+                <th style="padding:6px 8px;text-align:left">المبلغ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sales.map(sale => {
+                const time = new Date(sale.created_at).toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'});
+                const paysStr = (sale.payments || []).filter(p => p && p.method).map(p => {
+                  const mi = methodLabels[p.method]?.icon || '•';
+                  return `${mi} ${parseFloat(p.amount).toFixed(0)}`;
+                }).join(' + ');
+                const isPickup = sale.is_pickup === true;
+                const rowBg = isPickup ? 'background:#fef3c7;' : '';
+                return `
+                  <tr style="border-top:1px solid var(--border);${rowBg}" title="${isPickup ? 'طلب pickup أونلاين' : 'بيعة POS'}">
+                    <td style="padding:6px 8px;font-family:monospace;font-size:11px">${escapeHtml(sale.sale_number || '#'+sale.id)}${isPickup ? ' <span style=\"font-size:9px;background:#d97706;color:#fff;padding:1px 5px;border-radius:99px;font-family:Cairo,sans-serif\">pickup</span>' : ''}</td>
+                    <td style="padding:6px 8px">${time}</td>
+                    <td style="padding:6px 8px">${escapeHtml(sale.customer_name || 'عميل عام')}</td>
+                    <td style="padding:6px 8px;font-size:11px">${paysStr}</td>
+                    <td style="padding:6px 8px;text-align:left;font-weight:700">${parseFloat(sale.total).toLocaleString()} ج</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+    
+    // 🆕 v356: section للـ pickup المدفوعة أونلاين (للمراجعة)
+    html += _renderOnlinePaidPickupsSection(r.online_paid_pickups);
+    
+    cont.innerHTML = html;
+  } catch(e){
+    cont.innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════
 // 🆕 v254: ACTIVE SHIFTS — الشيفتات الشغالة دلوقتي (للأدمن)
 // ═════════════════════════════════════════════════════════════════
 
@@ -13062,7 +13802,11 @@ function renderActiveShiftCard(s){
               <span style="font-size:10px;background:#16a34a;color:#fff;padding:2px 6px;border-radius:99px;margin-right:4px">🟢 شغّال</span>
             </div>
             <div style="font-size:11px;color:var(--muted);margin-top:3px">🏪 ${escapeHtml(s.store_name || '-')} · 📅 بدأ ${dateStr} · ⏱️ ${durationStr}</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">${s.sales_count || 0} بيعة · إجمالي: <strong style="color:var(--text)">${totalAmt.toLocaleString()} ج</strong></div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">
+              ${s.sales_count || 0} بيعة POS
+              ${s.pickup_count > 0 ? ` · 📦 ${s.pickup_count} pickup` : ''}
+              · إجمالي: <strong style="color:var(--text)">${totalAmt.toLocaleString()} ج</strong>
+            </div>
           </div>
         </div>
         
@@ -13132,13 +13876,18 @@ async function openActiveShiftDetails(sessionId){
     };
 
     let html = `
+      <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:10px">
+        <button onclick="printSettlementA4('active', ${sessionId})" style="padding:8px 14px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-family:Cairo,sans-serif;font-weight:700;cursor:pointer;font-size:12px">
+          🖨️ طباعة A4
+        </button>
+      </div>
       <div style="background:#dcfce7;border:1px solid #16a34a;border-radius:8px;padding:10px;margin-bottom:10px;font-size:12px;color:#14532d;display:flex;align-items:center;gap:8px">
         <div style="width:10px;height:10px;background:#16a34a;border-radius:50%;animation:pulse 2s infinite"></div>
         <span><strong>🟢 شيفت شغّال — Live</strong> · البيانات بترجع من السيرفر مباشرة. لو حصلت بيعة جديدة، اقفل الـ modal وافتحه تاني للتحديث.</span>
       </div>
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:14px">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;text-align:center">
-          <div><div style="font-size:10px;color:var(--muted)">عدد البيعات</div><div style="font-size:16px;font-weight:800">${s.sales_count}</div></div>
+          <div><div style="font-size:10px;color:var(--muted)">عدد البيعات</div><div style="font-size:16px;font-weight:800">${s.sales_count}${s.pickup_count > 0 ? `<span style="font-size:10px;color:#d97706"> +${s.pickup_count}📦</span>` : ''}${s.online_paid_pickup_count > 0 ? `<span style="font-size:10px;color:#16a34a"> +${s.online_paid_pickup_count}🌐</span>` : ''}</div></div>
           <div><div style="font-size:10px;color:var(--muted)">الإجمالي</div><div style="font-size:16px;font-weight:800">${parseFloat(s.total_amount).toLocaleString()} ج</div></div>
           <div><div style="font-size:10px;color:#16a34a">💵 كاش</div><div style="font-size:16px;font-weight:800;color:#16a34a">${parseFloat(s.cash_amount).toLocaleString()} ج</div></div>
           <div><div style="font-size:10px;color:#6366f1">💳 فيزا</div><div style="font-size:16px;font-weight:800;color:#6366f1">${parseFloat(s.visa_amount).toLocaleString()} ج</div></div>
@@ -13188,9 +13937,11 @@ async function openActiveShiftDetails(sessionId){
                   const mi = methodLabels[p.method]?.icon || '•';
                   return `${mi} ${parseFloat(p.amount).toFixed(0)}`;
                 }).join(' + ');
+                const isPickup = sale.is_pickup === true;
+                const rowBg = isPickup ? 'background:#fef3c7;' : '';
                 return `
-                  <tr style="border-top:1px solid var(--border)">
-                    <td style="padding:6px 8px;font-family:monospace;font-size:11px">${escapeHtml(sale.sale_number || '#'+sale.id)}</td>
+                  <tr style="border-top:1px solid var(--border);${rowBg}" title="${isPickup ? 'طلب pickup أونلاين' : 'بيعة POS'}">
+                    <td style="padding:6px 8px;font-family:monospace;font-size:11px">${escapeHtml(sale.sale_number || '#'+sale.id)}${isPickup ? ' <span style=\"font-size:9px;background:#d97706;color:#fff;padding:1px 5px;border-radius:99px;font-family:Cairo,sans-serif\">pickup</span>' : ''}</td>
                     <td style="padding:6px 8px">${time}</td>
                     <td style="padding:6px 8px">${escapeHtml(sale.customer_name || 'عميل عام')}</td>
                     <td style="padding:6px 8px;font-size:11px">${paysStr}</td>
@@ -13203,6 +13954,9 @@ async function openActiveShiftDetails(sessionId){
         </div>
       `;
     }
+    
+    // 🆕 v356: section للـ pickup المدفوعة أونلاين (للمراجعة)
+    html += _renderOnlinePaidPickupsSection(r.online_paid_pickups);
     
     cont.innerHTML = html;
   } catch(e){
@@ -13234,7 +13988,7 @@ async function openSettlementDetails(id){
     let html = `
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:14px">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;text-align:center">
-          <div><div style="font-size:10px;color:var(--muted)">عدد البيعات</div><div style="font-size:16px;font-weight:800">${s.sales_count}</div></div>
+          <div><div style="font-size:10px;color:var(--muted)">عدد البيعات</div><div style="font-size:16px;font-weight:800">${s.sales_count}${s.pickup_count > 0 ? `<span style="font-size:10px;color:#d97706"> +${s.pickup_count}📦</span>` : ''}${s.online_paid_pickup_count > 0 ? `<span style="font-size:10px;color:#16a34a"> +${s.online_paid_pickup_count}🌐</span>` : ''}</div></div>
           <div><div style="font-size:10px;color:var(--muted)">الإجمالي</div><div style="font-size:16px;font-weight:800">${parseFloat(s.total_amount).toLocaleString()} ج</div></div>
           <div><div style="font-size:10px;color:#16a34a">💵 كاش</div><div style="font-size:16px;font-weight:800;color:#16a34a">${parseFloat(s.cash_amount).toLocaleString()} ج</div></div>
           <div><div style="font-size:10px;color:#6366f1">💳 فيزا</div><div style="font-size:16px;font-weight:800;color:#6366f1">${parseFloat(s.visa_amount).toLocaleString()} ج</div></div>
@@ -31595,28 +32349,43 @@ async function printStkReport(){
     };
     const statusLabel = statusLabels[s.status] || s.status;
     
-    // ابني rows للفروقات
-    const diffRows = items.differences.map(i => {
-      const diff = i.counted_qty - i.system_qty;
+    // 🆕 v358: helpers لـ rendering الصفوف بكل نوع
+    const _row = (i, opts) => {
+      const diff = (i.counted_qty != null) ? (i.counted_qty - i.system_qty) : null;
       const sign = diff > 0 ? '+' : '';
-      const color = diff > 0 ? '#16a34a' : '#dc2626';
-      const value = (parseFloat(i.price) || 0) * Math.abs(diff);
-      return `<tr>
-        <td>${escapeHtml(i.product_title || '')}${i.variant_title ? ' - '+escapeHtml(i.variant_title) : ''}</td>
-        <td>${escapeHtml(i.sku || '—')}</td>
+      const diffColor = diff > 0 ? '#16a34a' : diff < 0 ? '#dc2626' : '#6b7280';
+      const value = (parseFloat(i.price) || 0) * Math.abs(diff || 0);
+      const productCell = `${escapeHtml(i.product_title || '')}${i.variant_title ? ' - '+escapeHtml(i.variant_title) : ''}`;
+      
+      return `<tr ${opts?.rowBg ? `style="background:${opts.rowBg}"` : ''}>
+        <td>${productCell}</td>
+        <td style="font-family:monospace;font-size:9px">${escapeHtml(i.sku || '—')}</td>
         <td style="text-align:center">${i.system_qty}</td>
-        <td style="text-align:center;font-weight:700">${i.counted_qty}</td>
-        <td style="text-align:center;font-weight:700;color:${color}">${sign}${diff}</td>
-        <td style="text-align:left">${value > 0 ? value.toLocaleString('en-US', {maximumFractionDigits: 2}) + ' ج' : '—'}</td>
-        <td style="font-size:10px">${escapeHtml(i.reason || '')}</td>
+        <td style="text-align:center;font-weight:700">${i.counted_qty != null ? i.counted_qty : '—'}</td>
+        <td style="text-align:center;font-weight:700;color:${diffColor}">${diff != null ? (sign + diff) : '—'}</td>
+        <td style="text-align:left;font-size:10px">${value > 0 ? value.toLocaleString('en-US', {maximumFractionDigits: 0}) + ' ج' : '—'}</td>
+        ${opts?.showReason ? `<td style="font-size:10px">${escapeHtml(i.reason || '')}</td>` : ''}
       </tr>`;
-    }).join('');
+    };
+    
+    // الـ shortage (عجز) - مرتب من الأكبر للأصغر
+    const shortageRows = (items.shortage || []).sort((a,b) => 
+      (a.counted_qty - a.system_qty) - (b.counted_qty - b.system_qty)
+    ).map(i => _row(i, { showReason: true, rowBg: '#fef2f2' })).join('');
+    
+    // الـ surplus (فائض)
+    const surplusRows = (items.surplus || []).sort((a,b) => 
+      (b.counted_qty - b.system_qty) - (a.counted_qty - a.system_qty)
+    ).map(i => _row(i, { showReason: true, rowBg: '#f0fdf4' })).join('');
+    
+    // الـ matching (المعدود المطابق) - الجديد
+    const matchingRows = (items.matching || []).map(i => _row(i, { rowBg: '#fafafa' })).join('');
     
     // الـ uncounted
-    const uncountedRows = items.uncounted.slice(0, 50).map(i => `
-      <tr>
+    const uncountedRows = (items.uncounted || []).map(i => `
+      <tr style="background:#fffbeb">
         <td>${escapeHtml(i.product_title || '')}${i.variant_title ? ' - '+escapeHtml(i.variant_title) : ''}</td>
-        <td>${escapeHtml(i.sku || '—')}</td>
+        <td style="font-family:monospace;font-size:9px">${escapeHtml(i.sku || '—')}</td>
         <td style="text-align:center">${i.system_qty}</td>
       </tr>
     `).join('');
@@ -31634,7 +32403,8 @@ body { font-family: 'Cairo', 'Tahoma', sans-serif; color: #000; padding: 20px; l
 .title { font-size: 20px; font-weight: 800; margin: 14px 0; text-align:center; color:#1f2937; }
 .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 18px; margin:12px 0; padding:12px; background:#f9fafb; border-radius:6px; font-size:12px; }
 .info-grid b { color:#374151; }
-.summary { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:16px 0; }
+.summary { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin:16px 0; }
+.summary.summary-4 { grid-template-columns:repeat(4,1fr); gap:8px; }
 .sum-box { padding:10px 8px; border:1px solid #ccc; border-radius:6px; text-align:center; }
 .sum-box .lbl { font-size:10px; color:#666; }
 .sum-box .val { font-size:16px; font-weight:800; margin-top:4px; }
@@ -31678,11 +32448,12 @@ tr:nth-child(even) td { background:#fafafa; }
 <div class="summary">
   <div class="sum-box"><div class="lbl">إجمالي المنتجات</div><div class="val">${stats.totalItems}</div></div>
   <div class="sum-box" style="background:#d1fae5"><div class="lbl">تم العد</div><div class="val">${stats.countedCount} (${stats.progressPercent}%)</div></div>
+  <div class="sum-box" style="background:#f3f4f6"><div class="lbl">مطابق ✓</div><div class="val">${stats.matchingCount || 0}</div></div>
   <div class="sum-box" style="background:#fef3c7"><div class="lbl">فروقات</div><div class="val">${stats.differencesCount}</div></div>
   <div class="sum-box" style="background:${stats.uncountedCount > 0 ? '#fee2e2' : '#f3f4f6'}"><div class="lbl">لم يُعد</div><div class="val">${stats.uncountedCount}</div></div>
 </div>
 
-<div class="summary">
+<div class="summary summary-4">
   <div class="sum-box" style="background:#fef3c7"><div class="lbl">فائض</div><div class="val">${stats.surplusCount} منتج</div></div>
   <div class="sum-box" style="background:#fee2e2"><div class="lbl">عجز</div><div class="val">${stats.shortageCount} منتج</div></div>
   <div class="sum-box" style="background:${stats.totalSurplusValue > 0 ? '#d1fae5' : '#f3f4f6'}"><div class="lbl">قيمة الفائض</div><div class="val" style="font-size:13px">${(stats.totalSurplusValue||0).toLocaleString('en-US', {maximumFractionDigits: 0})} ج</div></div>
@@ -31694,8 +32465,17 @@ tr:nth-child(even) td { background:#fafafa; }
   ${stats.netValue > 0 ? '(فائض)' : stats.netValue < 0 ? '(عجز)' : ''}
 </div>
 
-${items.differences.length > 0 ? `
-<h3>⚠️ المنتجات اللي بها فروقات (${items.differences.length} منتج)</h3>
+<!-- 🆕 v358: Legend - الترميز -->
+<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px;margin:14px 0;font-size:10px">
+  <strong>📋 دليل القراءة:</strong>
+  <span style="display:inline-block;width:12px;height:12px;background:#fef2f2;border:1px solid #ddd;margin:0 4px;vertical-align:middle"></span> عجز (counted &lt; system) &nbsp;·&nbsp;
+  <span style="display:inline-block;width:12px;height:12px;background:#f0fdf4;border:1px solid #ddd;margin:0 4px;vertical-align:middle"></span> فائض (counted &gt; system) &nbsp;·&nbsp;
+  <span style="display:inline-block;width:12px;height:12px;background:#fafafa;border:1px solid #ddd;margin:0 4px;vertical-align:middle"></span> مطابق ✓ &nbsp;·&nbsp;
+  <span style="display:inline-block;width:12px;height:12px;background:#fffbeb;border:1px solid #ddd;margin:0 4px;vertical-align:middle"></span> لم يُعد
+</div>
+
+${items.shortage && items.shortage.length > 0 ? `
+<h3 style="color:#dc2626">🔴 عجز - منتجات الفعلي أقل من النظام (${items.shortage.length} منتج)</h3>
 <table>
   <thead>
     <tr>
@@ -31708,14 +32488,53 @@ ${items.differences.length > 0 ? `
       <th>السبب</th>
     </tr>
   </thead>
-  <tbody>${diffRows}</tbody>
+  <tbody>${shortageRows}</tbody>
 </table>
-` : `
-<div class="no-diff-banner">✅ ممتاز! مفيش فروقات في الجرد - كل الكميات مطابقة للنظام</div>
-`}
+` : ''}
 
-${items.uncounted.length > 0 ? `
-<h3>⚠️ المنتجات اللي ما اتعدتش (${items.uncounted.length} منتج${items.uncounted.length > 50 ? ' - عرض أول 50' : ''})</h3>
+${items.surplus && items.surplus.length > 0 ? `
+<h3 style="color:#16a34a">🟢 فائض - منتجات الفعلي أكتر من النظام (${items.surplus.length} منتج)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>المنتج</th>
+      <th>SKU</th>
+      <th style="text-align:center">النظام</th>
+      <th style="text-align:center">الفعلي</th>
+      <th style="text-align:center">الفرق</th>
+      <th style="text-align:left">القيمة</th>
+      <th>السبب</th>
+    </tr>
+  </thead>
+  <tbody>${surplusRows}</tbody>
+</table>
+` : ''}
+
+${items.matching && items.matching.length > 0 ? `
+<h3 style="color:#6b7280">✓ مطابق - منتجات الفعلي يساوي النظام (${items.matching.length} منتج)</h3>
+<div style="background:#d1fae5;color:#065f46;padding:8px;border-radius:6px;font-size:11px;margin-bottom:8px">
+  ✅ المنتجات دي اتعدت والكمية فيها مطابقة للنظام - مفيش فرق
+</div>
+<table>
+  <thead>
+    <tr>
+      <th>المنتج</th>
+      <th>SKU</th>
+      <th style="text-align:center">النظام</th>
+      <th style="text-align:center">الفعلي</th>
+      <th style="text-align:center">الفرق</th>
+      <th style="text-align:left">القيمة</th>
+    </tr>
+  </thead>
+  <tbody>${matchingRows}</tbody>
+</table>
+` : ''}
+
+${items.uncounted && items.uncounted.length > 0 ? `
+<h3 style="color:#d97706">⚠️ لم يُعد - منتجات ما اتعدتش (${items.uncounted.length} منتج)</h3>
+<div style="background:#fef3c7;color:#78350f;padding:8px;border-radius:6px;font-size:11px;margin-bottom:8px">
+  ⚠️ المنتجات دي مظهرتش في الجرد - ممكن تكون مش موجودة فعلياً أو اتنسيت
+</div>
 <table>
   <thead>
     <tr>
@@ -31726,6 +32545,10 @@ ${items.uncounted.length > 0 ? `
   </thead>
   <tbody>${uncountedRows}</tbody>
 </table>
+` : ''}
+
+${(!items.shortage || !items.shortage.length) && (!items.surplus || !items.surplus.length) && (!items.uncounted || !items.uncounted.length) && items.matching && items.matching.length > 0 ? `
+<div class="no-diff-banner">✅ ممتاز! تم العد كامل ومفيش فروقات - كل ${items.matching.length} منتج مطابق للنظام</div>
 ` : ''}
 
 <div class="signatures">
@@ -34280,6 +35103,219 @@ async function runBackfillCheck(dryRun){
     else if (dryRun) toast(`⚠️ ${mismatched.length} طلب فيهم فرق`);
     else toast(`✅ تم تحديث ${r.updated} طلب`);
     
+  } catch(e) {
+    resultEl.innerHTML = `<div style="color:var(--danger);padding:12px">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// 🆕 v357: Shopify Duplicates Scan + Cleanup
+async function scanShopifyDuplicates(){
+  const days = parseInt(document.getElementById('dup-days').value) || 7;
+  const resultEl = document.getElementById('dup-scan-result');
+  
+  resultEl.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg);border-radius:8px;color:var(--muted)">
+      <div style="width:24px;height:24px;border:3px solid #ef4444;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div>
+      <span>⏳ جاري فحص آخر ${days} أيام... (Shopify rate limit = 2req/sec فهيستغرق وقت)</span>
+    </div>
+    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+  `;
+  
+  try {
+    const r = await apiFetch('/api/admin/pos-sales/scan-shopify-duplicates', 'POST', {
+      days,
+      cleanup: false  // dry-run scan
+    });
+    
+    if(!r){
+      resultEl.innerHTML = `<div style="color:var(--danger);padding:12px">❌ فشل الفحص</div>`;
+      return;
+    }
+    
+    // خزّن للـ cleanup step
+    window._lastDupScan = r;
+    
+    if(!r.duplicates || r.duplicates.length === 0){
+      resultEl.innerHTML = `
+        <div style="background:#dcfce7;border:1px solid #16a34a;border-radius:8px;padding:14px;color:#14532d">
+          <div style="font-weight:800;font-size:14px">✅ مفيش duplicates!</div>
+          <div style="font-size:12px;margin-top:6px">تم فحص ${r.scanned} بيعة في آخر ${days} أيام. كل البيعات عندها order واحد بس في Shopify.</div>
+          ${r.errors && r.errors.length ? `
+            <div style="margin-top:10px;padding:8px;background:#fef3c7;border-radius:6px;color:#78350f;font-size:11px">
+              ⚠️ ${r.errors.length} error(s) أثناء الفحص (مش بـ يعني duplicates، ممكن rate limit أو network)
+            </div>
+          ` : ''}
+        </div>
+      `;
+      return;
+    }
+    
+    // فيه duplicates - اعرض الـ table
+    const totalDups = r.duplicates.reduce((sum, d) => sum + d.duplicates.length, 0);
+    const totalValue = r.duplicates.reduce((sum, d) => 
+      sum + d.duplicates.reduce((s, x) => s + (parseFloat(x.total_price) || 0), 0), 0
+    );
+    
+    let html = `
+      <div style="background:#fee2e2;border:2px solid #ef4444;border-radius:10px;padding:14px;margin-bottom:14px">
+        <div style="font-weight:900;font-size:15px;color:#991b1b;margin-bottom:8px">
+          🚨 تم العثور على ${totalDups} duplicate(s) في ${r.duplicates.length} بيعة
+        </div>
+        <div style="font-size:12px;color:#7f1d1d;line-height:1.7">
+          📊 تم فحص: <strong>${r.scanned}</strong> بيعة<br>
+          💰 إجمالي قيمة الـ duplicates: <strong>${totalValue.toLocaleString()} ج</strong><br>
+          📦 الـ Cancel هـ يعمل: refund + restock للـ inventory
+        </div>
+      </div>
+      
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead style="background:#f1f5f9;color:#475569">
+            <tr>
+              <th style="padding:8px;text-align:right">POS Sale</th>
+              <th style="padding:8px;text-align:right">الـ Order الأصلي (نـحتفظ بيه)</th>
+              <th style="padding:8px;text-align:right">الـ Duplicate(s) (نـ cancel)</th>
+              <th style="padding:8px;text-align:center">✓</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+    
+    r.duplicates.forEach((dup, idx) => {
+      const dupRows = dup.duplicates.map(d => `
+        <div style="margin-bottom:4px;padding:4px 8px;background:#fee2e2;border-radius:4px">
+          <div style="font-weight:700;color:#991b1b">${escapeHtml(d.shopify_order_name)}</div>
+          <div style="font-size:10px;color:#7f1d1d">
+            ${parseFloat(d.total_price).toLocaleString()} ج · ${d.financial_status} ·
+            ${new Date(d.created_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'})}
+          </div>
+        </div>
+      `).join('');
+      
+      html += `
+        <tr style="border-top:1px solid var(--border)">
+          <td style="padding:8px;vertical-align:top">
+            <div style="font-weight:800;font-family:monospace">#${escapeHtml(dup.pos_sale_number)}</div>
+            <div style="font-size:10px;color:var(--muted)">${parseFloat(dup.pos_total).toLocaleString()} ج</div>
+            <div style="font-size:9px;color:var(--muted);font-family:monospace;margin-top:4px;direction:ltr;text-align:left">${escapeHtml(dup.client_uuid)}</div>
+          </td>
+          <td style="padding:8px;vertical-align:top">
+            <div style="font-weight:700;color:#16a34a;background:#dcfce7;padding:4px 8px;border-radius:4px;display:inline-block">
+              ${escapeHtml(dup.primary_order_name)}
+            </div>
+            <div style="font-size:9px;color:var(--muted);margin-top:4px;direction:ltr;text-align:left">id: ${escapeHtml(dup.primary_order_id)}</div>
+          </td>
+          <td style="padding:8px;vertical-align:top">${dupRows}</td>
+          <td style="padding:8px;text-align:center;vertical-align:top">
+            <input type="checkbox" class="dup-checkbox" 
+                   data-duplicates="${dup.duplicates.map(d => d.shopify_order_id).join(',')}"
+                   checked
+                   style="width:18px;height:18px;cursor:pointer">
+          </td>
+        </tr>
+      `;
+    });
+    
+    html += `
+          </tbody>
+        </table>
+      </div>
+      
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('dup-scan-result').innerHTML = ''">إلغاء</button>
+        <button class="btn btn-danger" onclick="confirmCleanupDuplicates(${days})" style="background:#dc2626;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:800;cursor:pointer">
+          🗑️ Cancel الـ Duplicates المختارة (irreversible)
+        </button>
+      </div>
+    `;
+    
+    if(r.errors && r.errors.length){
+      html += `
+        <details style="margin-top:14px">
+          <summary style="cursor:pointer;color:var(--muted);font-size:12px">⚠️ ${r.errors.length} error(s) أثناء الفحص (click)</summary>
+          <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:10px;overflow:auto;max-height:200px">${escapeHtml(JSON.stringify(r.errors, null, 2))}</pre>
+        </details>
+      `;
+    }
+    
+    resultEl.innerHTML = html;
+  } catch(e) {
+    resultEl.innerHTML = `<div style="color:var(--danger);padding:12px">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function confirmCleanupDuplicates(days){
+  const checkboxes = document.querySelectorAll('.dup-checkbox:checked');
+  if(!checkboxes.length){
+    alert('⚠️ اختار بيعة واحدة على الأقل');
+    return;
+  }
+  
+  // جمّع كل الـ duplicate IDs المختارة
+  const dupIds = [];
+  checkboxes.forEach(cb => {
+    const ids = (cb.dataset.duplicates || '').split(',').filter(Boolean);
+    dupIds.push(...ids);
+  });
+  
+  if(!confirm(
+    `⚠️ هل أنت متأكد؟\n\n` +
+    `هـ يتم Cancel ${dupIds.length} order(s) من Shopify\n` +
+    `+ refund + restock تلقائياً\n\n` +
+    `الـ action irreversible.\n\nاضغط OK للمتابعة.`
+  )) return;
+  
+  const resultEl = document.getElementById('dup-scan-result');
+  resultEl.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg);border-radius:8px;color:var(--muted)">
+      <div style="width:24px;height:24px;border:3px solid #dc2626;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div>
+      <span>🗑️ جاري Cancel ${dupIds.length} duplicate(s)...</span>
+    </div>
+  `;
+  
+  try {
+    const r = await apiFetch('/api/admin/pos-sales/scan-shopify-duplicates', 'POST', {
+      days,
+      cleanup: true,
+      duplicate_ids: dupIds
+    });
+    
+    let html = `
+      <div style="background:#dcfce7;border:1px solid #16a34a;border-radius:10px;padding:14px">
+        <div style="font-weight:900;font-size:15px;color:#14532d;margin-bottom:8px">
+          ✅ تم الـ Cleanup
+        </div>
+        <div style="font-size:12px;color:#14532d;line-height:1.7">
+          🗑️ تم Cancel: <strong>${r.cancelled?.length || 0}</strong> order(s)<br>
+          📊 تم فحص: <strong>${r.scanned}</strong> بيعة<br>
+          ${r.errors && r.errors.length ? `⚠️ Errors: <strong>${r.errors.length}</strong>` : ''}
+        </div>
+      </div>
+    `;
+    
+    if(r.cancelled && r.cancelled.length){
+      html += `
+        <div style="margin-top:14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px">
+          <div style="font-weight:800;margin-bottom:8px">الـ Orders اللي اتـ cancel:</div>
+          ${r.cancelled.map(c => `
+            <div style="padding:6px;border-bottom:1px solid var(--border);font-size:11px">
+              ✅ ${escapeHtml(c.shopify_order_name)} (POS #${escapeHtml(c.pos_sale_number)})
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+    
+    if(r.errors && r.errors.length){
+      html += `
+        <details style="margin-top:14px" open>
+          <summary style="cursor:pointer;color:#dc2626;font-size:12px;font-weight:700">⚠️ ${r.errors.length} error(s) (click)</summary>
+          <pre style="background:#fee2e2;border:1px solid #ef4444;border-radius:6px;padding:10px;font-size:10px;overflow:auto;max-height:200px;color:#7f1d1d">${escapeHtml(JSON.stringify(r.errors, null, 2))}</pre>
+        </details>
+      `;
+    }
+    
+    resultEl.innerHTML = html;
   } catch(e) {
     resultEl.innerHTML = `<div style="color:var(--danger);padding:12px">❌ ${escapeHtml(e.message)}</div>`;
   }
