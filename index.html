@@ -1,43 +1,37 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v362 — STOCKTAKE TEMPLATES + SMART RANDOM (2026-05-25)
+  OrderPro v366 — OFFERS FIX (camelCase + Error Display) (2026-05-28)
   ═══════════════════════════════════════════════════════════════════
-  ✨ مزايا جديدة في نظام الجرد:
+  🐛 إصلاح bugs في عروض المحلات:
   
-  🎲 جرد عشوائي (mode جديد):
-  - Toggle بين 2 استراتيجية:
-    🧠 ذكي (Smart Weighted Score):
-      • القيمة × 0.4  (المنتجات الغالية أولوية)
-      • الوقت × 0.3   (اللي معدوش من زمان أولوية)
-      • المبيعات × 0.2 (fast-movers أولوية)
-      • السجل × 0.1   (المنتجات اللي تاريخها فروقات)
-    🎰 بسيط (Uniform Random)
-  - تحديد عدد المنتجات (1-500، default 50)
-  - Preview قبل البدء + إعادة توليد
-  - عرض الـ score + factors (في الـ smart mode)
+  Bug 1: الصور مش بتظهر
+  ─────────────────────
+  - الـ Backend بـ يـ return الـ fields كـ camelCase:
+    { imageUrl, productTitle, variantTitle, variantId, productId }
+  - الـ Frontend كان بـ يقرا snake_case:
+    it.image_url, it.product_title  ← UNDEFINED!
+  - النتيجة: الـ imgUrl دايماً فاضي → 📦 emoji بدل الصورة
   
-  📚 جرد من Template (mode جديد):
-  - حفظ template للمنتجات الثابتة (📋 جزئي ثابت)
-  - حفظ template للجرد العشوائي - بـ يجدد كل مرة
-  - List الـ templates مرتبة بآخر استخدام
-  - عدد مرات الاستخدام
-  - Templates manager: عرض/حذف
+  ✅ الحل: الـ frontend بقى يقبل الاتنين (camelCase أولاً):
+    it.imageUrl || it.image_url
+    it.productTitle || it.product_title
+    it.variantTitle || it.variant_title
   
-  Backend:
-  - جدول stocktake_templates جديد
-  - 5 endpoints جديدة:
-    POST /api/stocktake/random-preview
-    GET/POST/PUT/DELETE /api/stocktake/templates(/:id)
-    POST /api/stocktake/start-from-template
-  - الـ _generateRandomItems helper مع 4 factors
+  Bug 2: الـ POST 400 بدون رسالة واضحة
+  ─────────────────────────────────────
+  - الـ apiFetch كان بـ يـ throw `new Error(r.status)` فقط
+  - الـ user يشوف "❌ 400" بدون الرسالة العربية
+  - الـ Backend بـ يبعت رسائل مفصلة (اسم العرض مطلوب، إلخ) لكن ما تظهرش
   
-  UI:
-  - 5 modes في الـ Start (full/partial/random/template/scan)
-  - أزرار "💾 احفظ كـ Template" في partial + random
-  - Templates manager modal
+  ✅ الحل: الـ apiFetch دلوقتي بـ يحاول يقرأ الـ JSON body
+  - لو فيه { error: "..." } → يستخدمها كرسالة الـ exception
+  - النتيجة: المستخدم يشوف الرسالة الحقيقية
   
-  محتاج: server v275
+  مثال للـ messages اللي هتظهر دلوقتي:
+  - ❌ اسم العرض مطلوب
+  - ❌ المحل مطلوب
+  - ❌ المنتج "Ninja": سعر العرض غير صحيح (null)
   ═══════════════════════════════════════════════════════════════════
 -->
 <html lang="ar" dir="rtl">
@@ -7787,7 +7781,19 @@ async function apiFetch(path, method='GET', body=null){
       if(method !== 'GET' && r.status >= 500){
         addToOfflineQueue(path, method, body);
       }
-      throw new Error(r.status);
+      // 🔧 v366: حاول تقرأ الـ error message من الـ response body
+      // عشان الـ user يشوف الرسالة العربية من الـ backend بدل "❌ 400"
+      let errMsg = String(r.status);
+      try {
+        const errData = await r.json();
+        if(errData?.error){
+          errMsg = errData.error;
+          console.warn(`[apiFetch] ${method} ${path} → ${r.status}: ${errMsg}`);
+        }
+      } catch(parseErr){
+        // الـ response مش JSON - استخدم الـ status code
+      }
+      throw new Error(errMsg);
     }
     const data = await r.json();
 
@@ -31718,7 +31724,8 @@ async function openOfferEditor(offerId){
         variantTitle: p.variant_title,
         sku: p.sku,
         originalPrice: parseFloat(p.original_price) || 0,
-        offerPrice: parseFloat(p.offer_price) || 0
+        offerPrice: parseFloat(p.offer_price) || 0,
+        imageUrl: p.image_url || ''
       }));
     } catch(e){
       toast('❌ ' + e.message, 'error');
@@ -31760,26 +31767,43 @@ function onOfferProductSearch(query){
       }
       
       results.innerHTML = items.map(it => {
-        const variantId = it.shopify_variant_id || it.variant_id;
-        const productId = it.shopify_product_id || it.product_id;
+        // 🔧 v366: قبول camelCase + snake_case (الـ backend بـ يـ return camelCase)
+        const variantId = it.variantId || it.shopify_variant_id || it.variant_id;
+        const productId = it.productId || it.shopify_product_id || it.product_id;
+        const productTitle = it.productTitle || it.product_title || '';
+        const variantTitle = it.variantTitle || it.variant_title || '';
+        const imgUrl = it.imageUrl || it.image_url || '';
+        const sku = it.sku || '';
+        
         const alreadyAdded = _offerEditingProducts.some(p => p.variantId === variantId);
         const price = parseFloat(it.price) || 0;
         const itemJson = JSON.stringify({
           productId, variantId,
-          productTitle: it.product_title,
-          variantTitle: it.variant_title,
-          sku: it.sku,
-          originalPrice: price
+          productTitle,
+          variantTitle,
+          sku,
+          originalPrice: price,
+          imageUrl: imgUrl
         }).replace(/"/g, '&quot;');
         
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--border);${alreadyAdded?'opacity:.5':''}">
+        // 🆕 v365: عرض بـ صورة + اسم واضح
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid var(--border);${alreadyAdded?'opacity:.5;background:#f3f4f6':''}">
+          <div style="width:50px;height:50px;flex-shrink:0;border-radius:6px;overflow:hidden;background:#f3f4f6;display:flex;align-items:center;justify-content:center">
+            ${imgUrl 
+              ? `<img src="${escapeHtml(imgUrl)}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.parentNode.innerHTML='📦'">`
+              : '<span style="font-size:24px;opacity:.4">📦</span>'}
+          </div>
           <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:13px">${escapeHtml(it.product_title || '')}${it.variant_title?' - '+escapeHtml(it.variant_title):''}</div>
-            <div style="font-size:11px;color:var(--muted)">SKU: ${escapeHtml(it.sku || '—')} · ${price.toFixed(0)} ج</div>
+            <div style="font-weight:700;font-size:13px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(productTitle)}</div>
+            ${variantTitle && variantTitle !== 'Default Title' ? `<div style="font-size:11px;color:var(--accent);font-weight:600">${escapeHtml(variantTitle)}</div>` : ''}
+            <div style="display:flex;gap:10px;font-size:10px;color:var(--muted);margin-top:2px">
+              <span>SKU: <code style="background:#f3f4f6;padding:1px 4px;border-radius:3px">${escapeHtml(sku || '—')}</code></span>
+              <span style="font-weight:700;color:#475569">💰 ${price.toLocaleString()} ج</span>
+            </div>
           </div>
           ${alreadyAdded 
-            ? '<span style="font-size:11px;color:#22c55e;font-weight:700">✓ مُضاف</span>'
-            : `<button class="btn btn-success btn-xs" onclick='addProductToOffer(${itemJson})'>➕ ضيف</button>`}
+            ? '<span style="font-size:11px;color:#22c55e;font-weight:700;padding:6px 10px;background:#dcfce7;border-radius:6px;flex-shrink:0">✓ مُضاف</span>'
+            : `<button class="btn btn-success btn-sm" onclick='addProductToOffer(${itemJson})' style="flex-shrink:0">➕ ضيف</button>`}
         </div>`;
       }).join('');
     } catch(e){
@@ -31864,13 +31888,24 @@ function renderOfferProductsList(){
         const pct = orig > 0 ? ((orig - offerPrice) / orig) * 100 : 0;
         const pctStr = pct >= 0 ? `-${pct.toFixed(0)}%` : `+${Math.abs(pct).toFixed(0)}%`;
         const pctColor = pct >= 0 ? '#22c55e' : '#ef4444';
+        const imgUrl = p.imageUrl || '';
         
         return `<tr style="border-bottom:1px solid var(--border)">
           <td style="padding:6px;font-size:12px">
-            <div style="font-weight:700">${escapeHtml(p.productTitle || '—')}</div>
-            ${p.variantTitle ? `<div style="font-size:10px;color:var(--muted)">${escapeHtml(p.variantTitle)}</div>` : ''}
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="width:40px;height:40px;flex-shrink:0;border-radius:5px;overflow:hidden;background:#f3f4f6;display:flex;align-items:center;justify-content:center">
+                ${imgUrl 
+                  ? `<img src="${escapeHtml(imgUrl)}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.parentNode.innerHTML='📦'">`
+                  : '<span style="font-size:20px;opacity:.4">📦</span>'}
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700;line-height:1.2">${escapeHtml(p.productTitle || '—')}</div>
+                ${p.variantTitle && p.variantTitle !== 'Default Title' ? `<div style="font-size:10px;color:var(--accent)">${escapeHtml(p.variantTitle)}</div>` : ''}
+                ${p.sku ? `<div style="font-size:9px;color:var(--muted);font-family:monospace">${escapeHtml(p.sku)}</div>` : ''}
+              </div>
+            </div>
           </td>
-          <td style="padding:6px;text-align:center;color:var(--muted);font-family:Roboto,sans-serif">${orig.toFixed(0)} ج</td>
+          <td style="padding:6px;text-align:center;color:var(--muted);font-family:Roboto,sans-serif">${orig.toLocaleString()} ج</td>
           <td style="padding:6px">
             <input type="number" id="offer-price-${idx}" class="form-input" step="0.01" 
                    value="${offerPrice.toFixed(2)}" 
@@ -31935,7 +31970,8 @@ async function saveOffer(){
       variantTitle: p.variantTitle,
       sku: p.sku,
       originalPrice: p.originalPrice,
-      offerPrice: parseFloat(p.offerPrice)
+      offerPrice: parseFloat(p.offerPrice),
+      imageUrl: p.imageUrl || null
     }))
   };
   
@@ -32127,6 +32163,9 @@ function renderStkHistoryList(){
           ${statusBadge}
           <button class="btn btn-ghost btn-sm" onclick="openStocktakeSession(${s.id})" title="عرض التفاصيل">🔍</button>
           <button class="btn btn-ghost btn-sm" onclick="printStkReportById(${s.id})" title="تقرير PDF" style="color:var(--accent)">📄</button>
+          ${s.status === 'approved' && s.last_approval_run_id ? `
+            <button class="btn btn-ghost btn-sm" onclick="openApprovalReport(${s.id})" title="تقرير تحديث Shopify" style="color:#16a34a">📊</button>
+          ` : ''}
         </div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;font-size:11px;background:var(--bg);padding:8px;border-radius:6px">
@@ -32847,7 +32886,14 @@ function renderStocktakeDetail(){
         <button class="btn btn-success" onclick="approveStocktake()">✅ اعتماد + تحديث Shopify</button>
         <button class="btn btn-ghost" onclick="cancelStocktake()" style="color:var(--danger)">❌ إلغاء الجرد</button>
         <button class="btn btn-ghost" onclick="printStkReport()" style="color:var(--accent)">📄 تقرير PDF</button>
+        <!-- 🆕 v364: زرار refresh الـ snapshot -->
+        <button class="btn btn-ghost" onclick="refreshStkSnapshot()" style="color:#f59e0b" title="جيب آخر on_hand من Shopify عشان تتأكد من الـ snapshot قبل الـ approve">🔄 تحديث الـ snapshot من Shopify</button>
         ${total > 0 ? `<button class="btn btn-ghost" onclick="markAllSystemQty()" style="margin-right:auto">⚡ ملأ الكميات الفعلية = النظام</button>` : ''}
+      </div>
+      <!-- 🆕 v364: ملاحظة عن الـ on_hand -->
+      <div style="background:#eff6ff;border:1px solid #6366f1;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:#1e40af">
+        💡 <strong>"النظام"</strong> = الكمية الفعلية في الرف من Shopify (<code>on_hand</code>) — مش الـ available (اللي بـ يخصم الـ unfulfilled orders).
+        لو الجلسة قديمة، اضغط <strong>🔄 تحديث الـ snapshot</strong> قبل الاعتماد عشان تتأكد إن الأرقام لسه دقيقة.
       </div>
     `;
   } else {
@@ -33374,6 +33420,135 @@ async function updateStocktakeItem(itemId, value){
 // 🆕 v274/v361: approve مع mode awareness
 // لو full mode + فيه uncounted-with-stock: backend بـ يرجع 409 مع تفاصيل
 // نعرض modal للمدير عشان يأكد أو يلغي
+// 🆕 v364: Refresh الـ snapshot من Shopify (live on_hand)
+async function refreshStkSnapshot(){
+  if(!_stkCurrentSession) return;
+  
+  if(!confirm(
+    '🔄 تحديث الـ snapshot من Shopify\n\n' +
+    'هـ يجيب آخر on_hand لكل منتجات الجلسة من Shopify ويـ update الـ "النظام".\n\n' +
+    '💡 استخدم ده لو الجلسة بدأت من يوم/يومين وحصلت حركات (بيع/تحويل) عشان الـ approve يطلع delta صح.\n\n' +
+    '✓ مش بـ يـ change الـ counted_qty (الـ عد بتاعك)\n' +
+    '✓ بـ يـ change فقط الـ "النظام" عشان يطابق Shopify دلوقتي\n\n' +
+    'هل تكمل؟'
+  )) return;
+  
+  toast('🔄 جاري التحديث من Shopify...');
+  
+  try {
+    const r = await apiFetch(`/api/stocktake/sessions/${_stkCurrentSession.id}/refresh-snapshot`, 'POST', {});
+    
+    if(!r?.success){
+      toast('❌ ' + (r?.error || 'فشل')); 
+      return;
+    }
+    
+    // اعرض النتيجة في modal
+    _showSnapshotRefreshResult(r);
+    
+    // reload الجلسة عشان نشوف الأرقام الجديدة
+    await openStocktakeSession(_stkCurrentSession.id);
+  } catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+function _showSnapshotRefreshResult(data){
+  document.getElementById('stk-refresh-result-modal')?.remove();
+  
+  const modal = document.createElement('div');
+  modal.id = 'stk-refresh-result-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px)';
+  
+  const changes = data.changes || [];
+  const hasChanges = changes.length > 0;
+  
+  const changesRows = changes.slice(0, 100).map(c => {
+    const sign = c.diff > 0 ? '+' : '';
+    const color = c.diff > 0 ? '#16a34a' : '#dc2626';
+    return `
+      <tr style="border-bottom:1px solid var(--border);background:${Math.abs(c.diff) >= 5 ? '#fef3c7' : 'transparent'}">
+        <td style="padding:6px 8px;font-family:monospace;font-size:10px">${escapeHtml(c.variant_id?.slice(-12) || '—')}</td>
+        <td style="padding:6px 8px;text-align:center;font-size:11px">${c.old_snapshot}</td>
+        <td style="padding:6px 8px;text-align:center;font-size:11px;font-weight:700">${c.new_snapshot}</td>
+        <td style="padding:6px 8px;text-align:center;font-size:11px;font-weight:800;color:${color}">${sign}${c.diff}</td>
+        <td style="padding:6px 8px;text-align:center;font-size:11px">${c.counted_qty !== null ? c.counted_qty : '—'}</td>
+      </tr>
+    `;
+  }).join('');
+  
+  modal.innerHTML = `
+    <div style="background:var(--card);border-radius:14px;max-width:800px;width:100%;max-height:90vh;overflow:hidden;display:flex;flex-direction:column">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:${hasChanges ? '#fef3c7' : '#dcfce7'};display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0;font-size:17px;font-weight:900;color:${hasChanges ? '#78350f' : '#14532d'}">
+          ${hasChanges ? '⚠️' : '✅'} نتيجة تحديث الـ Snapshot
+        </h3>
+        <button onclick="document.getElementById('stk-refresh-result-modal').remove()" style="background:transparent;border:none;color:var(--muted);font-size:28px;cursor:pointer;line-height:1;padding:0">×</button>
+      </div>
+      
+      <div style="padding:14px;overflow:auto;flex:1">
+        <!-- Stats -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+          <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:10px;color:var(--muted);font-weight:700">📦 إجمالي</div>
+            <div style="font-size:18px;font-weight:900">${data.refreshed || 0}</div>
+          </div>
+          <div style="background:${hasChanges ? '#fef3c7' : '#dcfce7'};border:1px solid ${hasChanges ? '#fbbf24' : '#16a34a'};border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:10px;font-weight:700;color:${hasChanges ? '#78350f' : '#14532d'}">${hasChanges ? '🔄 اتغير' : '✅ مفيش تغيير'}</div>
+            <div style="font-size:18px;font-weight:900;color:${hasChanges ? '#78350f' : '#14532d'}">${data.changed_count || 0}</div>
+          </div>
+          <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:10px;color:var(--muted);font-weight:700">✓ بدون تغيير</div>
+            <div style="font-size:18px;font-weight:900">${data.unchanged_count || 0}</div>
+          </div>
+        </div>
+        
+        ${data.no_inventory_item_id > 0 ? `
+          <div style="background:#fee2e2;color:#991b1b;padding:8px 10px;border-radius:6px;font-size:11px;margin-bottom:10px">
+            ⚠️ ${data.no_inventory_item_id} منتج مش مربوط بـ Shopify (ما اتـ refresh)
+          </div>
+        ` : ''}
+        
+        ${!hasChanges ? `
+          <div style="text-align:center;padding:30px;color:#14532d;background:#dcfce7;border-radius:10px">
+            <div style="font-size:40px;margin-bottom:8px">✅</div>
+            <div style="font-weight:800;font-size:14px">الـ snapshot مظبوط</div>
+            <div style="font-size:11px;color:#166534;margin-top:6px">كل الأرقام بتطابق Shopify دلوقتي - تقدر تـ approve بأمان</div>
+          </div>
+        ` : `
+          <div style="background:#fef3c7;color:#78350f;padding:10px;border-radius:8px;font-size:12px;margin-bottom:10px;line-height:1.7">
+            <strong>⚠️ فيه ${changes.length} منتج اتغير الـ on_hand بتاعهم في Shopify</strong> من بداية الجلسة لحد دلوقتي.<br>
+            ده طبيعي لو حصلت بيعات أو تحويلات. الـ snapshot دلوقتي = آخر on_hand من Shopify، فالـ approve هـ يطلع delta صح.
+          </div>
+          
+          <div style="overflow:auto;max-height:400px;border:1px solid var(--border);border-radius:8px">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead style="background:var(--bg);position:sticky;top:0">
+                <tr>
+                  <th style="padding:8px;text-align:right">Variant</th>
+                  <th style="padding:8px;text-align:center">قبل</th>
+                  <th style="padding:8px;text-align:center">بعد (live)</th>
+                  <th style="padding:8px;text-align:center">الفرق</th>
+                  <th style="padding:8px;text-align:center">عدّ المراقب</th>
+                </tr>
+              </thead>
+              <tbody>${changesRows}</tbody>
+            </table>
+          </div>
+          ${changes.length > 100 ? `<div style="text-align:center;padding:6px;color:var(--muted);font-size:11px">عرض أول 100 من ${changes.length} منتج</div>` : ''}
+        `}
+      </div>
+      
+      <div style="padding:12px 20px;border-top:1px solid var(--border);background:var(--bg);display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:11px;color:var(--muted)">💡 الـ stocktake_items.system_qty اتـ update، فالـ approve هـ يـ apply delta صح</div>
+        <button onclick="document.getElementById('stk-refresh-result-modal').remove()" class="btn btn-primary">حسناً</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+}
+
 async function approveStocktake(){
   const counted = _stkCurrentItems.filter(i => i.counted_qty != null);
   const differences = _stkCurrentItems.filter(i => i.counted_qty != null && i.counted_qty !== i.system_qty).length;
@@ -33427,16 +33602,313 @@ async function _doApproveStocktake(confirmZeroUncounted){
     }
     
     if(data?.success){
-      toast('✅ ' + data.message);
-      if(data.errors && data.errors.length){
-        infoModal('⚠️ بعض المنتجات فشلت', data.errors.join('\n'), {pre: true});
-      }
+      // 🆕 v363: اعرض التقرير المفصل (sessionId + run_id موجودين)
       closeM('m-stk-detail');
       await loadStocktakePage();
+      
+      const hasFails = (data.summary?.failed_count || 0) > 0;
+      if(hasFails){
+        toast(`⚠️ ${data.summary.success_count} ✓ / ${data.summary.failed_count} ✗`);
+      } else {
+        toast(`✅ تم تحديث ${data.summary?.success_count || data.updated} منتج بنجاح`);
+      }
+      
+      // افتح التقرير المفصل تلقائياً
+      openApprovalReport(_stkCurrentSession?.id, data.approval_run_id);
     } else {
       toast('❌ ' + (data?.error || 'فشل'));
     }
   } catch(e) {
+    toast('❌ ' + e.message);
+  }
+}
+
+// 🆕 v363: فتح تقرير الـ approval المفصل
+async function openApprovalReport(sessionId, runId){
+  if(!sessionId) return;
+  
+  // امسح modal قديم
+  document.getElementById('stk-approval-report-modal')?.remove();
+  
+  const modal = document.createElement('div');
+  modal.id = 'stk-approval-report-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px)';
+  modal.innerHTML = `
+    <div style="background:var(--card);border-radius:14px;max-width:1100px;width:100%;max-height:92vh;overflow:hidden;display:flex;flex-direction:column">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:var(--accent-light);display:flex;justify-content:space-between;align-items:center;gap:12px">
+        <h3 style="margin:0;color:var(--accent);font-size:18px;font-weight:900">📊 تقرير تحديث Shopify</h3>
+        <button onclick="document.getElementById('stk-approval-report-modal').remove()" style="background:transparent;border:none;color:var(--muted);font-size:28px;cursor:pointer;line-height:1;padding:0">×</button>
+      </div>
+      <div id="stk-approval-report-body" style="flex:1;overflow:auto;padding:14px">
+        <div style="text-align:center;padding:40px;color:var(--muted)">
+          <div style="width:30px;height:30px;border:3px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;display:inline-block"></div>
+          <div style="margin-top:10px">⏳ جاري التحميل...</div>
+        </div>
+        <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  
+  try {
+    const url = `/api/stocktake/sessions/${sessionId}/approval-report${runId ? '?run_id=' + encodeURIComponent(runId) : ''}`;
+    const r = await apiFetch(url);
+    if(!r){ 
+      document.getElementById('stk-approval-report-body').innerHTML = '<div style="color:var(--danger);padding:20px">❌ فشل التحميل</div>'; 
+      return; 
+    }
+    _renderApprovalReport(r, sessionId);
+  } catch(e){
+    document.getElementById('stk-approval-report-body').innerHTML = `<div style="color:var(--danger);padding:20px">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function _renderApprovalReport(data, sessionId){
+  const body = document.getElementById('stk-approval-report-body');
+  if(!body) return;
+  
+  if(!data.items || !data.items.length){
+    body.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">${escapeHtml(data.message || 'مفيش بيانات')}</div>`;
+    return;
+  }
+  
+  const sum = data.summary || {};
+  const successItems = data.items.filter(i => i.status === 'success');
+  const failedItems = data.items.filter(i => i.status === 'failed');
+  
+  // value impact
+  const successValue = successItems.reduce((s, i) => s + (i.value || 0), 0);
+  const failedValue = failedItems.reduce((s, i) => s + (i.value || 0), 0);
+  
+  // error type labels
+  const errorTypeLabels = {
+    no_inventory_item_id: { ar: '🔌 مش مربوط بـ Shopify', desc: 'المنتج مفيهوش inventory_item_id - يمكن المنتج اتـ archive أو ما اتـ sync' },
+    activate_failed: { ar: '⚡ فشل تفعيل المنتج في المخزن', desc: 'Shopify رفض activate المنتج في الـ location ده' },
+    set_failed: { ar: '❌ فشل تحديث الكمية', desc: 'Shopify رفض set quantity (يمكن permissions أو الـ product state)' },
+    graphql_error: { ar: '🔥 خطأ GraphQL', desc: 'الـ API رد بـ error من غير user errors' },
+    unknown: { ar: '❓ خطأ غير معروف', desc: '' }
+  };
+  
+  // group failed بـ error_type
+  const failedByType = {};
+  failedItems.forEach(i => {
+    const t = i.error_type || 'unknown';
+    if(!failedByType[t]) failedByType[t] = [];
+    failedByType[t].push(i);
+  });
+  
+  // success rows
+  const successRows = successItems.map(i => {
+    const sign = i.diff > 0 ? '+' : '';
+    const diffColor = i.diff > 0 ? '#16a34a' : i.diff < 0 ? '#dc2626' : '#6b7280';
+    return `
+      <tr style="background:#f0fdf4;border-bottom:1px solid var(--border)">
+        <td style="padding:8px">
+          <div style="font-weight:700;font-size:12px">${escapeHtml(i.product_title || '')}${i.variant_title ? ' - '+escapeHtml(i.variant_title) : ''}</div>
+          <div style="font-size:9px;color:var(--muted);font-family:monospace">${escapeHtml(i.sku || i.variant_id || '—')}</div>
+        </td>
+        <td style="padding:8px;text-align:center;font-size:11px">${i.system_qty}</td>
+        <td style="padding:8px;text-align:center;font-size:11px;font-weight:700">${i.counted_qty}</td>
+        <td style="padding:8px;text-align:center;font-size:11px;font-weight:800;color:${diffColor}">${sign}${i.diff}</td>
+        <td style="padding:8px;text-align:left;font-size:11px">${i.value > 0 ? i.value.toLocaleString('en-US',{maximumFractionDigits:0})+' ج' : '—'}</td>
+        <td style="padding:8px;text-align:center"><span style="background:#16a34a;color:#fff;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700">✓ نجح</span></td>
+      </tr>
+    `;
+  }).join('');
+  
+  // failed sections grouped by error type
+  const failedSections = Object.entries(failedByType).map(([errType, items]) => {
+    const label = errorTypeLabels[errType] || errorTypeLabels.unknown;
+    const sectionValue = items.reduce((s, i) => s + (i.value || 0), 0);
+    
+    const rows = items.map(i => {
+      const sign = i.diff > 0 ? '+' : '';
+      return `
+        <tr style="background:#fef2f2;border-bottom:1px solid var(--border)">
+          <td style="padding:8px">
+            <div style="font-weight:700;font-size:12px">${escapeHtml(i.product_title || '')}${i.variant_title ? ' - '+escapeHtml(i.variant_title) : ''}</div>
+            <div style="font-size:9px;color:var(--muted);font-family:monospace">${escapeHtml(i.sku || i.variant_id || '—')}</div>
+          </td>
+          <td style="padding:8px;text-align:center;font-size:11px">${i.system_qty}</td>
+          <td style="padding:8px;text-align:center;font-size:11px;font-weight:700">${i.counted_qty}</td>
+          <td style="padding:8px;text-align:center;font-size:11px;font-weight:800;color:#dc2626">${sign}${i.diff}</td>
+          <td style="padding:8px;text-align:left;font-size:11px">${i.value > 0 ? i.value.toLocaleString('en-US',{maximumFractionDigits:0})+' ج' : '—'}</td>
+          <td style="padding:8px;font-size:10px;color:#991b1b;max-width:250px">${escapeHtml(i.error_message || '—')}</td>
+        </tr>
+      `;
+    }).join('');
+    
+    return `
+      <div style="margin-bottom:16px;border:2px solid #ef4444;border-radius:10px;overflow:hidden">
+        <div style="background:#fee2e2;padding:10px 14px;border-bottom:1px solid #ef4444">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div>
+              <div style="font-weight:900;color:#991b1b;font-size:14px">${label.ar} (${items.length} منتج)</div>
+              ${label.desc ? `<div style="font-size:11px;color:#7f1d1d;margin-top:2px">${label.desc}</div>` : ''}
+            </div>
+            <div style="font-size:11px;color:#7f1d1d;font-weight:700">القيمة المتأثرة: ${sectionValue.toLocaleString()} ج</div>
+          </div>
+        </div>
+        <div style="overflow:auto;max-height:400px">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead style="background:#fff;position:sticky;top:0">
+              <tr>
+                <th style="padding:8px;text-align:right">المنتج</th>
+                <th style="padding:8px;text-align:center">النظام</th>
+                <th style="padding:8px;text-align:center">المعدود</th>
+                <th style="padding:8px;text-align:center">الفرق</th>
+                <th style="padding:8px;text-align:left">القيمة</th>
+                <th style="padding:8px;text-align:right">رسالة Shopify</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  // runs history
+  const allRuns = data.all_runs || [];
+  const runsHtml = allRuns.length > 1 ? `
+    <details style="margin-bottom:14px">
+      <summary style="cursor:pointer;font-size:11px;color:var(--muted);font-weight:700">📜 سجل المحاولات (${allRuns.length})</summary>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:8px;border:1px solid var(--border)">
+        <thead style="background:var(--bg)">
+          <tr>
+            <th style="padding:6px;text-align:right">المحاولة</th>
+            <th style="padding:6px;text-align:right">التاريخ</th>
+            <th style="padding:6px;text-align:center">إجمالي</th>
+            <th style="padding:6px;text-align:center">نجح</th>
+            <th style="padding:6px;text-align:center">فشل</th>
+            <th style="padding:6px;text-align:center">عرض</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${allRuns.map((r, idx) => `
+            <tr style="${r.approval_run_id === data.run_id ? 'background:#eff6ff;font-weight:700' : ''};border-bottom:1px solid var(--border)">
+              <td style="padding:6px">${allRuns.length - idx}${r.approval_run_id.includes('retry') ? ' 🔄' : ''}</td>
+              <td style="padding:6px">${new Date(r.run_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'})}</td>
+              <td style="padding:6px;text-align:center">${r.total_items}</td>
+              <td style="padding:6px;text-align:center;color:#16a34a;font-weight:700">${r.success_count}</td>
+              <td style="padding:6px;text-align:center;color:${r.failed_count > 0 ? '#dc2626' : 'var(--muted)'};font-weight:700">${r.failed_count}</td>
+              <td style="padding:6px;text-align:center">
+                ${r.approval_run_id === data.run_id 
+                  ? '<span style="color:var(--accent);font-size:10px">معروض</span>' 
+                  : `<button class="btn btn-ghost btn-xs" onclick="openApprovalReport(${sessionId}, ${JSON.stringify(r.approval_run_id).replace(/"/g,'&quot;')})">👁️</button>`}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </details>
+  ` : '';
+  
+  body.innerHTML = `
+    ${runsHtml}
+    
+    <!-- Header summary -->
+    <div style="background:linear-gradient(135deg,${sum.failed_count > 0 ? '#fef3c7' : '#d1fae5'} 0%,#fff 100%);border:1px solid ${sum.failed_count > 0 ? '#fbbf24' : '#16a34a'};border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-weight:900;font-size:16px;margin-bottom:8px">
+        ${sum.failed_count > 0 ? `⚠️ تحديث جزئي: ${sum.success_count}/${sum.total_attempted} منتج` : `✅ تحديث ناجح: كل ${sum.success_count} منتج`}
+      </div>
+      <div style="font-size:11px;color:var(--muted)">
+        📍 ${escapeHtml(data.session_title || '')} · 
+        🕐 ${sum.run_at ? new Date(sum.run_at).toLocaleString('ar-EG') : ''}
+        ${sum.is_retry ? ` · 🔄 إعادة محاولة` : ''}
+      </div>
+    </div>
+    
+    <!-- Stats grid -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
+      <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--muted);font-weight:700">📊 إجمالي</div>
+        <div style="font-size:20px;font-weight:900">${sum.total_attempted || 0}</div>
+      </div>
+      <div style="background:#dcfce7;border:1px solid #16a34a;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#14532d;font-weight:700">✅ نجح</div>
+        <div style="font-size:20px;font-weight:900;color:#14532d">${sum.success_count || 0}</div>
+        <div style="font-size:9px;color:#166534">${successValue.toLocaleString()} ج</div>
+      </div>
+      <div style="background:${sum.failed_count > 0 ? '#fee2e2' : '#f3f4f6'};border:1px solid ${sum.failed_count > 0 ? '#ef4444' : 'var(--border)'};border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:${sum.failed_count > 0 ? '#991b1b' : 'var(--muted)'};font-weight:700">❌ فشل</div>
+        <div style="font-size:20px;font-weight:900;color:${sum.failed_count > 0 ? '#991b1b' : 'var(--muted)'}">${sum.failed_count || 0}</div>
+        <div style="font-size:9px;color:${sum.failed_count > 0 ? '#7f1d1d' : 'var(--muted)'}">${failedValue.toLocaleString()} ج</div>
+      </div>
+      <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--muted);font-weight:700">📈 نسبة النجاح</div>
+        <div style="font-size:20px;font-weight:900;color:${sum.failed_count > 0 ? 'var(--warn)' : 'var(--success)'}">${sum.total_attempted ? Math.round((sum.success_count||0)*100/sum.total_attempted) : 0}%</div>
+      </div>
+    </div>
+    
+    <!-- Action buttons -->
+    ${sum.failed_count > 0 ? `
+      <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:10px;padding:12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="font-size:12px;color:#78350f">
+          💡 الـ ${sum.failed_count} منتج اللي فشلوا ما اتـ تحدثوش في Shopify. تقدر تعيد المحاولة:
+        </div>
+        <button onclick="retryFailedItems(${sessionId})" style="background:#f59e0b;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-weight:800;cursor:pointer">
+          🔄 أعد محاولة الفاشلين
+        </button>
+      </div>
+    ` : ''}
+    
+    <!-- Failed sections -->
+    ${failedItems.length > 0 ? `
+      <h4 style="color:#991b1b;font-size:14px;margin:14px 0 8px">❌ المنتجات اللي فشلت (${failedItems.length})</h4>
+      ${failedSections}
+    ` : ''}
+    
+    <!-- Success section -->
+    ${successItems.length > 0 ? `
+      <details ${failedItems.length > 0 ? '' : 'open'} style="margin-top:14px;border:1px solid #16a34a;border-radius:10px;overflow:hidden">
+        <summary style="background:#d1fae5;padding:10px 14px;cursor:pointer;font-weight:900;color:#14532d;font-size:14px">
+          ✅ المنتجات اللي نجحت (${successItems.length}) — اضغط للعرض
+        </summary>
+        <div style="overflow:auto;max-height:500px">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead style="background:#f0fdf4;position:sticky;top:0">
+              <tr>
+                <th style="padding:8px;text-align:right">المنتج</th>
+                <th style="padding:8px;text-align:center">النظام</th>
+                <th style="padding:8px;text-align:center">المعدود</th>
+                <th style="padding:8px;text-align:center">الفرق</th>
+                <th style="padding:8px;text-align:left">القيمة</th>
+                <th style="padding:8px;text-align:center">الحالة</th>
+              </tr>
+            </thead>
+            <tbody>${successRows}</tbody>
+          </table>
+        </div>
+      </details>
+    ` : ''}
+    
+    <!-- Footer -->
+    <div style="margin-top:16px;padding:10px;background:var(--bg);border-radius:8px;font-size:11px;color:var(--muted);text-align:center">
+      💾 الـ approval log محفوظ في الـ DB - تقدر ترجعله أي وقت من تفاصيل الجلسة
+    </div>
+  `;
+}
+
+// 🆕 v363: إعادة محاولة الفاشلين
+async function retryFailedItems(sessionId){
+  if(!confirm('هتعيد محاولة كل المنتجات اللي فشلوا؟\n\n✓ هـ يحاول مرة تانية بنفس الكميات\n✓ نتيجة المحاولة الجديدة هـ تتسجل كـ run جديد')) return;
+  
+  const body = document.getElementById('stk-approval-report-body');
+  if(body){
+    body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)"><div style="width:30px;height:30px;border:3px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;display:inline-block"></div><div style="margin-top:10px">🔄 جاري إعادة المحاولة...</div></div>';
+  }
+  
+  try {
+    const r = await apiFetch(`/api/stocktake/sessions/${sessionId}/retry-failed`, 'POST', {});
+    if(r?.success){
+      toast(`✅ تمت إعادة المحاولة: ${r.success_count} ✓ / ${r.failed_count} ✗`);
+      // افتح التقرير الجديد
+      openApprovalReport(sessionId, r.new_run_id);
+    } else {
+      toast('❌ ' + (r?.error || 'فشل'));
+    }
+  } catch(e){
     toast('❌ ' + e.message);
   }
 }
