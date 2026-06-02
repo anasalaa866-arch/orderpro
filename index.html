@@ -1,44 +1,42 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v382 — STOCKTAKE ADJUST-DELTA UPLOAD (2026-06-02)
+  OrderPro v384 — PO TRANSFER DEBUG MODE (2026-06-03)
   ═══════════════════════════════════════════════════════════════════
-  🎯 الـ approach الأنظف لرفع الجرد لـ Shopify:
+  🔧 الـ test الأول لـ v383 أعطى 502 error. ده عشان نعرف السبب:
   
-  الفكرة:
-  - الجرد بـ يلتقط الفروق (delta) وقت العد
-  - الرفع بـ يطبّق الفروق على Shopify (مش بـ يـ SET قيم)
-  - مثال: الجرد لقى ناقص 2 → Shopify -= 2 (بـ يطرح 2 من القيمة الحالية)
-  - يطبّق صح في أي وقت (لو رفعت بعد ساعة أو شهر)
-  - حتى لو حصل بيع بين العد والاعتماد → الـ delta لسه صح
+  Server v297:
+  - logging مفصّل في الـ console.log (Railway)
+  - surfacing رد Shopify الـ raw في الـ JSON response
+  - error categorization (scope/origin/version)
+  - hints واضحة في الـ error messages
+  - try/catch بـ يـ detect 401/403/404/400 وبـ يعطي hint مناسب
   
-  Backend (server v295):
-  - شيل mode + confirmMovement params
-  - شيل movement detection logic  
-  - شيل bulk Shopify fetch (مش محتاج)
-  - بقى يستخدم inventoryAdjustQuantities mutation (بـ delta مش بـ value)
-  - skip لو الـ delta = 0 (مفيش فرق)
-  - method = 'adjust_delta' في الـ summary
+  Frontend (هنا):
+  - raw fetch بدل apiFetch عشان نقدر نقرا 502 body
+  - alert مفصّل بـ:
+    * HTTP status
+    * Error message + hints
+    * Shopify user errors (مع codes)
+    * Skipped items
+    * Debug info (PO, items, location)
+    * خطوات لإصلاح الـ scope (write_inventory_transfers)
   
-  Frontend:
-  - شيل movement modal بالكامل
-  - simpler progress modal (مفيش mode labels)
-  - confirm dialog بـ يشرح adjustment approach
+  ملاحظة مهمة: الـ Shopify Custom App محتاج access scope:
+  → write_inventory_transfers
   
-  مميزات vs الـ approach القديم:
-  ✅ Atomic - مفيش race condition
-  ✅ مفيش حاجة نـ fetch Shopify قبل الرفع
-  ✅ مفيش modal اختيار (single behavior)
-  ✅ ممكن نـ approve بعد أيام وSE الـ delta لسه صح
-  ✅ كود أبسط بكتير
+  لو الـ scope مش enabled، الـ mutation هـ ترفض.
+  خطوات الإصلاح:
+  1. Shopify Admin → Settings → Apps and sales channels → Develop apps
+  2. افتح الـ CAFELAX Custom App
+  3. Configuration → Admin API access scopes → ضيف:
+     • write_inventory_transfers
+     • read_inventory_transfers (لو موجود)
+  4. Save + Re-install الـ app
+  5. update SHOPIFY_ACCESS_TOKEN في Railway env vars (لو تغير)
   
-  ملاحظة: ده صحيح فقط لو المحل مقفول وقت العد
-  (مفيش بيع بين بدء العد ونهايته - وده الواقع لـ CAFELAX)
-  
-  من v381:
-  - Smart Delta (الـ approach السابق - استبدلناه)
-  - Failed uploads report (لسه موجود)
-  - Live progress bar (لسه موجود)
+  من v383:
+  - PO → Shopify Inventory Transfer integration (الـ feature الجديدة)
   ═══════════════════════════════════════════════════════════════════
 -->
 <html lang="ar" dir="rtl">
@@ -27320,8 +27318,19 @@ async function viewPO(id){
     let actionButtons = '';
     // 🆕 v287: زرار طباعة PDF لكل أمر شراء (متاح في كل الحالات)
     actionButtons += `<button class="btn btn-secondary btn-sm" onclick="printPO(${po.id})" style="background:#d4af37;border-color:#d4af37;color:#000;font-weight:800">🖨️ طباعة PDF</button>`;
+    
+    // 🆕 v296: زرار إرسال لـ Shopify كـ Inventory Transfer
+    if(po.shopify_transfer_id){
+      // اتـ بعت بالفعل
+      const shopifyUrl = `https://cafelax.myshopify.com/admin/inventory/transfers/${po.shopify_transfer_id}`;
+      actionButtons += `<a href="${shopifyUrl}" target="_blank" class="btn btn-success btn-sm" style="text-decoration:none">🔗 افتح في Shopify (Transfer #${po.shopify_transfer_id})</a>`;
+    } else if(po.status === 'draft' || po.status === 'sent' || po.status === 'ordered'){
+      // متاح للإرسال
+      actionButtons += `<button class="btn btn-success btn-sm" onclick="sendPOToShopify(${po.id})" style="background:#16a34a;border-color:#16a34a">📤 ارسال لـ Shopify كـ Transfer</button>`;
+    }
+    
     if(po.status === 'draft'){
-      actionButtons += `<button class="btn btn-primary btn-sm" onclick="sendPO(${po.id})">📤 إرسال</button>`;
+      actionButtons += `<button class="btn btn-primary btn-sm" onclick="sendPO(${po.id})">📤 إرسال للمورد</button>`;
       actionButtons += `<button class="btn btn-danger btn-sm" onclick="cancelPO(${po.id})">❌ إلغاء</button>`;
     } else if(po.status === 'sent' || po.status === 'partial_received'){
       actionButtons += `<button class="btn btn-primary btn-sm" onclick="openReceiveModal(${po.id})">📥 استلام بضاعة</button>`;
@@ -27621,6 +27630,91 @@ async function closePO(id){
     closeM('m-po-detail');
     loadPurchaseOrdersPage();
   } catch(e) { toast('❌ ' + e.message); }
+}
+
+// 🆕 v296: ابعت الـ PO لـ Shopify كـ Inventory Transfer
+async function sendPOToShopify(id){
+  if(!confirm('📤 ابعت الـ PO ده لـ Shopify كـ Inventory Transfer؟\n\nده هـ يخلي الـ PO يظهر في Shopify Admin > Inventory > Transfers، والـ team يقدر يستلمه من Shopify Admin أو POS app مباشرة.\n\nالـ inventory في Shopify هـ يحدث تلقائياً لما يـ receive في Shopify.')) return;
+  
+  toast('📤 جاري الإرسال لـ Shopify...');
+  
+  // 🔧 v297: نـ use raw fetch عشان نقدر نقرا الـ error body حتى لو 502
+  const baseUrl = (API_URL || BACKEND_URL).replace(/\/$/, '');
+  const opts = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    mode: 'cors'
+  };
+  if(window._adminToken) opts.headers['Authorization'] = 'Bearer ' + window._adminToken;
+  
+  try {
+    const res = await fetch(baseUrl + '/api/purchase-orders/' + id + '/send-to-shopify', opts);
+    const r = await res.json().catch(() => ({}));
+    
+    if(res.ok && r?.success){
+      let msg = `✅ تم! Transfer ID: ${r.transfer.id}\n\n`;
+      msg += `📦 ${r.transfer.items_count} منتج\n`;
+      msg += `📊 Status: ${r.transfer.status}\n`;
+      
+      if(r.transfer.skipped?.length){
+        msg += `\n⚠️ ${r.transfer.skipped.length} منتج اتـ skip (مفيش variant_id):\n`;
+        r.transfer.skipped.slice(0, 5).forEach(s => {
+          msg += `  • ${s.product_title || s.sku}: ${s.reason}\n`;
+        });
+      }
+      
+      if(r.shopify_url){
+        msg += `\n🔗 افتح في Shopify: ${r.shopify_url}`;
+      }
+      
+      alert(msg);
+      
+      if(r.shopify_url && confirm('تفتح الـ transfer في Shopify Admin دلوقتي؟')){
+        window.open(r.shopify_url, '_blank');
+      }
+      
+      closeM('m-po-detail');
+      loadPurchaseOrdersPage();
+    } else {
+      // 🔧 v297: detailed error display
+      let errorMsg = `❌ فشل الإرسال لـ Shopify (HTTP ${res.status})\n\n`;
+      errorMsg += `📋 الـ Error:\n${r?.error || 'غير معروف'}\n`;
+      
+      if(r?.userErrors?.length){
+        errorMsg += `\n📍 Shopify User Errors:\n`;
+        r.userErrors.forEach(e => {
+          errorMsg += `  • ${e.field?.join('.') || ''}: ${e.message}${e.code ? ` [${e.code}]` : ''}\n`;
+        });
+      }
+      
+      if(r?.skipped?.length){
+        errorMsg += `\n⚠️ ${r.skipped.length} منتج اتـ skip:\n`;
+        r.skipped.slice(0, 5).forEach(s => {
+          errorMsg += `  • ${s.product_title || s.sku || s.variant_id}: ${s.reason}\n`;
+        });
+      }
+      
+      if(r?.debug){
+        errorMsg += `\n🔍 Debug Info:\n`;
+        errorMsg += `  PO: ${r.debug.po_number}\n`;
+        errorMsg += `  Items: ${r.debug.line_items_built}/${r.debug.items_count}\n`;
+        errorMsg += `  Location: ${r.debug.warehouse_location || 'مش مربوط'}\n`;
+      }
+      
+      // أكتر شيوع: scope missing
+      errorMsg += `\n💡 لو السبب access scope:\n`;
+      errorMsg += `1. روح Shopify Admin → Settings → Apps and sales channels → Develop apps\n`;
+      errorMsg += `2. افتح الـ Custom App بتاع CAFELAX\n`;
+      errorMsg += `3. ضيف scope: write_inventory_transfers\n`;
+      errorMsg += `4. Re-install الـ app + update SHOPIFY_ACCESS_TOKEN في Railway\n`;
+      
+      console.error('[sendPOToShopify] Full error:', r);
+      alert(errorMsg);
+    }
+  } catch(e) { 
+    toast('❌ ' + e.message); 
+    console.error('sendPOToShopify error:', e);
+  }
 }
 
 function openReceiveModal(id){
