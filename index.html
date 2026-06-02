@@ -1,37 +1,44 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v366 — OFFERS FIX (camelCase + Error Display) (2026-05-28)
+  OrderPro v382 — STOCKTAKE ADJUST-DELTA UPLOAD (2026-06-02)
   ═══════════════════════════════════════════════════════════════════
-  🐛 إصلاح bugs في عروض المحلات:
+  🎯 الـ approach الأنظف لرفع الجرد لـ Shopify:
   
-  Bug 1: الصور مش بتظهر
-  ─────────────────────
-  - الـ Backend بـ يـ return الـ fields كـ camelCase:
-    { imageUrl, productTitle, variantTitle, variantId, productId }
-  - الـ Frontend كان بـ يقرا snake_case:
-    it.image_url, it.product_title  ← UNDEFINED!
-  - النتيجة: الـ imgUrl دايماً فاضي → 📦 emoji بدل الصورة
+  الفكرة:
+  - الجرد بـ يلتقط الفروق (delta) وقت العد
+  - الرفع بـ يطبّق الفروق على Shopify (مش بـ يـ SET قيم)
+  - مثال: الجرد لقى ناقص 2 → Shopify -= 2 (بـ يطرح 2 من القيمة الحالية)
+  - يطبّق صح في أي وقت (لو رفعت بعد ساعة أو شهر)
+  - حتى لو حصل بيع بين العد والاعتماد → الـ delta لسه صح
   
-  ✅ الحل: الـ frontend بقى يقبل الاتنين (camelCase أولاً):
-    it.imageUrl || it.image_url
-    it.productTitle || it.product_title
-    it.variantTitle || it.variant_title
+  Backend (server v295):
+  - شيل mode + confirmMovement params
+  - شيل movement detection logic  
+  - شيل bulk Shopify fetch (مش محتاج)
+  - بقى يستخدم inventoryAdjustQuantities mutation (بـ delta مش بـ value)
+  - skip لو الـ delta = 0 (مفيش فرق)
+  - method = 'adjust_delta' في الـ summary
   
-  Bug 2: الـ POST 400 بدون رسالة واضحة
-  ─────────────────────────────────────
-  - الـ apiFetch كان بـ يـ throw `new Error(r.status)` فقط
-  - الـ user يشوف "❌ 400" بدون الرسالة العربية
-  - الـ Backend بـ يبعت رسائل مفصلة (اسم العرض مطلوب، إلخ) لكن ما تظهرش
+  Frontend:
+  - شيل movement modal بالكامل
+  - simpler progress modal (مفيش mode labels)
+  - confirm dialog بـ يشرح adjustment approach
   
-  ✅ الحل: الـ apiFetch دلوقتي بـ يحاول يقرأ الـ JSON body
-  - لو فيه { error: "..." } → يستخدمها كرسالة الـ exception
-  - النتيجة: المستخدم يشوف الرسالة الحقيقية
+  مميزات vs الـ approach القديم:
+  ✅ Atomic - مفيش race condition
+  ✅ مفيش حاجة نـ fetch Shopify قبل الرفع
+  ✅ مفيش modal اختيار (single behavior)
+  ✅ ممكن نـ approve بعد أيام وSE الـ delta لسه صح
+  ✅ كود أبسط بكتير
   
-  مثال للـ messages اللي هتظهر دلوقتي:
-  - ❌ اسم العرض مطلوب
-  - ❌ المحل مطلوب
-  - ❌ المنتج "Ninja": سعر العرض غير صحيح (null)
+  ملاحظة: ده صحيح فقط لو المحل مقفول وقت العد
+  (مفيش بيع بين بدء العد ونهايته - وده الواقع لـ CAFELAX)
+  
+  من v381:
+  - Smart Delta (الـ approach السابق - استبدلناه)
+  - Failed uploads report (لسه موجود)
+  - Live progress bar (لسه موجود)
   ═══════════════════════════════════════════════════════════════════
 -->
 <html lang="ar" dir="rtl">
@@ -1468,6 +1475,8 @@ tr:hover td{background:#fafbff}
       <div class="card-body" style="padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input id="manual-orders-search" placeholder="ابحث (كود/عميل/تليفون)..." oninput="loadManualOrdersDebounced()" style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:Cairo,sans-serif;width:240px">
         <button class="btn btn-ghost btn-sm" onclick="loadManualOrders()">🔄 تحديث</button>
+        <!-- 🆕 v370: zarرار لـ backfill الطلبات القديمة في جدول orders عشان نقدر نطبعها -->
+        <button class="btn btn-ghost btn-sm" onclick="backfillManualOrdersToOrdersTable()" style="margin-right:auto;color:#16a34a" title="جهز الطلبات القديمة للطباعة">⚙️ جهز الطلبات للطباعة</button>
       </div>
     </div>
 
@@ -3046,6 +3055,7 @@ tr:hover td{background:#fafbff}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">🔍 الجرد</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="openFailedUploadsReport()" style="color:#dc2626;border-color:#dc2626" title="المنتجات اللي فشل رفعها لـ Shopify عبر كل الجلسات">⚠️ تقرير الرفع الفاشل</button>
       <button class="btn btn-ghost btn-sm" onclick="openStocktakers()" style="color:#16a34a;border-color:#16a34a">👷 موظفي الجرد</button>
       <button class="btn btn-primary btn-sm" onclick="openNewStocktake()">➕ بدء جرد جديد</button>
     </div>
@@ -12063,35 +12073,201 @@ async function bostaTrackOne(id){
 
 var activeCourierTab = null;
 
+// 🆕 v377: تنظيف is_bosta flag للطلبات المعيّنة لمناديب
+// السبب: طلبات اتـ flag كـ bosta بس بعدين اتعيّنت لمندوب → الـ is_bosta فضل true
+// النتيجة: الـ frontend بـ يخفيها من tab المندوب (تظهر في tab بوسطة)
+async function cleanupBostaFlag(){
+  if(!confirm('🧹 ده هـ يفحص الـ DB ويعمل تنظيف للطلبات اللي:\n\n' +
+              '• is_bosta = true\n' +
+              '• ومعيّنة لمندوب فعلي (courier_id موجود)\n\n' +
+              'النتيجة: الطلبات دي هتظهر في tab المندوب الصحيح بدل bosta.\n\n' +
+              'استمر؟')) return;
+  
+  toast('🔄 جاري التنظيف...');
+  try {
+    const r = await apiFetch('/api/orders/cleanup-bosta-flag', 'POST', {});
+    if(r?.success){
+      if(r.fixed === 0){
+        alert('✅ مفيش طلبات محتاجة تنظيف!');
+        return;
+      }
+      alert(`✅ تم إصلاح ${r.fixed} طلب\n\n` +
+            `${r.orderIds.slice(0,10).join('\n')}` +
+            (r.orderIds.length > 10 ? `\n... و ${r.orderIds.length - 10} طلب آخر` : '') +
+            `\n\nاضغط 🔄 تحديث عشان تشوف التغيير.`);
+      // refresh تلقائي
+      if(typeof loadOrders === 'function') await loadOrders();
+      toast('✅ تم - الطلبات بقت ظاهرة عند المناديب');
+    } else {
+      toast('❌ ' + (r?.error || 'فشل'), 'error');
+    }
+  } catch(e){
+    toast('❌ ' + e.message, 'error');
+  }
+}
+
+// 🆕 v375: تشخيص طلب مفقود — يبص في DB مباشرة ويعرض حالته
+async function diagnoseOrder(){
+  const id = prompt('🔍 اكتب رقم الطلب اللي مش ظاهر (مثلاً 143934 أو SH-143934):');
+  if(!id) return;
+  
+  const cleanId = id.trim().replace(/^SH-|^MN-/, '');
+  
+  toast('🔄 جاري الفحص...');
+  try {
+    const r = await apiFetch(`/api/orders/${encodeURIComponent(cleanId)}/diagnose`);
+    
+    if(!r.found){
+      alert(`❌ ${r.message || 'مش موجود'}\n\n${r.hint || ''}`);
+      return;
+    }
+    
+    const o = r.order;
+    const d = r.diagnosis;
+    const orderDate = new Date(o.created_at).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+    
+    // ابحث عن الـ courier name
+    const courierName = o.courier_id 
+      ? (couriers.find(c => String(c.id) === String(o.courier_id))?.name || `#${o.courier_id} (مش في القائمة)`)
+      : (o.is_bosta ? 'بوسطة' : '— مش معيّن');
+    
+    // 🆕 v376: مقارنة DB vs الـ frontend cache
+    const fullId = o.id;
+    const inFrontendCache = orders.find(x => x.id === fullId);
+    let cacheStatus = '';
+    if(!inFrontendCache){
+      cacheStatus = `\n⚠️ الطلب موجود في DB بس مش موجود في الـ frontend cache!\n   ← يبقى /api/orders ما رجّعش الطلب (مع إنه داخل الـ 60 يوم)\n   ← اضغط 🔄 تحديث وجرّب تاني`;
+    } else {
+      // الطلب موجود في الـ cache - شوف فين بالظبط
+      const fCourierId = inFrontendCache.courierId;
+      const fStatus = inFrontendCache.status;
+      const fIsBosta = inFrontendCache.isBosta;
+      
+      cacheStatus = `\n📂 في الـ frontend cache:\n` +
+        `  • courierId: ${fCourierId === null ? 'null' : fCourierId} ${fCourierId === 'bosta' ? '(bosta!)' : ''}\n` +
+        `  • status: "${fStatus}"\n` +
+        `  • isBosta: ${fIsBosta}\n`;
+      
+      // مقارنة
+      if(String(fCourierId) !== String(o.courier_id) && fCourierId !== 'bosta'){
+        cacheStatus += `\n❌ TYPE MISMATCH! DB courier_id="${o.courier_id}" (${typeof o.courier_id}) لكن frontend="${fCourierId}" (${typeof fCourierId})`;
+      } else if(fCourierId === 'bosta' && o.is_bosta){
+        cacheStatus += `\n⚠️ الطلب marked كـ bosta في الـ frontend (is_bosta=true في DB)`;
+        cacheStatus += `\n💡 شوفه في tab "بوسطة" أو في صفحة "مخزن العبور"`;
+      } else if(fStatus !== o.status){
+        cacheStatus += `\n❌ STATUS MISMATCH! DB="${o.status}" frontend="${fStatus}"`;
+      } else {
+        // كل حاجة matching - يبقى موجود لكن مش ظاهر في tab معين
+        cacheStatus += `\n✅ كل البيانات matching بين DB والـ frontend!\n`;
+        
+        if(fStatus === 'جاري التوصيل'){
+          cacheStatus += `💡 المفروض يظهر في tab "📦 نشط" للمندوب ${courierName}`;
+        } else if(fStatus === 'تحت التسوية'){
+          cacheStatus += `💡 شوفه في tab "⏳ تحت التسوية" للمندوب`;
+        } else if(fStatus === 'مكتمل'){
+          cacheStatus += `💡 شوفه في tab "✅ مكتمل" للمندوب`;
+        } else if(fStatus === 'مسوّى'){
+          cacheStatus += `💡 الطلب مسوّى — مش بـ يظهر في الـ tabs العادية. شوف صفحة التسويات.`;
+        } else {
+          cacheStatus += `💡 status="${fStatus}" — مش في أي tab نموذجي. ممكن يكون في الـ tab "الكل".`;
+        }
+      }
+    }
+    
+    const msg = 
+      `🔍 تشخيص الطلب ${o.id}\n` +
+      `${'─'.repeat(40)}\n\n` +
+      `📦 العميل: ${o.name || '—'}\n` +
+      `💰 المبلغ: ${o.total} ج\n` +
+      `📅 من ${r.daysAgo} يوم (${orderDate})\n\n` +
+      `🗄️  في DB:\n` +
+      `  • courier_id: ${o.courier_id || 'null'} ${o.is_bosta ? '+ is_bosta=true' : ''}\n` +
+      `  • status: "${o.status}"\n` +
+      `  • المندوب: ${courierName}\n` +
+      `  • المصدر: ${o.source_name || o.src || '—'}\n` +
+      (o.merged_into ? `  • مدموج في: ${o.merged_into}\n` : '') +
+      (o.settled_at ? `  • مسوّى في: ${new Date(o.settled_at).toLocaleString('ar-EG')}\n` : '') +
+      cacheStatus;
+    
+    alert(msg);
+    console.log('🔍 Order diagnosis:', { db: o, frontend: inFrontendCache, diagnosis: d });
+  } catch(e){
+    toast('❌ ' + e.message, 'error');
+  }
+}
+
 function renderCourierOrdersPage(){
   const tabs = $('courier-tabs');
   const content = $('courier-orders-content');
-  if(!couriers.length){
-    content.innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">لا يوجد مناديب مضافين</div>';
+  
+  // 🆕 v374: اشمل أي user عنده طلبات حتى لو مش في الـ couriers list
+  // (مثلاً: كاشير/مدير محل عمل توصيل بنفسه)
+  const courierIdsWithOrders = new Set();
+  orders.forEach(o => {
+    if(o.courierId && o.courierId !== 'bosta'){
+      courierIdsWithOrders.add(String(o.courierId));
+    }
+  });
+  
+  // ابني list موسعة: الـ couriers الأصليين + أي user عنده طلبات
+  const knownCourierIds = new Set(couriers.map(c => String(c.id)));
+  const orphanCourierIds = [...courierIdsWithOrders].filter(id => !knownCourierIds.has(id));
+  
+  // ابني displayCouriers
+  const displayCouriers = [...couriers];
+  for(const orphanId of orphanCourierIds){
+    displayCouriers.push({
+      id: parseInt(orphanId),
+      name: `👤 #${orphanId}`,  // user مجهول لكن عنده طلبات
+      phone: '—',
+      role: 'unknown',
+      _isOrphan: true
+    });
+  }
+  
+  if(!displayCouriers.length){
+    content.innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">لا يوجد مناديب أو مستخدمين عندهم طلبات</div>';
     return;
   }
 
-  if(!activeCourierTab || !couriers.find(c=>c.id==activeCourierTab)){
-    activeCourierTab = couriers[0].id;
+  if(!activeCourierTab || !displayCouriers.find(c=>c.id==activeCourierTab)){
+    activeCourierTab = displayCouriers[0].id;
   }
 
-  tabs.innerHTML = couriers.map((c,i)=>{
+  tabs.innerHTML = displayCouriers.map((c,i)=>{
     const active = oByC(c.id,'جاري التوصيل').length;
     const isActive = c.id == activeCourierTab;
+    // 🆕 v374: اخفي tab المندوب الأصلي لو مفيش عنده طلبات أصلاً (clean up)
+    // لكن اعرض الـ orphans دايماً لو عندهم طلبات
+    const hasAnyOrders = orders.some(o => String(o.courierId) === String(c.id));
+    if(!hasAnyOrders && !c._isOrphan) return ''; // لا تعرض tabs فارغة للمناديب
+    
+    // role badge
+    let roleBadge = '';
+    if(c._isOrphan){
+      roleBadge = '<span style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:8px;margin-right:4px;font-size:9px">⚠️ user</span>';
+    } else if(c.role === 'cashier'){
+      roleBadge = '<span style="background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:8px;margin-right:4px;font-size:9px">كاشير</span>';
+    } else if(c.role === 'store_manager'){
+      roleBadge = '<span style="background:#e0e7ff;color:#3730a3;padding:1px 5px;border-radius:8px;margin-right:4px;font-size:9px">مدير</span>';
+    } else if(c.role === 'shop'){
+      roleBadge = '<span style="background:#f3e8ff;color:#6b21a8;padding:1px 5px;border-radius:8px;margin-right:4px;font-size:9px">محل</span>';
+    }
+    
     return `<button onclick="activeCourierTab=${c.id};renderCourierOrdersPage()"
       style="padding:8px 16px;border-radius:8px;border:1.5px solid ${isActive?'var(--accent)':'var(--border)'};
       background:${isActive?'var(--accent)':'var(--card)'};color:${isActive?'#fff':'var(--text)'};
       font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer">
-      ${c.name}
+      ${c.name} ${roleBadge}
       ${active?`<span style="background:${isActive?'rgba(255,255,255,.3)':'var(--warn-light)'};color:${isActive?'#fff':'var(--warn)'};padding:1px 7px;border-radius:10px;margin-right:4px;font-size:11px">${active}</span>`:''}
     </button>`;
   }).join('');
 
-  const c = couriers.find(x=>x.id==activeCourierTab);
+  const c = displayCouriers.find(x=>x.id==activeCourierTab);
   if(!c){ content.innerHTML=''; return; }
 
-  const cOrders = orders.filter(o=>o.courierId==c.id&&o.status!=='ملغي');
-  const cancelled = orders.filter(o=>o.courierId==c.id&&o.status==='ملغي');
+  const cOrders = orders.filter(o=>String(o.courierId)==String(c.id)&&o.status!=='ملغي');
+  const cancelled = orders.filter(o=>String(o.courierId)==String(c.id)&&o.status==='ملغي');
   const active = cOrders.filter(o=>o.status==='جاري التوصيل');
   const underSettle = cOrders.filter(o=>o.status==='تحت التسوية');
   const done = cOrders.filter(o=>o.status==='مكتمل');
@@ -12107,6 +12283,10 @@ function renderCourierOrdersPage(){
           <button class="chip" id="co-tab-done-${c.id}" onclick="coFilter('done',${c.id})">✅ مكتمل (${done.length})</button>
           <button class="chip" id="co-tab-cancelled-${c.id}" onclick="coFilter('cancelled',${c.id})" style="${cancelled.length?'color:var(--danger);border-color:var(--danger)':''}">❌ ملغي (${cancelled.length})</button>
           <span style="font-size:11px;color:var(--muted);margin-right:auto">📱 ${c.phone}</span>
+          <!-- 🆕 v375: زرار تشخيص طلب مفقود -->
+          <button class="btn btn-ghost btn-xs" onclick="diagnoseOrder()" title="تشخيص طلب مش ظاهر" style="color:#f59e0b;border-color:#f59e0b">🔍 تشخيص طلب</button>
+          <!-- 🆕 v377: زرار تنظيف is_bosta flag للطلبات المعيّنة لمناديب -->
+          <button class="btn btn-ghost btn-xs" onclick="cleanupBostaFlag()" title="إصلاح طلبات is_bosta=true ومعيّنة لمندوب" style="color:#a855f7;border-color:#a855f7">🧹 تنظيف bosta</button>
         </div>
       </div>
       <!-- Bulk Actions Bar -->
@@ -15650,6 +15830,7 @@ function renderManualOrdersList(){
         <td style="text-align:center;font-weight:700">${parseFloat(o.total||0).toFixed(0)} ج</td>
         <td style="font-size:11px;color:var(--muted)">${created}</td>
         <td>
+          <button class="btn btn-ghost btn-xs" onclick="printManualOrderInvoiceDirect('SH-${escapeHtml(o.shopify_order_id)}')" title="طباعة فاتورة" style="color:#16a34a">🖨️</button>
           <button class="btn btn-ghost btn-xs" onclick="window.open('https://cafelax.myshopify.com/admin/orders/${escapeHtml(o.shopify_order_id)}','_blank')" title="افتح في Shopify">🛍️</button>
         </td>
       </tr>
@@ -15677,6 +15858,75 @@ function renderManualOrdersList(){
     </div>
   `;
 }
+
+// 🆕 v371: طباعة الفاتورة مباشرة من الـ backend (بدون الحاجة لـ orders cache)
+// بـ يفتح الـ /api/orders/:id/invoice في نافذة جديدة + auto-print
+async function printManualOrderInvoiceDirect(orderId){
+  if(!API_URL){ toast('❌ API غير متاح'); return; }
+  if(!window._adminToken){ toast('❌ لازم تسجل دخول أولاً'); return; }
+  
+  // 🆕 v283: بـ نبعت الـ token كـ query string عشان الـ adminAuth يقبله
+  // (window.open ما بـ يقدر يبعت Authorization header)
+  const invoiceUrl = API_URL.replace(/\/$/,'') 
+    + '/api/orders/' + encodeURIComponent(orderId) + '/invoice'
+    + '?token=' + encodeURIComponent(window._adminToken);
+  
+  // افتح الـ invoice في نافذة جديدة
+  const w = window.open(invoiceUrl, '_blank', 'width=900,height=1000');
+  if(!w){
+    toast('❌ المتصفح منع فتح النافذة - فعّل popups');
+    return;
+  }
+  
+  // انتظر تحميل الـ HTML ثم اطبع
+  let printed = false;
+  const tryPrint = () => {
+    if(printed) return;
+    printed = true;
+    try { w.focus(); w.print(); } catch(e){}
+  };
+  
+  // listener للـ signal من النافذة (لو الـ invoice page بـ يبعت "invoice-ready")
+  const onMsg = (ev) => {
+    if(ev.source !== w) return;
+    if(ev.data && ev.data.type === 'invoice-ready'){
+      window.removeEventListener('message', onMsg);
+      tryPrint();
+    }
+  };
+  window.addEventListener('message', onMsg);
+  
+  // safety timeout - 3 ثوان
+  setTimeout(() => {
+    window.removeEventListener('message', onMsg);
+    tryPrint();
+  }, 3000);
+}
+
+// 🆕 v370: backfill الطلبات اليدوية القديمة في جدول orders عشان نقدر نطبعها
+async function backfillManualOrdersToOrdersTable(){
+  if(!confirm('🔧 جهز كل الطلبات اليدوية للطباعة؟\n\nده هـ يـ refresh الـ line items من Shopify (يجيب الأسماء والصور) للطلبات اليدوية كلها — جديدة وقديمة — وينظف الـ cached invoices عشان تـ regenerate بالـ logo الجديد + بدون رقم التليفون.\n\nخد دقيقة لو فيه طلبات كتير.')) return;
+  
+  toast('🔄 جاري التحضير ومن Shopify...');
+  try {
+    // v372: force=true عشان يعيد enrich كل الطلبات
+    const r = await apiFetch('/api/manual-orders/backfill-orders-table', 'POST', { force: true });
+    if(r?.success){
+      const msg = `✅ تم تحديث ${(r.inserted||0) + (r.updated||0)} طلب\n` +
+                  `(${r.inserted||0} جديد، ${r.updated||0} محدث)\n` +
+                  `${r.total_manual_orders} طلب يدوي إجمالي\n` +
+                  (r.failed > 0 ? `❌ فشل: ${r.failed}` : '');
+      alert(msg);
+      toast('✅ جاهز - دلوقتي اضغط 🖨️ على أي طلب');
+      if(typeof loadOrders === 'function') await loadOrders();
+    } else {
+      toast('❌ ' + (r?.error || 'فشل'));
+    }
+  } catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
 
 // ============================================================
 // 🆕 v295: TASKS SYSTEM
@@ -17186,9 +17436,28 @@ function openAddChk(){
   if($('chk-payee'))$('chk-payee').style.display='block';
   openM('m-chk');
 }
-function openEditChk(id){
+async function openEditChk(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
-  editingChkId=id;chkImgData=c.img||'';
+  editingChkId=id;
+  
+  // 🆕 v291: لو الصورة lazy، حملها من الـ backend
+  if(c.hasImg && (c.img === '__lazy__' || !c.img)){
+    try {
+      const r = await apiFetch(`/api/checks/${encodeURIComponent(id)}/img`);
+      if(r?.img){
+        c.img = r.img;
+        chkImgData = r.img;
+      } else {
+        chkImgData = '';
+      }
+    } catch(e){
+      console.warn('check img load failed:', e);
+      chkImgData = '';
+    }
+  } else {
+    chkImgData = c.img || '';
+  }
+  
   document.getElementById('chk-modal-title').textContent='تعديل الشيك';
 
   // ملء الدفتر أولاً عشان يتملى chk-num-sel
@@ -17230,7 +17499,7 @@ function openEditChk(id){
   $('chk-invoice').value=c.invoice||'';
   $('chk-note').value=c.note||'';
 
-  if(c.img){$('chk-img-show').src=c.img;$('chk-img-show').style.display='block';$('chk-img-placeholder').style.display='none';}
+  if(chkImgData){$('chk-img-show').src=chkImgData;$('chk-img-show').style.display='block';$('chk-img-placeholder').style.display='none';}
   else{$('chk-img-show').style.display='none';$('chk-img-placeholder').style.display='block';}
   openM('m-chk');
 }
@@ -17245,13 +17514,25 @@ function saveChk(){
   if(!num){toast('❗ اختر رقم الشيك');return;}
   if(!payee){toast('❗ اختر المورد من القائمة');return;}
   if(!amount||!date){toast('❗ يرجى ملء الحقول المطلوبة');return;}
+  // 🆕 v291: ما نسمحش بـ __lazy__ placeholder يـ save كصورة
+  const imgToSave = (chkImgData === '__lazy__') ? '' : (chkImgData || '');
   const data={id:editingChkId||(Date.now()+'_'+Math.random().toString(36).slice(2,5)),
     num,payee,amount,date,bookId:$('chk-book-sel').value||'',
     invoice:$('chk-invoice').value.trim(),note:$('chk-note').value.trim(),
-    img:chkImgData||'',status:editingChkId?(chkList.find(x=>x.id===editingChkId)?.status||'pending'):'pending',
+    img:imgToSave,status:editingChkId?(chkList.find(x=>x.id===editingChkId)?.status||'pending'):'pending',
     createdAt:editingChkId?(chkList.find(x=>x.id===editingChkId)?.createdAt||new Date().toISOString()):new Date().toISOString()};
-  if(editingChkId){const idx=chkList.findIndex(x=>x.id===editingChkId);if(idx>=0)chkList[idx]=data;}
-  else chkList.push(data);
+  
+  // 🆕 v291: لو editing وفيه صورة original في DB لكن ما اتحملش (chkImgData فاضي)
+  // ما نبعتش img فاضي عشان ما نمسحش الصورة الأصلية
+  const original = editingChkId ? chkList.find(x=>x.id===editingChkId) : null;
+  if(editingChkId && original && original.hasImg && !imgToSave){
+    delete data.img; // ما نبعتش img → الـ backend يحتفظ بالأصلية
+  }
+  
+  if(editingChkId){const idx=chkList.findIndex(x=>x.id===editingChkId);if(idx>=0){
+    chkList[idx]={...chkList[idx], ...data}; // merge عشان hasImg ما يتحذفش
+  }}
+  else chkList.push({...data, hasImg: !!imgToSave});
   saveChks(true);if(API_URL)apiFetch('/api/checks','POST',data).catch(()=>{});
   closeM('m-chk');chkRenderActive();toast('✅ تم حفظ الشيك');
 }
@@ -17260,10 +17541,14 @@ async function chkMarkDone(id){
   c.status='done';c.doneAt=new Date().toISOString();
   saveChks(true);
   chkRenderActive();
+  // 🆕 v291: ما نبعتش "__lazy__" placeholder كـ img — هـ يدمر الصورة الأصلية
+  // إعمل copy ونشيل الـ placeholder
+  const payload = { ...c };
+  if(payload.img === '__lazy__') delete payload.img;
   // 🔧 v298: await + غير في الـ queue لو فشل
   if(API_URL){
     try {
-      const r = await apiFetch('/api/checks','POST',c);
+      const r = await apiFetch('/api/checks','POST',payload);
       if(r){
         toast('✅ تم تحديد الشيك كمصروف ومحفوظ على السيرفر');
       } else {
@@ -17273,14 +17558,14 @@ async function chkMarkDone(id){
         if(typeof addToOfflineQueue==='function'){
           // ما نضيفهاش لو موجودة بالفعل
           const exists = _offlineQueue?.some(it => it.path==='/api/checks' && it.body?.id===c.id);
-          if(!exists) addToOfflineQueue('/api/checks','POST',c);
+          if(!exists) addToOfflineQueue('/api/checks','POST',payload);
         }
       }
     } catch(e) {
       toast('⚠️ ' + (e.message || 'فشل الحفظ على السيرفر - محفوظ محلياً'));
       if(typeof addToOfflineQueue==='function'){
         const exists = _offlineQueue?.some(it => it.path==='/api/checks' && it.body?.id===c.id);
-        if(!exists) addToOfflineQueue('/api/checks','POST',c);
+        if(!exists) addToOfflineQueue('/api/checks','POST',payload);
       }
     }
   } else {
@@ -17417,7 +17702,34 @@ function previewChkImg(input){
   reader.readAsDataURL(input.files[0]);
 }
 function clearChkImg(){chkImgData='';$('chk-img-show').style.display='none';$('chk-img-placeholder').style.display='block';$('chk-img-input').value='';}
-function viewChkImg(id){const c=chkList.find(x=>x.id===id);if(!c||!c.img)return;$('chk-img-full').src=c.img;openM('m-chk-img');}
+// 🆕 v291: lazy load صورة الشيك من الـ backend (مش بـ تجي مع الـ list)
+async function viewChkImg(id){
+  const c = chkList.find(x=>x.id===id);
+  if(!c) return;
+  if(!c.hasImg && !c.img) return;
+  
+  // لو الصورة مش محملة (img='__lazy__') حملها من الـ backend
+  if(c.img === '__lazy__' || !c.img){
+    toast('🔄 جاري تحميل الصورة...');
+    try {
+      const r = await apiFetch(`/api/checks/${encodeURIComponent(id)}/img`);
+      if(r?.img){
+        c.img = r.img; // cache في الـ list
+        $('chk-img-full').src = r.img;
+        openM('m-chk-img');
+      } else {
+        toast('❌ مفيش صورة', 'error');
+      }
+    } catch(e){
+      toast('❌ ' + e.message, 'error');
+    }
+    return;
+  }
+  
+  // الصورة موجودة بالفعل
+  $('chk-img-full').src = c.img;
+  openM('m-chk-img');
+}
 // 🆕 v278: استعادة دفتر شيكات
 async function checkOrphanedCheckBooks(){
   // بنفحص في الـ background ونعرض زرار الاستعادة لو فيه orphans
@@ -20528,6 +20840,136 @@ async function _retryMissingPrints(orderIds){
   }
 }
 
+// 🆕 v379: prefetch كل صور الفواتير قبل الطباعة + حولها لـ blob URLs
+// المشكلة: الـ batches الكبيرة (118+ طلب = 200+ صورة) → Shopify CDN rate-limit
+// الحل: نحمّل الصور بـ concurrency محدودة (10 في وقت واحد)، نحطها في cache
+//       نحول الـ image src في الـ HTML pages لـ blob URLs محلية
+// النتيجة: نافذة الطباعة ما بـ تحتاج شبكة، الصور دايماً تظهر
+async function _prefetchBatchImages(allPagesArr){
+  // اجمع كل الـ image URLs الفريدة من كل الصفحات
+  const allUrls = new Set();
+  const urlRegex = /<img\s[^>]*src="([^"]+)"/gi;
+  for(const page of allPagesArr){
+    if(typeof page !== 'string') continue;
+    let m;
+    while((m = urlRegex.exec(page)) !== null){
+      const url = m[1];
+      // ما نـ prefetch ش data: URLs (already inline) أو blob: URLs
+      if(url.startsWith('http://') || url.startsWith('https://') || url.startsWith('//')){
+        allUrls.add(url);
+      }
+    }
+  }
+  
+  const total = allUrls.size;
+  if(total === 0){
+    console.log('[v379] no remote images to prefetch');
+    return;
+  }
+  
+  console.log(`[v379] prefetching ${total} unique images`);
+  
+  // overlay للـ progress
+  const ov = document.createElement('div');
+  ov.id = 'img-prefetch-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = `
+    <div style="background:var(--bg);border-radius:14px;padding:30px;max-width:480px;width:100%;text-align:center;border:1px solid var(--border)">
+      <div style="font-size:48px;margin-bottom:12px">🖼️</div>
+      <div style="font-weight:800;font-size:16px;margin-bottom:6px">جاري تحميل الصور...</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px">عشان الطباعة تطلع نظيفة بدون رموز فاضية</div>
+      <div style="background:var(--elev);border-radius:99px;height:20px;overflow:hidden;border:1px solid var(--border)">
+        <div id="img-prog-bar" style="height:100%;background:linear-gradient(90deg,var(--accent),var(--gold));width:0%;transition:width .2s"></div>
+      </div>
+      <div id="img-prog-text" style="margin-top:10px;font-size:13px;font-weight:700">0 / ${total}</div>
+      <div id="img-prog-detail" style="margin-top:4px;font-size:10px;color:var(--muted)"></div>
+    </div>
+  `;
+  document.body.appendChild(ov);
+  
+  const urlToBlob = {}; // url -> blob URL
+  let done = 0;
+  let failed = 0;
+  const startTs = Date.now();
+  
+  const updateProgress = () => {
+    const pct = Math.round((done / total) * 100);
+    const bar = document.getElementById('img-prog-bar');
+    const txt = document.getElementById('img-prog-text');
+    const dtl = document.getElementById('img-prog-detail');
+    if(bar) bar.style.width = pct + '%';
+    if(txt) txt.textContent = `${done} / ${total} (${pct}%)`;
+    if(dtl) dtl.textContent = failed > 0 ? `${failed} فشل` : '';
+  };
+  
+  // helper - تحميل صورة واحدة بـ retry
+  const fetchOne = async (url, retries = 2) => {
+    for(let attempt = 0; attempt <= retries; attempt++){
+      try {
+        const resp = await fetch(url, { mode: 'cors', cache: 'force-cache' });
+        if(!resp.ok) throw new Error('HTTP ' + resp.status);
+        const blob = await resp.blob();
+        // ما نحفظ ش حاجة أكبر من 2MB (احتياط)
+        if(blob.size > 2 * 1024 * 1024){
+          console.warn('[v379] image too large, skipping:', url, blob.size);
+          return null;
+        }
+        return URL.createObjectURL(blob);
+      } catch(e){
+        if(attempt === retries){
+          console.warn('[v379] failed after retries:', url, e.message);
+          return null;
+        }
+        // backoff قبل الـ retry
+        await new Promise(rs => setTimeout(rs, 200 * (attempt + 1)));
+      }
+    }
+    return null;
+  };
+  
+  // download بـ concurrency محدودة (10 في وقت واحد)
+  const urlsList = [...allUrls];
+  const CONCURRENCY = 10;
+  
+  for(let i = 0; i < urlsList.length; i += CONCURRENCY){
+    const chunk = urlsList.slice(i, i + CONCURRENCY);
+    await Promise.all(chunk.map(async (url) => {
+      const blobUrl = await fetchOne(url);
+      if(blobUrl){
+        urlToBlob[url] = blobUrl;
+      } else {
+        failed++;
+      }
+      done++;
+      updateProgress();
+    }));
+  }
+  
+  const took = ((Date.now() - startTs) / 1000).toFixed(1);
+  console.log(`[v379] prefetch done: ${done}/${total} in ${took}s (${failed} failed)`);
+  
+  // استبدل كل URLs بالـ blob URLs المحلية في الـ HTML pages
+  for(let i = 0; i < allPagesArr.length; i++){
+    if(typeof allPagesArr[i] !== 'string') continue;
+    let html = allPagesArr[i];
+    for(const [originalUrl, blobUrl] of Object.entries(urlToBlob)){
+      // escape regex special chars
+      const escaped = originalUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      html = html.replace(new RegExp(`src="${escaped}"`, 'g'), `src="${blobUrl}"`);
+    }
+    allPagesArr[i] = html;
+  }
+  
+  // اقفل الـ overlay
+  ov.remove();
+  
+  if(failed > 0){
+    toast(`⚠️ ${failed} صورة لم تحمّل — هتظهر فاضية`, 'warn');
+  } else {
+    toast(`✅ ${done} صورة جاهزة`, 'success');
+  }
+}
+
 async function printBatchInvoices(){
   // جيب كل الدفعات الموجودة
   const batches = {};
@@ -20951,6 +21393,11 @@ async function doBatchPrint(){
   }
 
   if(!allPages.length){ toast('❗ لا توجد صفحات للطباعة'); return; }
+
+  // 🆕 v379: prefetch كل الصور وحولها لـ blob URLs قبل فتح نافذة الطباعة
+  // ده بـ يحل مشكلة الصور اللي مش بـ تظهر في الـ batches الكبيرة
+  // (Shopify CDN بـ يرمي rate limits لو 200+ صورة بـ تتـ load في وقت واحد)
+  await _prefetchBatchImages(allPages);
 
   // ===== الخطوة 3: افتح نافذة الطباعة =====
   const w = window.open('','_blank','width=900,height=1000');
@@ -31567,6 +32014,18 @@ let _offersStatusFilter = 'all';
 let _offerEditingId = null;
 let _offerEditingProducts = []; // [{productId, variantId, productTitle, variantTitle, sku, originalPrice, offerPrice}]
 let _offerSearchDebounce = null;
+let _offerSearchResultsMap = {}; // 🆕 v367: variantId/productId → product data (للـ click handler)
+
+// 🆕 v367: helper - ضيف منتج للعرض من الـ search results map
+// pattern ده immune للأحرف الخاصة في أسماء المنتجات (apostrophes, quotes)
+function addOfferProductFromMap(itemKey){
+  const prod = _offerSearchResultsMap[itemKey];
+  if(!prod){
+    toast('❌ المنتج مش موجود في الـ cache', 'error');
+    return;
+  }
+  addProductToOffer(prod);
+}
 
 async function loadStoreOffers(){
   try {
@@ -31638,7 +32097,18 @@ function renderOffersList(){
     const startStr = o.start_at ? new Date(o.start_at).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : 'من فوراً';
     const endStr = o.end_at ? new Date(o.end_at).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' }) : 'دائم';
     
-    return `<div class="card" style="margin-bottom:10px;padding:14px">
+    // 🆕 v373: stats
+    const salesCount = parseInt(o.sales_count) || 0;
+    const unitsSold = parseInt(o.units_sold) || 0;
+    const revenue = parseFloat(o.revenue) || 0;
+    const totalDiscount = parseFloat(o.total_discount) || 0;
+    const lastSold = o.last_sold_at ? new Date(o.last_sold_at).toLocaleDateString('ar-EG', { dateStyle: 'short' }) : null;
+    const hasSales = salesCount > 0;
+    
+    return `<div class="card" style="margin-bottom:10px;padding:14px;cursor:pointer;transition:transform .15s,box-shadow .15s" 
+                onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,.1)'" 
+                onmouseout="this.style.boxShadow=''"
+                onclick="openOfferStatsModal(${o.id})">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
         <div style="flex:1;min-width:200px">
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap">
@@ -31650,7 +32120,7 @@ function renderOffersList(){
           <div style="font-size:11px;color:var(--muted);margin-top:2px">📦 ${o.product_count || 0} منتج</div>
           ${o.notes ? `<div style="font-size:11px;color:var(--muted);margin-top:4px;font-style:italic">📝 ${escapeHtml(o.notes)}</div>` : ''}
         </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <div style="display:flex;gap:6px;flex-wrap:wrap" onclick="event.stopPropagation()">
           <button class="btn btn-ghost btn-xs" onclick="toggleOfferActive(${o.id}, ${!o.active})" 
                   style="color:${o.active?'#f59e0b':'#22c55e'};border-color:${o.active?'#f59e0b':'#22c55e'}">
             ${o.active ? '⏸️ إيقاف' : '▶️ تشغيل'}
@@ -31660,6 +32130,27 @@ function renderOffersList(){
           <button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="deleteOffer(${o.id})">✕</button>
         </div>
       </div>
+      
+      <!-- 🆕 v373: Stats bar -->
+      <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        <div style="background:${hasSales?'#dcfce7':'#f8fafc'};border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:10px;color:#64748b;font-weight:700">🧾 البيعات</div>
+          <div style="font-size:18px;font-weight:900;color:${hasSales?'#16a34a':'#94a3b8'};font-family:'Roboto',sans-serif">${salesCount}</div>
+        </div>
+        <div style="background:${unitsSold>0?'#dbeafe':'#f8fafc'};border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:10px;color:#64748b;font-weight:700">📦 الوحدات</div>
+          <div style="font-size:18px;font-weight:900;color:${unitsSold>0?'#2563eb':'#94a3b8'};font-family:'Roboto',sans-serif">${unitsSold}</div>
+        </div>
+        <div style="background:${revenue>0?'#fef9c3':'#f8fafc'};border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:10px;color:#64748b;font-weight:700">💰 الإيراد</div>
+          <div style="font-size:14px;font-weight:900;color:${revenue>0?'#ca8a04':'#94a3b8'};font-family:'Roboto',sans-serif">${revenue.toLocaleString('en-US', {maximumFractionDigits:0})} ج</div>
+        </div>
+        <div style="background:${totalDiscount>0?'#fee2e2':'#f8fafc'};border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:10px;color:#64748b;font-weight:700">🏷️ الخصم</div>
+          <div style="font-size:14px;font-weight:900;color:${totalDiscount>0?'#dc2626':'#94a3b8'};font-family:'Roboto',sans-serif">${totalDiscount.toLocaleString('en-US', {maximumFractionDigits:0})} ج</div>
+        </div>
+      </div>
+      ${lastSold ? `<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:left">آخر بيعة: ${lastSold} · اضغط للتفاصيل ←</div>` : '<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:left;opacity:.5">لسه مفيش بيعات</div>'}
     </div>`;
   }).join('');
 }
@@ -31670,6 +32161,223 @@ async function toggleOfferActive(id, newActive){
     toast(newActive ? '✅ اتفعّل' : '⏸️ اتوقف', 'success');
     loadStoreOffers();
   } catch(e){ toast('❌ ' + e.message, 'error'); }
+}
+
+// 🆕 v373: Modal تفاصيل stats العرض
+async function openOfferStatsModal(offerId){
+  // اعمل modal placeholder
+  let modal = document.getElementById('offer-stats-modal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'offer-stats-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;padding:20px;overflow-y:auto;display:flex;align-items:flex-start;justify-content:center';
+    document.body.appendChild(modal);
+  }
+  
+  modal.innerHTML = `<div style="background:var(--bg);max-width:900px;width:100%;margin:20px auto;border-radius:14px;padding:24px;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="text-align:center;padding:40px">
+      <div style="font-size:32px;margin-bottom:8px">⏳</div>
+      <div style="color:var(--muted)">جاري تحميل التفاصيل...</div>
+    </div>
+  </div>`;
+  modal.onclick = (e) => { if(e.target === modal) modal.remove(); };
+  
+  try {
+    const data = await apiFetch(`/api/pos/offers/${offerId}/stats`);
+    _renderOfferStatsModal(modal, data);
+  } catch(e){
+    modal.querySelector('div').innerHTML = `
+      <div style="text-align:center;padding:40px">
+        <div style="font-size:32px;color:var(--danger);margin-bottom:8px">❌</div>
+        <div>فشل التحميل: ${escapeHtml(e.message)}</div>
+        <button class="btn btn-primary" style="margin-top:14px" onclick="document.getElementById('offer-stats-modal').remove()">إغلاق</button>
+      </div>
+    `;
+  }
+}
+
+function _renderOfferStatsModal(modal, data){
+  const o = data.offer;
+  const t = data.totals || {};
+  const products = data.byProduct || [];
+  const recent = data.recentSales || [];
+  const byDay = data.byDay || [];
+  
+  const salesCount = parseInt(t.sales_count) || 0;
+  const unitsSold = parseInt(t.units_sold) || 0;
+  const revenue = parseFloat(t.revenue) || 0;
+  const totalDiscount = parseFloat(t.total_discount) || 0;
+  const grossRevenue = parseFloat(t.gross_revenue) || 0;
+  const avgPerSale = salesCount > 0 ? (revenue / salesCount) : 0;
+  const discountPct = grossRevenue > 0 ? ((totalDiscount / grossRevenue) * 100) : 0;
+  
+  const firstSold = t.first_sold_at ? new Date(t.first_sold_at).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+  const lastSold = t.last_sold_at ? new Date(t.last_sold_at).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+  
+  // by-day chart (simple bars)
+  const maxDayRevenue = Math.max(1, ...byDay.map(d => parseFloat(d.revenue) || 0));
+  const chartHtml = byDay.length > 0 ? `
+    <div style="margin-top:14px">
+      <div style="font-weight:800;font-size:13px;color:var(--gold);margin-bottom:8px">📈 آخر 30 يوم</div>
+      <div style="display:flex;gap:3px;align-items:flex-end;height:80px;padding:4px;background:var(--elev);border-radius:8px;overflow-x:auto">
+        ${byDay.slice().reverse().map(d => {
+          const rev = parseFloat(d.revenue) || 0;
+          const height = Math.max(4, (rev / maxDayRevenue) * 70);
+          const dayLabel = new Date(d.day).toLocaleDateString('ar-EG', { day: '2-digit', month: '2-digit' });
+          return `<div style="flex:1;min-width:18px;display:flex;flex-direction:column;align-items:center;gap:2px" title="${dayLabel}: ${rev.toFixed(0)} ج · ${d.units_sold} وحدة">
+            <div style="width:100%;background:linear-gradient(180deg,var(--accent),var(--gold));height:${height}px;border-radius:3px 3px 0 0;min-width:8px"></div>
+            <div style="font-size:8px;color:var(--muted);transform:rotate(-45deg);transform-origin:center;white-space:nowrap">${dayLabel}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  ` : '';
+  
+  // products breakdown
+  const productsHtml = products.length > 0 ? products.map(p => {
+    const pRev = parseFloat(p.revenue) || 0;
+    const pDisc = parseFloat(p.discount_given) || 0;
+    const pUnits = parseInt(p.units_sold) || 0;
+    const avgOffer = parseFloat(p.avg_offer_price) || 0;
+    const avgOrig = parseFloat(p.avg_original_price) || 0;
+    return `<tr>
+      <td style="padding:8px;font-size:12px">
+        <div style="font-weight:700">${escapeHtml(p.product_title || '—')}</div>
+        ${p.variant_title && p.variant_title !== 'Default Title' ? `<div style="font-size:10px;color:var(--muted)">${escapeHtml(p.variant_title)}</div>` : ''}
+        ${p.sku ? `<div style="font-size:9px;color:var(--muted);font-family:monospace">${escapeHtml(p.sku)}</div>` : ''}
+      </td>
+      <td style="padding:8px;text-align:center;font-weight:800;font-family:Roboto,sans-serif">${pUnits}</td>
+      <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif">${p.sales_count}</td>
+      <td style="padding:8px;text-align:center;font-size:11px;font-family:Roboto,sans-serif">
+        ${avgOrig > 0 ? `<span style="color:var(--muted);text-decoration:line-through">${avgOrig.toFixed(0)}</span><br>` : ''}
+        <strong style="color:#16a34a">${avgOffer.toFixed(0)} ج</strong>
+      </td>
+      <td style="padding:8px;text-align:left;font-weight:800;font-family:Roboto,sans-serif;color:#ca8a04">${pRev.toLocaleString('en-US', {maximumFractionDigits:0})} ج</td>
+      <td style="padding:8px;text-align:left;font-family:Roboto,sans-serif;color:#dc2626">${pDisc.toLocaleString('en-US', {maximumFractionDigits:0})} ج</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--muted)">لسه مفيش بيعات</td></tr>';
+  
+  // recent sales
+  const recentHtml = recent.length > 0 ? recent.map(s => {
+    const dt = new Date(s.created_at).toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' });
+    const qty = parseInt(s.qty) || 0;
+    const unitPrice = parseFloat(s.unit_price) || 0;
+    const orig = parseFloat(s.original_price) || 0;
+    const lineDiscount = parseFloat(s.line_discount) || 0;
+    return `<tr>
+      <td style="padding:6px;font-size:11px;font-family:Roboto,sans-serif">${escapeHtml(s.sale_number || '')}</td>
+      <td style="padding:6px;font-size:11px">${dt}</td>
+      <td style="padding:6px;font-size:11px">${escapeHtml(s.cashier_name || '—')}</td>
+      <td style="padding:6px;font-size:11px">
+        <div style="font-weight:700">${escapeHtml(s.product_title || '')}</div>
+        ${s.variant_title && s.variant_title !== 'Default Title' ? `<div style="font-size:9px;color:var(--muted)">${escapeHtml(s.variant_title)}</div>` : ''}
+      </td>
+      <td style="padding:6px;text-align:center;font-family:Roboto,sans-serif;font-weight:700">${qty}</td>
+      <td style="padding:6px;text-align:left;font-family:Roboto,sans-serif;font-size:11px">
+        ${orig > 0 ? `<span style="color:var(--muted);text-decoration:line-through;font-size:9px">${orig.toFixed(0)}</span> ` : ''}
+        <strong>${unitPrice.toFixed(0)} ج</strong>
+      </td>
+      <td style="padding:6px;text-align:left;color:#dc2626;font-family:Roboto,sans-serif;font-size:11px">${lineDiscount > 0 ? '-' + lineDiscount.toFixed(0) + ' ج' : '—'}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--muted)">مفيش بيعات</td></tr>';
+  
+  modal.innerHTML = `<div style="background:var(--bg);max-width:1000px;width:100%;margin:0 auto;border-radius:14px;padding:24px;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;gap:12px;flex-wrap:wrap">
+      <div>
+        <h2 style="margin:0 0 6px;font-size:20px;color:var(--gold)">🏷️ ${escapeHtml(o.name)}</h2>
+        <div style="font-size:12px;color:var(--muted)">🏪 ${escapeHtml(o.store_name || '—')} · 📅 ${firstSold !== '—' ? `من ${firstSold} إلى ${lastSold}` : 'لسه مفيش بيعات'}</div>
+      </div>
+      <button onclick="document.getElementById('offer-stats-modal').remove()" 
+              style="background:transparent;border:none;color:var(--muted);font-size:28px;cursor:pointer;line-height:1;padding:0">×</button>
+    </div>
+    
+    <!-- Big stat cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:18px">
+      <div style="background:linear-gradient(135deg,#dcfce7,#bbf7d0);border-radius:10px;padding:14px;border:1px solid #86efac">
+        <div style="font-size:11px;color:#166534;font-weight:700">🧾 إجمالي البيعات</div>
+        <div style="font-size:28px;font-weight:900;color:#16a34a;font-family:Roboto,sans-serif">${salesCount}</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#dbeafe,#bfdbfe);border-radius:10px;padding:14px;border:1px solid #93c5fd">
+        <div style="font-size:11px;color:#1e40af;font-weight:700">📦 الوحدات المباعة</div>
+        <div style="font-size:28px;font-weight:900;color:#2563eb;font-family:Roboto,sans-serif">${unitsSold}</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#fef9c3,#fef08a);border-radius:10px;padding:14px;border:1px solid #fde047">
+        <div style="font-size:11px;color:#854d0e;font-weight:700">💰 الإيراد الفعلي</div>
+        <div style="font-size:22px;font-weight:900;color:#ca8a04;font-family:Roboto,sans-serif">${revenue.toLocaleString('en-US', {maximumFractionDigits:0})} ج</div>
+        ${salesCount > 0 ? `<div style="font-size:9px;color:#854d0e;margin-top:2px">متوسط البيعة: ${avgPerSale.toFixed(0)} ج</div>` : ''}
+      </div>
+      <div style="background:linear-gradient(135deg,#fee2e2,#fecaca);border-radius:10px;padding:14px;border:1px solid #fca5a5">
+        <div style="font-size:11px;color:#991b1b;font-weight:700">🏷️ الخصم الممنوح</div>
+        <div style="font-size:22px;font-weight:900;color:#dc2626;font-family:Roboto,sans-serif">${totalDiscount.toLocaleString('en-US', {maximumFractionDigits:0})} ج</div>
+        ${discountPct > 0 ? `<div style="font-size:9px;color:#991b1b;margin-top:2px">${discountPct.toFixed(1)}% من السعر الأصلي</div>` : ''}
+      </div>
+    </div>
+    
+    ${grossRevenue > 0 ? `
+      <div style="background:var(--elev);border-radius:10px;padding:12px;margin-bottom:14px;border:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">💡 الإيراد قبل العرض كان هـ يكون:</div>
+        <div style="font-size:18px;font-weight:900;font-family:Roboto,sans-serif">
+          <span style="color:var(--muted);text-decoration:line-through">${grossRevenue.toLocaleString('en-US', {maximumFractionDigits:0})} ج</span>
+          <span style="margin:0 8px">→</span>
+          <span style="color:#16a34a">${revenue.toLocaleString('en-US', {maximumFractionDigits:0})} ج</span>
+        </div>
+      </div>
+    ` : ''}
+    
+    ${chartHtml}
+    
+    <!-- By-product table -->
+    <div style="margin-top:18px">
+      <div style="font-weight:800;font-size:13px;color:var(--gold);margin-bottom:8px">📦 المنتجات (${products.length})</div>
+      <div style="background:var(--elev);border-radius:10px;overflow:hidden;border:1px solid var(--border)">
+        <div style="overflow-x:auto">
+          <table style="width:100%;font-size:12px;border-collapse:collapse;min-width:600px">
+            <thead style="background:rgba(0,0,0,.05)">
+              <tr>
+                <th style="padding:8px;text-align:right;font-weight:800">المنتج</th>
+                <th style="padding:8px;text-align:center;font-weight:800">وحدات</th>
+                <th style="padding:8px;text-align:center;font-weight:800">بيعات</th>
+                <th style="padding:8px;text-align:center;font-weight:800">السعر</th>
+                <th style="padding:8px;text-align:left;font-weight:800">الإيراد</th>
+                <th style="padding:8px;text-align:left;font-weight:800">الخصم</th>
+              </tr>
+            </thead>
+            <tbody>${productsHtml}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Recent sales -->
+    <div style="margin-top:18px">
+      <div style="font-weight:800;font-size:13px;color:var(--gold);margin-bottom:8px">🕐 آخر ${recent.length} بيعة</div>
+      <div style="background:var(--elev);border-radius:10px;overflow:hidden;border:1px solid var(--border)">
+        <div style="overflow-x:auto;max-height:300px;overflow-y:auto">
+          <table style="width:100%;font-size:11px;border-collapse:collapse;min-width:700px">
+            <thead style="background:rgba(0,0,0,.05);position:sticky;top:0">
+              <tr>
+                <th style="padding:8px;text-align:right">رقم البيعة</th>
+                <th style="padding:8px;text-align:right">التاريخ</th>
+                <th style="padding:8px;text-align:right">الكاشير</th>
+                <th style="padding:8px;text-align:right">المنتج</th>
+                <th style="padding:8px;text-align:center">كمية</th>
+                <th style="padding:8px;text-align:left">السعر</th>
+                <th style="padding:8px;text-align:left">الخصم</th>
+              </tr>
+            </thead>
+            <tbody>${recentHtml}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Footer -->
+    <div style="margin-top:18px;display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-ghost" onclick="document.getElementById('offer-stats-modal').remove()">إغلاق</button>
+    </div>
+  </div>`;
 }
 
 async function deleteOffer(id){
@@ -31766,6 +32474,10 @@ function onOfferProductSearch(query){
         return;
       }
       
+      // 🆕 v367: استخدم Map + data-id بدل inline JSON
+      // الـ pattern ده immune للأحرف الخاصة (apostrophes, quotes, إلخ)
+      _offerSearchResultsMap = {};
+      
       results.innerHTML = items.map(it => {
         // 🔧 v366: قبول camelCase + snake_case (الـ backend بـ يـ return camelCase)
         const variantId = it.variantId || it.shopify_variant_id || it.variant_id;
@@ -31777,14 +32489,15 @@ function onOfferProductSearch(query){
         
         const alreadyAdded = _offerEditingProducts.some(p => p.variantId === variantId);
         const price = parseFloat(it.price) || 0;
-        const itemJson = JSON.stringify({
+        
+        // 🆕 v367: احفظ في الـ map بدل ما نـ inline JSON
+        const itemKey = String(variantId || productId);
+        _offerSearchResultsMap[itemKey] = {
           productId, variantId,
-          productTitle,
-          variantTitle,
-          sku,
+          productTitle, variantTitle, sku,
           originalPrice: price,
           imageUrl: imgUrl
-        }).replace(/"/g, '&quot;');
+        };
         
         // 🆕 v365: عرض بـ صورة + اسم واضح
         return `<div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid var(--border);${alreadyAdded?'opacity:.5;background:#f3f4f6':''}">
@@ -31803,7 +32516,7 @@ function onOfferProductSearch(query){
           </div>
           ${alreadyAdded 
             ? '<span style="font-size:11px;color:#22c55e;font-weight:700;padding:6px 10px;background:#dcfce7;border-radius:6px;flex-shrink:0">✓ مُضاف</span>'
-            : `<button class="btn btn-success btn-sm" onclick='addProductToOffer(${itemJson})' style="flex-shrink:0">➕ ضيف</button>`}
+            : `<button class="btn btn-success btn-sm" data-pid="${escapeHtml(itemKey)}" onclick="addOfferProductFromMap(this.dataset.pid)" style="flex-shrink:0">➕ ضيف</button>`}
         </div>`;
       }).join('');
     } catch(e){
@@ -33564,61 +34277,501 @@ async function approveStocktake(){
   };
   const modeLabel = modeLabels[sessionMode] || sessionMode;
   
-  if(!confirm(`هتعتمد الجرد؟\n\n📊 ${counted.length} منتج معدود\n⚠️ ${differences} فرق\n${modeLabel}\n\n⚠️ هيتم تحديث Shopify بالكميات الجديدة - مش هينفع تتراجع!`)) return;
+  if(!confirm(`هتعتمد الجرد؟\n\n📊 ${counted.length} منتج معدود\n⚠️ ${differences} منتج بفرق عن الـ snapshot\n${modeLabel}\n\n📌 الرفع بـ Adjustment Delta:\n   - بـ يطبّق الفروقات (+/-) على Shopify\n   - لو الجرد لقى -2، Shopify -= 2 (مش بـ يـ SET على القيمة)\n   - يطبّق صح حتى لو في بيوع بين العد والاعتماد\n\n⚠️ مش هينفع تتراجع بعد الاعتماد!`)) return;
   
   await _doApproveStocktake(false);
 }
 
-// internal helper - يقوم بالـ approve call
+// internal helper - يقوم بالـ approve call عبر SSE stream
 // confirmZeroUncounted: لو true، الـ backend بـ يـ apply الـ "uncounted = 0" بدون سؤال
 async function _doApproveStocktake(confirmZeroUncounted){
-  toast('🔄 جاري التحديث...');
+  // 🔧 v295: مفيش mode/confirmMovement - الـ delta هو الـ default الوحيد
+  const sessionId = _stkCurrentSession.id;
+  const baseUrl = (API_URL || BACKEND_URL).replace(/\/$/, '');
+  
+  // فتح progress modal
+  _showStkProgressModal();
+  _updateStkProgress({ done: 0, total: 0, message: '⏳ جاري الاتصال...' });
+  
+  const opts = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    mode: 'cors',
+    body: JSON.stringify({ confirmZeroUncounted })
+  };
+  if(window._adminToken) opts.headers['Authorization'] = 'Bearer ' + window._adminToken;
+  
+  let lastEventData = null;
+  let buffer = '';
+  let runIdReceived = null;
   
   try {
-    // استخدم fetch مباشر عشان نقدر نقرا 409 response body
-    const baseUrl = API_URL || BACKEND_URL;
-    const opts = {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      mode: 'cors',
-      body: JSON.stringify({ confirmZeroUncounted })
-    };
-    if(window._adminToken){
-      opts.headers['Authorization'] = 'Bearer ' + window._adminToken;
-    }
+    const res = await fetch(baseUrl + '/api/stocktake/sessions/' + sessionId + '/approve-stream', opts);
     
-    const res = await fetch(baseUrl.replace(/\/$/,'') + '/api/stocktake/sessions/' + _stkCurrentSession.id + '/approve', opts);
-    const data = await res.json();
-    
-    // 🆕 v361: لو 409 = full mode + uncounted-with-stock، اعرض confirmation modal
-    if(res.status === 409 && data?.error === 'confirmation_required'){
-      _showZeroUncountedConfirmModal(data);
+    if(!res.ok || !res.body){
+      _closeStkProgressModal();
+      const errText = await res.text().catch(() => '');
+      toast('❌ ' + (errText || 'فشل الاتصال بـ stream'));
       return;
     }
     
-    if(!res.ok){
-      toast('❌ ' + (data?.error || 'فشل'));
-      return;
-    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
     
-    if(data?.success){
-      // 🆕 v363: اعرض التقرير المفصل (sessionId + run_id موجودين)
-      closeM('m-stk-detail');
-      await loadStocktakePage();
+    while(true){
+      const { done, value } = await reader.read();
+      if(done) break;
       
-      const hasFails = (data.summary?.failed_count || 0) > 0;
-      if(hasFails){
-        toast(`⚠️ ${data.summary.success_count} ✓ / ${data.summary.failed_count} ✗`);
-      } else {
-        toast(`✅ تم تحديث ${data.summary?.success_count || data.updated} منتج بنجاح`);
+      buffer += decoder.decode(value, { stream: true });
+      
+      // split events بـ \n\n
+      const events = buffer.split('\n\n');
+      buffer = events.pop(); // الجزء الأخير لو مش كامل
+      
+      for(const ev of events){
+        if(!ev.startsWith('data: ')) continue;
+        const jsonStr = ev.slice(6).trim();
+        if(!jsonStr) continue;
+        
+        let data;
+        try { data = JSON.parse(jsonStr); } catch(e){ continue; }
+        lastEventData = data;
+        
+        if(data.type === 'start'){
+          runIdReceived = data.run_id;
+          _updateStkProgress({ 
+            done: 0, total: data.total, 
+            message: data.total === 0 ? '✅ مفيش تغييرات' : `جاري رفع ${data.total} منتج...`
+          });
+        }
+        else if(data.type === 'progress'){
+          _updateStkProgress({
+            done: data.done, total: data.total,
+            item: data.item,
+            status: data.status,
+            error: data.error_message
+          });
+        }
+        else if(data.type === 'confirmation_required'){
+          // full mode + uncounted با stock
+          _closeStkProgressModal();
+          _showZeroUncountedConfirmModal({
+            error: 'confirmation_required',
+            mode: data.mode,
+            message: data.message,
+            total_count: data.total_count,
+            total_impact_qty: data.total_impact_qty,
+            total_impact_value: data.total_impact_value,
+            uncounted_with_stock: data.uncounted_with_stock
+          });
+          return;
+        }
+        else if(data.type === 'done'){
+          // أظهر النتيجة النهائية في الـ modal
+          _finalizeStkProgress(data, sessionId);
+          return;
+        }
+        else if(data.type === 'error'){
+          _closeStkProgressModal();
+          toast('❌ ' + (data.message || 'فشل'));
+          return;
+        }
       }
-      
-      // افتح التقرير المفصل تلقائياً
-      openApprovalReport(_stkCurrentSession?.id, data.approval_run_id);
-    } else {
-      toast('❌ ' + (data?.error || 'فشل'));
+    }
+    
+    // الـ stream اقفل بدون done event
+    if(lastEventData?.type !== 'done'){
+      _closeStkProgressModal();
+      toast('⚠️ الاتصال اتقطع');
     }
   } catch(e) {
+    _closeStkProgressModal();
+    toast('❌ ' + e.message);
+  }
+}
+
+
+// 🆕 v380: فتح/تحديث/قفل progress modal للجرد
+function _showStkProgressModal(){
+  document.getElementById('stk-progress-modal')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'stk-progress-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = `
+    <div style="background:var(--bg);border-radius:14px;padding:24px;max-width:560px;width:100%;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.4)">
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:36px;margin-bottom:6px">📦</div>
+        <div style="font-weight:900;font-size:16px" id="stk-prog-title">جاري رفع الجرد لـ Shopify</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px" id="stk-prog-sub">⏳ تحضير...</div>
+      </div>
+      
+      <!-- Progress bar -->
+      <div style="background:var(--elev);border-radius:99px;height:24px;overflow:hidden;border:1px solid var(--border);position:relative">
+        <div id="stk-prog-bar" style="height:100%;background:linear-gradient(90deg,#3b82f6,#22c55e);width:0%;transition:width .25s"></div>
+        <div id="stk-prog-pct" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5)">0%</div>
+      </div>
+      
+      <!-- Counters -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px">
+        <div style="background:#dcfce7;border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:10px;color:#166534;font-weight:700">✓ نجح</div>
+          <div style="font-size:20px;font-weight:900;color:#16a34a;font-family:Roboto,sans-serif" id="stk-prog-ok">0</div>
+        </div>
+        <div style="background:#fee2e2;border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:10px;color:#991b1b;font-weight:700">✗ فشل</div>
+          <div style="font-size:20px;font-weight:900;color:#dc2626;font-family:Roboto,sans-serif" id="stk-prog-fail">0</div>
+        </div>
+        <div style="background:#e0e7ff;border-radius:8px;padding:8px;text-align:center">
+          <div style="font-size:10px;color:#3730a3;font-weight:700">⏳ متبقي</div>
+          <div style="font-size:20px;font-weight:900;color:#4f46e5;font-family:Roboto,sans-serif" id="stk-prog-remain">0</div>
+        </div>
+      </div>
+      
+      <!-- Last item being processed -->
+      <div id="stk-prog-current" style="margin-top:12px;padding:8px 12px;background:var(--elev);border-radius:8px;font-size:11px;min-height:36px;display:flex;align-items:center;color:var(--muted)">
+        —
+      </div>
+      
+      <!-- Live errors list -->
+      <div id="stk-prog-errors" style="margin-top:10px;max-height:140px;overflow-y:auto;display:none">
+        <div style="font-size:11px;font-weight:800;color:#dc2626;margin-bottom:6px">⚠️ الفشل الحديث:</div>
+        <div id="stk-prog-errors-list" style="font-size:10px;line-height:1.6"></div>
+      </div>
+      
+      <!-- Action button (hidden during, shown on done) -->
+      <div id="stk-prog-actions" style="margin-top:14px;display:none;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      </div>
+    </div>
+  `;
+  document.body.appendChild(ov);
+  
+  // reset internal state
+  window._stkProgState = { ok: 0, fail: 0, total: 0, done: 0, errors: [] };
+}
+
+function _updateStkProgress(p){
+  const st = window._stkProgState || { ok: 0, fail: 0, total: 0, done: 0, errors: [] };
+  if(p.total != null) st.total = p.total;
+  if(p.done != null) st.done = p.done;
+  
+  if(p.status === 'success') st.ok++;
+  else if(p.status === 'failed'){
+    st.fail++;
+    if(p.item){
+      st.errors.unshift({
+        product_title: p.item.product_title,
+        sku: p.item.sku,
+        error: p.error || 'فشل'
+      });
+      if(st.errors.length > 30) st.errors.length = 30;
+    }
+  }
+  
+  const pct = st.total > 0 ? Math.round((st.done / st.total) * 100) : 0;
+  const bar = document.getElementById('stk-prog-bar');
+  const pctEl = document.getElementById('stk-prog-pct');
+  const okEl = document.getElementById('stk-prog-ok');
+  const failEl = document.getElementById('stk-prog-fail');
+  const remainEl = document.getElementById('stk-prog-remain');
+  const subEl = document.getElementById('stk-prog-sub');
+  const currentEl = document.getElementById('stk-prog-current');
+  
+  if(bar) bar.style.width = pct + '%';
+  if(pctEl) pctEl.textContent = pct + '%';
+  if(okEl) okEl.textContent = st.ok;
+  if(failEl) failEl.textContent = st.fail;
+  if(remainEl) remainEl.textContent = Math.max(0, st.total - st.done);
+  
+  if(subEl){
+    subEl.textContent = p.message || `${st.done} / ${st.total} منتج`;
+  }
+  
+  if(p.item && currentEl){
+    const status = p.status === 'success' ? '✓' : p.status === 'failed' ? '✗' : '⏳';
+    const color = p.status === 'success' ? '#16a34a' : p.status === 'failed' ? '#dc2626' : 'var(--muted)';
+    currentEl.innerHTML = `<span style="color:${color};font-weight:900;margin-left:6px">${status}</span> ${(p.item.product_title || '').slice(0,60)}${p.item.variant_title && p.item.variant_title !== 'Default Title' ? ` · ${p.item.variant_title}` : ''} <span style="color:var(--muted);font-size:10px;margin-right:8px">(${p.item.system_qty}→${p.item.counted_qty})</span>`;
+  }
+  
+  // show errors list لو فيه فشل
+  if(st.errors.length > 0){
+    const errBox = document.getElementById('stk-prog-errors');
+    const errList = document.getElementById('stk-prog-errors-list');
+    if(errBox) errBox.style.display = 'block';
+    if(errList){
+      errList.innerHTML = st.errors.slice(0, 10).map(e => 
+        `<div style="padding:3px 0;border-bottom:1px dashed var(--border)"><strong>${(e.product_title||'').slice(0,40)}</strong> <span style="color:var(--muted)">(${(e.sku||'').slice(0,15)})</span><br><span style="color:#dc2626;font-size:9px">${(e.error||'').slice(0,80)}</span></div>`
+      ).join('');
+    }
+  }
+  
+  window._stkProgState = st;
+}
+
+function _finalizeStkProgress(data, sessionId){
+  const ok = data.summary?.success_count || 0;
+  const fail = data.summary?.failed_count || 0;
+  const total = data.summary?.total_attempted || 0;
+  const runId = data.summary?.run_id;
+  // 🆕 v295: adjust-delta mode
+  const updated = data.summary?.updated ?? data.updated ?? 0;
+  const skipped = data.summary?.skipped || 0;
+  
+  const titleEl = document.getElementById('stk-prog-title');
+  const subEl = document.getElementById('stk-prog-sub');
+  const barEl = document.getElementById('stk-prog-bar');
+  
+  if(titleEl){
+    titleEl.innerHTML = fail === 0 
+      ? `<span style="color:#16a34a">✅ تم بنجاح</span>` 
+      : `<span style="color:#f59e0b">⚠️ تم مع أخطاء</span>`;
+  }
+  if(subEl){
+    let breakdown = `<strong>تم رفع الفروق على Shopify</strong><br>`;
+    breakdown += `✅ ${updated} منتج اتعدّل`;
+    if(skipped > 0) breakdown += ` · ⏭️ ${skipped} مفيش فرق`;
+    if(fail > 0) breakdown += ` · ✗ ${fail} فشل`;
+    subEl.innerHTML = breakdown;
+  }
+  if(barEl && fail > 0){
+    barEl.style.background = 'linear-gradient(90deg,#f59e0b,#ef4444)';
+  }
+  
+  // action buttons
+  const actions = document.getElementById('stk-prog-actions');
+  if(actions){
+    actions.style.display = 'flex';
+    let html = '';
+    if(fail > 0){
+      html += `<button class="btn btn-sm" style="background:#dc2626;color:#fff;border:none" onclick="openApprovalReport(${sessionId}, '${runId}'); _closeStkProgressModal()">📋 شوف الـ ${fail} منتج اللي فشل</button>`;
+    } else {
+      html += `<button class="btn btn-sm btn-primary" onclick="openApprovalReport(${sessionId}, '${runId}'); _closeStkProgressModal()">📊 تقرير كامل</button>`;
+    }
+    html += `<button class="btn btn-sm btn-ghost" onclick="_closeStkProgressModal()">إغلاق</button>`;
+    actions.innerHTML = html;
+  }
+  
+  // refresh الـ stocktake page في الخلفية
+  closeM('m-stk-detail');
+  loadStocktakePage().catch(()=>{});
+}
+
+function _closeStkProgressModal(){
+  document.getElementById('stk-progress-modal')?.remove();
+  window._stkProgState = null;
+}
+
+// 🆕 v380: صفحة "تقرير الرفع الفاشل" الدائم — عبر كل الجلسات
+async function openFailedUploadsReport(){
+  document.getElementById('stk-failed-uploads-modal')?.remove();
+  
+  const modal = document.createElement('div');
+  modal.id = 'stk-failed-uploads-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99997;padding:20px;overflow-y:auto;display:flex;align-items:flex-start;justify-content:center';
+  modal.onclick = (e) => { if(e.target === modal) modal.remove(); };
+  modal.innerHTML = `<div style="background:var(--bg);max-width:1100px;width:100%;margin:0 auto;border-radius:14px;padding:24px;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="text-align:center;padding:40px">
+      <div style="font-size:32px;margin-bottom:8px">⏳</div>
+      <div style="color:var(--muted)">جاري تحميل التقرير...</div>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  
+  try {
+    const data = await apiFetch('/api/stocktake/failed-uploads');
+    _renderFailedUploadsReport(modal, data);
+  } catch(e){
+    modal.querySelector('div').innerHTML = `
+      <div style="text-align:center;padding:40px">
+        <div style="font-size:32px;color:var(--danger);margin-bottom:8px">❌</div>
+        <div>فشل التحميل: ${escapeHtml(e.message)}</div>
+        <button class="btn btn-primary" style="margin-top:14px" onclick="document.getElementById('stk-failed-uploads-modal').remove()">إغلاق</button>
+      </div>
+    `;
+  }
+}
+
+function _renderFailedUploadsReport(modal, data){
+  const total = data.total_failed || 0;
+  const valueImpact = data.total_value_impact || 0;
+  const items = data.items || [];
+  const bySession = data.by_session || [];
+  const byErrorType = data.by_error_type || {};
+  
+  // error type labels
+  const errorLabels = {
+    'no_inventory_item_id': 'مفيش inventory_item_id',
+    'no_location': 'مفيش location',
+    'set_failed': 'فشل الـ Shopify mutation',
+    'exception': 'خطأ غير متوقع',
+    'unknown': 'غير معروف'
+  };
+  
+  const errorChips = Object.entries(byErrorType).map(([k, v]) => 
+    `<span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;margin:2px">${escapeHtml(errorLabels[k] || k)}: ${v}</span>`
+  ).join('');
+  
+  const sessionsHtml = bySession.length > 0 ? bySession.map(s => {
+    const d = s.approved_at ? new Date(s.approved_at).toLocaleString('ar-EG', { dateStyle:'short', timeStyle:'short' }) : '—';
+    return `<div style="display:inline-block;background:var(--elev);border:1px solid var(--border);border-radius:8px;padding:6px 10px;margin:3px;font-size:11px">
+      <strong>${escapeHtml(s.session_title || `#${s.session_id}`)}</strong> <span style="color:var(--muted)">· ${escapeHtml(s.warehouse_name || '')}</span> · ${d} · <span style="color:#dc2626;font-weight:700">${s.failed_count} فشل</span>
+    </div>`;
+  }).join('') : '<div style="color:var(--muted);font-size:11px">—</div>';
+  
+  const itemsHtml = items.length > 0 ? items.map(it => {
+    const dt = it.attempted_at ? new Date(it.attempted_at).toLocaleString('ar-EG', { dateStyle:'short', timeStyle:'short' }) : '—';
+    const errLabel = errorLabels[it.error_type] || it.error_type || 'غير معروف';
+    const canRetry = it.has_inventory_item_id; // ما نقدرش نـ retry لو مفيش inventory_item_id
+    return `<tr data-log-id="${it.id}">
+      <td style="padding:8px;width:40px;text-align:center">
+        <input type="checkbox" class="failed-item-chk" value="${it.id}" data-can-retry="${canRetry?'1':'0'}" ${canRetry?'':'disabled'} style="width:16px;height:16px">
+      </td>
+      <td style="padding:8px;width:40px">
+        ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" style="width:32px;height:32px;border-radius:4px;object-fit:cover" loading="lazy">` : '<div style="width:32px;height:32px;background:var(--elev);border-radius:4px;display:flex;align-items:center;justify-content:center">📦</div>'}
+      </td>
+      <td style="padding:8px;font-size:12px">
+        <div style="font-weight:700">${escapeHtml((it.product_title || '').slice(0,60))}</div>
+        ${it.variant_title && it.variant_title !== 'Default Title' ? `<div style="font-size:10px;color:var(--muted)">${escapeHtml(it.variant_title)}</div>` : ''}
+        ${it.sku ? `<div style="font-size:9px;color:var(--muted);font-family:monospace">${escapeHtml(it.sku)}</div>` : ''}
+      </td>
+      <td style="padding:8px;font-size:11px;color:var(--muted)">
+        ${escapeHtml(it.session_title || '')}<br>
+        <span style="font-size:9px">${escapeHtml(it.warehouse_name || '')}</span>
+      </td>
+      <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif;font-size:11px">
+        <span style="color:var(--muted)">${it.system_qty}</span> → <strong>${it.counted_qty}</strong>
+        <div style="font-size:9px;color:${it.diff>0?'#16a34a':'#dc2626'};font-weight:800">${it.diff>0?'+':''}${it.diff}</div>
+      </td>
+      <td style="padding:8px;text-align:left;font-family:Roboto,sans-serif;font-size:11px;font-weight:700;color:#dc2626">
+        ${it.value > 0 ? (it.value.toLocaleString('en-US', {maximumFractionDigits:0}) + ' ج') : '—'}
+      </td>
+      <td style="padding:8px;font-size:11px">
+        <div style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:6px;font-weight:700;display:inline-block;margin-bottom:3px">${escapeHtml(errLabel)}</div>
+        <div style="font-size:9px;color:#991b1b;line-height:1.4">${escapeHtml((it.error_message || '').slice(0,140))}</div>
+      </td>
+      <td style="padding:8px;font-size:10px;color:var(--muted);white-space:nowrap">${dt}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--muted)">🎉 مفيش منتجات فشل رفعها!</td></tr>';
+  
+  modal.innerHTML = `<div style="background:var(--bg);max-width:1100px;width:100%;margin:0 auto;border-radius:14px;padding:24px;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:12px;flex-wrap:wrap">
+      <div>
+        <h2 style="margin:0 0 4px;font-size:20px;color:var(--gold)">⚠️ تقرير الرفع الفاشل</h2>
+        <div style="font-size:11px;color:var(--muted)">المنتجات اللي فشل رفعها لـ Shopify في آخر محاولة لكل جلسة جرد</div>
+      </div>
+      <button onclick="document.getElementById('stk-failed-uploads-modal').remove()" 
+              style="background:transparent;border:none;color:var(--muted);font-size:28px;cursor:pointer;line-height:1;padding:0">×</button>
+    </div>
+    
+    <!-- Summary cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">
+      <div style="background:linear-gradient(135deg,#fee2e2,#fecaca);border-radius:10px;padding:14px;border:1px solid #fca5a5">
+        <div style="font-size:11px;color:#991b1b;font-weight:700">📦 إجمالي الفشل</div>
+        <div style="font-size:28px;font-weight:900;color:#dc2626;font-family:Roboto,sans-serif">${total}</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#fef9c3,#fef08a);border-radius:10px;padding:14px;border:1px solid #fde047">
+        <div style="font-size:11px;color:#854d0e;font-weight:700">💰 القيمة المتأثرة</div>
+        <div style="font-size:22px;font-weight:900;color:#ca8a04;font-family:Roboto,sans-serif">${valueImpact.toLocaleString('en-US', {maximumFractionDigits:0})} ج</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#dbeafe,#bfdbfe);border-radius:10px;padding:14px;border:1px solid #93c5fd">
+        <div style="font-size:11px;color:#1e40af;font-weight:700">📋 جلسات متأثرة</div>
+        <div style="font-size:28px;font-weight:900;color:#2563eb;font-family:Roboto,sans-serif">${bySession.length}</div>
+      </div>
+    </div>
+    
+    <!-- Error types breakdown -->
+    ${errorChips ? `
+      <div style="margin-bottom:12px;padding:10px;background:var(--elev);border-radius:8px">
+        <div style="font-size:11px;font-weight:800;margin-bottom:6px">أنواع الأخطاء:</div>
+        ${errorChips}
+      </div>
+    ` : ''}
+    
+    <!-- Sessions affected -->
+    ${bySession.length > 0 ? `
+      <div style="margin-bottom:14px">
+        <div style="font-weight:800;font-size:13px;color:var(--gold);margin-bottom:6px">📅 الجلسات المتأثرة</div>
+        ${sessionsHtml}
+      </div>
+    ` : ''}
+    
+    <!-- Actions toolbar -->
+    ${total > 0 ? `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;padding:10px;background:var(--elev);border-radius:8px">
+        <button class="btn btn-sm" onclick="_toggleAllFailedItems()" style="background:transparent;border:1px solid var(--border)">☑️ اختار الكل</button>
+        <button class="btn btn-sm" onclick="_retrySelectedFailedItems()" style="background:#22c55e;color:#fff;border:none">🔄 retry المختار</button>
+        <button class="btn btn-sm btn-ghost" onclick="openFailedUploadsReport()">🔄 تحديث</button>
+        <div style="margin-right:auto;font-size:11px;color:var(--muted)" id="failed-selected-count">0 مختار</div>
+      </div>
+    ` : ''}
+    
+    <!-- Items table -->
+    <div style="background:var(--elev);border-radius:10px;overflow:hidden;border:1px solid var(--border)">
+      <div style="overflow-x:auto;max-height:500px;overflow-y:auto">
+        <table style="width:100%;font-size:12px;border-collapse:collapse;min-width:900px">
+          <thead style="background:rgba(0,0,0,.05);position:sticky;top:0;z-index:1">
+            <tr>
+              <th style="padding:8px;text-align:center"></th>
+              <th style="padding:8px;text-align:center"></th>
+              <th style="padding:8px;text-align:right">المنتج</th>
+              <th style="padding:8px;text-align:right">الجلسة / المخزن</th>
+              <th style="padding:8px;text-align:center">الكمية</th>
+              <th style="padding:8px;text-align:left">القيمة</th>
+              <th style="padding:8px;text-align:right">الخطأ</th>
+              <th style="padding:8px;text-align:right">المحاولة</th>
+            </tr>
+          </thead>
+          <tbody>${itemsHtml}</tbody>
+        </table>
+      </div>
+    </div>
+    
+    <!-- Footer -->
+    <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <div style="font-size:10px;color:var(--muted)">💡 الـ retry بـ يستخدم الكمية المحفوظة في الجلسة الأصلية</div>
+      <button class="btn btn-ghost" onclick="document.getElementById('stk-failed-uploads-modal').remove()">إغلاق</button>
+    </div>
+  </div>`;
+  
+  // wire checkbox change → update count
+  modal.querySelectorAll('.failed-item-chk').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const sel = modal.querySelectorAll('.failed-item-chk:checked').length;
+      const cnt = document.getElementById('failed-selected-count');
+      if(cnt) cnt.textContent = sel + ' مختار';
+    });
+  });
+}
+
+function _toggleAllFailedItems(){
+  const boxes = document.querySelectorAll('#stk-failed-uploads-modal .failed-item-chk:not([disabled])');
+  const allChecked = [...boxes].every(b => b.checked);
+  boxes.forEach(b => { b.checked = !allChecked; });
+  const sel = document.querySelectorAll('#stk-failed-uploads-modal .failed-item-chk:checked').length;
+  const cnt = document.getElementById('failed-selected-count');
+  if(cnt) cnt.textContent = sel + ' مختار';
+}
+
+async function _retrySelectedFailedItems(){
+  const checked = [...document.querySelectorAll('#stk-failed-uploads-modal .failed-item-chk:checked')];
+  if(!checked.length){ toast('❗ اختار منتجات الأول'); return; }
+  
+  const ids = checked.map(c => parseInt(c.value));
+  if(!confirm(`هتحاول ترفع ${ids.length} منتج تاني لـ Shopify؟`)) return;
+  
+  toast('🔄 جاري إعادة المحاولة...');
+  try {
+    const r = await apiFetch('/api/stocktake/retry-failed', 'POST', { item_ids: ids });
+    if(r?.success){
+      const msg = `${r.success_count} نجح / ${r.failed_count} لسه فاشل`;
+      toast((r.failed_count === 0 ? '✅ ' : '⚠️ ') + msg);
+      // refresh
+      setTimeout(() => openFailedUploadsReport(), 600);
+    } else {
+      toast('❌ ' + (r?.error || 'فشل'));
+    }
+  } catch(e){
     toast('❌ ' + e.message);
   }
 }
