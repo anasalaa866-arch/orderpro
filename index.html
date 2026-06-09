@@ -1,42 +1,42 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v384 — PO TRANSFER DEBUG MODE (2026-06-03)
+  OrderPro v388 — TRANSFER PLAN (ذكاء التحويلات على مستوى الصفحة) (2026-06-10)
   ═══════════════════════════════════════════════════════════════════
-  🔧 الـ test الأول لـ v383 أعطى 502 error. ده عشان نعرف السبب:
+  ♻️ إعادة بناء كاملة لصفحة "ذكاء التحويلات":
+     - شيلنا الاقتراح القديم على مستوى المنتج (suggestion cards + manual modal)
+     - دلوقتي: تختار مخزن مصدر + مخزن وجهة فوق الصفحة، تضغط "حلّل"
+     - النظام بيلف على كل المنتجات المشتركة ويطلّع جدول:
+       checkbox · المنتج+حالته · رصيد المصدر · رصيد الوجهة · كمية التحويل · preview بعد
+     - الكميات قابلة للتعديل (+/− أو كتابة)، اقتراح أولي ذكي
+     - "حدد الكل/إلغاء الكل" + بحث
+     - تحويل واحد مجمّع بكل المنتجات المحددة → POST /api/transfers
+     - تحذيرات: كمية > رصيد المصدر، أو المصدر هينزل تحت الحد الآمن
+
+  🔗 بيعتمد على endpoint backend جديد: GET /api/transfer-plan (v307)
+     لازم تـ deploy الـ backend v307 الأول عشان الصفحة تشتغل.
+
+  من v386 — INFOMODAL HTML SUPPORT FIX (2026-06-09):
+  🐛 Bug: modal "حركة المنتج" بـ يعرض HTML كـ text raw
+     (مثال: <"div style="padding:30px..." بدل ما يـ render)
   
-  Server v297:
-  - logging مفصّل في الـ console.log (Railway)
-  - surfacing رد Shopify الـ raw في الـ JSON response
-  - error categorization (scope/origin/version)
-  - hints واضحة في الـ error messages
-  - try/catch بـ يـ detect 401/403/404/400 وبـ يعطي hint مناسب
+  السبب:
+  - showProductHistory() بـ يبعت {html: true} للـ infoModal
+  - لكن infoModal كان بـ يـ escape الـ body دائماً
+  - الـ opts.html ما كانش supported أصلاً
   
-  Frontend (هنا):
-  - raw fetch بدل apiFetch عشان نقدر نقرا 502 body
-  - alert مفصّل بـ:
-    * HTTP status
-    * Error message + hints
-    * Shopify user errors (مع codes)
-    * Skipped items
-    * Debug info (PO, items, location)
-    * خطوات لإصلاح الـ scope (write_inventory_transfers)
+  Fix:
+  - infoModal بقى يقبل opts.html = true
+  - لو true: يـ inject الـ body كـ raw HTML (caller responsible للـ safety)
+  - لو لا: السلوك القديم (escape + replace 
+ with <br>)
   
-  ملاحظة مهمة: الـ Shopify Custom App محتاج access scope:
-  → write_inventory_transfers
+  ده بـ يأثر فقط على modals بـ يبعت {html: true} explicitly:
+  - "حركة المنتج" (showProductHistory) 
+  - أي callers تانية بـ تستخدم الـ option ده
   
-  لو الـ scope مش enabled، الـ mutation هـ ترفض.
-  خطوات الإصلاح:
-  1. Shopify Admin → Settings → Apps and sales channels → Develop apps
-  2. افتح الـ CAFELAX Custom App
-  3. Configuration → Admin API access scopes → ضيف:
-     • write_inventory_transfers
-     • read_inventory_transfers (لو موجود)
-  4. Save + Re-install الـ app
-  5. update SHOPIFY_ACCESS_TOKEN في Railway env vars (لو تغير)
-  
-  من v383:
-  - PO → Shopify Inventory Transfer integration (الـ feature الجديدة)
+  من v385:
+  - PO Enhancements (prices + expiry)
   ═══════════════════════════════════════════════════════════════════
 -->
 <html lang="ar" dir="rtl">
@@ -4902,98 +4902,123 @@ tr:hover td{background:#fafbff}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div>
       <h2 style="margin:0">🧠 ذكاء التحويلات بين المخازن</h2>
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">توصيات بناءً على سرعة البيع في كل مخزن منفصل</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">اختر مخزن مصدر ومخزن وجهة، والنظام يقترح المنتجات اللي محتاجة تحويل</div>
     </div>
-    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-      <button class="btn btn-ghost btn-sm" onclick="toggleTransferSettings()">⚙️ إعدادات</button>
-      <button class="btn btn-primary btn-sm" onclick="loadTransferSuggestions()">🔄 تحديث</button>
+    <button class="btn btn-ghost btn-sm" onclick="tpToggleSettings()">⚙️ إعدادات التحليل</button>
+  </div>
+
+  <!-- Warehouse Picker -->
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:16px">
+      <div style="display:grid;grid-template-columns:1fr auto 1fr auto;gap:12px;align-items:end">
+        <div>
+          <label style="font-weight:700;font-size:12px;color:#991b1b;display:block;margin-bottom:5px">📤 المخزن المُرسِل (من)</label>
+          <select id="tp-from" class="form-input" style="width:100%;font-weight:700" onchange="tpOnWhChange()">
+            <option value="">— اختر المخزن —</option>
+          </select>
+        </div>
+        <button class="btn btn-ghost" onclick="tpSwap()" title="بدّل المصدر والوجهة" style="margin-bottom:2px;font-size:18px">🔁</button>
+        <div>
+          <label style="font-weight:700;font-size:12px;color:#065f46;display:block;margin-bottom:5px">📥 المخزن المستقبِل (إلى)</label>
+          <select id="tp-to" class="form-input" style="width:100%;font-weight:700" onchange="tpOnWhChange()">
+            <option value="">— اختر المخزن —</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="tp-analyze-btn" onclick="tpAnalyze()" style="margin-bottom:2px;white-space:nowrap">🔍 حلّل التحويل</button>
+      </div>
     </div>
   </div>
 
   <!-- Settings Panel (hidden by default) -->
-  <div class="card" id="ts-settings-panel" style="display:none;margin-bottom:14px">
+  <div class="card" id="tp-settings-panel" style="display:none;margin-bottom:14px">
     <div style="padding:14px">
       <div style="font-weight:800;font-size:13px;margin-bottom:10px">⚙️ إعدادات التحليل</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;font-size:12px">
         <div>
           <label style="font-weight:700;color:var(--muted);font-size:11px">فترة حساب البيع</label>
-          <select id="ts-days" class="form-input" onchange="loadTransferSuggestions()">
+          <select id="tp-days" class="form-input">
             <option value="7">آخر 7 أيام</option>
             <option value="14" selected>آخر 14 يوم</option>
             <option value="30">آخر 30 يوم</option>
           </select>
         </div>
         <div>
-          <label style="font-weight:700;color:var(--muted);font-size:11px">هدف التغطية</label>
-          <select id="ts-target" class="form-input" onchange="loadTransferSuggestions()">
+          <label style="font-weight:700;color:var(--muted);font-size:11px">هدف تغطية الوجهة</label>
+          <select id="tp-target" class="form-input">
             <option value="7">7 أيام</option>
             <option value="14" selected>14 يوم</option>
             <option value="21">21 يوم</option>
+            <option value="30">30 يوم</option>
           </select>
         </div>
         <div>
-          <label style="font-weight:700;color:var(--muted);font-size:11px">حد "حرج" (يوم)</label>
-          <input type="number" id="ts-critical" class="form-input" value="7" min="1" max="30" onchange="loadTransferSuggestions()">
+          <label style="font-weight:700;color:var(--muted);font-size:11px">المصدر يحتفظ بـ (يوم)</label>
+          <input type="number" id="tp-critical" class="form-input" value="7" min="0" max="60">
         </div>
-        <div>
-          <label style="font-weight:700;color:var(--muted);font-size:11px">حد "منخفض" (يوم)</label>
-          <input type="number" id="ts-low" class="form-input" value="14" min="1" max="60" onchange="loadTransferSuggestions()">
+        <div style="display:flex;align-items:flex-end">
+          <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600">
+            <input type="checkbox" id="tp-include-all" style="width:16px;height:16px"> اعرض كل المنتجات (حتى اللي مش محتاجة)
+          </label>
         </div>
-        <div>
-          <label style="font-weight:700;color:var(--muted);font-size:11px">حد "فائض" (يوم)</label>
-          <input type="number" id="ts-excess" class="form-input" value="30" min="14" max="180" onchange="loadTransferSuggestions()">
-        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6">
+        💡 "المصدر يحتفظ بـ X يوم" يعني النظام مش هيقترح تحويل كمية تخلّي المصدر ينزل تحت تغطية X يوم من احتياجه هو.
       </div>
     </div>
   </div>
 
-  <!-- Info Banner -->
-  <div style="background:linear-gradient(135deg,#eff6ff 0%,#fff 100%);border:1px solid #3b82f6;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;line-height:1.6;color:#1e3a8a">
-    💡 <strong>إزاي بيتحسب:</strong> النظام بيحسب سرعة البيع لكل منتج في كل مخزن منفصل (sales ÷ أيام نشطة). الأيام اللي ستوكها كان 0 ما بتدخلش الحسبة. التوصية تظهر لكل مخزن في حالة حرجة/منخفضة، وأنت تختار المخزن المُرسِل.
-  </div>
-
-  <!-- Stats Cards -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">
-    <div class="sc" style="border-right:4px solid #ef4444">
-      <div class="sc-icon">🔴</div>
-      <div class="sc-label">حالة حرجة</div>
-      <div class="sc-val" id="ts-stat-critical" style="color:#ef4444">0</div>
+  <!-- Stats (hidden until analyzed) -->
+  <div id="tp-stats" style="display:none;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">
+    <div class="sc" style="border-right:4px solid #3b82f6">
+      <div class="sc-icon">📦</div>
+      <div class="sc-label">منتجات محتاجة تحويل</div>
+      <div class="sc-val" id="tp-stat-needs" style="color:#3b82f6">0</div>
+    </div>
+    <div class="sc" style="border-right:4px solid #10b981">
+      <div class="sc-icon">✅</div>
+      <div class="sc-label">إجمالي الكمية المقترحة</div>
+      <div class="sc-val" id="tp-stat-qty" style="color:#10b981">0</div>
     </div>
     <div class="sc" style="border-right:4px solid #f59e0b">
-      <div class="sc-icon">🟠</div>
-      <div class="sc-label">منخفض</div>
-      <div class="sc-val" id="ts-stat-low" style="color:#f59e0b">0</div>
+      <div class="sc-icon">⚠️</div>
+      <div class="sc-label">المصدر مش كفاية</div>
+      <div class="sc-val" id="tp-stat-insufficient" style="color:#f59e0b">0</div>
     </div>
     <div class="sc" style="border-right:4px solid #6b7280">
-      <div class="sc-icon">⚠️</div>
-      <div class="sc-label">بدون مصدر كافي</div>
-      <div class="sc-val" id="ts-stat-nosrc" style="color:#6b7280">0</div>
-    </div>
-    <div class="sc" style="border-right:4px solid #3b82f6">
-      <div class="sc-icon">📋</div>
-      <div class="sc-label">إجمالي توصيات</div>
-      <div class="sc-val" id="ts-stat-total" style="color:#3b82f6">0</div>
+      <div class="sc-icon">☑️</div>
+      <div class="sc-label">محدد للتحويل</div>
+      <div class="sc-val" id="tp-stat-selected" style="color:#6b7280">0</div>
     </div>
   </div>
 
-  <!-- Filter & Search -->
-  <div class="card" style="margin-bottom:14px">
+  <!-- Toolbar (hidden until analyzed) -->
+  <div class="card" id="tp-toolbar" style="display:none;margin-bottom:14px">
     <div style="padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <input id="ts-search" placeholder="🔍 ابحث عن منتج..." oninput="renderTransferSuggestions()" 
-             style="flex:1;min-width:200px;padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px">
-      <div style="display:flex;gap:5px;flex-wrap:wrap" id="ts-status-filter">
-        <button class="chip on" onclick="tsSetFilter('all', this)">الكل</button>
-        <button class="chip" onclick="tsSetFilter('critical', this)" style="color:#ef4444">🔴 حرج</button>
-        <button class="chip" onclick="tsSetFilter('low', this)" style="color:#f59e0b">🟠 منخفض</button>
-      </div>
+      <input id="tp-search" placeholder="🔍 ابحث عن منتج..." oninput="tpRender()"
+             style="flex:1;min-width:180px;padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px">
+      <button class="btn btn-ghost btn-sm" onclick="tpSelectAll(true)">☑️ حدد الكل</button>
+      <button class="btn btn-ghost btn-sm" onclick="tpSelectAll(false)">⬜ إلغاء الكل</button>
     </div>
   </div>
 
   <!-- Results -->
-  <div id="ts-results">
-    <div style="text-align:center;padding:40px;color:var(--muted)">
-      <div style="font-size:42px;opacity:.3">🧠</div>
-      <div>اضغط "تحديث" لتحليل المخزون والمبيعات</div>
+  <div id="tp-results">
+    <div style="text-align:center;padding:50px;color:var(--muted)">
+      <div style="font-size:48px;opacity:.3">🧠</div>
+      <div style="margin-top:10px;font-weight:700">اختر المخزن المُرسِل والمستقبِل واضغط "حلّل التحويل"</div>
+      <div style="font-size:12px;margin-top:4px">النظام هيقترحلك المنتجات اللي الوجهة محتاجاها والمصدر عنده منها فائض</div>
+    </div>
+  </div>
+
+  <!-- Sticky bottom action bar (hidden until selection) -->
+  <div id="tp-action-bar" style="display:none;position:sticky;bottom:0;background:var(--card,#fff);border-top:2px solid var(--primary,#6366f1);padding:12px 16px;margin:14px -4px 0;border-radius:0 0 12px 12px;box-shadow:0 -4px 16px rgba(0,0,0,.08);z-index:5">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div style="font-size:13px;font-weight:700">
+        <span id="tp-bar-summary">—</span>
+      </div>
+      <button class="btn btn-primary" id="tp-create-btn" onclick="tpCreateBulkTransfer()">
+        ✅ أنشئ تحويل واحد بكل المحدد
+      </button>
     </div>
   </div>
 </div>
@@ -7431,8 +7456,11 @@ function infoModal(title, body, opts = {}){
   overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
 
   const isPre = !!opts.pre;
+  const isHtml = !!opts.html;  // 🆕 v386: support raw HTML rendering
   const bodyHtml = isPre
     ? `<pre style="background:#f8fafc;padding:12px;border-radius:8px;font-family:'Courier New',monospace;font-size:12px;white-space:pre-wrap;word-break:break-word;max-height:400px;overflow-y:auto;border:1px solid var(--border)">${escapeHtml(body)}</pre>`
+    : isHtml
+    ? `<div style="line-height:1.7;color:var(--text)">${body}</div>`  // 🆕 v386: raw HTML (caller responsible for safety)
     : `<div style="white-space:pre-wrap;line-height:1.7;color:var(--text)">${escapeHtml(body).replace(/\n/g,'<br>')}</div>`;
 
   overlay.innerHTML = `
@@ -24200,283 +24228,371 @@ async function deleteStocktaker(id){
 
 // ============================================================
 // ============================================================
-// 🧠 v251: TRANSFER SUGGESTIONS (ذكاء التحويلات)
 // ============================================================
-let _tsData = { suggestions: [], stats: {} };
-let _tsStatusFilter = 'all';
-let _tsSearch = '';
+// 🧠 v388: TRANSFER PLAN (ذكاء التحويلات — على مستوى الصفحة)
+// ============================================================
+// الـ user يختار مخزن مصدر + وجهة، يضغط "حلّل"، فيظهر جدول
+// بكل المنتجات اللي الوجهة محتاجاها والمصدر عنده منها فائض.
+// يختار اللي عايزه (checkbox)، يعدّل الكميات، وينشئ تحويل واحد مجمّع.
+let _tpData = null;        // { from, to, plan[], stats }
+let _tpSelected = {};      // { variant_id: qty }  — المنتجات المحددة وكمياتها
+let _tpWarehouses = [];    // قائمة المخازن للـ dropdowns
 
-function toggleTransferSettings(){
-  const panel = document.getElementById('ts-settings-panel');
-  if(panel) panel.style.display = (panel.style.display === 'none' ? 'block' : 'none');
+function tpToggleSettings(){
+  const p = document.getElementById('tp-settings-panel');
+  if(p) p.style.display = (p.style.display === 'none' ? 'block' : 'none');
 }
 
-function tsSetFilter(f, btn){
-  _tsStatusFilter = f;
-  document.querySelectorAll('#ts-status-filter .chip').forEach(c => c.classList.remove('on'));
-  if(btn) btn.classList.add('on');
-  renderTransferSuggestions();
+// تحميل المخازن في الـ dropdowns (أول مرة)
+async function tpLoadWarehouses(){
+  if(_tpWarehouses.length) return;
+  try {
+    const r = await apiFetch('/api/inventory/warehouses');
+    _tpWarehouses = r || [];
+  } catch(e){
+    toast('❌ فشل تحميل المخازن: ' + e.message);
+    return;
+  }
+  const opts = '<option value="">— اختر المخزن —</option>' +
+    _tpWarehouses.map(w => {
+      const icon = w.is_pos ? '🏪' : '📦';
+      const master = w.is_master ? ' ⭐' : '';
+      return `<option value="${w.id}">${icon} ${escapeHtml(w.name)}${master}</option>`;
+    }).join('');
+  const fromSel = document.getElementById('tp-from');
+  const toSel = document.getElementById('tp-to');
+  if(fromSel) fromSel.innerHTML = opts;
+  if(toSel) toSel.innerHTML = opts;
 }
 
-async function loadTransferSuggestions(){
-  const results = document.getElementById('ts-results');
-  if(!results) return;
-  
-  const days = parseInt(document.getElementById('ts-days')?.value) || 14;
-  const target = parseInt(document.getElementById('ts-target')?.value) || 14;
-  const critical = parseInt(document.getElementById('ts-critical')?.value) || 7;
-  const low = parseInt(document.getElementById('ts-low')?.value) || 14;
-  const excess = parseInt(document.getElementById('ts-excess')?.value) || 30;
-  
+function tpSwap(){
+  const fromSel = document.getElementById('tp-from');
+  const toSel = document.getElementById('tp-to');
+  if(!fromSel || !toSel) return;
+  const tmp = fromSel.value;
+  fromSel.value = toSel.value;
+  toSel.value = tmp;
+  tpOnWhChange();
+}
+
+function tpOnWhChange(){
+  // لو المصدر = الوجهة، نبّه
+  const from = document.getElementById('tp-from')?.value;
+  const to = document.getElementById('tp-to')?.value;
+  const btn = document.getElementById('tp-analyze-btn');
+  if(btn){
+    const valid = from && to && from !== to;
+    btn.disabled = !valid;
+    btn.style.opacity = valid ? '1' : '0.5';
+    btn.style.cursor = valid ? 'pointer' : 'not-allowed';
+  }
+}
+
+async function tpAnalyze(){
+  const from = document.getElementById('tp-from')?.value;
+  const to = document.getElementById('tp-to')?.value;
+  if(!from || !to){ toast('⚠️ اختر المخزن المصدر والوجهة'); return; }
+  if(from === to){ toast('⚠️ المصدر والوجهة لازم يكونوا مختلفين'); return; }
+
+  const days = parseInt(document.getElementById('tp-days')?.value) || 14;
+  const target = parseInt(document.getElementById('tp-target')?.value) || 14;
+  const critical = parseInt(document.getElementById('tp-critical')?.value) || 7;
+  const includeAll = document.getElementById('tp-include-all')?.checked || false;
+
+  const results = document.getElementById('tp-results');
   results.innerHTML = `
     <div style="text-align:center;padding:40px;color:var(--muted)">
       <div style="font-size:32px;animation:spin 1s linear infinite">⏳</div>
       <div style="margin-top:8px;font-weight:700">جاري تحليل المبيعات والمخزون...</div>
-      <div style="font-size:11px;margin-top:4px">آخر ${days} يوم</div>
-    </div>
-  `;
-  
+    </div>`;
+
   try {
     const params = new URLSearchParams({
-      days, targetCoverage: target,
-      criticalThreshold: critical, lowThreshold: low, excessThreshold: excess
+      fromWarehouseId: from,
+      toWarehouseId: to,
+      days, targetCoverage: target, criticalThreshold: critical,
+      includeAll: includeAll ? 'true' : 'false'
     });
-    const r = await apiFetch('/api/transfer-suggestions?' + params.toString());
-    _tsData = r || { suggestions: [], stats: {} };
-    
-    // update stats
-    const stats = _tsData.stats || {};
-    if(document.getElementById('ts-stat-total')) document.getElementById('ts-stat-total').textContent = stats.total || 0;
-    if(document.getElementById('ts-stat-critical')) document.getElementById('ts-stat-critical').textContent = stats.critical || 0;
-    if(document.getElementById('ts-stat-low')) document.getElementById('ts-stat-low').textContent = stats.low || 0;
-    if(document.getElementById('ts-stat-nosrc')) document.getElementById('ts-stat-nosrc').textContent = stats.without_source || 0;
-    
-    // update sidebar badge
-    const navBadge = document.getElementById('nb-transfer-suggestions');
-    if(navBadge){
-      if(stats.critical > 0){
-        navBadge.textContent = stats.critical;
-        navBadge.style.display = '';
-      } else {
-        navBadge.textContent = '';
-        navBadge.style.display = 'none';
+    const r = await apiFetch('/api/transfer-plan?' + params.toString());
+    _tpData = r;
+    _tpSelected = {};
+
+    // افتراضياً: حدد كل اللي محتاج تحويل وعنده مصدر كافي
+    (r.plan || []).forEach(p => {
+      if(p.to_needs && p.suggested_qty > 0){
+        _tpSelected[p.variant_id] = p.suggested_qty;
       }
-    }
-    
-    renderTransferSuggestions();
+    });
+
+    tpUpdateStats();
+    tpRender();
   } catch(e){
     results.innerHTML = `
       <div style="text-align:center;padding:30px">
         <div style="font-size:36px;color:#ef4444">❌</div>
         <div style="font-weight:700;color:#ef4444;margin-top:8px">فشل التحليل</div>
         <div style="font-size:12px;color:var(--muted);margin-top:6px">${escapeHtml(e.message)}</div>
-      </div>
-    `;
+      </div>`;
   }
 }
 
-function renderTransferSuggestions(){
-  const results = document.getElementById('ts-results');
-  if(!results) return;
-  
-  let suggestions = _tsData.suggestions || [];
-  
-  // filter by search
-  const search = (document.getElementById('ts-search')?.value || '').trim().toLowerCase();
+function tpUpdateStats(){
+  if(!_tpData) return;
+  const s = _tpData.stats || {};
+  document.getElementById('tp-stats').style.display = 'grid';
+  document.getElementById('tp-toolbar').style.display = 'block';
+  document.getElementById('tp-stat-needs').textContent = s.needs_transfer || 0;
+  document.getElementById('tp-stat-qty').textContent = (s.total_suggested_qty || 0).toLocaleString('ar-EG');
+  document.getElementById('tp-stat-insufficient').textContent = s.insufficient_source || 0;
+  tpUpdateSelectionUI();
+}
+
+function tpUpdateSelectionUI(){
+  const ids = Object.keys(_tpSelected).filter(k => (_tpSelected[k] || 0) > 0);
+  const count = ids.length;
+  const totalQty = ids.reduce((sum, k) => sum + (_tpSelected[k] || 0), 0);
+  const selStat = document.getElementById('tp-stat-selected');
+  if(selStat) selStat.textContent = count;
+
+  const bar = document.getElementById('tp-action-bar');
+  const summary = document.getElementById('tp-bar-summary');
+  if(bar && _tpData){
+    if(count > 0){
+      bar.style.display = 'block';
+      summary.innerHTML = `📤 <strong>${escapeHtml(_tpData.from.warehouse_name)}</strong> → 📥 <strong>${escapeHtml(_tpData.to.warehouse_name)}</strong> · ${count} منتج · ${totalQty.toLocaleString('ar-EG')} قطعة`;
+    } else {
+      bar.style.display = 'none';
+    }
+  }
+}
+
+function tpToggleProduct(variantId, suggestedQty){
+  if(_tpSelected[variantId] != null){
+    delete _tpSelected[variantId];
+  } else {
+    _tpSelected[variantId] = suggestedQty || 1;
+  }
+  tpRender();
+}
+
+function tpSetQty(variantId, val){
+  const q = Math.max(0, parseInt(val) || 0);
+  if(q === 0){
+    delete _tpSelected[variantId];
+  } else {
+    _tpSelected[variantId] = q;
+  }
+  tpUpdateSelectionUI();
+  // حدّث الـ preview لهذا الصف فقط
+  tpUpdateRowPreview(variantId);
+}
+
+function tpQtyStep(variantId, delta){
+  const inp = document.getElementById('tp-qty-' + variantId);
+  if(!inp) return;
+  let v = Math.max(0, (parseInt(inp.value) || 0) + delta);
+  inp.value = v;
+  tpSetQty(variantId, v);
+  // حدّث حالة الـ checkbox
+  const cb = document.getElementById('tp-cb-' + variantId);
+  if(cb) cb.checked = v > 0;
+}
+
+function tpSelectAll(select){
+  if(!_tpData) return;
+  let visible = tpVisiblePlan();
+  visible.forEach(p => {
+    if(select){
+      // حدد بالكمية المقترحة (أو 1 لو صفر)
+      _tpSelected[p.variant_id] = p.suggested_qty > 0 ? p.suggested_qty : Math.max(1, p.needed_qty);
+    } else {
+      delete _tpSelected[p.variant_id];
+    }
+  });
+  tpRender();
+}
+
+function tpVisiblePlan(){
+  if(!_tpData) return [];
+  let plan = _tpData.plan || [];
+  const search = (document.getElementById('tp-search')?.value || '').trim().toLowerCase();
   if(search){
-    suggestions = suggestions.filter(s => 
-      (s.product_title || '').toLowerCase().includes(search) ||
-      (s.sku || '').toLowerCase().includes(search) ||
-      (s.barcode || '').toLowerCase().includes(search)
+    plan = plan.filter(p =>
+      (p.product_title || '').toLowerCase().includes(search) ||
+      (p.sku || '').toLowerCase().includes(search) ||
+      (p.barcode || '').toLowerCase().includes(search)
     );
   }
-  
-  // filter by status
-  if(_tsStatusFilter === 'critical'){
-    suggestions = suggestions.filter(s => 
-      s.suggestions.some(sg => sg.receiving_status === 'critical')
-    );
-  } else if(_tsStatusFilter === 'low'){
-    suggestions = suggestions.filter(s => 
-      s.suggestions.every(sg => sg.receiving_status === 'low')
-    );
+  return plan;
+}
+
+function tpUpdateRowPreview(variantId){
+  if(!_tpData) return;
+  const p = (_tpData.plan || []).find(x => x.variant_id === variantId);
+  if(!p) return;
+  const box = document.getElementById('tp-preview-' + variantId);
+  if(!box) return;
+  box.innerHTML = tpRowPreviewHtml(p, _tpSelected[variantId] || 0);
+}
+
+// HTML الـ preview لصف واحد (رصيد المصدر/الوجهة بعد التحويل)
+function tpRowPreviewHtml(p, qty){
+  const fromAfter = p.from_stock - qty;
+  const toAfter = p.to_stock + qty;
+  const fromDaysAfter = p.from_velocity > 0 ? (fromAfter / p.from_velocity).toFixed(1) + 'ي' : '∞';
+  const toDaysAfter = p.to_velocity > 0 ? (toAfter / p.to_velocity).toFixed(1) + 'ي' : '∞';
+  let warn = '';
+  if(qty > p.from_stock){
+    warn = `<span style="color:#ef4444;font-weight:700">⛔ أكبر من رصيد المصدر</span>`;
+  } else if(qty > p.from_can_spare && qty > 0){
+    warn = `<span style="color:#f59e0b;font-weight:700">⚠️ هينزل المصدر تحت الحد الآمن</span>`;
   }
-  
-  if(!suggestions.length){
+  if(qty <= 0) return `<span style="color:var(--muted)">—</span>`;
+  return `
+    <span style="font-size:11px">
+      📤 ${p.from_stock}→<strong style="color:${fromAfter<0?'#ef4444':'inherit'}">${fromAfter}</strong> (${fromDaysAfter})
+      &nbsp;·&nbsp;
+      📥 ${p.to_stock}→<strong style="color:#065f46">${toAfter}</strong> (${toDaysAfter})
+      ${warn ? '<br>'+warn : ''}
+    </span>`;
+}
+
+function tpRender(){
+  const results = document.getElementById('tp-results');
+  if(!results || !_tpData) return;
+
+  const plan = tpVisiblePlan();
+  tpUpdateSelectionUI();
+
+  if(!plan.length){
+    const allEmpty = !(_tpData.plan || []).length;
     results.innerHTML = `
       <div style="text-align:center;padding:50px;color:var(--muted)">
-        <div style="font-size:48px;opacity:.4">✅</div>
-        <div style="font-weight:700;margin-top:10px">مفيش توصيات تحويل</div>
-        <div style="font-size:12px;margin-top:4px">المخزون متوازن في كل المخازن</div>
-      </div>
-    `;
+        <div style="font-size:48px;opacity:.4">${allEmpty ? '✅' : '🔍'}</div>
+        <div style="font-weight:700;margin-top:10px">${allEmpty ? 'مفيش منتجات محتاجة تحويل' : 'مفيش نتائج للبحث'}</div>
+        <div style="font-size:12px;margin-top:4px">${allEmpty ? `المخزون متوازن بين ${escapeHtml(_tpData.from.warehouse_name)} و ${escapeHtml(_tpData.to.warehouse_name)}` : 'جرّب كلمة بحث تانية'}</div>
+      </div>`;
     return;
   }
-  
-  results.innerHTML = suggestions.map(s => renderSuggestionCard(s)).join('');
-}
 
-function renderSuggestionCard(s){
-  const isCritical = s.suggestions.some(sg => sg.receiving_status === 'critical');
-  const borderColor = isCritical ? '#ef4444' : '#f59e0b';
-  
-  // breakdown of all warehouses for this product
-  const warehousesHtml = (s.warehouses || []).map(w => {
-    const color = w.status === 'critical' ? '#ef4444' :
-                  w.status === 'low' ? '#f59e0b' :
-                  w.status === 'excess' ? '#10b981' :
-                  w.status === 'ok' ? '#3b82f6' : '#6b7280';
-    const icon = w.is_pos ? '🏪' : '📦';
-    const statusLabel = w.status === 'critical' ? 'حرج' :
-                        w.status === 'low' ? 'منخفض' :
-                        w.status === 'excess' ? 'فائض' :
-                        w.status === 'ok' ? 'طبيعي' : 'خامل';
-    const daysLeftText = w.days_left === null ? '∞' : 
-                         w.days_left === 0 && w.stock === 0 ? '-' :
-                         w.days_left + ' يوم';
-    
+  const statusInfo = st =>
+    st === 'critical' ? {c:'#ef4444', t:'🔴 حرج'} :
+    st === 'low' ? {c:'#f59e0b', t:'🟠 منخفض'} :
+    st === 'excess' ? {c:'#10b981', t:'🟢 فائض'} :
+    st === 'ok' ? {c:'#3b82f6', t:'🔵 طبيعي'} : {c:'#6b7280', t:'⚪ خامل'};
+
+  const fmtDays = d => d === null ? '∞' : d + 'ي';
+
+  const rows = plan.map(p => {
+    const isSelected = _tpSelected[p.variant_id] != null;
+    const qty = _tpSelected[p.variant_id] || 0;
+    const si = statusInfo(p.to_status);
+    const insufficientBadge = (p.to_needs && !p.has_enough_source)
+      ? `<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;margin-right:4px">⚠️ المصدر مش كفاية</span>` : '';
+
     return `
-      <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 1fr;gap:8px;padding:8px 10px;background:var(--bg);border-radius:6px;font-size:12px;align-items:center;border-right:3px solid ${color}">
-        <div>
-          <div style="font-weight:700">${icon} ${escapeHtml(w.warehouse_name || '#'+w.warehouse_id)}</div>
-          <div style="font-size:10px;color:${color}">${statusLabel}</div>
+      <div class="tp-row" style="display:grid;grid-template-columns:30px 1fr 90px 90px 120px 1fr;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);background:${isSelected?'#f0f9ff':'transparent'}">
+        <div style="text-align:center">
+          <input type="checkbox" id="tp-cb-${p.variant_id}" ${isSelected?'checked':''}
+                 onchange="tpToggleProduct('${p.variant_id}', ${p.suggested_qty > 0 ? p.suggested_qty : Math.max(1,p.needed_qty)})"
+                 style="width:17px;height:17px;cursor:pointer">
+        </div>
+        <div style="min-width:0">
+          <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(p.product_title)}${p.variant_title ? ' - '+escapeHtml(p.variant_title) : ''}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:monospace">${p.sku ? escapeHtml(p.sku) : ''}</div>
+          <div style="margin-top:2px">${insufficientBadge}<span style="font-size:10px;color:${si.c};font-weight:700">${si.t}</span></div>
         </div>
         <div style="text-align:center">
-          <div style="color:var(--muted);font-size:10px">المخزون</div>
-          <div style="font-weight:800;font-size:14px">${w.stock}</div>
+          <div style="font-size:10px;color:var(--muted)">📤 المصدر</div>
+          <div style="font-weight:800">${p.from_stock}</div>
+          <div style="font-size:10px;color:var(--muted)">${fmtDays(p.from_days_left)} · يبعت ${p.from_can_spare}</div>
         </div>
         <div style="text-align:center">
-          <div style="color:var(--muted);font-size:10px">بيع/يوم</div>
-          <div style="font-weight:700">${w.velocity.toFixed(1)}</div>
+          <div style="font-size:10px;color:var(--muted)">📥 الوجهة</div>
+          <div style="font-weight:800;color:${si.c}">${p.to_stock}</div>
+          <div style="font-size:10px;color:var(--muted)">${fmtDays(p.to_days_left)} · محتاج ${p.needed_qty}</div>
         </div>
         <div style="text-align:center">
-          <div style="color:var(--muted);font-size:10px">أيام نشطة</div>
-          <div style="font-weight:700">${w.active_days}</div>
-        </div>
-        <div style="text-align:center">
-          <div style="color:var(--muted);font-size:10px">متبقي</div>
-          <div style="font-weight:800;color:${color}">${daysLeftText}</div>
-        </div>
-      </div>
-    `;
-  }).join('');
-  
-  // suggestions
-  const sugHtml = s.suggestions.map(sg => {
-    const recColor = sg.receiving_status === 'critical' ? '#ef4444' : '#f59e0b';
-    
-    if(!sg.has_source){
-      return `
-        <div style="background:#fef2f2;border:1px dashed #ef4444;border-radius:8px;padding:10px;margin-top:8px">
-          <div style="font-weight:800;color:#991b1b;font-size:13px">⚠️ ${escapeHtml(sg.receiving_warehouse_name)} يحتاج ${sg.needed_qty} قطعة</div>
-          <div style="font-size:11px;color:#7f1d1d;margin-top:4px">
-            مفيش مخزن عنده فائض كافي. لازم تطلب من المورد (PO).
+          <div style="display:flex;gap:3px;align-items:center;justify-content:center">
+            <button class="btn btn-ghost btn-sm" onclick="tpQtyStep('${p.variant_id}',-1)" style="padding:2px 8px;font-size:14px">−</button>
+            <input type="number" id="tp-qty-${p.variant_id}" min="0" value="${qty}"
+                   oninput="tpSetQty('${p.variant_id}', this.value); document.getElementById('tp-cb-${p.variant_id}').checked = (parseInt(this.value)||0)>0"
+                   style="width:48px;text-align:center;font-weight:800;padding:4px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif">
+            <button class="btn btn-ghost btn-sm" onclick="tpQtyStep('${p.variant_id}',1)" style="padding:2px 8px;font-size:14px">+</button>
           </div>
         </div>
-      `;
+        <div id="tp-preview-${p.variant_id}" style="font-size:11px;line-height:1.5">${tpRowPreviewHtml(p, qty)}</div>
+      </div>`;
+  }).join('');
+
+  results.innerHTML = `
+    <div class="card" style="overflow:hidden">
+      <div style="display:grid;grid-template-columns:30px 1fr 90px 90px 120px 1fr;gap:10px;padding:10px 12px;background:var(--bg);font-size:10px;color:var(--muted);font-weight:700;border-bottom:2px solid var(--border)">
+        <div></div>
+        <div>المنتج</div>
+        <div style="text-align:center">رصيد المصدر</div>
+        <div style="text-align:center">رصيد الوجهة</div>
+        <div style="text-align:center">كمية التحويل</div>
+        <div>بعد التحويل</div>
+      </div>
+      ${rows}
+    </div>`;
+}
+
+async function tpCreateBulkTransfer(){
+  if(!_tpData) return;
+  const items = Object.keys(_tpSelected)
+    .filter(k => (_tpSelected[k] || 0) > 0)
+    .map(k => ({ variantId: k, qty: _tpSelected[k] }));
+
+  if(!items.length){ toast('⚠️ مفيش منتجات محددة'); return; }
+
+  // تحقق: مفيش كمية أكبر من رصيد المصدر
+  const overflows = [];
+  items.forEach(it => {
+    const p = (_tpData.plan || []).find(x => x.variant_id === it.variantId);
+    if(p && it.qty > p.from_stock){
+      overflows.push(`${p.product_title} (${it.qty} > رصيد ${p.from_stock})`);
     }
-    
-    return `
-      <div style="background:#fffbeb;border:1px solid ${recColor};border-radius:8px;padding:12px;margin-top:8px">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-          <div style="flex:1;min-width:200px">
-            <div style="font-weight:800;color:${recColor};font-size:13px">
-              💡 حوّل <strong>${sg.suggested_qty}</strong> قطعة
-            </div>
-            <div style="font-size:12px;margin-top:4px;line-height:1.6">
-              من <strong>${escapeHtml(sg.source_warehouse_name)}</strong>
-              (عنده ${sg.source_stock} · يكفي ${sg.source_days_left || '∞'} يوم)
-              → 
-              <strong>${escapeHtml(sg.receiving_warehouse_name)}</strong>
-              (عنده ${sg.receiving_stock} · يكفي ${sg.receiving_days_left} يوم)
-            </div>
-          </div>
-          <button class="btn btn-primary btn-sm" 
-                  onclick='tsCreateTransfer(${JSON.stringify({
-                    variant_id: s.variant_id,
-                    product_title: s.product_title,
-                    variant_title: s.variant_title,
-                    sku: s.sku,
-                    barcode: s.barcode,
-                    from_wh: sg.source_warehouse_id,
-                    from_wh_name: sg.source_warehouse_name,
-                    to_wh: sg.receiving_warehouse_id,
-                    to_wh_name: sg.receiving_warehouse_name,
-                    qty: sg.suggested_qty
-                  }).replace(/'/g, "&#39;")})'>
-            ✅ أنشئ تحويل
-          </button>
-        </div>
-      </div>
-    `;
-  }).join('');
-  
-  return `
-    <div class="card" style="margin-bottom:14px;border-right:4px solid ${borderColor}">
-      <div style="padding:14px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:10px">
-          <div style="flex:1;min-width:200px">
-            <div style="font-weight:800;font-size:14px">${escapeHtml(s.product_title || '')}${s.variant_title ? ' - ' + escapeHtml(s.variant_title) : ''}</div>
-            <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:3px">
-              ${s.sku ? 'SKU: ' + escapeHtml(s.sku) : ''}${s.barcode ? ' · ' + escapeHtml(s.barcode) : ''}
-            </div>
-          </div>
-          <div style="font-size:11px;color:var(--muted)">
-            ⏱️ ${s.priority_days_left.toFixed(1)} يوم متبقي
-          </div>
-        </div>
-        
-        <!-- Warehouses breakdown -->
-        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
-          ${warehousesHtml}
-        </div>
-        
-        <!-- Suggestions -->
-        ${sugHtml}
-      </div>
-    </div>
-  `;
-}
+  });
+  if(overflows.length){
+    toast('⛔ كميات أكبر من رصيد المصدر:\n' + overflows.slice(0,3).join('\n'));
+    return;
+  }
 
-// Create transfer button → open transfers modal pre-filled
-async function tsCreateTransfer(data){
-  if(!data) return;
-  
-  // option 1: redirect إلى صفحة transfers مع pre-fill
-  // عشان نحافظ على إن المستخدم يراجع، نخليه يقرر final
-  
+  const totalQty = items.reduce((s, it) => s + it.qty, 0);
   const confirmed = confirm(
-    `تأكيد إنشاء تحويل؟\n\n` +
-    `📦 المنتج: ${data.product_title}\n` +
-    `📤 من: ${data.from_wh_name}\n` +
-    `📥 إلى: ${data.to_wh_name}\n` +
-    `🔢 الكمية: ${data.qty} قطعة\n\n` +
-    `هيتم إنشاء التحويل كـ draft، تقدر تراجعه قبل الإرسال.`
+    `تأكيد إنشاء تحويل مجمّع؟\n\n` +
+    `📤 من: ${_tpData.from.warehouse_name}\n` +
+    `📥 إلى: ${_tpData.to.warehouse_name}\n` +
+    `📦 عدد المنتجات: ${items.length}\n` +
+    `🔢 إجمالي الكمية: ${totalQty} قطعة\n\n` +
+    `هيتم إنشاء تحويل واحد فيه كل المنتجات المحددة.`
   );
   if(!confirmed) return;
-  
+
+  const btn = document.getElementById('tp-create-btn');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ جاري الإنشاء...'; }
+
   try {
-    // ابني الـ payload للـ transfer API (shape بتاع v259)
     const payload = {
-      fromWarehouseId: data.from_wh,
-      toWarehouseId: data.to_wh,
-      notes: `تحويل مقترح من نظام الذكاء (${new Date().toLocaleDateString('ar-EG')})`,
-      items: [{
-        variantId: data.variant_id,
-        qty: data.qty
-      }]
+      fromWarehouseId: _tpData.from.warehouse_id,
+      toWarehouseId: _tpData.to.warehouse_id,
+      notes: `تحويل مجمّع من ذكاء التحويلات (${new Date().toLocaleDateString('ar-EG')}) — ${items.length} منتج`,
+      items
     };
-    
     const r = await apiFetch('/api/transfers', 'POST', payload);
     if(r && (r.success || r.id)){
-      toast('✅ تم إنشاء التحويل');
-      // إعادة تحميل الـ suggestions عشان نشيل اللي تم
-      setTimeout(() => loadTransferSuggestions(), 800);
+      toast(`✅ تم إنشاء التحويل: ${items.length} منتج · ${totalQty} قطعة`);
+      // أعد التحليل عشان نشوف الأرصدة المحدّثة
+      setTimeout(() => tpAnalyze(), 800);
     } else {
       toast('❌ ' + (r?.error || 'فشل الإنشاء'));
+      if(btn){ btn.disabled = false; btn.textContent = '✅ أنشئ تحويل واحد بكل المحدد'; }
     }
   } catch(e){
     toast('❌ ' + e.message);
+    if(btn){ btn.disabled = false; btn.textContent = '✅ أنشئ تحويل واحد بكل المحدد'; }
   }
 }
 
@@ -27431,11 +27547,244 @@ async function viewPO(id){
       ${po.notes ? `<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px">📝 ${escapeHtml(po.notes)}</div>` : ''}
       
       ${actionButtons ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px">${actionButtons}</div>` : ''}
+      
+      <!-- 🆕 v300: قسم الأسعار والصلاحية -->
+      <div id="po-pricing-section" style="margin-top:16px"></div>
     `;
     
     document.getElementById('po-detail-content').innerHTML = html;
     openM('m-po-detail');
+    
+    // 🆕 v300: load pricing/batches section async
+    if(items.length > 0){
+      _loadPOPricingSection(po.id);
+    }
   } catch(e) { toast('❌ ' + e.message); }
+}
+
+// 🆕 v300: تحميل قسم الأسعار والصلاحية
+async function _loadPOPricingSection(poId){
+  const container = document.getElementById('po-pricing-section');
+  if(!container) return;
+  
+  container.innerHTML = `
+    <div style="background:var(--elev);border-radius:10px;padding:14px;border:1px solid var(--border)">
+      <div style="font-weight:800;color:var(--gold);font-size:14px;margin-bottom:8px">💰 الأسعار والصلاحية</div>
+      <div style="color:var(--muted);font-size:12px;text-align:center;padding:14px">⏳ جاري التحميل...</div>
+    </div>
+  `;
+  
+  try {
+    const r = await apiFetch('/api/purchase-orders/' + poId + '/items-with-pricing');
+    if(!r?.items?.length){
+      container.innerHTML = '';
+      return;
+    }
+    
+    const itemsHtml = r.items.map(it => _renderPOPricingRow(poId, it)).join('');
+    
+    container.innerHTML = `
+      <div style="background:var(--elev);border-radius:10px;padding:14px;border:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap">
+          <div style="font-weight:800;color:var(--gold);font-size:14px">💰 الأسعار والصلاحية</div>
+          <div style="font-size:10px;color:var(--muted)">سعر البيع بـ يتعدّل في Shopify مباشرة · الصلاحيات بـ تنحفظ في صفحة "تواريخ الصلاحية"</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">${itemsHtml}</div>
+      </div>
+    `;
+  } catch(e){
+    container.innerHTML = `<div style="color:#dc2626;font-size:12px">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// 🆕 v300: render row لكل item بـ الأسعار + الصلاحية
+function _renderPOPricingRow(poId, item){
+  const margin = item.profit_margin || 0;
+  let marginColor = '#94a3b8';  // gray
+  if(margin > 30) marginColor = '#16a34a';      // green
+  else if(margin >= 15) marginColor = '#ca8a04'; // yellow
+  else if(margin > 0) marginColor = '#dc2626';   // red
+  
+  return `
+    <div data-item-id="${item.id}" style="background:var(--bg);border-radius:8px;padding:10px;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:180px">
+          <div style="font-weight:700;font-size:12px">${escapeHtml((item.product_title || '').slice(0, 60))}</div>
+          ${item.variant_title && item.variant_title !== 'Default Title' ? `<div style="font-size:10px;color:var(--muted)">${escapeHtml(item.variant_title)}</div>` : ''}
+          ${item.sku ? `<div style="font-size:9px;color:var(--muted);font-family:Roboto,sans-serif">SKU: ${escapeHtml(item.sku)}</div>` : ''}
+        </div>
+        
+        <!-- Profit margin badge -->
+        <div style="background:${marginColor}22;color:${marginColor};padding:4px 8px;border-radius:6px;font-weight:800;font-size:11px;font-family:Roboto,sans-serif;border:1px solid ${marginColor}55">
+          ربح ${margin.toFixed(1)}%
+        </div>
+      </div>
+      
+      <!-- Pricing row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-top:8px;align-items:end">
+        <div>
+          <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px">💰 شراء (محلي)</label>
+          <input type="number" step="0.01" min="0" 
+            value="${item.purchase_price.toFixed(2)}" 
+            data-original="${item.purchase_price}"
+            onblur="_savePOItemPrice(${poId}, ${item.id}, 'purchase', this)"
+            style="width:100%;padding:6px;font-family:Roboto,sans-serif;font-size:12px;background:var(--elev);border:1px solid var(--border);border-radius:6px;color:var(--text);text-align:center">
+        </div>
+        <div>
+          <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px">🏷️ بيع (Shopify)</label>
+          <input type="number" step="0.01" min="0" 
+            value="${item.sale_price.toFixed(2)}" 
+            data-original="${item.sale_price}"
+            onblur="_savePOItemPrice(${poId}, ${item.id}, 'sale', this)"
+            style="width:100%;padding:6px;font-family:Roboto,sans-serif;font-size:12px;background:var(--elev);border:1px solid var(--border);border-radius:6px;color:var(--text);text-align:center">
+        </div>
+        <div style="display:flex;gap:4px">
+          <button onclick="_openBatchDateModal(${poId}, ${item.id}, ${item.ordered_qty}, ${JSON.stringify(item.product_title || '').replace(/"/g, '&quot;')})" 
+            style="padding:6px 10px;background:#7c3aed22;color:#7c3aed;border:1px solid #7c3aed55;border-radius:6px;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap"
+            title="إضافة تاريخ صلاحية">
+            📅 صلاحية
+          </button>
+          ${item.active_batches > 0 ? `<span style="padding:6px 8px;background:#16a34a22;color:#16a34a;border-radius:6px;font-size:10px;font-weight:700;align-self:center" title="عدد الـ batches الـ active">✓ ${item.active_batches}</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// 🆕 v300: حفظ تعديل سعر (purchase أو sale)
+async function _savePOItemPrice(poId, itemId, type, inputEl){
+  const newVal = parseFloat(inputEl.value);
+  const original = parseFloat(inputEl.dataset.original);
+  
+  if(isNaN(newVal) || newVal < 0){
+    toast('❌ قيمة غير صالحة');
+    inputEl.value = original.toFixed(2);
+    return;
+  }
+  
+  // لو ما تغيرش، skip
+  if(Math.abs(newVal - original) < 0.001){
+    return;
+  }
+  
+  const body = {};
+  if(type === 'purchase'){
+    body.purchase_price = newVal;
+  } else {
+    body.sale_price = newVal;
+  }
+  
+  // visual loading
+  const origBg = inputEl.style.background;
+  inputEl.style.background = '#fbbf2422';
+  inputEl.disabled = true;
+  
+  try {
+    const r = await apiFetch(
+      `/api/purchase-orders/${poId}/items/${itemId}/prices`,
+      'PUT',
+      body
+    );
+    
+    inputEl.dataset.original = newVal;
+    inputEl.style.background = '#16a34a22';
+    setTimeout(() => { inputEl.style.background = origBg; }, 1000);
+    
+    if(type === 'sale'){
+      toast('✅ تم تحديث Shopify');
+    } else {
+      toast('✅ تم تحديث سعر الشراء');
+    }
+    
+    // re-fetch عشان تحدّث الـ profit margin
+    setTimeout(() => _loadPOPricingSection(poId), 500);
+  } catch(e){
+    inputEl.style.background = '#dc262622';
+    inputEl.value = original.toFixed(2);
+    toast('❌ ' + e.message);
+    setTimeout(() => { inputEl.style.background = origBg; }, 2000);
+  } finally {
+    inputEl.disabled = false;
+  }
+}
+
+// 🆕 v300: فتح modal لإضافة تاريخ صلاحية
+function _openBatchDateModal(poId, itemId, defaultQty, productTitle){
+  document.getElementById('batch-date-modal')?.remove();
+  
+  // default exp date = 1 year from now
+  const defaultDate = new Date();
+  defaultDate.setFullYear(defaultDate.getFullYear() + 1);
+  const defaultDateStr = defaultDate.toISOString().slice(0, 10);
+  
+  const ov = document.createElement('div');
+  ov.id = 'batch-date-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = `
+    <div style="background:var(--bg);border-radius:14px;padding:20px;max-width:420px;width:100%;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,.4)">
+      <h3 style="margin:0 0 4px;font-size:16px">📅 إضافة تاريخ صلاحية</h3>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px">${escapeHtml(productTitle)}</div>
+      
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">تاريخ الانتهاء:</label>
+      <input type="date" id="batch-exp-date" value="${defaultDateStr}" 
+        style="width:100%;padding:10px;background:var(--elev);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:Roboto,sans-serif;font-size:14px;margin-bottom:10px">
+      
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">الكمية:</label>
+      <input type="number" id="batch-qty" value="${defaultQty}" min="1" 
+        style="width:100%;padding:10px;background:var(--elev);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:Roboto,sans-serif;font-size:14px;margin-bottom:10px">
+      
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">ملاحظات (اختياري):</label>
+      <input type="text" id="batch-notes" placeholder="مثلاً: lot #..." 
+        style="width:100%;padding:10px;background:var(--elev);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;margin-bottom:14px">
+      
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-ghost" onclick="document.getElementById('batch-date-modal').remove()">إلغاء</button>
+        <button class="btn btn-primary" onclick="_saveBatchFromPO(${poId}, ${itemId})" style="background:#7c3aed;border-color:#7c3aed">💾 حفظ + ربط بصفحة الصلاحية</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(ov);
+  
+  // focus على الـ date input
+  setTimeout(() => document.getElementById('batch-exp-date')?.focus(), 100);
+}
+
+// 🆕 v300: حفظ الـ batch المرتبط بـ PO
+async function _saveBatchFromPO(poId, itemId){
+  const exp_date = document.getElementById('batch-exp-date')?.value;
+  const quantity = parseInt(document.getElementById('batch-qty')?.value);
+  const notes = document.getElementById('batch-notes')?.value?.trim() || '';
+  
+  if(!exp_date){
+    toast('❌ التاريخ مطلوب');
+    return;
+  }
+  if(!quantity || quantity < 1){
+    toast('❌ كمية غير صالحة');
+    return;
+  }
+  
+  // validate date not in past
+  const today = new Date().toISOString().slice(0, 10);
+  if(exp_date < today){
+    if(!confirm('⚠️ التاريخ ده فات بالفعل - متأكد؟')) return;
+  }
+  
+  try {
+    const r = await apiFetch(
+      `/api/purchase-orders/${poId}/items/${itemId}/batch`,
+      'POST',
+      { exp_date, quantity, notes }
+    );
+    
+    document.getElementById('batch-date-modal')?.remove();
+    toast('✅ تم حفظ الصلاحية + ربطها بصفحة تواريخ الصلاحية');
+    
+    // refresh الـ pricing section عشان نشوف الـ active_batches count يحدث
+    _loadPOPricingSection(poId);
+  } catch(e){
+    toast('❌ ' + e.message);
+  }
 }
 
 // 🆕 v287: طباعة PDF لأمر شراء موجود (من قائمة أوامر الشراء)
@@ -38297,7 +38646,7 @@ function goPage(el,page){
   if(page==='inventory') loadInventoryPage();
   if(page==='stocktake') loadStocktakePage();
   if(page==='transfers') loadTransfersPage();
-  if(page==='transfer-suggestions') loadTransferSuggestions();
+  if(page==='transfer-suggestions') tpLoadWarehouses();
   if(page==='purchase-suggestions') loadPurchaseSuggestions();
   if(page==='pos-stores') loadPosStoresPage();
   if(page==='pos-promo') loadPromoPage();
