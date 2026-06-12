@@ -1,21 +1,21 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v388 — TRANSFER PLAN (ذكاء التحويلات على مستوى الصفحة) (2026-06-10)
+  OrderPro v395 — IMAGE SIZE COLUMN (2026-06-11)
   ═══════════════════════════════════════════════════════════════════
-  ♻️ إعادة بناء كاملة لصفحة "ذكاء التحويلات":
-     - شيلنا الاقتراح القديم على مستوى المنتج (suggestion cards + manual modal)
-     - دلوقتي: تختار مخزن مصدر + مخزن وجهة فوق الصفحة، تضغط "حلّل"
-     - النظام بيلف على كل المنتجات المشتركة ويطلّع جدول:
-       checkbox · المنتج+حالته · رصيد المصدر · رصيد الوجهة · كمية التحويل · preview بعد
-     - الكميات قابلة للتعديل (+/− أو كتابة)، اقتراح أولي ذكي
-     - "حدد الكل/إلغاء الكل" + بحث
-     - تحويل واحد مجمّع بكل المنتجات المحددة → POST /api/transfers
-     - تحذيرات: كمية > رصيد المصدر، أو المصدر هينزل تحت الحد الآمن
+  ✨ عمود "الحجم" في فحص الكتالوج (B/KB/MB) — من fileSize (backend v315)
+  🐛 backend v315: دعم صور AVIF (Air Up) + إصلاح فشلها
 
-  🔗 بيعتمد على endpoint backend جديد: GET /api/transfer-plan (v307)
-     لازم تـ deploy الـ backend v307 الأول عشان الصفحة تشتغل.
+  من v394 — DISTRIBUTION FILTERS:
+  ✨ الطلبات اليدوية مش بتظهر في التوزيع + "وزّع على" مناديب بس
 
+  من v389 — RESYNC REMOVED ITEMS:
+  🐛 resyncOrderPrice بقى يعمل full re-fetch (منتجات + سعر)
+
+  ♻️ من v388 — TRANSFER PLAN (ذكاء التحويلات على مستوى الصفحة):
+     تختار مخزن مصدر + وجهة، تضغط حلّل، تختار منتجات (checkbox)،
+     تحويل واحد مجمّع. بيعتمد على backend /api/transfer-plan.
+  ───────────────────────────────────────────────────────────────────
   من v386 — INFOMODAL HTML SUPPORT FIX (2026-06-09):
   🐛 Bug: modal "حركة المنتج" بـ يعرض HTML كـ text raw
      (مثال: <"div style="padding:30px..." بدل ما يـ render)
@@ -629,6 +629,7 @@ tr:hover td{background:#fafbff}
       </div>
       <div class="nav-group-body">
         <div class="ni" data-p="inventory" onclick="goPage(this,'inventory')"><span class="ni-icon">📦</span><span class="ni-label">المخزون</span><span class="nbadge" id="nb-inv-low" style="background:var(--warn)">0</span></div>
+        <div class="ni" data-p="image-fix" onclick="goPage(this,'image-fix')"><span class="ni-icon">🖼️</span><span class="ni-label">تظبيط الصور</span></div>
         <div class="ni" data-p="watchlist" onclick="goPage(this,'watchlist')"><span class="ni-icon">⭐</span><span class="ni-label">منتجاتي المهمة</span><span class="nbadge" id="nb-watchlist" style="background:var(--accent)">0</span></div>
         <div class="ni" data-p="stocktake" onclick="goPage(this,'stocktake')"><span class="ni-icon">🔍</span><span class="ni-label">الجرد</span></div>
         <div class="ni" data-p="transfers" onclick="goPage(this,'transfers')"><span class="ni-icon">🔄</span><span class="ni-label">تحويلات المخازن</span><span class="nbadge" id="nb-transfers" style="background:var(--warn)">0</span></div>
@@ -1479,6 +1480,55 @@ tr:hover td{background:#fafbff}
     </div>
 
     <div id="manual-orders-list"></div>
+  </div>
+
+  <!-- 🆕 v392: BULK IMAGE FIX PAGE -->
+  <div class="page" id="page-image-fix">
+    <div style="background:linear-gradient(135deg,#eef2ff,#fff);border:1px solid #c7d2fe;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+      <div style="font-weight:800;color:#3730a3;font-size:15px">🖼️ تظبيط صور المنتجات</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.6">
+        بيحوّل كل صورة لمربع <strong>2048×2048</strong> بخلفية بيضا والمنتج في النص، ويغيّر اسمها لـ <strong>Cafelax-اسم-المنتج</strong>.
+        الصورة بتتحط في مربع بـ contain (مفيش قص)، فالأبعاد الوحشة بتتظبط والصور الكويسة بتفضل زي ما هي.
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="padding:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="imgfix-scan-btn" onclick="imgfixScan()">🔍 افحص الكتالوج</button>
+        <input id="imgfix-search" placeholder="🔎 ابحث باسم المنتج..." oninput="imgfixRender()"
+               style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;min-width:220px">
+        <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="imgfix-only-needed" checked onchange="imgfixRender()" style="width:15px;height:15px">
+          اعرض اللي محتاج تظبيط بس
+        </label>
+        <div style="flex:1"></div>
+        <button class="btn btn-secondary" id="imgfix-fixall-btn" onclick="imgfixStartAll()" style="display:none;background:#16a34a;color:#fff">✅ ظبّط الكل</button>
+      </div>
+      <div id="imgfix-scan-progress" style="padding:0 14px 12px;font-size:12px;color:var(--muted)"></div>
+    </div>
+
+    <!-- Active Job Progress -->
+    <div class="card" id="imgfix-job-card" style="display:none;margin-bottom:14px">
+      <div style="padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-weight:800" id="imgfix-job-title">جاري المعالجة...</div>
+          <div style="font-size:12px;color:var(--muted)" id="imgfix-job-stats"></div>
+        </div>
+        <div style="background:#e5e7eb;border-radius:99px;height:14px;overflow:hidden">
+          <div id="imgfix-job-bar" style="background:linear-gradient(90deg,#6366f1,#10b981);height:100%;width:0%;transition:width .4s"></div>
+        </div>
+        <div id="imgfix-job-failed" style="margin-top:8px;font-size:11px"></div>
+      </div>
+    </div>
+
+    <!-- Results table -->
+    <div id="imgfix-results">
+      <div style="text-align:center;padding:50px;color:var(--muted)">
+        <div style="font-size:48px;opacity:.3">🖼️</div>
+        <div style="margin-top:10px;font-weight:700">اضغط "افحص الكتالوج" لعرض المنتجات وحالة صورها</div>
+      </div>
+    </div>
   </div>
 
   <!-- 🆕 v317: SYNC FAILURES PAGE -->
@@ -6985,7 +7035,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','inventory':'📦 المخزون','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -8268,7 +8318,8 @@ function updateStats(){
   $('st-total').textContent=total;$('st-wait').textContent=wait;$('st-go').textContent=go;$('st-done').textContent=done;
   $('st-rev').textContent=rev.toLocaleString()+' ج';
   $('nb-orders').textContent=orders.filter(o=>o.status==='جديد').length;
-  $('nb-assign').textContent=wait;
+  // 🆕 badge التوزيع يطابق صفحة التوزيع: يستثني اليدوية (مش محتاجة توزيع)
+  $('nb-assign').textContent=orders.filter(o=>!o.courierId&&!o.isBosta&&o.status!=='مكتمل'&&o.status!=='ملغي'&&!isTransit(o)&&o.sourceName!=='cafelax_manual').length;
   $('nb-notifs').textContent=notifications.filter(n=>!n.read).length||'';
   // فقط الطلبات الموزعة وفي انتظار الاستلام
   const pickupCount=orders.filter(o=>isPickup(o) && o.courierId && !o.pickedUpAt && o.status!=='مكتمل' && o.status!=='ملغي').length;
@@ -9297,7 +9348,8 @@ function renderAssignPage(){
   // طلبات Shopify اللي shipping method فيها "Pick up" بتيجي بـ delivery_type='pickup'
   // ولازم تظهر في التوزيع عشان يتم توزيعها للمحل
   // (الفلتر القديم: !isPickup(o) كان بيخفيها)
-  const u=orders.filter(o=>!o.courierId&&!o.isBosta&&o.status!=='مكتمل'&&o.status!=='ملغي'&&!isTransit(o));
+  // 🆕 استثني الطلبات اليدوية — بتروح Shopify fulfilled، مش محتاجة توزيع
+  const u=orders.filter(o=>!o.courierId&&!o.isBosta&&o.status!=='مكتمل'&&o.status!=='ملغي'&&!isTransit(o)&&o.sourceName!=='cafelax_manual');
   $('assign-count').textContent=u.length+' طلب';
   const probCount=u.filter(o=>o.hasProblem).length;
   const probBtn=$('assign-prob-btn');
@@ -9518,10 +9570,10 @@ function renderAssignGrid(){
     return;
   }
   const suggested=suggestCourier(o);
-  // 🆕 v274: فلترة - بس مندوبين و محلات (مش كاشيرز/مدراء/محضرين)
+  // 🆕 اعرض المناديب بس (courier) — أي دور تاني يختفي. بوسطة كزرار منفصل تحت
   const assignableCouriers = couriers.filter(c => {
     const r = c.role || 'courier';
-    return r === 'courier' || r === 'shop';
+    return r === 'courier';
   });
   g.innerHTML=assignableCouriers.map((c,i)=>{
     const active=oByC(c.id,'جاري التوصيل').length;
@@ -10114,14 +10166,43 @@ async function checkShopifyPrice(orderId){
   }
 }
 
-function resyncOrderPrice(orderId, newTotal){
-  if(!confirm('هتحدث إجمالي الطلب إلى '+newTotal.toLocaleString()+' ج؟'))return;
+async function resyncOrderPrice(orderId, newTotal){
+  if(!confirm('هيتم تحديث المنتجات والإجمالي من Shopify (بيشيل المنتجات المحذوفة بعد تعديل الطلب). نكمل؟'))return;
   const o = orders.find(x=>x.id===orderId);
   if(!o)return;
+  if(!API_URL){ toast('❗ الـ backend غير متصل'); return; }
   const oldTotal = o.total;
+
+  // 🆕 v389: نعمل full re-fetch (منتجات + سعر) بدل تحديث السعر بس.
+  // ده بيصلّح الطلبات المعدّلة على Shopify (المنتجات المحذوفة current_quantity=0)
+  if(o.shopifyId){
+    toast('⏳ جاري التحديث من Shopify...');
+    try{
+      const r = await apiFetch('/api/shopify/fetch-line-items','POST',{
+        shopifyOrderId: String(o.shopifyId),
+        orderId: o.id,
+      });
+      if(r && r.success){
+        if(r.lineItemsJson) o.lineItemsJson = r.lineItemsJson;
+        if(r.totalPrice != null) o.total = r.totalPrice;
+        else o.total = newTotal;
+        if(r.subtotalPrice != null) o.subtotalPrice = r.subtotalPrice;
+        if(r.shippingPrice != null) o.shippingPrice = r.shippingPrice;
+        debouncedSaveOrders();
+        document.getElementById('price-check-popup')?.remove();
+        const totInput = document.getElementById('eo-total');
+        if(totInput) totInput.value = o.total;
+        refreshAll();
+        toast('✅ تم تحديث المنتجات والإجمالي إلى '+(o.total||0).toLocaleString()+' ج');
+        return;
+      }
+    }catch(e){ console.warn('resync full:', e.message); }
+  }
+
+  // fallback: لو مفيش shopifyId أو فشل، حدّث السعر بس (السلوك القديم)
   o.total = newTotal;
   debouncedSaveOrders();
-  if(API_URL) apiFetch('/api/orders/'+orderId,'PATCH',{total:newTotal}).catch(()=>{});
+  apiFetch('/api/orders/'+orderId,'PATCH',{total:newTotal}).catch(()=>{});
   document.getElementById('price-check-popup')?.remove();
   const totInput = document.getElementById('eo-total');
   if(totInput) totInput.value = newTotal;
@@ -15857,6 +15938,7 @@ function renderManualOrdersList(){
         <td style="font-size:11px;color:var(--muted)">${created}</td>
         <td>
           <button class="btn btn-ghost btn-xs" onclick="printManualOrderInvoiceDirect('SH-${escapeHtml(o.shopify_order_id)}')" title="طباعة فاتورة" style="color:#16a34a">🖨️</button>
+          <button class="btn btn-ghost btn-xs" onclick="moOpenReturn('${escapeHtml(o.shopify_order_id)}','${escapeHtml(o.shopify_order_name || '#'+o.shopify_order_number)}')" title="مرتجع — رجّع منتج للمخزن" style="color:#dc2626">↩️</button>
           <button class="btn btn-ghost btn-xs" onclick="window.open('https://cafelax.myshopify.com/admin/orders/${escapeHtml(o.shopify_order_id)}','_blank')" title="افتح في Shopify">🛍️</button>
         </td>
       </tr>
@@ -15883,6 +15965,367 @@ function renderManualOrdersList(){
       </div>
     </div>
   `;
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🆕 v390: MANUAL ORDER RETURN — مرتجع للطلبات اليدوية
+// ───────────────────────────────────────────────────────────
+// تختار منتج + الكمية الجديدة → الكمية تتغيّر في Shopify + الفرق
+// يرجع المخزن (restock) + من غير أي refund مالي.
+let _moReturnState = null; // { shopifyId, orderName, items[] }
+
+async function moOpenReturn(shopifyId, orderName){
+  if(!API_URL){ toast('❌ API غير متاح'); return; }
+  _moReturnState = { shopifyId, orderName, items: [] };
+
+  // افتح الـ modal بحالة تحميل
+  let modal = document.getElementById('mo-return-modal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'mo-return-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:16px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border)">
+        <div style="font-weight:800;font-size:15px">↩️ مرتجع — ${escapeHtml(orderName)}</div>
+        <button class="btn btn-ghost btn-sm" onclick="moCloseReturn()" style="font-size:18px;padding:2px 10px">✕</button>
+      </div>
+      <div id="mo-return-body" style="padding:18px">
+        <div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري جلب منتجات الطلب...</div>
+      </div>
+    </div>
+  `;
+  modal.style.display = 'flex';
+
+  // جيب الـ line items
+  try {
+    const r = await apiFetch('/api/manual-orders/' + encodeURIComponent(shopifyId) + '/line-items');
+    if(!r || !r.items){ throw new Error(r?.error || 'فشل جلب المنتجات'); }
+    _moReturnState.items = r.items.map(it => ({ ...it, newQuantity: it.currentQuantity }));
+    moRenderReturnBody();
+  } catch(e){
+    document.getElementById('mo-return-body').innerHTML =
+      `<div style="color:var(--danger);text-align:center;padding:20px">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function moCloseReturn(){
+  const m = document.getElementById('mo-return-modal');
+  if(m) m.style.display = 'none';
+  _moReturnState = null;
+}
+
+function moRenderReturnBody(){
+  const body = document.getElementById('mo-return-body');
+  if(!body || !_moReturnState) return;
+  const its = _moReturnState.items;
+  if(!its.length){
+    body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">مفيش منتجات في الطلب</div>';
+    return;
+  }
+
+  const rows = its.map((it, idx) => {
+    const willReturn = it.currentQuantity - it.newQuantity;
+    return `
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:12px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px">
+        <div style="min-width:0">
+          <div style="font-weight:700;font-size:13px">${escapeHtml(it.title)}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:monospace">${it.sku ? escapeHtml(it.sku) : ''}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">الكمية الحالية: <strong>${it.currentQuantity}</strong>${willReturn > 0 ? ` · <span style="color:#dc2626">هيرجع المخزن: ${willReturn}</span>` : ''}</div>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="font-size:10px;color:var(--muted)">الكمية الجديدة</span>
+          <button class="btn btn-ghost btn-sm" onclick="moReturnQtyStep(${idx},-1)" style="padding:2px 9px;font-size:15px">−</button>
+          <input type="number" min="0" max="${it.currentQuantity}" value="${it.newQuantity}"
+                 onchange="moReturnSetQty(${idx}, this.value)"
+                 style="width:50px;text-align:center;font-weight:800;padding:5px;border:1px solid var(--border);border-radius:7px;font-family:Cairo,sans-serif">
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const totalReturn = its.reduce((s,it) => s + (it.currentQuantity - it.newQuantity), 0);
+  const anyChange = totalReturn > 0;
+
+  body.innerHTML = `
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:#1e40af;line-height:1.6">
+      💡 غيّر الكمية للقيمة <strong>الجديدة</strong> (بعد المرتجع). الفرق هيرجع المخزن تلقائياً. <strong>مفيش أي رد فلوس</strong> — التعديل على المخزون والطلب بس.
+    </div>
+    ${rows}
+    <div style="margin-top:8px">
+      <label style="font-size:11px;color:var(--muted);font-weight:700;display:block;margin-bottom:4px">ملاحظة (اختياري)</label>
+      <input id="mo-return-note" placeholder="سبب المرتجع..." style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" id="mo-return-confirm" onclick="moConfirmReturn()" ${anyChange?'':'disabled style="opacity:.5;cursor:not-allowed"'}>
+        ↩️ نفّذ المرتجع ${anyChange ? `(${totalReturn} قطعة)` : ''}
+      </button>
+      <button class="btn btn-ghost" onclick="moCloseReturn()">إلغاء</button>
+    </div>
+  `;
+}
+
+function moReturnSetQty(idx, val){
+  if(!_moReturnState) return;
+  const it = _moReturnState.items[idx];
+  let q = parseInt(val);
+  if(isNaN(q) || q < 0) q = 0;
+  if(q > it.currentQuantity) q = it.currentQuantity;
+  it.newQuantity = q;
+  moRenderReturnBody();
+}
+
+function moReturnQtyStep(idx, delta){
+  if(!_moReturnState) return;
+  const it = _moReturnState.items[idx];
+  moReturnSetQty(idx, it.newQuantity + delta);
+}
+
+async function moConfirmReturn(){
+  if(!_moReturnState) return;
+  // بس المنتجات اللي كميتها اتغيّرت
+  const changed = _moReturnState.items
+    .filter(it => it.newQuantity < it.currentQuantity)
+    .map(it => ({ lineItemId: it.lineItemId, sku: it.sku || '', title: it.title || '', newQuantity: it.newQuantity }));
+
+  if(!changed.length){ toast('⚠️ مفيش أي كمية اتغيّرت'); return; }
+
+  const totalReturn = _moReturnState.items.reduce((s,it) => s + (it.currentQuantity - it.newQuantity), 0);
+  if(!confirm(`تأكيد المرتجع؟\n\n${changed.length} منتج هيتعدّل\n${totalReturn} قطعة هترجع المخزن\n\nمفيش أي رد فلوس — تعديل مخزون وطلب بس.`)) return;
+
+  const note = document.getElementById('mo-return-note')?.value?.trim() || '';
+  const btn = document.getElementById('mo-return-confirm');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ جاري التنفيذ...'; }
+
+  try {
+    const r = await apiFetch('/api/manual-orders/' + encodeURIComponent(_moReturnState.shopifyId) + '/return', 'POST', {
+      items: changed,
+      note,
+    });
+    if(r && r.success){
+      toast('✅ ' + (r.message || 'تم المرتجع'));
+      if(r.failed && r.failed.length){
+        toast('⚠️ ' + r.failed.length + ' منتج فشل');
+      }
+      moCloseReturn();
+      loadManualOrders(); // حدّث الجدول
+    } else {
+      toast('❌ ' + (r?.error || 'فشل المرتجع'));
+      if(btn){ btn.disabled = false; btn.textContent = '↩️ نفّذ المرتجع'; }
+    }
+  } catch(e){
+    toast('❌ ' + e.message);
+    if(btn){ btn.disabled = false; btn.textContent = '↩️ نفّذ المرتجع'; }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🆕 v392: BULK IMAGE FIX
+// ═══════════════════════════════════════════════════════════
+let _imgfixItems = [];        // كل المنتجات اللي اتفحصت
+let _imgfixScanning = false;
+let _imgfixJobPoll = null;    // interval للـ progress
+
+function imgfixOnOpen(){
+  // لو فيه job شغّال، استأنف المتابعة
+  imgfixCheckActiveJob();
+}
+
+async function imgfixScan(){
+  if(!API_URL){ toast('❌ الـ backend غير متصل'); return; }
+  if(_imgfixScanning) return;
+  _imgfixScanning = true;
+  _imgfixItems = [];
+  const btn = document.getElementById('imgfix-scan-btn');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ جاري الفحص...'; }
+  const prog = document.getElementById('imgfix-scan-progress');
+
+  try {
+    let cursor = null, pages = 0;
+    do {
+      const params = new URLSearchParams({ limit: '50' });
+      if(cursor) params.set('cursor', cursor);
+      const r = await apiFetch('/api/image-fix/scan?' + params.toString());
+      if(!r || !r.items) throw new Error(r?.error || 'فشل الفحص');
+      _imgfixItems.push(...r.items.filter(it => it.hasImage));
+      cursor = r.hasNextPage ? r.endCursor : null;
+      pages++;
+      const needed = _imgfixItems.filter(i => i.needsFix).length;
+      if(prog) prog.textContent = `تم فحص ${_imgfixItems.length} منتج... (${needed} محتاج تظبيط)`;
+      imgfixRender();
+      // safety: حد أقصى ~160 صفحة (8000 منتج)
+      if(pages > 165) break;
+    } while(cursor);
+
+    const needed = _imgfixItems.filter(i => i.needsFix).length;
+    if(prog) prog.textContent = `✅ خلص الفحص: ${_imgfixItems.length} منتج · ${needed} محتاج تظبيط`;
+    const fixAll = document.getElementById('imgfix-fixall-btn');
+    if(fixAll) fixAll.style.display = needed > 0 ? 'inline-flex' : 'none';
+  } catch(e){
+    if(prog) prog.textContent = '❌ ' + e.message;
+    toast('❌ ' + e.message);
+  } finally {
+    _imgfixScanning = false;
+    if(btn){ btn.disabled = false; btn.textContent = '🔍 افحص الكتالوج'; }
+  }
+}
+
+function imgfixRender(){
+  const cont = document.getElementById('imgfix-results');
+  if(!cont) return;
+  const onlyNeeded = document.getElementById('imgfix-only-needed')?.checked;
+  const search = (document.getElementById('imgfix-search')?.value || '').trim().toLowerCase();
+  let list = _imgfixItems.slice();
+  if(onlyNeeded) list = list.filter(i => i.needsFix);
+  if(search) list = list.filter(i => (i.title || '').toLowerCase().includes(search));
+
+  if(!list.length){
+    let msg, sub;
+    if(search){ msg = '🔎 مفيش نتائج للبحث'; sub = 'جرّب كلمة تانية'; }
+    else if(_imgfixItems.length){ msg = '✅ كل الصور المعروضة متظبطة'; sub = ''; }
+    else { msg = 'اضغط "افحص الكتالوج"'; sub = ''; }
+    cont.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:42px;opacity:.3">${search?'🔎':'🖼️'}</div><div style="margin-top:10px;font-weight:700">${msg}</div>${sub?`<div style="font-size:12px;margin-top:4px">${sub}</div>`:''}</div>`;
+    return;
+  }
+
+  const rows = list.map(it => {
+    const dim = (it.width && it.height) ? `${it.width}×${it.height}` : '؟';
+    const sizeStr = imgfixFmtSize(it.fileSize);
+    const badge = it.needsFix
+      ? `<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700">⚠️ محتاج تظبيط</span>`
+      : `<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700">✅ متظبط</span>`;
+    return `
+      <tr data-media="${it.mediaGid}">
+        <td style="width:48px"><img src="${it.imageUrl}" style="width:42px;height:42px;object-fit:contain;background:#f3f4f6;border-radius:6px;border:1px solid var(--border)"></td>
+        <td style="font-size:12px;font-weight:600">${escapeHtml(it.title)}</td>
+        <td style="text-align:center;font-size:11px;font-family:monospace">${dim}</td>
+        <td style="text-align:center;font-size:11px;font-family:monospace;color:var(--muted)">${sizeStr}</td>
+        <td style="text-align:center">${badge}</td>
+        <td style="text-align:center">
+          ${it.needsFix ? `<button class="btn btn-ghost btn-xs" onclick='imgfixOne(this, ${JSON.stringify(it).replace(/'/g,"&#39;")})' style="color:#16a34a">🖼️ ظبّط</button>` : '—'}
+        </td>
+      </tr>`;
+  }).join('');
+
+  cont.innerHTML = `
+    <div class="card">
+      <div class="card-hd"><h3 style="margin:0">${list.length} منتج${search?` (بحث: "${escapeHtml(search)}")`:''}</h3></div>
+      <div class="tw" style="overflow-x:auto">
+        <table style="width:100%;font-size:12px">
+          <thead><tr>
+            <th></th><th>المنتج</th>
+            <th style="text-align:center">الأبعاد</th>
+            <th style="text-align:center">الحجم</th>
+            <th style="text-align:center">الحالة</th>
+            <th style="text-align:center"></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// تنسيق حجم الملف (bytes → KB/MB)
+function imgfixFmtSize(bytes){
+  if(!bytes || bytes <= 0) return '—';
+  if(bytes < 1024) return bytes + ' B';
+  if(bytes < 1024*1024) return Math.round(bytes/1024) + ' KB';
+  return (bytes/(1024*1024)).toFixed(1) + ' MB';
+}
+
+async function imgfixOne(btn, item){
+  if(!confirm(`ظبّط صورة "${item.title}"؟`)) return;
+  btn.disabled = true; btn.textContent = '⏳';
+  try {
+    const r = await apiFetch('/api/image-fix/single', 'POST', {
+      mediaGid: item.mediaGid, imageUrl: item.imageUrl, title: item.title,
+    });
+    if(r && r.success){
+      toast('✅ اتظبطت: ' + (r.filename || ''));
+      // علّم الصف متظبط
+      const tr = btn.closest('tr');
+      if(tr){
+        const it = _imgfixItems.find(x => x.mediaGid === item.mediaGid);
+        if(it) it.needsFix = false;
+        imgfixRender();
+      }
+    } else {
+      toast('❌ ' + (r?.error || 'فشل'));
+      btn.disabled = false; btn.textContent = '🖼️ ظبّط';
+    }
+  } catch(e){
+    toast('❌ ' + e.message);
+    btn.disabled = false; btn.textContent = '🖼️ ظبّط';
+  }
+}
+
+async function imgfixStartAll(){
+  const needed = _imgfixItems.filter(i => i.needsFix);
+  if(!needed.length){ toast('مفيش صور محتاجة تظبيط'); return; }
+  if(!confirm(`هتظبّط ${needed.length} صورة. العملية بتشتغل في الخلفية وممكن تاخد وقت. نبدأ؟`)) return;
+
+  try {
+    const items = needed.map(i => ({
+      productGid: i.productGid, mediaGid: i.mediaGid, title: i.title, imageUrl: i.imageUrl,
+    }));
+    const r = await apiFetch('/api/image-fix/jobs', 'POST', { items });
+    if(r && r.success){
+      toast(`✅ بدأ تظبيط ${r.total} صورة`);
+      imgfixTrackJob(r.jobId);
+    } else {
+      toast('❌ ' + (r?.error || 'فشل بدء العملية'));
+    }
+  } catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
+async function imgfixCheckActiveJob(){
+  if(!API_URL) return;
+  try {
+    const r = await apiFetch('/api/image-fix/jobs');
+    const running = (r?.jobs || []).find(j => j.status === 'running');
+    if(running) imgfixTrackJob(running.id);
+  } catch(e){}
+}
+
+function imgfixTrackJob(jobId){
+  const card = document.getElementById('imgfix-job-card');
+  if(card) card.style.display = 'block';
+  if(_imgfixJobPoll) clearInterval(_imgfixJobPoll);
+
+  const poll = async () => {
+    try {
+      const r = await apiFetch('/api/image-fix/jobs/' + jobId);
+      if(!r || !r.job) return;
+      const j = r.job;
+      const pct = j.total > 0 ? Math.round(((j.done + j.failed) / j.total) * 100) : 0;
+      const bar = document.getElementById('imgfix-job-bar');
+      const stats = document.getElementById('imgfix-job-stats');
+      const title = document.getElementById('imgfix-job-title');
+      if(bar) bar.style.width = pct + '%';
+      if(stats) stats.textContent = `${j.done + j.failed} / ${j.total} (✅ ${j.done} · ❌ ${j.failed})`;
+      if(title) title.textContent = j.status === 'done' ? '✅ خلصت المعالجة' : '⏳ جاري المعالجة...';
+
+      const failBox = document.getElementById('imgfix-job-failed');
+      if(failBox && r.recentFailed && r.recentFailed.length){
+        failBox.innerHTML = '<div style="color:#991b1b;font-weight:700;margin-bottom:4px">آخر اللي فشلوا:</div>' +
+          r.recentFailed.slice(0,5).map(f => `<div style="color:var(--muted)">• ${escapeHtml(f.product_title||'')}: ${escapeHtml((f.error||'').slice(0,60))}</div>`).join('');
+      }
+
+      if(j.status === 'done'){
+        clearInterval(_imgfixJobPoll);
+        _imgfixJobPoll = null;
+        toast(`✅ خلصت: ${j.done} نجحت · ${j.failed} فشلت`);
+        // أعد الفحص عشان نحدّث الحالات
+        setTimeout(() => imgfixScan(), 1500);
+      }
+    } catch(e){}
+  };
+  poll();
+  _imgfixJobPoll = setInterval(poll, 3000);
 }
 
 // 🆕 v371: طباعة الفاتورة مباشرة من الـ backend (بدون الحاجة لـ orders cache)
@@ -21843,7 +22286,8 @@ async function buildPackingSlipHtml(o){
 }
 
 function startBatch(){
-  const unassigned=orders.filter(o=>!o.courierId&&!o.isBosta&&o.status!=='مكتمل'&&o.status!=='ملغي'&&o.status!=='مدمج'&&!isTransit(o));
+  // 🆕 استثني الطلبات اليدوية — بتروح Shopify fulfilled، مش محتاجة توزيع
+  const unassigned=orders.filter(o=>!o.courierId&&!o.isBosta&&o.status!=='مكتمل'&&o.status!=='ملغي'&&o.status!=='مدمج'&&!isTransit(o)&&o.sourceName!=='cafelax_manual');
   if(!unassigned.length){toast('❗ لا توجد طلبات للتوزيع');return;}
   batchOrders=[...unassigned].sort((a,b)=>{
     const na=parseInt((a.shopifyId||a.id.replace('SH-','')||0));
@@ -21918,7 +22362,9 @@ function renderBatchOrder(){
       });
     }
 
-    const ranked=couriers.filter(c => (c.role || 'courier') !== 'preparer').map(c=>({...c,zm:zoneMatchScore(o.area,c.zone)})).sort((a,b)=>(b.zm-a.zm));
+    // 🆕 اعرض المناديب بس (courier) — أي دور تاني (محل/جرد/كاشير/محضر) يختفي
+    // بوسطة موجود كزرار منفصل تحت
+    const ranked=couriers.filter(c => (c.role || 'courier') === 'courier').map(c=>({...c,zm:zoneMatchScore(o.area,c.zone)})).sort((a,b)=>(b.zm-a.zm));
     grid.innerHTML=ranked.map(c=>{
       // 🔧 v238: استخدم getShipCost
       const ship=getShipCost(o,c);
@@ -38616,6 +39062,7 @@ function goPage(el,page){
   if(page==='late-orders')renderLateOrdersPage();
   if(page==='order-tracker')renderOrderTracker();
   if(page==='manual-orders')loadManualOrders();
+  if(page==='image-fix')imgfixOnOpen();
   if(page==='sync-failures')loadSyncFailures();
   if(page==='payables')loadPayables();
   if(page==='settlements-receipts')loadSettlementsReceipts();
