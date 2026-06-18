@@ -1,13 +1,16 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v395 — IMAGE SIZE COLUMN (2026-06-11)
+  OrderPro v400 — SYNC PROGRESS BAR (2026-06-18)
   ═══════════════════════════════════════════════════════════════════
-  ✨ عمود "الحجم" في فحص الكتالوج (B/KB/MB) — من fileSize (backend v315)
-  🐛 backend v315: دعم صور AVIF (Air Up) + إصلاح فشلها
+  ✨ progress bar للمزامنة الكاملة + مزامنة الكميات:
+     - المزامنة بقت background job (مش بتعلّق الصفحة)
+     - progress bar حي بيعرض المرحلة (مخازن/منتجات/كميات) + العدّادات
+     - بيكمّل المتابعة لو فتحت الصفحة والمزامنة شغّالة
+     يعتمد على backend v321 (sync_jobs + progress endpoints).
 
-  من v394 — DISTRIBUTION FILTERS:
-  ✨ الطلبات اليدوية مش بتظهر في التوزيع + "وزّع على" مناديب بس
+  من v399 — IMAGE FIX AUTO REVIEW QUEUE:
+  ✨ المنتجات الجديدة تظهر تلقائياً في تبويب الصور
 
   من v389 — RESYNC REMOVED ITEMS:
   🐛 resyncOrderPrice بقى يعمل full re-fetch (منتجات + سعر)
@@ -1502,6 +1505,22 @@ tr:hover td{background:#fafbff}
           <input type="checkbox" id="imgfix-only-needed" checked onchange="imgfixRender()" style="width:15px;height:15px">
           اعرض اللي محتاج تظبيط بس
         </label>
+        <select id="imgfix-size-filter" onchange="imgfixRender()" title="فلتر بالحجم"
+                style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;cursor:pointer">
+          <option value="all">كل الأحجام</option>
+          <option value="lt100">أصغر من 100 KB</option>
+          <option value="100-300">100 – 300 KB</option>
+          <option value="300-500">300 – 500 KB</option>
+          <option value="gt500">أكبر من 500 KB</option>
+          <option value="gt1mb">أكبر من 1 MB</option>
+        </select>
+        <select id="imgfix-sort" onchange="imgfixRender()" title="ترتيب"
+                style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;cursor:pointer">
+          <option value="none">بدون ترتيب</option>
+          <option value="size-desc">الحجم: الأكبر أولاً</option>
+          <option value="size-asc">الحجم: الأصغر أولاً</option>
+          <option value="title">الاسم (أ-ي)</option>
+        </select>
         <div style="flex:1"></div>
         <button class="btn btn-secondary" id="imgfix-fixall-btn" onclick="imgfixStartAll()" style="display:none;background:#16a34a;color:#fff">✅ ظبّط الكل</button>
       </div>
@@ -3044,8 +3063,32 @@ tr:hover td{background:#fafbff}
     <h2 style="margin:0">📦 المخزون</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-sm" onclick="openManageWarehousesModal()" title="ضبط المخازن والمخزن الرئيسي">⚙️ إدارة المخازن</button>
+      <button class="btn btn-ghost btn-sm" onclick="bulkActivateStart()" title="تفعيل كل المخازن لكل المنتجات على Shopify" style="color:#7c3aed">🏬 تفعيل كل المخازن</button>
       <button class="btn btn-ghost btn-sm" onclick="syncInventoryLevels()">🔄 مزامنة الكميات</button>
       <button class="btn btn-primary btn-sm" onclick="syncInventoryFull()">🔁 مزامنة كاملة</button>
+    </div>
+  </div>
+
+  <!-- 🆕 v397: Bulk Activate Progress -->
+  <div id="bulk-activate-card" style="display:none;background:linear-gradient(135deg,#f5f3ff,#fff);border:1px solid #ddd6fe;border-radius:10px;padding:14px;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-weight:800;color:#6d28d9" id="bulk-activate-title">🏬 جاري تفعيل المخازن...</div>
+      <div style="font-size:12px;color:var(--muted)" id="bulk-activate-stats"></div>
+    </div>
+    <div style="background:#e5e7eb;border-radius:99px;height:14px;overflow:hidden">
+      <div id="bulk-activate-bar" style="background:linear-gradient(90deg,#8b5cf6,#6d28d9);height:100%;width:0%;transition:width .4s"></div>
+    </div>
+    <div id="bulk-activate-note" style="margin-top:8px;font-size:11px;color:var(--muted)"></div>
+  </div>
+
+  <!-- 🆕 v400: Sync Progress -->
+  <div id="sync-progress-card" style="display:none;background:linear-gradient(135deg,#eff6ff,#fff);border:1px solid #bfdbfe;border-radius:10px;padding:14px;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-weight:800;color:#1d4ed8" id="sync-progress-title">🔄 جاري المزامنة...</div>
+      <div style="font-size:12px;color:var(--muted)" id="sync-progress-stats"></div>
+    </div>
+    <div style="background:#e5e7eb;border-radius:99px;height:14px;overflow:hidden">
+      <div id="sync-progress-bar" style="background:linear-gradient(90deg,#3b82f6,#1d4ed8);height:100%;width:0%;transition:width .5s"></div>
     </div>
   </div>
 
@@ -16131,6 +16174,31 @@ let _imgfixJobPoll = null;    // interval للـ progress
 function imgfixOnOpen(){
   // لو فيه job شغّال، استأنف المتابعة
   imgfixCheckActiveJob();
+  // 🆕 v399: حمّل المنتجات الجديدة (review queue) تلقائياً
+  imgfixLoadReviewQueue();
+}
+
+// 🆕 v399: حمّل المنتجات الجديدة المعلّمة (من products/create webhook)
+async function imgfixLoadReviewQueue(){
+  if(!API_URL) return;
+  try {
+    const r = await apiFetch('/api/image-fix/review-queue');
+    const items = (r && r.items) ? r.items : [];
+    if(items.length){
+      // احقن المنتجات الجديدة في القايمة (من غير ما نمسح نتيجة فحص كامل لو موجودة)
+      const existing = new Set(_imgfixItems.map(i => i.mediaGid));
+      const fresh = items.filter(i => !existing.has(i.mediaGid)).map(i => ({...i, hasImage: true, _isNew: true}));
+      _imgfixItems = [...fresh, ..._imgfixItems];
+      imgfixRender();
+      const prog = document.getElementById('imgfix-scan-progress');
+      if(prog && !_imgfixScanning){
+        prog.textContent = `🆕 ${items.length} منتج جديد محتاج مراجعة صورة` + (_imgfixItems.length > items.length ? ` · ${_imgfixItems.length} إجمالي` : '');
+      }
+      // فعّل زرار "ظبّط الكل" لو فيه محتاج
+      const fixAll = document.getElementById('imgfix-fixall-btn');
+      if(fixAll && _imgfixItems.some(i => i.needsFix)) fixAll.style.display = 'inline-flex';
+    }
+  } catch(e){}
 }
 
 async function imgfixScan(){
@@ -16181,12 +16249,36 @@ function imgfixRender(){
   if(onlyNeeded) list = list.filter(i => i.needsFix);
   if(search) list = list.filter(i => (i.title || '').toLowerCase().includes(search));
 
+  // 🆕 v396: فلتر بالحجم (KB)
+  const sizeFilter = document.getElementById('imgfix-size-filter')?.value || 'all';
+  if(sizeFilter !== 'all'){
+    list = list.filter(i => {
+      const kb = (i.fileSize || 0) / 1024;
+      if(!i.fileSize) return false; // الصور بدون حجم تُستثنى من الفلترة بالحجم
+      switch(sizeFilter){
+        case 'lt100': return kb < 100;
+        case '100-300': return kb >= 100 && kb < 300;
+        case '300-500': return kb >= 300 && kb < 500;
+        case 'gt500': return kb >= 500;
+        case 'gt1mb': return kb >= 1024;
+        default: return true;
+      }
+    });
+  }
+
+  // 🆕 v396: ترتيب
+  const sortBy = document.getElementById('imgfix-sort')?.value || 'none';
+  if(sortBy === 'size-desc') list.sort((a,b) => (b.fileSize||0) - (a.fileSize||0));
+  else if(sortBy === 'size-asc') list.sort((a,b) => (a.fileSize||0) - (b.fileSize||0));
+  else if(sortBy === 'title') list.sort((a,b) => (a.title||'').localeCompare(b.title||'', 'ar'));
+
   if(!list.length){
     let msg, sub;
     if(search){ msg = '🔎 مفيش نتائج للبحث'; sub = 'جرّب كلمة تانية'; }
+    else if(sizeFilter !== 'all'){ msg = '📏 مفيش صور في نطاق الحجم ده'; sub = 'جرّب نطاق تاني'; }
     else if(_imgfixItems.length){ msg = '✅ كل الصور المعروضة متظبطة'; sub = ''; }
     else { msg = 'اضغط "افحص الكتالوج"'; sub = ''; }
-    cont.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:42px;opacity:.3">${search?'🔎':'🖼️'}</div><div style="margin-top:10px;font-weight:700">${msg}</div>${sub?`<div style="font-size:12px;margin-top:4px">${sub}</div>`:''}</div>`;
+    cont.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:42px;opacity:.3">${search?'🔎':sizeFilter!=='all'?'📏':'🖼️'}</div><div style="margin-top:10px;font-weight:700">${msg}</div>${sub?`<div style="font-size:12px;margin-top:4px">${sub}</div>`:''}</div>`;
     return;
   }
 
@@ -16196,10 +16288,13 @@ function imgfixRender(){
     const badge = it.needsFix
       ? `<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700">⚠️ محتاج تظبيط</span>`
       : `<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700">✅ متظبط</span>`;
+    const newBadge = it._isNew
+      ? `<span style="background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:6px;font-size:9px;font-weight:700;margin-right:4px">🆕 جديد</span>`
+      : '';
     return `
       <tr data-media="${it.mediaGid}">
         <td style="width:48px"><img src="${it.imageUrl}" style="width:42px;height:42px;object-fit:contain;background:#f3f4f6;border-radius:6px;border:1px solid var(--border)"></td>
-        <td style="font-size:12px;font-weight:600">${escapeHtml(it.title)}</td>
+        <td style="font-size:12px;font-weight:600">${newBadge}${escapeHtml(it.title)}</td>
         <td style="text-align:center;font-size:11px;font-family:monospace">${dim}</td>
         <td style="text-align:center;font-size:11px;font-family:monospace;color:var(--muted)">${sizeStr}</td>
         <td style="text-align:center">${badge}</td>
@@ -16209,9 +16304,13 @@ function imgfixRender(){
       </tr>`;
   }).join('');
 
+  // إجمالي حجم الصور المعروضة (لو فيها أحجام)
+  const totalBytes = list.reduce((s,i) => s + (i.fileSize||0), 0);
+  const totalStr = totalBytes > 0 ? ` · إجمالي ${imgfixFmtSize(totalBytes)}` : '';
+
   cont.innerHTML = `
     <div class="card">
-      <div class="card-hd"><h3 style="margin:0">${list.length} منتج${search?` (بحث: "${escapeHtml(search)}")`:''}</h3></div>
+      <div class="card-hd"><h3 style="margin:0">${list.length} منتج${search?` (بحث: "${escapeHtml(search)}")`:''}${totalStr}</h3></div>
       <div class="tw" style="overflow-x:auto">
         <table style="width:100%;font-size:12px">
           <thead><tr>
@@ -16241,16 +16340,13 @@ async function imgfixOne(btn, item){
   try {
     const r = await apiFetch('/api/image-fix/single', 'POST', {
       mediaGid: item.mediaGid, imageUrl: item.imageUrl, title: item.title,
+      productId: item.productId || item.productGid,  // 🆕 v399: عشان العلم يتشال
     });
     if(r && r.success){
       toast('✅ اتظبطت: ' + (r.filename || ''));
-      // علّم الصف متظبط
-      const tr = btn.closest('tr');
-      if(tr){
-        const it = _imgfixItems.find(x => x.mediaGid === item.mediaGid);
-        if(it) it.needsFix = false;
-        imgfixRender();
-      }
+      // 🆕 v399: شيل الصف من القايمة (اتظبط خلاص)، والباقي يفضل
+      _imgfixItems = _imgfixItems.filter(x => x.mediaGid !== item.mediaGid);
+      imgfixRender();
     } else {
       toast('❌ ' + (r?.error || 'فشل'));
       btn.disabled = false; btn.textContent = '🖼️ ظبّط';
@@ -24481,34 +24577,181 @@ async function toggleWarehouseMaster(warehouseId, isMaster, checkbox){
 
 async function syncInventoryLevels(){
   if(!confirm('مزامنة الكميات من Shopify؟')) return;
-  toast('🔄 جاري المزامنة...');
   try{
     const r = await apiFetch('/api/inventory/sync-levels', 'POST', {});
     if(r && r.success){
-      toast(`✅ تم مزامنة ${r.levels} كمية في ${r.durationSec}s`);
-      await refreshInventoryItems();
+      toast('🔄 بدأت مزامنة الكميات');
+      syncTrackJob(r.jobId);
+    } else if(r && r.jobId){
+      toast('⚠️ فيه مزامنة شغّالة');
+      syncTrackJob(r.jobId);
     } else {
       toast('❌ ' + (r?.error || 'فشل'));
     }
-  }catch(e){
-    toast('❌ ' + e.message);
-  }
+  }catch(e){ toast('❌ ' + e.message); }
 }
 
 async function syncInventoryFull(){
   if(!confirm('مزامنة كاملة (مخازن + منتجات + كميات)؟ ممكن تاخد دقيقة')) return;
-  toast('🔄 جاري المزامنة الكاملة...');
   try{
     const r = await apiFetch('/api/inventory/sync', 'POST', {});
     if(r && r.success){
-      toast(`✅ ${r.message}`);
-      await loadInventoryPage();
+      toast('🔄 بدأت المزامنة الكاملة');
+      syncTrackJob(r.jobId);
+    } else if(r && r.jobId){
+      toast('⚠️ فيه مزامنة شغّالة');
+      syncTrackJob(r.jobId);
     } else {
       toast('❌ ' + (r?.error || 'فشل'));
     }
-  }catch(e){
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// 🆕 v400: progress bar للمزامنة
+let _syncPoll = null;
+function syncTrackJob(jobId){
+  const card = document.getElementById('sync-progress-card');
+  if(card) card.style.display = 'block';
+  if(_syncPoll) clearInterval(_syncPoll);
+
+  const poll = async () => {
+    try {
+      const r = await apiFetch('/api/inventory/sync/' + jobId);
+      if(!r || !r.job) return;
+      const j = r.job;
+      const bar = document.getElementById('sync-progress-bar');
+      const title = document.getElementById('sync-progress-title');
+      const stats = document.getElementById('sync-progress-stats');
+
+      const kindLabel = j.kind === 'full' ? 'مزامنة كاملة' : 'مزامنة الكميات';
+
+      if(j.status === 'running'){
+        if(title) title.textContent = `🔄 ${kindLabel} — ${j.phase || '...'}`;
+        const parts = [];
+        if(j.products_synced) parts.push(`${j.products_synced} منتج`);
+        if(j.levels_synced) parts.push(`${j.levels_synced} كمية`);
+        if(j.warehouses_synced) parts.push(`${j.warehouses_synced} مخزن`);
+        if(stats) stats.textContent = parts.join(' · ') || 'بدء...';
+        // progress تقديري بالمرحلة (مفيش total دقيق)
+        if(bar){
+          let pct = 5;
+          if(j.phase === 'المخازن') pct = 10;
+          else if(j.phase === 'المنتجات') pct = 40;
+          else if(j.phase === 'الكميات') pct = 75;
+          const cur = parseFloat(bar.style.width) || 0;
+          bar.style.width = Math.max(cur, pct) + '%';
+        }
+      } else if(j.status === 'done'){
+        if(bar) bar.style.width = '100%';
+        if(title) title.textContent = `✅ خلصت ${kindLabel}`;
+        if(stats) stats.textContent = `${j.products_synced||0} منتج · ${j.levels_synced||0} كمية · ${j.duration_sec||0}s`;
+        clearInterval(_syncPoll); _syncPoll = null;
+        toast(`✅ خلصت المزامنة في ${j.duration_sec||0}s`);
+        // حدّث الصفحة
+        if(typeof loadInventoryPage === 'function') loadInventoryPage();
+        else if(typeof refreshInventoryItems === 'function') refreshInventoryItems();
+        // اخفي الكارت بعد 5 ثواني
+        setTimeout(() => { if(card) card.style.display = 'none'; }, 5000);
+      } else if(j.status === 'error'){
+        if(title) title.textContent = '❌ فشلت المزامنة';
+        if(stats) stats.textContent = j.error || '';
+        if(bar) bar.style.background = '#ef4444';
+        clearInterval(_syncPoll); _syncPoll = null;
+        toast('❌ فشلت المزامنة: ' + (j.error || ''));
+      }
+    } catch(e){}
+  };
+  poll();
+  _syncPoll = setInterval(poll, 2000);
+}
+
+// لو فيه مزامنة شغّالة وقت فتح الصفحة، استأنف المتابعة
+async function syncCheckActive(){
+  if(!API_URL) return;
+  try {
+    const r = await apiFetch('/api/inventory/sync-active');
+    if(r && r.job) syncTrackJob(r.job.id);
+  } catch(e){}
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🆕 v397: BULK LOCATION ACTIVATION
+// ═══════════════════════════════════════════════════════════
+let _bulkActivatePoll = null;
+
+async function bulkActivateStart(){
+  if(!API_URL){ toast('❌ الـ backend غير متصل'); return; }
+  const msg = 'هيتم تفعيل كل المخازن (Trivium, Obour, Chocolate Room, Online Marketplaces) ' +
+    'لكل المنتجات على Shopify.\n\n' +
+    '• المنتج هيتفعّل في المخزن برصيد 0 (مش هيلخبط أي مخزون موجود)\n' +
+    '• العملية بتشتغل في الخلفية وممكن تاخد وقت طويل (آلاف المنتجات)\n' +
+    '• بعد ما تخلص، اعمل "مزامنة كاملة" عشان الكميات تظهر في OrderPro\n\n' +
+    'نبدأ؟';
+  if(!confirm(msg)) return;
+
+  try {
+    const r = await apiFetch('/api/admin/bulk-activate-locations', 'POST', {});
+    if(r && r.success){
+      toast(`✅ بدأ التفعيل (${r.locationsCount} مخازن)`);
+      bulkActivateTrack(r.jobId);
+    } else if(r && r.jobId){
+      toast('⚠️ فيه عملية شغّالة بالفعل');
+      bulkActivateTrack(r.jobId);
+    } else {
+      toast('❌ ' + (r?.error || 'فشل بدء العملية'));
+    }
+  } catch(e){
     toast('❌ ' + e.message);
   }
+}
+
+async function bulkActivateCheckActive(){
+  if(!API_URL) return;
+  try {
+    const r = await apiFetch('/api/admin/bulk-activate-locations');
+    const running = (r?.jobs || []).find(j => j.status === 'running');
+    if(running) bulkActivateTrack(running.id);
+  } catch(e){}
+}
+
+function bulkActivateTrack(jobId){
+  const card = document.getElementById('bulk-activate-card');
+  if(card) card.style.display = 'block';
+  if(_bulkActivatePoll) clearInterval(_bulkActivatePoll);
+
+  const poll = async () => {
+    try {
+      const r = await apiFetch('/api/admin/bulk-activate-locations/' + jobId);
+      if(!r || !r.job) return;
+      const j = r.job;
+      const bar = document.getElementById('bulk-activate-bar');
+      const stats = document.getElementById('bulk-activate-stats');
+      const title = document.getElementById('bulk-activate-title');
+      const note = document.getElementById('bulk-activate-note');
+
+      // مفيش total معروف مسبقاً (بنعدّ بالـ processed)، فنعرض عدّاد بدل %
+      if(stats) stats.textContent = `عُولج ${j.processed} منتج · ✅ ${j.activated} تفعيل · ⏭️ ${j.skipped} · ❌ ${j.failed}`;
+
+      if(j.status === 'done'){
+        if(bar) bar.style.width = '100%';
+        if(title) title.textContent = '✅ خلص تفعيل المخازن';
+        if(note) note.textContent = `تم تفعيل ${j.activated} (منتج×مخزن). دلوقتي اعمل "🔁 مزامنة كاملة" عشان الكميات تظهر.`;
+        clearInterval(_bulkActivatePoll);
+        _bulkActivatePoll = null;
+        toast(`✅ خلص: ${j.activated} تفعيل`);
+      } else {
+        // progress تقديري: بنحرّك الـ bar تدريجياً (مفيش total دقيق)
+        if(bar){
+          const cur = parseFloat(bar.style.width) || 5;
+          bar.style.width = Math.min(95, cur + 2) + '%';
+        }
+        if(title) title.textContent = '🏬 جاري تفعيل المخازن...';
+        if(note && j.last_error) note.textContent = '⚠️ آخر تنبيه: ' + j.last_error;
+      }
+    } catch(e){}
+  };
+  poll();
+  _bulkActivatePoll = setInterval(poll, 4000);
 }
 
 async function showProductHistory(variantId, productTitle){
@@ -34490,6 +34733,8 @@ function renderStocktakeDetail(){
         <button class="btn btn-ghost" onclick="printStkReport()" style="color:var(--accent)">📄 تقرير PDF</button>
         <!-- 🆕 v364: زرار refresh الـ snapshot -->
         <button class="btn btn-ghost" onclick="refreshStkSnapshot()" style="color:#f59e0b" title="جيب آخر on_hand من Shopify عشان تتأكد من الـ snapshot قبل الـ approve">🔄 تحديث الـ snapshot من Shopify</button>
+        <!-- 🆕 v398: زرار ضيف كل المنتجات الناقصة بستوكها -->
+        <button class="btn btn-ghost" onclick="mergeAllStkProducts()" style="color:#7c3aed" title="ضيف كل المنتجات اللي ليها رصيد في المخزن ومش في الجرد، بستوكها الفعلي — من غير ما يمسح اللي اتعدّ">➕ ضيف كل المنتجات الناقصة</button>
         ${total > 0 ? `<button class="btn btn-ghost" onclick="markAllSystemQty()" style="margin-right:auto">⚡ ملأ الكميات الفعلية = النظام</button>` : ''}
       </div>
       <!-- 🆕 v364: ملاحظة عن الـ on_hand -->
@@ -35023,6 +35268,35 @@ async function updateStocktakeItem(itemId, value){
 // لو full mode + فيه uncounted-with-stock: backend بـ يرجع 409 مع تفاصيل
 // نعرض modal للمدير عشان يأكد أو يلغي
 // 🆕 v364: Refresh الـ snapshot من Shopify (live on_hand)
+// 🆕 v398: ضيف كل المنتجات الناقصة لجلسة الجرد بستوكها الفعلي
+async function mergeAllStkProducts(){
+  if(!_stkCurrentSession) return;
+
+  if(!confirm(
+    '➕ ضيف كل المنتجات الناقصة\n\n' +
+    'هـ يضيف كل منتج ليه رصيد في المخزن ده ومش موجود في الجرد، بستوكه الفعلي.\n\n' +
+    '✓ مش هيمسح أو يغيّر أي حاجة اتعدّت بالفعل\n' +
+    '✓ المنتجات الجديدة هتتضاف بكمية "النظام" من المخزن\n' +
+    '⚠️ مهم: لازم تكون عملت "مزامنة كاملة" بعد تفعيل المخازن عشان الأرقام تكون موجودة.\n\n' +
+    'نكمّل؟'
+  )) return;
+
+  toast('➕ جاري إضافة المنتجات...');
+
+  try {
+    const r = await apiFetch(`/api/stocktake/sessions/${_stkCurrentSession.id}/merge-all-products`, 'POST', {});
+    if(!r?.success){
+      toast('❌ ' + (r?.error || 'فشل'));
+      return;
+    }
+    toast(`✅ ${r.message || 'تمت الإضافة'}`);
+    // reload الجلسة عشان نشوف المنتجات الجديدة
+    await openStocktakeSession(_stkCurrentSession.id);
+  } catch(e){
+    toast('❌ ' + e.message);
+  }
+}
+
 async function refreshStkSnapshot(){
   if(!_stkCurrentSession) return;
   
@@ -39090,7 +39364,7 @@ function goPage(el,page){
   if(page==='treasury'){loadTreasury().then(()=>{renderTreasuryList();if(_activeTreasuryId)selectTreasury(_activeTreasuryId);});}
   if(page==='expiry') loadBatchesPage();
   // 🆕 v240: Inventory pages
-  if(page==='inventory') loadInventoryPage();
+  if(page==='inventory'){ loadInventoryPage(); bulkActivateCheckActive(); syncCheckActive(); }
   if(page==='stocktake') loadStocktakePage();
   if(page==='transfers') loadTransfersPage();
   if(page==='transfer-suggestions') tpLoadWarehouses();
