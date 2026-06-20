@@ -1,16 +1,27 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v400 — SYNC PROGRESS BAR (2026-06-18)
+  OrderPro v403 — STOCKTAKE DOUBLE-APPLY REPAIR (2026-06-20)
   ═══════════════════════════════════════════════════════════════════
-  ✨ progress bar للمزامنة الكاملة + مزامنة الكميات:
-     - المزامنة بقت background job (مش بتعلّق الصفحة)
-     - progress bar حي بيعرض المرحلة (مخازن/منتجات/كميات) + العدّادات
-     - بيكمّل المتابعة لو فتحت الصفحة والمزامنة شغّالة
-     يعتمد على backend v321 (sync_jobs + progress endpoints).
+  🩹 زرار "إصلاح الرفع المكرر" بعد التشخيص:
+     - مراجعة (dry-run): بيجيب الكمية الحالية الفعلية من Shopify لكل صنف
+       متضاعف ويعرض: الحالي · الزيادة الغلط · الإصلاح (delta عكسي) · الناتج
+       المتوقع — من غير أي كتابة على Shopify.
+     - تنفيذ: بعد مراجعة الأرقام، بيطبّق delta عكسي (-excess) لكل صنف
+       بـ inventoryAdjustQuantities (نسبي) — بيرجّع الصح *بدون* ما يلمس
+       المبيعات اللي حصلت بعد الجرد. idempotent (مستحيل يتضاعف الإصلاح).
+     يعتمد على backend v325 (repair-double-apply endpoint).
 
-  من v399 — IMAGE FIX AUTO REVIEW QUEUE:
-  ✨ المنتجات الجديدة تظهر تلقائياً في تبويب الصور
+  من v402 — STOCKTAKE DOUBLE-APPLY DIAGNOSIS:
+  ✨ زرار "🔧 تشخيص الرفع المكرر" في صفحة تقرير الجرد:
+     بيكشف الأصناف اللي اتطبّق عليها الجرد أكتر من مرة (رفع متكرر
+     بعد انقطاع النت) — read-only، ما بيكتبش حاجة على Shopify.
+     بيعرض: ملخص المحاولات، الأصناف المتضاعفة، الـ deltas، الصح،
+     المطبّق فعلاً، والزيادة الغلط لكل صنف.
+     يعتمد على backend v323 (diagnose-double-apply endpoint).
+
+  من v401 — STOCKTAKE REPORT:
+  ✨ صفحة تقرير الجرد
 
   من v389 — RESYNC REMOVED ITEMS:
   🐛 resyncOrderPrice بقى يعمل full re-fetch (منتجات + سعر)
@@ -635,6 +646,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="image-fix" onclick="goPage(this,'image-fix')"><span class="ni-icon">🖼️</span><span class="ni-label">تظبيط الصور</span></div>
         <div class="ni" data-p="watchlist" onclick="goPage(this,'watchlist')"><span class="ni-icon">⭐</span><span class="ni-label">منتجاتي المهمة</span><span class="nbadge" id="nb-watchlist" style="background:var(--accent)">0</span></div>
         <div class="ni" data-p="stocktake" onclick="goPage(this,'stocktake')"><span class="ni-icon">🔍</span><span class="ni-label">الجرد</span></div>
+        <div class="ni" data-p="stk-report" onclick="goPage(this,'stk-report')"><span class="ni-icon">📋</span><span class="ni-label">تقرير الجرد</span></div>
         <div class="ni" data-p="transfers" onclick="goPage(this,'transfers')"><span class="ni-icon">🔄</span><span class="ni-label">تحويلات المخازن</span><span class="nbadge" id="nb-transfers" style="background:var(--warn)">0</span></div>
         <div class="ni" data-p="transfer-suggestions" onclick="goPage(this,'transfer-suggestions')"><span class="ni-icon">🧠</span><span class="ni-label">ذكاء التحويلات</span><span class="nbadge" id="nb-transfer-suggestions" style="background:var(--danger)"></span></div>
         <div class="ni" data-p="purchase-suggestions" onclick="goPage(this,'purchase-suggestions')"><span class="ni-icon">🛒</span><span class="ni-label">ذكاء الشراء</span><span class="nbadge" id="nb-purchase-suggestions" style="background:var(--danger)"></span></div>
@@ -3175,8 +3187,43 @@ tr:hover td{background:#fafbff}
   </div>
 </div>
 
-<!-- ===== STOCKTAKE NEW SESSION MODAL ===== -->
-<!-- 🆕 v259: WAREHOUSE TRANSFERS PAGE -->
+<!-- 🆕 v401: STOCKTAKE REPORT PAGE -->
+<div class="page" id="page-stk-report">
+  <div style="background:linear-gradient(135deg,#fffbeb,#fff);border:1px solid #fde68a;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+    <div style="font-weight:800;color:#92400e;font-size:15px">📋 تقرير عمليات الجرد</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">كل عملية عدّ: مين عدّ، إيه، الكمية، والوقت. بيفضل محفوظ بعد قفل الجرد.</div>
+  </div>
+
+  <!-- Controls -->
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <select id="stkr-session" onchange="stkrLoad()" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;min-width:220px">
+        <option value="">كل الجلسات</option>
+      </select>
+      <input id="stkr-search" placeholder="🔎 ابحث بالصنف (اسم / SKU / باركود)..." oninput="stkrSearchDebounced()"
+             style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;min-width:280px">
+      <button class="btn btn-ghost btn-sm" onclick="stkrLoad()">🔄 تحديث</button>
+      <button class="btn btn-ghost btn-sm" onclick="stkDiagnose()" style="color:#dc2626;border-color:#fecaca" title="كشف الأصناف اللي اتطبّق عليها الجرد أكتر من مرة (رفع مكرر)">🔧 تشخيص الرفع المكرر</button>
+      <div style="flex:1"></div>
+      <span id="stkr-count" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+  </div>
+
+  <!-- 🆕 v402: نتيجة تشخيص الرفع المكرر -->
+  <div id="stk-diagnose-result" style="display:none;margin-bottom:14px"></div>
+
+  <!-- 🆕 v403: مراجعة/تنفيذ إصلاح الرفع المكرر -->
+  <div id="stk-repair-result" style="display:none;margin-bottom:14px"></div>
+
+  <!-- Results -->
+  <div id="stkr-results">
+    <div style="text-align:center;padding:50px;color:var(--muted)">
+      <div style="font-size:48px;opacity:.3">📋</div>
+      <div style="margin-top:10px;font-weight:700">بيتحمّل...</div>
+    </div>
+  </div>
+</div>
+
 <div class="page" id="page-transfers">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">🔄 تحويلات المخازن</h2>
@@ -7078,7 +7125,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -33870,6 +33917,281 @@ function signageReload(){
 // END: SIGNAGE
 // ============================================================
 
+// ═══════════════════════════════════════════════════════════
+// 🆕 v401: STOCKTAKE REPORT
+// ═══════════════════════════════════════════════════════════
+let _stkrSearchTimer = null;
+let _stkrSessionsLoaded = false;
+
+async function stkrInit(){
+  // حمّل قايمة الجلسات مرة واحدة
+  if(!_stkrSessionsLoaded){
+    try {
+      const r = await apiFetch('/api/stocktake/report/sessions');
+      const sessions = (r && r.sessions) ? r.sessions : [];
+      const sel = document.getElementById('stkr-session');
+      if(sel){
+        const opts = ['<option value="">كل الجلسات</option>'];
+        for(const s of sessions){
+          const date = s.started_at ? new Date(s.started_at).toLocaleDateString('ar-EG') : '';
+          const statusLabel = s.status === 'approved' ? '✅ مقفول' : s.status === 'in_progress' ? '🔄 شغّال' : s.status;
+          const title = s.title || `جرد ${s.warehouse_name||''}`;
+          opts.push(`<option value="${s.id}">${escapeHtml(title)} · ${date} · ${statusLabel} (${s.entries_count||0})</option>`);
+        }
+        sel.innerHTML = opts.join('');
+      }
+      _stkrSessionsLoaded = true;
+    } catch(e){}
+  }
+  stkrLoad();
+}
+
+function stkrSearchDebounced(){
+  if(_stkrSearchTimer) clearTimeout(_stkrSearchTimer);
+  _stkrSearchTimer = setTimeout(stkrLoad, 400);
+}
+
+async function stkrLoad(){
+  if(!API_URL){ return; }
+  const cont = document.getElementById('stkr-results');
+  const sessionId = document.getElementById('stkr-session')?.value || '';
+  const search = (document.getElementById('stkr-search')?.value || '').trim();
+
+  if(cont) cont.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ بيتحمّل...</div>';
+
+  try {
+    const params = new URLSearchParams({ limit: '500' });
+    if(sessionId) params.set('sessionId', sessionId);
+    if(search) params.set('search', search);
+    const r = await apiFetch('/api/stocktake/report?' + params.toString());
+    const entries = (r && r.entries) ? r.entries : [];
+    const total = r?.total || 0;
+
+    const countEl = document.getElementById('stkr-count');
+    if(countEl) countEl.textContent = `${total} عملية عدّ` + (total > entries.length ? ` (عرض أول ${entries.length})` : '');
+
+    if(!entries.length){
+      cont.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:42px;opacity:.3">${search?'🔎':'📋'}</div><div style="margin-top:10px;font-weight:700">${search?'مفيش نتائج للبحث':'مفيش عمليات عدّ'}</div></div>`;
+      return;
+    }
+
+    const rows = entries.map(e => {
+      const when = e.counted_at ? new Date(e.counted_at).toLocaleString('ar-EG', {dateStyle:'short', timeStyle:'short'}) : '—';
+      const diff = (e.difference != null) ? e.difference : null;
+      const diffStr = diff == null ? '—'
+        : diff === 0 ? `<span style="color:#16a34a">✓ 0</span>`
+        : diff > 0 ? `<span style="color:#2563eb">+${diff}</span>`
+        : `<span style="color:#dc2626">${diff}</span>`;
+      return `
+        <tr>
+          <td style="font-size:12px;font-weight:600">${escapeHtml(e.product_title||'—')}${e.variant_title?`<span style="color:var(--muted);font-weight:400"> · ${escapeHtml(e.variant_title)}</span>`:''}<div style="font-size:10px;color:var(--muted);font-family:monospace">${escapeHtml(e.sku||e.variant_id||'')}</div></td>
+          <td style="text-align:center;font-weight:800;font-size:14px">${e.qty}</td>
+          <td style="text-align:center;font-size:11px;color:var(--muted)">${e.location_note?escapeHtml(e.location_note):'—'}</td>
+          <td style="text-align:center;font-size:12px;font-weight:600">${escapeHtml(e.counted_by||'—')}</td>
+          <td style="text-align:center;font-size:11px;color:var(--muted)">${when}</td>
+        </tr>`;
+    }).join('');
+
+    cont.innerHTML = `
+      <div class="card">
+        <div class="tw" style="overflow-x:auto">
+          <table style="width:100%;font-size:12px">
+            <thead><tr>
+              <th>المنتج</th>
+              <th style="text-align:center">الكمية المعدودة</th>
+              <th style="text-align:center">المكان/ملاحظة</th>
+              <th style="text-align:center">مين عدّ</th>
+              <th style="text-align:center">الوقت</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  } catch(e){
+    if(cont) cont.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger)">❌ ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+// 🆕 v402: تشخيص الرفع المكرر (read-only)
+async function stkDiagnose(){
+  const sessionId = document.getElementById('stkr-session')?.value || '';
+  if(!sessionId){
+    toast('⚠️ اختار جلسة معيّنة الأول من القايمة');
+    return;
+  }
+  const box = document.getElementById('stk-diagnose-result');
+  if(box){ box.style.display = 'block'; box.innerHTML = '<div class="card"><div style="padding:20px;text-align:center;color:var(--muted)">⏳ جاري التشخيص...</div></div>'; }
+
+  try {
+    const r = await apiFetch(`/api/stocktake/sessions/${sessionId}/diagnose-double-apply`);
+    if(!r || r.error){ if(box) box.innerHTML = `<div class="card"><div style="padding:20px;color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</div></div>`; return; }
+
+    const s = r.summary || {};
+    const runs = r.runs || [];
+    const doubled = r.doubled || [];
+
+    // ملخص المحاولات
+    const runsHtml = runs.map((run,i) => {
+      const when = run.run_at ? new Date(run.run_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'}) : '';
+      return `<div style="font-size:12px;color:var(--muted)">محاولة ${i+1}: ${when} — ✅ ${run.success_count} نجح · ❌ ${run.failed_count} فشل</div>`;
+    }).join('');
+
+    // جدول الأصناف المتضاعفة
+    const rows = doubled.map(d => {
+      const deltasStr = (d.deltas||[]).map(x => (x>0?'+':'')+x).join(' ، ');
+      return `
+        <tr>
+          <td style="font-size:12px;font-weight:600">${escapeHtml(d.product_title||'—')}<div style="font-size:10px;color:var(--muted);font-family:monospace">${escapeHtml(d.sku||d.variant_id||'')}</div></td>
+          <td style="text-align:center;font-size:11px">${d.apply_count}×</td>
+          <td style="text-align:center;font-size:11px;font-family:monospace">${deltasStr}</td>
+          <td style="text-align:center;font-weight:700;color:#2563eb">${d.correct_delta!=null?((d.correct_delta>0?'+':'')+d.correct_delta):'—'}</td>
+          <td style="text-align:center;font-weight:700">${d.total_applied!=null?((d.total_applied>0?'+':'')+d.total_applied):'—'}</td>
+          <td style="text-align:center;font-weight:800;color:#dc2626">${d.excess!=null?((d.excess>0?'+':'')+d.excess):'؟'}</td>
+        </tr>`;
+    }).join('');
+
+    box.innerHTML = `
+      <div class="card">
+        <div style="padding:14px;border-bottom:1px solid var(--border)">
+          <div style="font-weight:800;font-size:15px;color:#991b1b">🔧 نتيجة تشخيص الرفع المكرر</div>
+          <div style="margin-top:6px">${runsHtml || '<span style="color:var(--muted);font-size:12px">مفيش سجل محاولات</span>'}</div>
+        </div>
+        <div style="padding:14px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+          <div style="text-align:center;background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted)">أصناف اترفعت</div><div style="font-size:20px;font-weight:800">${s.total_items_applied||0}</div></div>
+          <div style="text-align:center;background:#f0fdf4;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted)">سليمة (مرة)</div><div style="font-size:20px;font-weight:800;color:#16a34a">${s.single_ok||0}</div></div>
+          <div style="text-align:center;background:#fef2f2;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted)">متضاعفة</div><div style="font-size:20px;font-weight:800;color:#dc2626">${s.doubled_count||0}</div></div>
+          <div style="text-align:center;background:#fffbeb;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted)">إجمالي الزيادة الغلط</div><div style="font-size:20px;font-weight:800;color:#b45309">${s.total_excess||0}</div></div>
+        </div>
+        ${doubled.length ? `
+        <div class="tw" style="overflow-x:auto;padding:0 14px 14px">
+          <table style="width:100%;font-size:12px">
+            <thead><tr>
+              <th>المنتج</th>
+              <th style="text-align:center">اترفع</th>
+              <th style="text-align:center">الـ deltas</th>
+              <th style="text-align:center">الصح</th>
+              <th style="text-align:center">المطبّق فعلاً</th>
+              <th style="text-align:center">الزيادة الغلط</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <div style="padding:0 14px 14px;font-size:12px;color:var(--muted);line-height:1.7">
+          💡 "الزيادة الغلط" = الكمية اللي اتطبّقت زيادة بسبب التكرار. الإصلاح هيطبّق
+          عكسها (delta سالب) عشان يرجّع الصح <strong>بدون ما يلمس المبيعات</strong> اللي حصلت بعدين.
+          راجع الأرقام، ولو مظبوطة نكمّل لخطوة الإصلاح.
+        </div>
+        ${(s.needs_repair_count||0) > 0 ? `
+        <div style="padding:0 14px 16px">
+          <button class="btn btn-primary" onclick="stkRepair(true)" style="background:#b45309;border-color:#b45309">
+            🩹 إصلاح الرفع المكرر — مراجعة أول (${s.needs_repair_count} صنف)
+          </button>
+          ${(s.repaired_count||0) > 0 ? `<span style="margin-right:10px;font-size:12px;color:#16a34a;font-weight:700">✅ اتصلح قبل كده: ${s.repaired_count}</span>` : ''}
+        </div>` : ((s.repaired_count||0) > 0 ? `<div style="padding:0 14px 16px;color:#16a34a;font-weight:700;font-size:13px">✅ كل الأصناف المتضاعفة (${s.repaired_count}) اتصلحت</div>` : '')}` : `<div style="padding:0 14px 20px;text-align:center;color:#16a34a;font-weight:700">✅ مفيش أصناف اتطبّق عليها الجرد أكتر من مرة</div>`}
+      </div>`;
+  } catch(e){
+    if(box) box.innerHTML = `<div class="card"><div style="padding:20px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+// 🆕 v403: إصلاح الرفع المكرر — مراجعة (dry-run) ثم تنفيذ فعلي
+async function stkRepair(dryRun){
+  const sessionId = document.getElementById('stkr-session')?.value || '';
+  if(!sessionId){ toast('⚠️ اختار جلسة الأول'); return; }
+  const box = document.getElementById('stk-repair-result');
+  if(!box) return;
+
+  // تأكيد قوي قبل التنفيذ الفعلي
+  if(!dryRun){
+    const ok = confirm('⚠️ تأكيد نهائي\n\nهيتم تطبيق delta عكسي فعلي على Shopify للأصناف المتضاعفة.\nده آمن للمبيعات اللي حصلت بعد الجرد (تعديل نسبي)، وميتنفّذش أكتر من مرة.\n\nتكمّل؟');
+    if(!ok) return;
+  }
+
+  box.style.display = 'block';
+  box.innerHTML = `<div class="card"><div style="padding:20px;text-align:center;color:var(--muted)">${dryRun ? '⏳ جاري تجهيز المراجعة + قراءة الكميات الحالية من Shopify...' : '⏳ جاري تنفيذ الإصلاح على Shopify...'}</div></div>`;
+
+  try {
+    const r = await apiFetch(`/api/stocktake/sessions/${sessionId}/repair-double-apply`, 'POST',
+      dryRun ? { dry_run: true } : { dry_run: false, confirm: 'REPAIR' });
+    if(!r || r.error){ box.innerHTML = `<div class="card"><div style="padding:20px;color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</div></div>`; return; }
+
+    // ── وضع التنفيذ: اعرض النتيجة وحدّث التشخيص ──
+    if(!dryRun){
+      const su = r.summary || {};
+      const errRows = (r.errors||[]).slice(0,50).map(e =>
+        `<tr><td style="font-size:12px">${escapeHtml(e.product_title||e.sku||'—')}</td><td style="font-size:11px;color:var(--danger)">${escapeHtml(e.error_message||'')}</td></tr>`
+      ).join('');
+      box.innerHTML = `
+        <div class="card">
+          <div style="padding:14px;border-bottom:1px solid var(--border);font-weight:800;color:#15803d">🩹 تم تنفيذ الإصلاح</div>
+          <div style="padding:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+            <div style="text-align:center;background:#f0fdf4;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted)">اتصلح</div><div style="font-size:22px;font-weight:800;color:#16a34a">${su.repaired_count||0}</div></div>
+            <div style="text-align:center;background:#fef2f2;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted)">فشل</div><div style="font-size:22px;font-weight:800;color:#dc2626">${su.failed_count||0}</div></div>
+            <div style="text-align:center;background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted)">اتصلح قبل كده</div><div style="font-size:22px;font-weight:800">${su.already_repaired||0}</div></div>
+          </div>
+          ${errRows ? `<div class="tw" style="overflow-x:auto;padding:0 14px 14px"><table style="width:100%;font-size:12px"><thead><tr><th>المنتج</th><th>الخطأ</th></tr></thead><tbody>${errRows}</tbody></table></div>` : ''}
+          <div style="padding:0 14px 16px;font-size:12px;color:var(--muted)">✅ خلصنا. اضغط "تشخيص الرفع المكرر" تاني للتأكيد إن المتضاعفين اتعلّموا "اتصلح".</div>
+        </div>`;
+      toast(`✅ اتصلح ${su.repaired_count||0} صنف`);
+      // أعد التشخيص تلقائياً عشان يحدّث الحالة
+      setTimeout(() => stkDiagnose(), 800);
+      return;
+    }
+
+    // ── وضع المراجعة (dry-run) ──
+    const su = r.summary || {};
+    const plan = r.plan || [];
+    if(!plan.length){
+      box.innerHTML = `<div class="card"><div style="padding:20px;text-align:center;color:#16a34a;font-weight:700">✅ مفيش أصناف محتاجة إصلاح${su.already_repaired ? ` (${su.already_repaired} اتصلح قبل كده)` : ''}</div></div>`;
+      return;
+    }
+    const rows = plan.map(p => {
+      const f = n => (n==null?'—':((n>0?'+':'')+n));
+      return `<tr>
+        <td style="font-size:12px;font-weight:600">${escapeHtml(p.product_title||'—')}<div style="font-size:10px;color:var(--muted);font-family:monospace">${escapeHtml(p.sku||p.variant_id||'')}</div></td>
+        <td style="text-align:center;font-weight:700">${p.current_available==null?'؟':p.current_available}</td>
+        <td style="text-align:center;font-weight:700;color:#2563eb">${f(p.correct_delta)}</td>
+        <td style="text-align:center;font-weight:800;color:#dc2626">${f(p.excess)}</td>
+        <td style="text-align:center;font-weight:800;color:#b45309">${f(p.repair_delta)}</td>
+        <td style="text-align:center;font-weight:800;color:#16a34a">${p.result_after==null?'؟':p.result_after}</td>
+      </tr>`;
+    }).join('');
+    box.innerHTML = `
+      <div class="card">
+        <div style="padding:14px;border-bottom:1px solid var(--border)">
+          <div style="font-weight:800;font-size:15px;color:#b45309">🩹 مراجعة الإصلاح (لسه مفيش كتابة على Shopify)</div>
+          <div style="margin-top:6px;font-size:12px;color:var(--muted)">راجع عمود "الحالي" — المفروض يكون فيه الزيادة المضاعفة. "الناتج المتوقع" = الحالي + الإصلاح.</div>
+        </div>
+        <div style="padding:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          <div style="text-align:center;background:#fffbeb;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted)">هيتصلح</div><div style="font-size:22px;font-weight:800;color:#b45309">${su.plan_count||0}</div></div>
+          <div style="text-align:center;background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted)">اتصلح قبل كده</div><div style="font-size:22px;font-weight:800">${su.already_repaired||0}</div></div>
+          <div style="text-align:center;background:#eff6ff;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted)">صافي الإصلاح</div><div style="font-size:22px;font-weight:800;color:#2563eb">${(su.total_repair_delta>0?'+':'')+(su.total_repair_delta||0)}</div></div>
+        </div>
+        ${(su.skipped_no_item||su.skipped_no_excess) ? `<div style="padding:0 14px 8px;font-size:11px;color:var(--muted)">⚠️ اتخطّى: ${su.skipped_no_item||0} مفيش inventory_item · ${su.skipped_no_excess||0} زيادة=0</div>` : ''}
+        <div class="tw" style="overflow-x:auto;padding:0 14px 8px">
+          <table style="width:100%;font-size:12px">
+            <thead><tr>
+              <th>المنتج</th>
+              <th style="text-align:center">الحالي (Shopify)</th>
+              <th style="text-align:center">الصح</th>
+              <th style="text-align:center">الزيادة الغلط</th>
+              <th style="text-align:center">الإصلاح (delta)</th>
+              <th style="text-align:center">الناتج المتوقع</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <div style="padding:8px 14px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="stkRepair(false)" style="background:#dc2626;border-color:#dc2626">⚠️ نفّذ الإصلاح فعلياً على Shopify</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('stk-repair-result').style.display='none'">إلغاء</button>
+          <span style="font-size:11px;color:var(--muted)">آمن للمبيعات اللي بعد الجرد · idempotent · ميتنفّذش مرتين</span>
+        </div>
+      </div>`;
+  } catch(e){
+    box.innerHTML = `<div class="card"><div style="padding:20px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
 async function loadStocktakePage(){
   try{
     // 🆕 v256: تحميل stats + history
@@ -39366,6 +39688,7 @@ function goPage(el,page){
   // 🆕 v240: Inventory pages
   if(page==='inventory'){ loadInventoryPage(); bulkActivateCheckActive(); syncCheckActive(); }
   if(page==='stocktake') loadStocktakePage();
+  if(page==='stk-report') stkrInit();
   if(page==='transfers') loadTransfersPage();
   if(page==='transfer-suggestions') tpLoadWarehouses();
   if(page==='purchase-suggestions') loadPurchaseSuggestions();
