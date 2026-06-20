@@ -1,8 +1,14 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v403 — STOCKTAKE DOUBLE-APPLY REPAIR (2026-06-20)
+  OrderPro v404 — STOCKTAKE REPAIR + NEGATIVE GUARD (2026-06-20)
   ═══════════════════════════════════════════════════════════════════
+  🛡️ v404: الأصناف اللي ناتج إصلاحها بالسالب بتتعلّم بالأحمر، وبيظهر
+     عدّادها + تحذير. بشكل افتراضي التنفيذ بيتخطّاها (محتاجة مراجعة بإيد)،
+     وفيه checkbox لو عايز تشملهم صراحةً. بعد التنفيذ بيتعرض اللي اتخطّى.
+     يعتمد على backend v326.
+
+  من v403 — STOCKTAKE DOUBLE-APPLY REPAIR:
   🩹 زرار "إصلاح الرفع المكرر" بعد التشخيص:
      - مراجعة (dry-run): بيجيب الكمية الحالية الفعلية من Shopify لكل صنف
        متضاعف ويعرض: الحالي · الزيادة الغلط · الإصلاح (delta عكسي) · الناتج
@@ -34102,8 +34108,10 @@ async function stkRepair(dryRun){
   if(!box) return;
 
   // تأكيد قوي قبل التنفيذ الفعلي
+  let inclNeg = false;
   if(!dryRun){
-    const ok = confirm('⚠️ تأكيد نهائي\n\nهيتم تطبيق delta عكسي فعلي على Shopify للأصناف المتضاعفة.\nده آمن للمبيعات اللي حصلت بعد الجرد (تعديل نسبي)، وميتنفّذش أكتر من مرة.\n\nتكمّل؟');
+    inclNeg = !!document.getElementById('stk-incl-neg')?.checked;
+    const ok = confirm(`⚠️ تأكيد نهائي\n\nهيتم تطبيق delta عكسي فعلي على Shopify للأصناف المتضاعفة.\nده آمن للمبيعات اللي حصلت بعد الجرد (تعديل نسبي)، وميتنفّذش أكتر من مرة.\n${inclNeg ? '\n⚠️ هتشمل كمان الأصناف اللي هتبقى بالسالب.' : '\nالأصناف اللي هتبقى بالسالب هتتخطّى (تتراجع بإيد).'}\n\nتكمّل؟`);
     if(!ok) return;
   }
 
@@ -34112,7 +34120,7 @@ async function stkRepair(dryRun){
 
   try {
     const r = await apiFetch(`/api/stocktake/sessions/${sessionId}/repair-double-apply`, 'POST',
-      dryRun ? { dry_run: true } : { dry_run: false, confirm: 'REPAIR' });
+      dryRun ? { dry_run: true } : { dry_run: false, confirm: 'REPAIR', include_negative: inclNeg });
     if(!r || r.error){ box.innerHTML = `<div class="card"><div style="padding:20px;color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</div></div>`; return; }
 
     // ── وضع التنفيذ: اعرض النتيجة وحدّث التشخيص ──
@@ -34127,8 +34135,9 @@ async function stkRepair(dryRun){
           <div style="padding:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
             <div style="text-align:center;background:#f0fdf4;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted)">اتصلح</div><div style="font-size:22px;font-weight:800;color:#16a34a">${su.repaired_count||0}</div></div>
             <div style="text-align:center;background:#fef2f2;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted)">فشل</div><div style="font-size:22px;font-weight:800;color:#dc2626">${su.failed_count||0}</div></div>
-            <div style="text-align:center;background:#f8fafc;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted)">اتصلح قبل كده</div><div style="font-size:22px;font-weight:800">${su.already_repaired||0}</div></div>
+            <div style="text-align:center;background:#fffbeb;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--muted)">اتخطّى (سالب)</div><div style="font-size:22px;font-weight:800;color:#b45309">${su.skipped_negative||0}</div></div>
           </div>
+          ${(su.skipped_negative||0) > 0 ? `<div style="padding:0 14px 10px;font-size:12px;color:#991b1b">⚠️ ${su.skipped_negative} صنف اتخطّى عشان ناتجه بالسالب — راجعهم بإيد، ولو متأكد علّم خيار "اشمل السالب" في المراجعة وأعد التنفيذ.</div>` : ''}
           ${errRows ? `<div class="tw" style="overflow-x:auto;padding:0 14px 14px"><table style="width:100%;font-size:12px"><thead><tr><th>المنتج</th><th>الخطأ</th></tr></thead><tbody>${errRows}</tbody></table></div>` : ''}
           <div style="padding:0 14px 16px;font-size:12px;color:var(--muted)">✅ خلصنا. اضغط "تشخيص الرفع المكرر" تاني للتأكيد إن المتضاعفين اتعلّموا "اتصلح".</div>
         </div>`;
@@ -34153,7 +34162,7 @@ async function stkRepair(dryRun){
         <td style="text-align:center;font-weight:700;color:#2563eb">${f(p.correct_delta)}</td>
         <td style="text-align:center;font-weight:800;color:#dc2626">${f(p.excess)}</td>
         <td style="text-align:center;font-weight:800;color:#b45309">${f(p.repair_delta)}</td>
-        <td style="text-align:center;font-weight:800;color:#16a34a">${p.result_after==null?'؟':p.result_after}</td>
+        <td style="text-align:center;font-weight:800;color:${p.would_go_negative?'#dc2626':'#16a34a'}">${p.result_after==null?'؟':p.result_after}${p.would_go_negative?' ⚠️':''}</td>
       </tr>`;
     }).join('');
     box.innerHTML = `
@@ -34182,6 +34191,11 @@ async function stkRepair(dryRun){
           </table>
         </div>
         <div style="padding:8px 14px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          ${(su.negative_count||0) > 0 ? `
+          <div style="width:100%;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;font-size:12px;color:#991b1b">
+            ⚠️ <strong>${su.negative_count}</strong> صنف ناتج إصلاحهم هيبقى بالسالب (متعلّمين بالأحمر فوق). الافتراضي إن التنفيذ <strong>بيتخطّاهم</strong> — راجعهم بإيد في Shopify الأول. لو متأكد إنهم فعلاً اتباعوا أكتر من المتوفر، علّم الخيار ده عشان تشملهم:
+            <label style="display:block;margin-top:8px;font-weight:700;cursor:pointer"><input type="checkbox" id="stk-incl-neg"> اشمل الأصناف اللي هتبقى بالسالب (${su.negative_count})</label>
+          </div>` : ''}
           <button class="btn btn-primary" onclick="stkRepair(false)" style="background:#dc2626;border-color:#dc2626">⚠️ نفّذ الإصلاح فعلياً على Shopify</button>
           <button class="btn btn-ghost btn-sm" onclick="document.getElementById('stk-repair-result').style.display='none'">إلغاء</button>
           <span style="font-size:11px;color:var(--muted)">آمن للمبيعات اللي بعد الجرد · idempotent · ميتنفّذش مرتين</span>
