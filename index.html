@@ -1,8 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v411 — ADMIN RETURNS (restock only) (2026-07-04)
+  OrderPro v412 — RETURNS: unfulfilled + warehouse select (2026-07-04)
   ═══════════════════════════════════════════════════════════════════
+  🔧 v412: مرتجع جزئي لأي صنف (متشحن أو غير متشحن مع badge)، + قائمة
+     اختيار المخزن اللي يرجعله المخزون (افتراضي = مخزن شحن الأوردر).
+     backend v334 (RETURN للمتشحن / CANCEL لغير المتشحن).
+
+  من v411 — ADMIN RETURNS (restock only):
   🆕 v411: صفحة "↩️ مرتجعات" (جنب طلبات يدوية): بحث أوردر برقمه → اختيار
      الأصناف والكميات → إرجاع مخزون على Shopify (من غير رد فلوس) + سجل
      مرتجعات. backend v333. منفصل تماماً عن مرتجعات المحل/الكاشير.
@@ -34316,25 +34321,29 @@ async function returnsLookup(){
   try{
     const r=await apiFetch(`/api/returns/lookup?q=${encodeURIComponent(q)}`,'GET');
     if(!r || r.error){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(r?.error||'مالقتش الأوردر')}</div></div>`; return; }
-    _ret={ shopify_id:r.shopify_id, name:r.name, items:r.items||[] };
+    _ret={ shopify_id:r.shopify_id, name:r.name, items:r.items||[], locations:r.locations||[], defaultLoc:r.default_location_id, defaultLocName:r.default_location_name };
     renderReturnOrder(r);
   }catch(e){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`; }
 }
 function renderReturnOrder(r){
   const box=$('ret-order'); const items=r.items||[];
   if(!items.length){ box.innerHTML=`<div class="card"><div style="padding:20px;text-align:center;color:var(--muted)">أوردر ${escapeHtml(r.name||'')} مفيهوش أصناف قابلة للإرجاع</div></div>`; return; }
+  const locs=r.locations||[];
+  const locOpts=locs.map(l=>`<option value="${escapeHtml(l.id)}" ${l.id===r.default_location_id?'selected':''}>${escapeHtml(l.name)}</option>`).join('');
   const rows=items.map(it=>{
-    const canRet=it.restockable && it.currentQuantity>0;
+    const badge = it.fulfilled
+      ? `<span style="font-size:9px;background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:99px">متشحن</span>`
+      : `<span style="font-size:9px;background:#fef3c7;color:#b45309;padding:1px 6px;border-radius:99px">غير متشحن</span>`;
     return `<div style="display:flex;gap:10px;align-items:center;padding:10px;border-bottom:1px solid var(--border)">
       <div style="width:46px;height:46px;border-radius:8px;background:#f1f5f9;overflow:hidden;flex-shrink:0">${it.image?`<img src="${it.image}" style="width:100%;height:100%;object-fit:cover">`:''}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(it.title||'')}</div>
-        <div style="font-size:11px;color:var(--muted)">${escapeHtml(it.sku||'')} · متاح: ${it.currentQuantity}${it.restockable&&it.location?` · ${escapeHtml(it.location)}`:''}</div>
+        <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(it.title||'')} ${badge}</div>
+        <div style="font-size:11px;color:var(--muted)">${escapeHtml(it.sku||'')} · متاح: ${it.currentQuantity}</div>
       </div>
-      ${canRet?`<div style="display:flex;align-items:center;gap:6px">
+      <div style="display:flex;align-items:center;gap:6px">
         <span style="font-size:11px;color:var(--muted)">إرجاع</span>
         <input type="number" min="0" max="${it.currentQuantity}" value="0" data-li="${escapeHtml(it.lineItemId)}" data-cur="${it.currentQuantity}" class="ret-qty" style="width:62px;padding:6px;border:1px solid var(--border);border-radius:8px;text-align:center">
-      </div>`:`<span style="font-size:11px;color:#94a3b8">مش قابل للإرجاع</span>`}
+      </div>
     </div>`;
   }).join('');
   box.innerHTML=`<div class="card">
@@ -34344,6 +34353,11 @@ function renderReturnOrder(r){
     </div>
     ${rows}
     <div style="padding:12px 14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700">🏬 يرجع لمخزن:</span>
+        <select id="ret-loc" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;min-width:200px">${locOpts||'<option value="">—</option>'}</select>
+        ${r.default_location_name?`<span style="font-size:10px;color:var(--muted)">الافتراضي = مخزن شحن الأوردر</span>`:''}
+      </div>
       <input type="text" id="ret-note" placeholder="ملاحظة (اختياري)" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;margin-bottom:10px">
       <button class="btn btn-primary" style="background:#dc2626;border-color:#dc2626" onclick="returnsExecute()">↩️ نفّذ المرتجع (إرجاع مخزون)</button>
     </div>
@@ -34353,15 +34367,18 @@ async function returnsExecute(){
   const inputs=Array.from(document.querySelectorAll('.ret-qty'));
   const items=[]; let totalRet=0;
   for(const inp of inputs){
-    const ret=parseInt(inp.value)||0; const cur=parseInt(inp.dataset.cur)||0;
-    if(ret>0){ totalRet+=ret; items.push({ lineItemId: inp.dataset.li, newQuantity: Math.max(0, cur-ret) }); }
+    const ret=parseInt(inp.value)||0;
+    if(ret>0){ totalRet+=ret; items.push({ lineItemId: inp.dataset.li, returnQty: ret }); }
   }
   if(!items.length){ toast('حدد كمية إرجاع لصنف واحد على الأقل'); return; }
-  if(!confirm(`تأكيد: إرجاع ${totalRet} قطعة للمخزون على Shopify (من غير رد فلوس). تكمّل؟`)) return;
+  const locationId=$('ret-loc')?.value||'';
+  if(!locationId){ toast('اختار المخزن'); return; }
+  const locName=$('ret-loc')?.selectedOptions?.[0]?.textContent||'';
+  if(!confirm(`تأكيد: إرجاع ${totalRet} قطعة لمخزن "${locName}" على Shopify (من غير رد فلوس). تكمّل؟`)) return;
   const note=($('ret-note')?.value||'').trim();
   try{
     toast('⏳ جاري تنفيذ المرتجع...');
-    const r=await apiFetch(`/api/manual-orders/${_ret.shopify_id}/return`,'POST',{ items, note });
+    const r=await apiFetch(`/api/returns/${_ret.shopify_id}/execute`,'POST',{ items, locationId, note });
     if(!r || r.error){ toast('❌ '+(r?.error||'فشل المرتجع')); return; }
     toast('✅ '+(r.message||'تم المرتجع'));
     returnsLookup(); returnsHistory();
