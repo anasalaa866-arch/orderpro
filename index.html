@@ -1,8 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v412 — RETURNS: unfulfilled + warehouse select (2026-07-04)
+  OrderPro v413 — DUP WARNING 96H CONSISTENCY (2026-07-04)
   ═══════════════════════════════════════════════════════════════════
+  🔧 v413: عدّاد "طلبات مشكلة" (المتكررين) في الشريط الجانبي كان بيحسب
+     التكرار على كل التاريخ، بينما تبويب المتكررين بيستخدم آخر 96 ساعة بس.
+     اتظبط العدّاد يستخدم نفس الـ 96 ساعة → الاتنين بقوا متطابقين.
+
+  من v412 — RETURNS: unfulfilled + warehouse select:
   🔧 v412: مرتجع جزئي لأي صنف (متشحن أو غير متشحن مع badge)، + قائمة
      اختيار المخزن اللي يرجعله المخزون (افتراضي = مخزن شحن الأوردر).
      backend v334 (RETURN للمتشحن / CANCEL لغير المتشحن).
@@ -8528,7 +8533,9 @@ function updateStats(){
   $('nb-pickup').textContent=pickupCount||'';
   $('nb-transit').textContent=transitCount||'';
   if($('nb-bosta'))$('nb-bosta').textContent=bostaCount||'';
-  const unassignedO=orders.filter(o=>!o.courierId&&o.status!=='ملغي'&&o.status!=='مكتمل');
+  // 🔧 v413: عدّاد "طلبات مشكلة" (المتكررين) يطابق تبويب المتكررين = آخر 96 ساعة بس
+  const _dupCutoff96=Date.now()-(96*60*60*1000);
+  const unassignedO=orders.filter(o=>!o.courierId&&o.status!=='ملغي'&&o.status!=='مكتمل'&&new Date(o.createdAt||0).getTime()>=_dupCutoff96);
   const allPhones=unassignedO.map(o=>o.phone).filter(p=>p&&p!=='—');
   const dupPh=allPhones.filter((p,i)=>allPhones.indexOf(p)!==i);
   if($('nb-problems'))$('nb-problems').textContent=new Set(dupPh).size||'';
