@@ -1,8 +1,25 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v413 — DUP WARNING 96H CONSISTENCY (2026-07-04)
+  OrderPro v416 — TREASURY: recognize deposit/withdraw (2026-07-05)
   ═══════════════════════════════════════════════════════════════════
+  🔧 v416: إصلاح فرق رصيد الخزنة — السلف/الرواتب (deposit/withdraw) كانت
+     بتبان في الكشف بس مش بتتخصم من الرصيد الحالي (اللي كان بيحسب in/out بس).
+     دلوقتي الرصيد والكشف بيشملوا الاتنين. يصلّح الأرقام الحالية والجديدة.
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v415 — HR LEAVES (نظام الإجازات) (2026-07-05)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v415: صفحة "🏖️ الإجازات" تحت الموارد البشرية: طلب إجازة (سنوية/مرضية/
+     عارضة/بدون مرتب)، حساب الأيام تلقائي، رصيد السنوية للموظف، قائمة
+     بالطلبات + موافقة/رفض/حذف + badge للمستنية. backend v342.
+
+  من v414 — POS CUSTOMERS EXPORT:
+  🆕 v414: صفحة "📇 عملاء المحل (Export)" تحت المالية: اختار فترة →
+     عرض عملاء كاشير المحل (POS) بأرقامهم + تنزيل Excel للرسائل.
+     أرقام حقيقية بس، مجمّعة بالتليفون. backend v339.
+
+  من v413 — DUP WARNING 96H CONSISTENCY:
   🔧 v413: عدّاد "طلبات مشكلة" (المتكررين) في الشريط الجانبي كان بيحسب
      التكرار على كل التاريخ، بينما تبويب المتكررين بيستخدم آخر 96 ساعة بس.
      اتظبط العدّاد يستخدم نفس الـ 96 ساعة → الاتنين بقوا متطابقين.
@@ -668,6 +685,7 @@ tr:hover td{background:#fafbff}
       </div>
       <div class="nav-group-body">
         <div class="ni" data-p="sales-sources" onclick="goPage(this,'sales-sources')"><span class="ni-icon">📊</span><span class="ni-label">مبيعات حسب المصدر</span></div>
+        <div class="ni" data-p="pos-customers" onclick="goPage(this,'pos-customers')"><span class="ni-icon">📇</span><span class="ni-label">عملاء المحل (Export)</span></div>
         <div class="ni" data-p="accounting" onclick="goPage(this,'accounting')"><span class="ni-icon">💰</span><span class="ni-label">محاسبة المناديب</span></div>
         <div class="ni" data-p="shop-accounting" onclick="goPage(this,'shop-accounting')"><span class="ni-icon">🏪</span><span class="ni-label">محاسبة المحل</span></div>
         <div class="ni" data-p="treasury" onclick="goPage(this,'treasury')"><span class="ni-icon">🏦</span><span class="ni-label">الخزنة</span></div>
@@ -756,6 +774,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="hr-advances" onclick="goPage(this,'hr-advances')"><span class="ni-icon">💵</span><span class="ni-label">السلف</span><span class="nbadge" id="nb-hr-pending" style="background:var(--warn)">0</span></div>
         <div class="ni" data-p="hr-penalties" onclick="goPage(this,'hr-penalties')"><span class="ni-icon">⚠️</span><span class="ni-label">الجزاءات</span></div>
         <div class="ni" data-p="hr-purchases" onclick="goPage(this,'hr-purchases')"><span class="ni-icon">🛒</span><span class="ni-label">مشتريات الموظفين</span><span class="nbadge" id="nb-hr-purch" style="background:var(--danger)">0</span></div>
+        <div class="ni" data-p="hr-leaves" onclick="goPage(this,'hr-leaves')"><span class="ni-icon">🏖️</span><span class="ni-label">الإجازات</span><span class="nbadge" id="nb-hr-leaves" style="background:var(--warn)">0</span></div>
       </div>
     </div>
 
@@ -855,6 +874,26 @@ tr:hover td{background:#fafbff}
       </div>
     </div>
     <div id="pl-grid"><div class="card"><div style="padding:22px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div></div></div>
+  </div>
+
+  <div class="page" id="page-pos-customers">
+    <div class="card" style="margin-bottom:14px">
+      <div style="padding:14px">
+        <div style="font-weight:800;margin-bottom:8px">📇 عملاء كاشير المحل — تصدير أرقام للرسائل</div>
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+          <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">من</label>
+            <input type="date" id="posc-from" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"></div>
+          <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">إلى</label>
+            <input type="date" id="posc-to" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"></div>
+          <button class="btn btn-primary" onclick="loadPosCustomers()">🔍 عرض</button>
+          <button class="btn btn-ghost btn-sm" onclick="posCustPreset('month')">الشهر ده</button>
+          <button class="btn btn-ghost btn-sm" onclick="posCustPreset('lastmonth')">الشهر اللي فات</button>
+          <button class="btn" id="posc-dl" onclick="downloadPosExcel()" style="background:#16a34a;color:#fff;display:none">⬇️ تنزيل Excel</button>
+        </div>
+        <div style="margin-top:6px;font-size:11px;color:var(--muted)">عملاء اشتروا من كاشير المحل (POS) في الفترة · أرقام حقيقية بس (بدون الافتراضي) · مجمّعين بالتليفون.</div>
+      </div>
+    </div>
+    <div id="posc-result"></div>
   </div>
 
   <div class="page" id="page-sales-sources">
@@ -5950,6 +5989,42 @@ tr:hover td{background:#fafbff}
 </div>
 
 <!-- ===== HR PURCHASES PAGE (v244) ===== -->
+<div class="page" id="page-hr-leaves">
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:14px">
+      <div style="font-weight:800;margin-bottom:10px">🏖️ طلب إجازة جديد</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+        <select id="lv-emp" class="form-input"><option value="">— الموظف —</option></select>
+        <select id="lv-type" class="form-input">
+          <option value="annual">سنوية</option>
+          <option value="sick">مرضية</option>
+          <option value="casual">عارضة</option>
+          <option value="unpaid">بدون مرتب</option>
+        </select>
+        <div><label style="font-size:11px;color:var(--muted)">من</label><input type="date" id="lv-from" class="form-input" oninput="lvCalcDays()"></div>
+        <div><label style="font-size:11px;color:var(--muted)">إلى</label><input type="date" id="lv-to" class="form-input" oninput="lvCalcDays()"></div>
+        <input type="text" id="lv-reason" class="form-input" placeholder="السبب (اختياري)">
+      </div>
+      <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span id="lv-days" style="font-size:12px;color:var(--muted)"></span>
+        <button class="btn btn-primary" onclick="submitLeave()">➕ تسجيل الطلب</button>
+        <span id="lv-bal" style="font-size:12px;color:var(--gold);font-weight:700"></span>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+      <span style="font-weight:800">📋 الإجازات</span>
+      <select id="lv-f-status" class="form-input" style="max-width:150px" onchange="loadHrLeaves()">
+        <option value="">كل الحالات</option><option value="pending">مستنية</option><option value="approved">مقبولة</option><option value="rejected">مرفوضة</option>
+      </select>
+      <input type="number" id="lv-f-year" class="form-input" style="max-width:110px" placeholder="السنة" onchange="loadHrLeaves()">
+      <button class="btn btn-ghost btn-sm" onclick="loadHrLeaves()">🔄 تحديث</button>
+    </div>
+    <div id="lv-list" style="padding:8px 14px;overflow-x:auto"></div>
+  </div>
+</div>
+
 <div class="page" id="page-hr-purchases">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">🛒 مشتريات الموظفين</h2>
@@ -7240,7 +7315,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -20376,8 +20451,8 @@ function getTreasuryBalance(tId){
   const t = _treasuries.find(x=>x.id===tId);
   if(!t) return 0;
   const txs = _treasuryTx.filter(x=>x.treasuryId===tId);
-  const inAmt = txs.filter(x=>x.type==='in').reduce((s,x)=>s+(parseFloat(x.amount)||0),0);
-  const outAmt = txs.filter(x=>x.type==='out').reduce((s,x)=>s+(parseFloat(x.amount)||0),0);
+  const inAmt = txs.filter(x=>x.type==='in'||x.type==='deposit').reduce((s,x)=>s+(parseFloat(x.amount)||0),0); // 🔧 v416: اشمل deposit
+  const outAmt = txs.filter(x=>x.type==='out'||x.type==='withdraw').reduce((s,x)=>s+(parseFloat(x.amount)||0),0);
   return (parseFloat(t.opening)||0) + inAmt - outAmt;
 }
 
@@ -20435,7 +20510,7 @@ function renderTreasuryTx(tId){
   let runningBal = (t && t.opening) ? parseFloat(t.opening) || 0 : 0;
   const txsWithBal = txsAsc.map(tx => {
     const amt = parseFloat(tx.amount) || 0;
-    if(tx.type === 'in') runningBal += amt;
+    if(tx.type === 'in' || tx.type === 'deposit') runningBal += amt; // 🔧 v416
     else runningBal -= amt;
     return { ...tx, _balance: runningBal };
   });
@@ -20460,7 +20535,7 @@ function renderTreasuryTx(tId){
 
   txsDesc.forEach((tx, idx) => {
     const num = txsDesc.length - idx; // ترقيم من القديم للجديد
-    const isIn = tx.type === 'in';
+    const isIn = tx.type === 'in' || tx.type === 'deposit'; // 🔧 v416
     const amt = parseFloat(tx.amount) || 0;
     const bal = tx._balance;
     html += '<tr style="border-bottom:1px solid var(--border)">'
@@ -34501,6 +34576,67 @@ async function photoDelete(id){
   catch(e){ toast('❌ '+e.message); }
 }
 
+// 🆕 v414: عملاء المحل (POS) — عرض + تصدير Excel
+let _poscData = [];
+function _poscYmd(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function posCustInit(){
+  const f=$('posc-from'), t=$('posc-to'); const now=new Date();
+  if(f && !f.value){ f.value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`; }
+  if(t && !t.value){ t.value=_poscYmd(now); }
+  loadPosCustomers();
+}
+function posCustPreset(p){
+  const now=new Date(); let from, to=_poscYmd(now);
+  if(p==='month'){ from=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`; }
+  else if(p==='lastmonth'){ const fm=new Date(now.getFullYear(),now.getMonth()-1,1); const lm=new Date(now.getFullYear(),now.getMonth(),0); from=_poscYmd(fm); to=_poscYmd(lm); }
+  $('posc-from').value=from; $('posc-to').value=to; loadPosCustomers();
+}
+function _poscMoney(n){ return (Number(n)||0).toLocaleString('en-US',{maximumFractionDigits:0}); }
+async function loadPosCustomers(){
+  const box=$('posc-result'); if(!box) return;
+  const from=$('posc-from')?.value, to=$('posc-to')?.value;
+  if(!from || !to){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--muted)">اختار الفترة</div></div>`; return; }
+  box.innerHTML=`<div class="card"><div style="padding:24px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div></div>`;
+  $('posc-dl').style.display='none'; _poscData=[];
+  try{
+    const r=await apiFetch(`/api/customers/pos-export?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,'GET');
+    if(!r || r.error){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</div></div>`; return; }
+    _poscData = r.customers || [];
+    if(!_poscData.length){ box.innerHTML=`<div class="card"><div style="padding:22px;text-align:center;color:var(--muted)">مفيش عملاء POS بأرقام في الفترة دي</div></div>`; return; }
+    $('posc-dl').style.display='inline-flex';
+    const rows=_poscData.slice(0,500).map((c,i)=>`<tr>
+      <td style="text-align:center;color:var(--muted)">${i+1}</td>
+      <td>${escapeHtml(c.name||'—')}</td>
+      <td style="font-family:Roboto,sans-serif;font-weight:700">${escapeHtml(c.phone)}</td>
+      <td style="text-align:center">${c.orders_count}</td>
+      <td style="text-align:left;font-family:Roboto,sans-serif">${_poscMoney(c.total_amount)} ج</td>
+      <td style="font-size:11px;color:var(--muted)">${c.last_order_at?new Date(c.last_order_at).toLocaleDateString('ar-EG'):''}</td>
+    </tr>`).join('');
+    box.innerHTML=`<div class="card">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-weight:800">👥 ${_poscData.length} عميل${_poscData.length>500?' (بيظهر أول 500 — التنزيل بيشمل الكل)':''}</div>
+      <div style="padding:6px 14px;overflow-x:auto"><table style="width:100%;font-size:13px">
+        <thead><tr><th>#</th><th style="text-align:right">الاسم</th><th style="text-align:right">التليفون</th><th>طلبات</th><th style="text-align:left">إجمالي</th><th>آخر طلب</th></tr></thead>
+        <tbody>${rows}</tbody></table></div></div>`;
+  }catch(e){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`; }
+}
+function downloadPosExcel(){
+  if(!_poscData.length){ toast('مفيش بيانات'); return; }
+  const from=$('posc-from')?.value, to=$('posc-to')?.value;
+  const data = _poscData.map((c,i)=>({
+    '#': i+1,
+    'الاسم': c.name||'',
+    'رقم التليفون': String(c.phone||''),
+    'عدد الطلبات': c.orders_count,
+    'إجمالي المبلغ': Number(c.total_amount)||0,
+    'آخر طلب': c.last_order_at ? new Date(c.last_order_at).toLocaleDateString('ar-EG') : ''
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:5},{wch:26},{wch:16},{wch:12},{wch:14},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'عملاء المحل');
+  XLSX.writeFile(wb, `عملاء_المحل_${from}_${to}.xlsx`);
+}
+
 // 🆕 v405: داشبورد مبيعات حسب المصدر
 function _ssrcYmd(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function ssrcInit(){
@@ -38251,6 +38387,80 @@ function purchaseStatusBadge(p){
   })[p.status] || p.status;
 }
 
+// 🆕 v415: نظام إجازات الموظفين
+const _LV_TYPES = { annual:'سنوية', sick:'مرضية', casual:'عارضة', unpaid:'بدون مرتب' };
+const _LV_STATUS = { pending:['مستنية','#f59e0b'], approved:['مقبولة','#16a34a'], rejected:['مرفوضة','#dc2626'] };
+let _lvEmployees = [];
+async function loadHrLeaves(){
+  const list=$('lv-list'); if(!list) return;
+  // حمّل الموظفين مرة
+  if(!_lvEmployees.length){
+    try{ const er=await apiFetch('/api/hr/employees','GET'); _lvEmployees=(er.employees||er||[]).filter(e=>e.active!==false);
+      const sel=$('lv-emp'); if(sel){ sel.innerHTML='<option value="">— الموظف —</option>'+_lvEmployees.map(e=>`<option value="${e.id}">${escapeHtml(e.name_ar||e.name||('#'+e.id))}</option>`).join(''); }
+      if(!$('lv-emp').dataset.bound){ $('lv-emp').dataset.bound='1'; $('lv-emp').addEventListener('change', lvLoadBalance); }
+    }catch(e){}
+  }
+  const status=$('lv-f-status')?.value||''; const year=$('lv-f-year')?.value||'';
+  list.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted)">⏳...</div>';
+  try{
+    const qs=[]; if(status)qs.push('status='+status); if(year)qs.push('year='+year);
+    const r=await apiFetch('/api/hr/leaves'+(qs.length?'?'+qs.join('&'):''),'GET');
+    const rows=r.leaves||[];
+    // badge للمستنية
+    const pend=rows.filter(x=>x.status==='pending').length;
+    const nb=$('nb-hr-leaves'); if(nb) nb.textContent=pend||'';
+    if(!rows.length){ list.innerHTML='<div style="padding:18px;text-align:center;color:var(--muted)">مفيش إجازات</div>'; return; }
+    list.innerHTML=`<table style="width:100%;font-size:13px"><thead><tr>
+      <th style="text-align:right">الموظف</th><th>النوع</th><th>من</th><th>إلى</th><th>أيام</th><th style="text-align:right">السبب</th><th>الحالة</th><th>إجراء</th>
+      </tr></thead><tbody>${rows.map(l=>{
+        const st=_LV_STATUS[l.status]||[l.status,'#64748b'];
+        return `<tr>
+          <td style="font-weight:700">${escapeHtml(l.employee_name||('#'+l.employee_id))}</td>
+          <td style="text-align:center">${_LV_TYPES[l.leave_type]||l.leave_type}</td>
+          <td style="font-family:Roboto,sans-serif">${(l.start_date||'').slice(0,10)}</td>
+          <td style="font-family:Roboto,sans-serif">${(l.end_date||'').slice(0,10)}</td>
+          <td style="text-align:center;font-weight:700">${l.days}</td>
+          <td style="font-size:11px;color:var(--muted)">${escapeHtml(l.reason||'')}</td>
+          <td style="text-align:center"><span style="background:${st[1]}22;color:${st[1]};padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700">${st[0]}</span></td>
+          <td style="text-align:center;white-space:nowrap">
+            ${l.status==='pending'?`<button class="btn btn-sm" style="background:#16a34a;color:#fff;padding:3px 8px" onclick="lvAction(${l.id},'approve')">✓</button> <button class="btn btn-sm" style="background:#dc2626;color:#fff;padding:3px 8px" onclick="lvAction(${l.id},'reject')">✕</button>`:''}
+            <button class="btn btn-ghost btn-sm" style="padding:3px 8px" onclick="lvDelete(${l.id})">🗑️</button>
+          </td></tr>`;
+      }).join('')}</tbody></table>`;
+  }catch(e){ list.innerHTML=`<div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`; }
+}
+function lvCalcDays(){
+  const f=$('lv-from')?.value, t=$('lv-to')?.value; const el=$('lv-days');
+  if(f&&t){ const d=Math.round((new Date(t+'T00:00:00Z')-new Date(f+'T00:00:00Z'))/86400000)+1; el.textContent=d>0?`📅 ${d} يوم`:'⚠️ التاريخ غلط'; }
+  else el.textContent='';
+}
+async function lvLoadBalance(){
+  const id=$('lv-emp')?.value; const el=$('lv-bal'); if(!el) return; el.textContent='';
+  if(!id) return;
+  try{ const r=await apiFetch(`/api/hr/leaves/balance/${id}?year=${new Date().getFullYear()}`,'GET');
+    el.textContent=`رصيد السنوية: ${r.annual_remaining} من ${r.annual_entitlement} (اتاخد ${r.annual_used})`;
+  }catch(e){}
+}
+async function submitLeave(){
+  const employee_id=$('lv-emp')?.value, leave_type=$('lv-type')?.value, start_date=$('lv-from')?.value, end_date=$('lv-to')?.value, reason=$('lv-reason')?.value;
+  if(!employee_id){ toast('اختار الموظف'); return; }
+  if(!start_date||!end_date){ toast('حدد التواريخ'); return; }
+  try{
+    const r=await apiFetch('/api/hr/leaves','POST',{ employee_id, leave_type, start_date, end_date, reason });
+    if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    toast('✅ اتسجّل الطلب ('+r.days+' يوم)');
+    $('lv-from').value=''; $('lv-to').value=''; $('lv-reason').value=''; $('lv-days').textContent='';
+    loadHrLeaves(); lvLoadBalance();
+  }catch(e){ toast('❌ '+e.message); }
+}
+async function lvAction(id,action){
+  try{ const r=await apiFetch(`/api/hr/leaves/${id}/${action}`,'POST',{}); if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); return; } toast(action==='approve'?'✅ اتقبلت':'✕ اترفضت'); loadHrLeaves(); lvLoadBalance(); }catch(e){ toast('❌ '+e.message); }
+}
+async function lvDelete(id){
+  if(!confirm('حذف الطلب؟')) return;
+  try{ await apiFetch(`/api/hr/leaves/${id}`,'DELETE'); toast('🗑️ اتحذف'); loadHrLeaves(); }catch(e){ toast('❌ '+e.message); }
+}
+
 async function loadHrPurchases(){
   try{
     // جيب stats
@@ -40091,6 +40301,7 @@ function goPage(el,page){
   if(page==='stocktake') loadStocktakePage();
   if(page==='stk-report') stkrInit();
   if(page==='sales-sources') ssrcInit();
+  if(page==='pos-customers') posCustInit();
   if(page==='photo-library') loadPhotoLibrary();
   if(page==='returns') returnsInit();
   if(page==='transfers') loadTransfersPage();
@@ -40132,6 +40343,7 @@ function goPage(el,page){
   if(page==='hr-advances') loadHrAdvances();
   if(page==='hr-penalties') loadHrPenalties();
   if(page==='hr-purchases') loadHrPurchases();
+  if(page==='hr-leaves') loadHrLeaves();
   if(page==='stars-reviews')loadStarsReviews();
   if(page==='shop-transfers')loadShopTransfers();
   if(page==='shipping-transfers')loadShippingTransfers();
