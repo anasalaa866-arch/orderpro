@@ -1,8 +1,34 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
-  OrderPro v417 — TREASURY PRINT: deposit/withdraw (2026-07-05)
+  OrderPro v422 — TALABAT page tabs (2026-07-07)
   ═══════════════════════════════════════════════════════════════════
+  🔧 v422: صفحة طلبات اتقسمت تابين — "📋 المنتجات المربوطة" و"🎯 فرص طلبات"
+     بدل ما الفرص تحت الجدول الطويل. الفرص بتتحمّل أول ما تفتح تابها.
+
+  من v421 — TALABAT opportunities:
+  🆕 v421: قسم "🎯 فرص طلبات" في صفحة طلبات — منتجات ليها ستوك (كل المخازن)
+     ومش مضافة على طلبات، مع مبيعات آخر 30 يوم، ترتيب بالأكثر مبيعاً/مخزوناً
+     + تنزيل Excel. backend v347.
+
+  من v420 — TALABAT names:
+  🔧 v420: عمود "اسم المنتج على طلبات" وجنبه "منتجك على الموقع". (اسم طلبات
+     بيتملّي بعد إعادة رفع products.xlsx مرة — backend v345 بيحافظ على الربط.)
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v419 — TALABAT: matched name + manual link (2026-07-06)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v419: في صفحة طلبات — عمود "منتجك المتطابق" يوضّح اسم منتجك جنب اسم
+     منتج طلبات، وزرار "🔗 ربط" للمنتجات غير المتطابقة (بحث في كتالوجك
+     واختيار المنتج) + تغيير/فك الربط. backend v344.
+
+  من v418 — TALABAT MARKETPLACE:
+  🆕 v418: صفحة "🛵 طلبات (Talabat)": رفع شيت منتجات طلبات (.xlsx) →
+     مطابقة بالباركود + تقرير، جدول المنتجات المربوطة (مخزون ترفيوم/سعر
+     الموقع×1.15/سعر مثبّت/active)، تثبيت/فك سعر لكل منتج، وزرار "توليد
+     شيت التحديث" (CSV بفورمات طلبات). backend v343.
+
+  من v417 — TREASURY PRINT:
   🔧 v417: نفس إصلاح v416 بس في *طباعة* حركات الخزنة — رصيد أول/آخر الفترة
      والرصيد التراكمي في الـ PDF بقوا يشملوا deposit/withdraw (السلف/الرواتب).
      فالمطبوع بقى مطابق للرصيد الحالي في الصفحة.
@@ -693,6 +719,7 @@ tr:hover td{background:#fafbff}
       <div class="nav-group-body">
         <div class="ni" data-p="sales-sources" onclick="goPage(this,'sales-sources')"><span class="ni-icon">📊</span><span class="ni-label">مبيعات حسب المصدر</span></div>
         <div class="ni" data-p="pos-customers" onclick="goPage(this,'pos-customers')"><span class="ni-icon">📇</span><span class="ni-label">عملاء المحل (Export)</span></div>
+        <div class="ni" data-p="talabat" onclick="goPage(this,'talabat')"><span class="ni-icon">🛵</span><span class="ni-label">طلبات (Talabat)</span></div>
         <div class="ni" data-p="accounting" onclick="goPage(this,'accounting')"><span class="ni-icon">💰</span><span class="ni-label">محاسبة المناديب</span></div>
         <div class="ni" data-p="shop-accounting" onclick="goPage(this,'shop-accounting')"><span class="ni-icon">🏪</span><span class="ni-label">محاسبة المحل</span></div>
         <div class="ni" data-p="treasury" onclick="goPage(this,'treasury')"><span class="ni-icon">🏦</span><span class="ni-label">الخزنة</span></div>
@@ -882,6 +909,66 @@ tr:hover td{background:#fafbff}
     </div>
     <div id="pl-grid"><div class="card"><div style="padding:22px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div></div></div>
   </div>
+
+  <div class="page" id="page-talabat">
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="btn" id="tal-tabbtn-links" onclick="talTab('links')" style="background:#2563eb;color:#fff">📋 المنتجات المربوطة</button>
+      <button class="btn btn-ghost" id="tal-tabbtn-opps" onclick="talTab('opps')">🎯 فرص طلبات</button>
+    </div>
+    <div id="tal-tab-links">
+    <div class="card" style="margin-bottom:14px">
+      <div style="padding:14px">
+        <div style="font-weight:800;margin-bottom:8px">🛵 ربط منتجات طلبات (Talabat)</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">ارفع شيت منتجات طلبات (products.xlsx) مرة → بيتطابق بالباركود مع كتالوجك. بعد كده اضغط "توليد شيت التحديث" أي وقت.</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input type="file" id="tal-file" accept=".xlsx,.xls" style="display:none" onchange="talabatUpload(this.files[0])">
+          <button class="btn btn-ghost" onclick="document.getElementById('tal-file').click()">📤 رفع شيت منتجات طلبات (.xlsx)</button>
+          <button class="btn" id="tal-export" onclick="talabatExport()" style="background:#f5a623;color:#fff;display:none">⬇️ توليد شيت التحديث (CSV)</button>
+        </div>
+        <div id="tal-report" style="margin-top:10px;font-size:13px"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div style="padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+        <span style="font-weight:800">📋 المنتجات المربوطة</span>
+        <input type="text" id="tal-search" class="form-input" style="max-width:220px" placeholder="🔍 بحث بالاسم أو الـ sku..." oninput="talabatRender()">
+        <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="tal-only-unmatched" onchange="talabatRender()"> غير المتطابق بس</label>
+        <span id="tal-summary" style="font-size:12px;color:var(--muted);margin-inline-start:auto"></span>
+      </div>
+      <div id="tal-list" style="padding:6px 14px;overflow-x:auto"></div>
+    </div>
+    </div>
+    <div id="tal-tab-opps" style="display:none">
+    <div class="card" style="margin-bottom:14px">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+        <div style="font-weight:800">🎯 فرص طلبات — منتجات ليها ستوك ومش على طلبات</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">منتجات مخزونها (كل المخازن) > 0 ومش مضافة على طلبات · مبيعات آخر 30 يوم (كل القنوات). ضيفها على طلبات تبيع أكتر.</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">
+          <button class="btn btn-primary" onclick="talOppLoad()">🔍 عرض الفرص</button>
+          <span style="font-size:12px;color:var(--muted)">ترتيب:</span>
+          <button class="btn btn-ghost btn-sm" id="talopp-sort-sold" onclick="talOppSort('sold')">🔥 الأكثر مبيعاً</button>
+          <button class="btn btn-ghost btn-sm" id="talopp-sort-stock" onclick="talOppSort('stock')">📦 الأكثر مخزوناً</button>
+          <button class="btn" id="talopp-dl" onclick="talOppExcel()" style="background:#16a34a;color:#fff;display:none;margin-inline-start:auto">⬇️ تنزيل Excel</button>
+        </div>
+      </div>
+      <div id="talopp-list" style="padding:6px 14px;overflow-x:auto"></div>
+    </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="m-tal-link"><div class="modal" style="width:460px">
+    <div class="mhd"><h3>🔗 ربط منتج طلبات</h3><button class="xbtn" onclick="closeM('m-tal-link')">✕</button></div>
+    <div style="padding:14px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:4px">المنتج على طلبات:</div>
+      <div id="tal-link-title" style="font-weight:700;margin-bottom:10px"></div>
+      <input type="text" id="tal-link-search" class="form-input" placeholder="🔍 دوّر على منتجك بالاسم أو الباركود..." oninput="talabatSearchProducts()" style="width:100%">
+      <div id="tal-link-results" style="margin-top:8px;max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px"></div>
+    </div>
+    <div class="mft">
+      <button class="btn btn-ghost" id="tal-link-unlink" onclick="talabatUnlinkCurrent()" style="color:#dc2626;display:none">↩️ فك الربط</button>
+      <button class="btn btn-ghost" onclick="closeM('m-tal-link')">إغلاق</button>
+    </div>
+  </div></div>
 
   <div class="page" id="page-pos-customers">
     <div class="card" style="margin-bottom:14px">
@@ -7322,7 +7409,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'talabat':'🛵 طلبات (Talabat)','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -34585,6 +34672,200 @@ async function photoDelete(id){
   catch(e){ toast('❌ '+e.message); }
 }
 
+// 🆕 v422: تبويبات صفحة طلبات
+function talTab(which){
+  const isLinks = which === 'links';
+  $('tal-tab-links').style.display = isLinks ? 'block' : 'none';
+  $('tal-tab-opps').style.display = isLinks ? 'none' : 'block';
+  const bl=$('tal-tabbtn-links'), bo=$('tal-tabbtn-opps');
+  if(bl&&bo){
+    bl.className = isLinks ? 'btn' : 'btn btn-ghost'; bl.style.cssText = isLinks ? 'background:#2563eb;color:#fff' : '';
+    bo.className = isLinks ? 'btn btn-ghost' : 'btn'; bo.style.cssText = isLinks ? '' : 'background:#2563eb;color:#fff';
+  }
+  if(!isLinks && !_talOpp.length) talOppLoad(); // حمّل الفرص أول ما تفتح التاب
+}
+
+// 🆕 v421: فرص طلبات — منتجات ليها ستوك ومش على طلبات
+let _talOpp = [], _talOppSort = 'sold';
+async function talOppLoad(){
+  const box=$('talopp-list'); if(!box) return;
+  box.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div>';
+  $('talopp-dl').style.display='none';
+  try{
+    const r=await apiFetch('/api/talabat/opportunities','GET');
+    if(!r||r.error){ box.innerHTML=`<div style="padding:16px;color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</div>`; return; }
+    _talOpp=r.rows||[];
+    if(!_talOpp.length){ box.innerHTML='<div style="padding:18px;text-align:center;color:var(--muted)">مفيش منتجات — يا إما كلها على طلبات يا إما مفيش ستوك</div>'; return; }
+    $('talopp-dl').style.display='inline-flex';
+    talOppRender();
+  }catch(e){ box.innerHTML=`<div style="padding:16px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`; }
+}
+function talOppSort(by){ _talOppSort=by; talOppRender(); }
+function talOppRender(){
+  const box=$('talopp-list'); if(!box||!_talOpp.length) return;
+  const rows=[..._talOpp].sort((a,b)=> _talOppSort==='stock' ? (b.total_stock-a.total_stock)||(b.sold_30d-a.sold_30d) : (b.sold_30d-a.sold_30d)||(b.total_stock-a.total_stock));
+  // زرار الترتيب النشط
+  const ss=$('talopp-sort-sold'), sk=$('talopp-sort-stock');
+  if(ss&&sk){ const act='background:#2563eb;color:#fff'; ss.style.cssText=ss.style.cssText.replace(/background:[^;]*;?color:[^;]*;?/,''); sk.style.cssText=sk.style.cssText.replace(/background:[^;]*;?color:[^;]*;?/,''); (_talOppSort==='sold'?ss:sk).setAttribute('style',act); }
+  box.innerHTML=`<div style="padding:6px 0;font-size:12px;color:var(--muted)">${_talOpp.length} منتج فرصة · بيظهر أول 500</div>
+    <table style="width:100%;font-size:13px"><thead><tr>
+      <th style="text-align:center">#</th><th style="text-align:right">المنتج</th><th>الباركود</th><th>مبيعات 30 يوم</th><th>المخزون الكلي</th><th>سعر الموقع</th>
+    </tr></thead><tbody>${rows.slice(0,500).map((x,i)=>`<tr>
+      <td style="text-align:center;color:var(--muted)">${i+1}</td>
+      <td style="font-weight:600">${escapeHtml(x.title)}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(x.barcode)}</td>
+      <td style="text-align:center;font-weight:800;color:${x.sold_30d>0?'#dc2626':'var(--muted)'}">${x.sold_30d}</td>
+      <td style="text-align:center;font-weight:700">${x.total_stock}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif">${x.price.toLocaleString()}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+function talOppExcel(){
+  if(!_talOpp.length){ toast('مفيش بيانات'); return; }
+  const rows=[..._talOpp].sort((a,b)=> _talOppSort==='stock' ? (b.total_stock-a.total_stock) : (b.sold_30d-a.sold_30d));
+  const data=rows.map((x,i)=>({ '#':i+1, 'المنتج':x.title, 'الباركود':String(x.barcode||''), 'مبيعات 30 يوم':x.sold_30d, 'المخزون الكلي':x.total_stock, 'سعر الموقع':x.price }));
+  const ws=XLSX.utils.json_to_sheet(data);
+  ws['!cols']=[{wch:5},{wch:40},{wch:16},{wch:14},{wch:14},{wch:12}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'فرص طلبات');
+  XLSX.writeFile(wb, `فرص_طلبات_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// 🆕 v418: طلبات (Talabat) — ربط + توليد شيت التحديث
+let _talLinks = [];
+async function loadTalabat(){
+  await talabatLoadLinks();
+}
+async function talabatLoadLinks(){
+  try{
+    const r = await apiFetch('/api/talabat/links','GET');
+    _talLinks = (r && r.links) || [];
+    if(_talLinks.length && $('tal-export')) $('tal-export').style.display='inline-flex';
+    talabatRender();
+  }catch(e){ if($('tal-list')) $('tal-list').innerHTML=`<div style="padding:16px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`; }
+}
+async function talabatUpload(file){
+  if(!file) return;
+  const rep=$('tal-report'); rep.innerHTML='⏳ جاري قراءة الشيت...';
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const ws = wb.Sheets['Products'] || wb.Sheets[wb.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_json(ws, {defval:''});
+    const products = data.map(row=>({
+      sku: row['sku']!==undefined?String(row['sku']):'',
+      name: row['name']||'',
+      barcode1: row['barcode 1']||'', barcode2: row['barcode 2']||'', barcode3: row['barcode 3']||''
+    })).filter(p=>p.sku);
+    if(!products.length){ rep.innerHTML='<span style="color:var(--danger)">❌ مفيش عمود sku في الشيت</span>'; return; }
+    rep.innerHTML=`⏳ جاري ربط ${products.length} منتج...`;
+    const r = await apiFetch('/api/talabat/link','POST',{ products });
+    if(!r||r.error){ rep.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
+    rep.innerHTML=`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;color:#15803d">
+      ✅ تم: إجمالي ${r.total} · اتطابق <b>${r.matched}</b> · مش متطابق <b>${r.unmatched_count}</b>
+      ${r.unmatched_count?`<div style="font-size:11px;color:#b45309;margin-top:4px">غير المتطابق هيظهر في القائمة تحت (فعّل "غير المتطابق بس")</div>`:''}
+    </div>`;
+    talabatLoadLinks();
+    $('tal-file').value='';
+  }catch(e){ rep.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+function talabatRender(){
+  const box=$('tal-list'); if(!box) return;
+  const q=($('tal-search')?.value||'').trim().toLowerCase();
+  const onlyU=$('tal-only-unmatched')?.checked;
+  let rows=_talLinks;
+  if(onlyU) rows=rows.filter(l=>!l.matched);
+  if(q) rows=rows.filter(l=>(l.talabat_name||'').toLowerCase().includes(q)||(l.matched_name||'').toLowerCase().includes(q)||String(l.talabat_sku).includes(q));
+  const matchedCount=_talLinks.filter(l=>l.matched).length;
+  const activeCount=_talLinks.filter(l=>l.active===1).length;
+  if($('tal-summary')) $('tal-summary').textContent=`${_talLinks.length} منتج · مطابق ${matchedCount} · متاح (active) ${activeCount}`;
+  if(!rows.length){ box.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted)">مفيش منتجات — ارفع شيت طلبات الأول</div>'; return; }
+  box.innerHTML=`<table style="width:100%;font-size:13px"><thead><tr>
+    <th style="text-align:right">المنتج على طلبات</th><th style="text-align:right">منتجك على الموقع</th><th>sku طلبات</th><th>مخزون ترفيوم</th><th>سعر الموقع</th><th>×1.15</th><th>سعر مثبّت</th><th>السعر النهائي</th><th>active</th>
+    </tr></thead><tbody>${rows.slice(0,800).map(l=>`<tr style="${l.matched?'':'background:#fef2f2'}">
+      <td style="font-weight:600">${escapeHtml(l.talabat_name||'—')}</td>
+      <td>${l.matched
+          ? `<span style="color:#15803d">${escapeHtml(l.matched_name||'—')}</span> <button class="btn btn-ghost" style="padding:1px 6px;font-size:10px" onclick="talabatOpenLink(${l.id})" title="تغيير الربط">✏️</button>`
+          : `<button class="btn" style="background:#2563eb;color:#fff;padding:4px 12px;font-size:12px" onclick="talabatOpenLink(${l.id})">🔗 ربط</button>`}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(l.talabat_sku)}</td>
+      <td style="text-align:center;font-weight:700">${l.matched?l.trivium_qty:'—'}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif">${l.web_price?l.web_price.toLocaleString():'—'}</td>
+      <td style="text-align:center;color:var(--muted);font-family:Roboto,sans-serif">${l.matched?l.auto_price.toLocaleString():'—'}</td>
+      <td style="text-align:center"><input type="number" min="0" value="${l.price_override!=null?l.price_override:''}" placeholder="—" ${l.matched?'':'disabled'} onchange="talabatSetPrice(${l.id}, this.value)" style="width:70px;padding:4px;border:1px solid var(--border);border-radius:6px;text-align:center;font-family:Roboto,sans-serif"></td>
+      <td style="text-align:center;font-weight:800;color:${l.price_override!=null?'#b45309':'#16a34a'};font-family:Roboto,sans-serif">${l.matched?l.final_price.toLocaleString():'—'}</td>
+      <td style="text-align:center">${l.matched?(l.active?'<span style="color:#16a34a;font-weight:700">1</span>':'<span style="color:#dc2626">0</span>'):'—'}</td>
+    </tr>`).join('')}</tbody></table>
+    ${rows.length>800?`<div style="padding:8px;text-align:center;color:var(--muted);font-size:11px">بيظهر أول 800 — التوليد بيشمل الكل</div>`:''}`;
+}
+// 🆕 v419: ربط يدوي لمنتج طلبات بمنتج من كتالوجك
+let _talLinkId=null, _talSearchTimer=null;
+function talabatOpenLink(id){
+  _talLinkId=id;
+  const l=_talLinks.find(x=>x.id===id);
+  $('tal-link-title').textContent = l ? (l.talabat_name||l.talabat_sku) : '';
+  $('tal-link-search').value=''; $('tal-link-results').innerHTML='<div style="padding:12px;color:var(--muted);font-size:12px">اكتب اسم أو باركود منتجك...</div>';
+  $('tal-link-unlink').style.display = (l && l.matched) ? 'inline-flex' : 'none';
+  openM('m-tal-link');
+  setTimeout(()=>$('tal-link-search').focus(),100);
+}
+function talabatSearchProducts(){
+  clearTimeout(_talSearchTimer);
+  const q=$('tal-link-search').value.trim();
+  if(q.length<2){ $('tal-link-results').innerHTML='<div style="padding:12px;color:var(--muted);font-size:12px">اكتب حرفين على الأقل...</div>'; return; }
+  _talSearchTimer=setTimeout(async()=>{
+    $('tal-link-results').innerHTML='<div style="padding:12px;color:var(--muted)">⏳...</div>';
+    try{
+      const r=await apiFetch(`/api/inventory/search?q=${encodeURIComponent(q)}&limit=25`,'GET');
+      const res=(r&&r.results)||[];
+      if(!res.length){ $('tal-link-results').innerHTML='<div style="padding:12px;color:var(--muted);font-size:12px">مفيش نتايج</div>'; return; }
+      $('tal-link-results').innerHTML=res.map(p=>`<div onclick="talabatPickProduct('${p.variant_id}')" style="padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;gap:8px" onmouseover="this.style.background='var(--hover,#f1f5f9)'" onmouseout="this.style.background=''">
+        <div><div style="font-weight:600;font-size:13px">${escapeHtml(p.product_title)}${p.variant_title&&p.variant_title!=='Default Title'?' · '+escapeHtml(p.variant_title):''}</div>
+        <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(p.barcode||p.sku||'')} · ${(Number(p.price)||0).toLocaleString()} ج</div></div>
+      </div>`).join('');
+    }catch(e){ $('tal-link-results').innerHTML=`<div style="padding:12px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`; }
+  },300);
+}
+async function talabatPickProduct(variantId){
+  if(!_talLinkId) return;
+  try{
+    const r=await apiFetch(`/api/talabat/link-manual/${_talLinkId}`,'POST',{ variant_id: variantId });
+    if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    toast('🔗 اتربط'); closeM('m-tal-link'); talabatLoadLinks();
+  }catch(e){ toast('❌ '+e.message); }
+}
+async function talabatUnlinkCurrent(){
+  if(!_talLinkId) return;
+  if(!confirm('فك الربط؟')) return;
+  try{
+    await apiFetch(`/api/talabat/link-manual/${_talLinkId}`,'POST',{ variant_id: null });
+    toast('↩️ اتفك الربط'); closeM('m-tal-link'); talabatLoadLinks();
+  }catch(e){ toast('❌ '+e.message); }
+}
+async function talabatSetPrice(id, val){
+  const price_override = (val===''||val==null) ? null : Number(val);
+  try{
+    const r=await apiFetch(`/api/talabat/price/${id}`,'POST',{ price_override });
+    if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    const l=_talLinks.find(x=>x.id===id);
+    if(l){ l.price_override=r.price_override; l.final_price=(r.price_override!=null?r.price_override:l.auto_price); }
+    toast(price_override!=null?'📌 اتثبّت السعر':'↩️ رجع تلقائي');
+    talabatRender();
+  }catch(e){ toast('❌ '+e.message); }
+}
+function talabatExport(){
+  if(!_talLinks.length){ toast('مفيش منتجات'); return; }
+  const header=['SKU','Barcode','reason','start_date','end_date','Campaing_status','discounted_price','maximum_sales_quantity','original_Price','active'];
+  const esc=v=>{ const s=String(v==null?'':v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+  const lines=[header.join(',')];
+  for(const l of _talLinks){
+    lines.push([esc(l.talabat_sku),'','','','','','', l.trivium_qty, l.final_price, l.active].join(','));
+  }
+  const csv='\uFEFF'+lines.join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`talabat_stock_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+  toast('⬇️ اتنزّل شيت التحديث');
+}
+
 // 🆕 v414: عملاء المحل (POS) — عرض + تصدير Excel
 let _poscData = [];
 function _poscYmd(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
@@ -40311,6 +40592,7 @@ function goPage(el,page){
   if(page==='stk-report') stkrInit();
   if(page==='sales-sources') ssrcInit();
   if(page==='pos-customers') posCustInit();
+  if(page==='talabat') loadTalabat();
   if(page==='photo-library') loadPhotoLibrary();
   if(page==='returns') returnsInit();
   if(page==='transfers') loadTransfersPage();
