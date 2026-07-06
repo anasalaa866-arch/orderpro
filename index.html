@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v417 — TREASURY PRINT: deposit/withdraw (2026-07-05)
+  ═══════════════════════════════════════════════════════════════════
+  🔧 v417: نفس إصلاح v416 بس في *طباعة* حركات الخزنة — رصيد أول/آخر الفترة
+     والرصيد التراكمي في الـ PDF بقوا يشملوا deposit/withdraw (السلف/الرواتب).
+     فالمطبوع بقى مطابق للرصيد الحالي في الصفحة.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v416 — TREASURY: recognize deposit/withdraw (2026-07-05)
   ═══════════════════════════════════════════════════════════════════
   🔧 v416: إصلاح فرق رصيد الخزنة — السلف/الرواتب (deposit/withdraw) كانت
@@ -20642,18 +20649,20 @@ function executeTreasuryPrint(){
   const fromDate=new Date(fromVal+'T00:00:00');
   const toDate=new Date(toVal+'T23:59:59');
   const txsBefore=allTxs.filter(x=>new Date(x.date)<fromDate);
+  const _isInT=x=>(x.type==='in'||x.type==='deposit');   // 🔧 v417: اشمل deposit/withdraw
+  const _isOutT=x=>(x.type==='out'||x.type==='withdraw');
   const openingBalance=(parseFloat(t?.opening)||0)
-    + txsBefore.filter(x=>x.type==='in').reduce((s,x)=>s+(parseFloat(x.amount)||0),0)
-    - txsBefore.filter(x=>x.type==='out').reduce((s,x)=>s+(parseFloat(x.amount)||0),0);
+    + txsBefore.filter(_isInT).reduce((s,x)=>s+(parseFloat(x.amount)||0),0)
+    - txsBefore.filter(_isOutT).reduce((s,x)=>s+(parseFloat(x.amount)||0),0);
 
-  const totalIn=txs.filter(x=>x.type==='in').reduce((s,x)=>s+(parseFloat(x.amount)||0),0);
-  const totalOut=txs.filter(x=>x.type==='out').reduce((s,x)=>s+(parseFloat(x.amount)||0),0);
+  const totalIn=txs.filter(_isInT).reduce((s,x)=>s+(parseFloat(x.amount)||0),0);
+  const totalOut=txs.filter(_isOutT).reduce((s,x)=>s+(parseFloat(x.amount)||0),0);
   const closingBalance=openingBalance+totalIn-totalOut;
 
   // بناء صفوف مع رصيد تراكمي
   let runningBalance=openingBalance;
   const rows=txs.map((tx,i)=>{
-    const isIn=tx.type==='in';
+    const isIn=(tx.type==='in'||tx.type==='deposit'); // 🔧 v417
     const amt=parseFloat(tx.amount)||0;
     runningBalance = isIn ? runningBalance+amt : runningBalance-amt;
     return `<tr>
