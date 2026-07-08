@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v424 — TALABAT opps: ×1.15 price column (2026-07-07)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v424: عمود "سعر طلبات (×1.15)" في شيت الفرص (الجدول + Excel). backend v352.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v423 — TALABAT sheet fixed filename (2026-07-07)
   ═══════════════════════════════════════════════════════════════════
   🔧 v423: شيت تحديث طلبات بينزل باسم ثابت Cafelax_1105302.csv.
@@ -34712,7 +34717,7 @@ function talOppRender(){
   if(ss&&sk){ const act='background:#2563eb;color:#fff'; ss.style.cssText=ss.style.cssText.replace(/background:[^;]*;?color:[^;]*;?/,''); sk.style.cssText=sk.style.cssText.replace(/background:[^;]*;?color:[^;]*;?/,''); (_talOppSort==='sold'?ss:sk).setAttribute('style',act); }
   box.innerHTML=`<div style="padding:6px 0;font-size:12px;color:var(--muted)">${_talOpp.length} منتج فرصة · بيظهر أول 500</div>
     <table style="width:100%;font-size:13px"><thead><tr>
-      <th style="text-align:center">#</th><th style="text-align:right">المنتج</th><th>الباركود</th><th>مبيعات 30 يوم</th><th>المخزون الكلي</th><th>سعر الموقع</th>
+      <th style="text-align:center">#</th><th style="text-align:right">المنتج</th><th>الباركود</th><th>مبيعات 30 يوم</th><th>المخزون الكلي</th><th>سعر الموقع</th><th>سعر طلبات (×1.15)</th>
     </tr></thead><tbody>${rows.slice(0,500).map((x,i)=>`<tr>
       <td style="text-align:center;color:var(--muted)">${i+1}</td>
       <td style="font-weight:600">${escapeHtml(x.title)}</td>
@@ -34720,14 +34725,15 @@ function talOppRender(){
       <td style="text-align:center;font-weight:800;color:${x.sold_30d>0?'#dc2626':'var(--muted)'}">${x.sold_30d}</td>
       <td style="text-align:center;font-weight:700">${x.total_stock}</td>
       <td style="text-align:center;font-family:Roboto,sans-serif">${x.price.toLocaleString()}</td>
+      <td style="text-align:center;font-weight:800;color:#16a34a;font-family:Roboto,sans-serif">${(x.talabat_price!=null?x.talabat_price:Math.ceil((x.price||0)*1.15)).toLocaleString()}</td>
     </tr>`).join('')}</tbody></table>`;
 }
 function talOppExcel(){
   if(!_talOpp.length){ toast('مفيش بيانات'); return; }
   const rows=[..._talOpp].sort((a,b)=> _talOppSort==='stock' ? (b.total_stock-a.total_stock) : (b.sold_30d-a.sold_30d));
-  const data=rows.map((x,i)=>({ '#':i+1, 'المنتج':x.title, 'الباركود':String(x.barcode||''), 'مبيعات 30 يوم':x.sold_30d, 'المخزون الكلي':x.total_stock, 'سعر الموقع':x.price }));
+  const data=rows.map((x,i)=>({ '#':i+1, 'المنتج':x.title, 'الباركود':String(x.barcode||''), 'مبيعات 30 يوم':x.sold_30d, 'المخزون الكلي':x.total_stock, 'سعر الموقع':x.price, 'سعر طلبات (×1.15)':(x.talabat_price!=null?x.talabat_price:Math.ceil((x.price||0)*1.15)) }));
   const ws=XLSX.utils.json_to_sheet(data);
-  ws['!cols']=[{wch:5},{wch:40},{wch:16},{wch:14},{wch:14},{wch:12}];
+  ws['!cols']=[{wch:5},{wch:40},{wch:16},{wch:14},{wch:14},{wch:12},{wch:16}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'فرص طلبات');
   XLSX.writeFile(wb, `فرص_طلبات_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
