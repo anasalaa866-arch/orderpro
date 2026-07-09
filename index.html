@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v428 — sidebar favorites (per user) (2026-07-07)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v428: نجمة ⭐ جنب كل عنصر في القايمة + قسم "المفضلة" فوق. محفوظة
+     بالحساب في الداتابيز فتظهر على أي جهاز. backend v358.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v427 — sales-by-source: محل/طلبات/توتال (2026-07-07)
   ═══════════════════════════════════════════════════════════════════
   🆕 v427: صفحة مبيعات حسب المصدر — كارت المحل اتقسم لـ: محل (POS) + محل
@@ -686,6 +692,9 @@ tr:hover td{background:#fafbff}
         <span class="sb-search-ic">🔍</span>
       </div>
     </div>
+
+    <!-- 🆕 v428: المفضلة (لكل مستخدم، من الداتابيز) -->
+    <div id="fav-nav" style="display:none"></div>
 
     <!-- ⚡ الرئيسية (مفتوحة دائماً) -->
     <div class="nav-group open" data-group="main">
@@ -8531,6 +8540,63 @@ document.addEventListener('DOMContentLoaded', () => {
     m.style.display = 'none';
   });
 });
+
+// 🆕 v428: مفضلة القايمة الجانبية (من الداتابيز، لكل مستخدم)
+let _favorites = [];
+async function loadFavorites(){
+  try {
+    const r = await apiFetch('/api/admin/favorites');
+    _favorites = (r?.favorites) || [];
+  } catch(e){ _favorites = []; }
+  renderFavorites();
+  injectFavStars();
+}
+function renderFavorites(){
+  const box = document.getElementById('fav-nav'); if(!box) return;
+  const items = _favorites.map(pk => {
+    const src = document.querySelector('.sb-nav .ni[data-p="'+pk+'"]:not(#fav-nav .ni)');
+    if(!src) return '';
+    const icon = src.querySelector('.ni-icon')?.textContent || '•';
+    const label = src.querySelector('.ni-label')?.textContent || pk;
+    return `<div class="ni" data-p="${pk}" onclick="goPage(this,'${pk}')">
+      <span class="ni-icon">${icon}</span><span class="ni-label">${escapeHtml(label)}</span>
+      <span onclick="event.stopPropagation();toggleFav('${pk}')" title="شيل من المفضلة" style="margin-inline-start:auto;cursor:pointer;color:#fbbf24;font-size:13px">★</span>
+    </div>`;
+  }).filter(Boolean).join('');
+  if(!items){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='block';
+  box.innerHTML = `<div class="nav-group open">
+    <div class="nav-group-hd" style="cursor:default"><span class="ng-icon">⭐</span><span class="ng-label">المفضلة</span></div>
+    <div class="nav-group-body">${items}</div>
+  </div>`;
+}
+function injectFavStars(){
+  document.querySelectorAll('.sb-nav .nav-group .ni[data-p]').forEach(ni => {
+    if(ni.closest('#fav-nav')) return; // متعملش نجمة على نسخ المفضلة
+    const pk = ni.getAttribute('data-p');
+    const isFav = _favorites.includes(pk);
+    let star = ni.querySelector('.fav-star');
+    if(!star){
+      star = document.createElement('span');
+      star.className = 'fav-star';
+      star.style.cssText = 'margin-inline-start:auto;cursor:pointer;font-size:13px;flex:0 0 auto';
+      star.onclick = (e)=>{ e.stopPropagation(); toggleFav(pk); };
+      ni.appendChild(star);
+    }
+    star.textContent = isFav ? '★' : '☆';
+    star.style.color = isFav ? '#fbbf24' : 'rgba(255,255,255,.22)';
+    star.title = isFav ? 'شيل من المفضلة' : 'ضيف للمفضلة';
+  });
+}
+async function toggleFav(pk){
+  try {
+    const r = await apiFetch('/api/admin/favorites/toggle','POST',{ page_key: pk });
+    _favorites = (r?.favorites) || [];
+    renderFavorites();
+    injectFavStars();
+  } catch(e){ if(typeof toast==='function') toast('❌ '+e.message); }
+}
+document.addEventListener('DOMContentLoaded', () => setTimeout(loadFavorites, 1500)); // للجلسات المستعادة
 
 async function loadOrders(){
   await syncCouriersToDB();
@@ -19440,6 +19506,7 @@ async function doLogin(){
   // 🆕 v217: حمّل أنواع الطلبات في الخلفية (مهم للـ badges في صفحة التوزيع)
   ensureOrderTypesLoaded();
   loadOrders();
+  loadFavorites(); // 🆕 v428: مفضلة القايمة
   loadSettlements();
   loadChks();
   loadTreasury();
