@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v426 — TALABAT price = web/0.85 (2026-07-07)
+  ═══════════════════════════════════════════════════════════════════
+  🔧 v426: سعر طلبات التلقائي بقى ceil(السعر ÷ 0.85) بدل ×1.15 (الفرص +
+     القائمة). المثبّت مايتأثرش. backend v355.
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v425 — diagnose failed sale items (2026-07-07)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v425: زرار "🔍 شخّص الأصناف" في صفحة "بيعات لم تتزامن" — بيعرض أصناف
+     البيعة ويحدّد أنهي صنف مشكلة (اسم فاضي / variant مش في الكتالوج). backend v354.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v424 — TALABAT opps: ×1.15 price column (2026-07-07)
   ═══════════════════════════════════════════════════════════════════
   🆕 v424: عمود "سعر طلبات (×1.15)" في شيت الفرص (الجدول + Excel). backend v352.
@@ -15777,6 +15789,43 @@ async function loadSyncFailures(){
   }
 }
 
+// 🆕 v425: تشخيص أصناف بيعة فاشلة — يوضّح أنهي صنف مشكلة
+async function diagnoseSale(saleNumber, saleId, btn){
+  const box = document.getElementById('diag-'+saleId);
+  if(!box) return;
+  const orig = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = '⏳...'; }
+  box.innerHTML = '';
+  try{
+    const r = await apiFetch(`/api/pos/diagnose-sale?sale=${encodeURIComponent(saleNumber)}`, 'GET');
+    if(!r || r.error){ box.innerHTML = `<div style="color:var(--danger);font-size:12px">❌ ${escapeHtml(r?.error||'فشل')}</div>`; return; }
+    const rowsHtml = (r.items||[]).map(it => {
+      const bad = it.problem;
+      return `<tr style="${bad?'background:#fef2f2':''}">
+        <td style="padding:4px 8px;font-weight:600">${escapeHtml(it.product_title)}${it.variant_title?' · '+escapeHtml(it.variant_title):''}</td>
+        <td style="padding:4px 8px;text-align:center;font-family:monospace;font-size:11px">${escapeHtml(String(it.variant_id||''))}</td>
+        <td style="padding:4px 8px;text-align:center">${it.qty}</td>
+        <td style="padding:4px 8px;text-align:center">${it.in_catalog?'<span style="color:#16a34a">✔</span>':'<span style="color:#dc2626">✘</span>'}</td>
+        <td style="padding:4px 8px;font-size:11px;color:#b91c1c">${it.reasons.join('، ')}</td>
+      </tr>`;
+    }).join('');
+    const probCount = (r.problem_items||[]).length;
+    box.innerHTML = `
+      <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+        <div style="padding:6px 10px;background:${probCount?'#fef2f2':'#f0fdf4'};font-size:12px;font-weight:700;color:${probCount?'#b91c1c':'#15803d'}">
+          ${probCount ? `⚠️ ${probCount} صنف عامل مشكلة` : '✅ كل الأصناف سليمة (المشكلة يمكن تكون تانية)'} — إجمالي ${r.items_count} صنف
+        </div>
+        <table style="width:100%;font-size:12px;border-collapse:collapse">
+          <thead><tr style="background:var(--bg-secondary,#f8fafc)">
+            <th style="padding:5px 8px;text-align:right">الصنف</th><th style="padding:5px 8px">variant_id</th><th style="padding:5px 8px">كمية</th><th style="padding:5px 8px">في الكتالوج؟</th><th style="padding:5px 8px;text-align:right">المشكلة</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+  }catch(e){ box.innerHTML = `<div style="color:var(--danger);font-size:12px">❌ ${escapeHtml(e.message)}</div>`; }
+  finally{ if(btn){ btn.disabled = false; btn.textContent = orig; } }
+}
+
 function renderSyncFailures(){
   const cont = document.getElementById('sync-failures-content');
   if(!cont) return;
@@ -15799,8 +15848,10 @@ function renderSyncFailures(){
           </div>
           <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:8px 10px;font-size:11px;color:#7f1d1d;direction:ltr;font-family:monospace;word-break:break-word;max-height:80px;overflow-y:auto">${escapeHtml(errShort)}</div>
           <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end">
+            <button class="btn btn-ghost btn-sm" onclick="diagnoseSale('${escapeHtml(s.sale_number)}', ${s.id}, this)">🔍 شخّص الأصناف</button>
             <button class="btn btn-secondary btn-sm" onclick="resyncSale(${s.id}, this)" style="background:#3b82f6;color:#fff;border-color:#3b82f6">🔄 أعد المحاولة</button>
           </div>
+          <div id="diag-${s.id}" style="margin-top:8px"></div>
         </div>
       </div>
     `;
@@ -34717,7 +34768,7 @@ function talOppRender(){
   if(ss&&sk){ const act='background:#2563eb;color:#fff'; ss.style.cssText=ss.style.cssText.replace(/background:[^;]*;?color:[^;]*;?/,''); sk.style.cssText=sk.style.cssText.replace(/background:[^;]*;?color:[^;]*;?/,''); (_talOppSort==='sold'?ss:sk).setAttribute('style',act); }
   box.innerHTML=`<div style="padding:6px 0;font-size:12px;color:var(--muted)">${_talOpp.length} منتج فرصة · بيظهر أول 500</div>
     <table style="width:100%;font-size:13px"><thead><tr>
-      <th style="text-align:center">#</th><th style="text-align:right">المنتج</th><th>الباركود</th><th>مبيعات 30 يوم</th><th>المخزون الكلي</th><th>سعر الموقع</th><th>سعر طلبات (×1.15)</th>
+      <th style="text-align:center">#</th><th style="text-align:right">المنتج</th><th>الباركود</th><th>مبيعات 30 يوم</th><th>المخزون الكلي</th><th>سعر الموقع</th><th>سعر طلبات (÷0.85)</th>
     </tr></thead><tbody>${rows.slice(0,500).map((x,i)=>`<tr>
       <td style="text-align:center;color:var(--muted)">${i+1}</td>
       <td style="font-weight:600">${escapeHtml(x.title)}</td>
@@ -34725,13 +34776,13 @@ function talOppRender(){
       <td style="text-align:center;font-weight:800;color:${x.sold_30d>0?'#dc2626':'var(--muted)'}">${x.sold_30d}</td>
       <td style="text-align:center;font-weight:700">${x.total_stock}</td>
       <td style="text-align:center;font-family:Roboto,sans-serif">${x.price.toLocaleString()}</td>
-      <td style="text-align:center;font-weight:800;color:#16a34a;font-family:Roboto,sans-serif">${(x.talabat_price!=null?x.talabat_price:Math.ceil((x.price||0)*1.15)).toLocaleString()}</td>
+      <td style="text-align:center;font-weight:800;color:#16a34a;font-family:Roboto,sans-serif">${(x.talabat_price!=null?x.talabat_price:Math.ceil((x.price||0)/0.85)).toLocaleString()}</td>
     </tr>`).join('')}</tbody></table>`;
 }
 function talOppExcel(){
   if(!_talOpp.length){ toast('مفيش بيانات'); return; }
   const rows=[..._talOpp].sort((a,b)=> _talOppSort==='stock' ? (b.total_stock-a.total_stock) : (b.sold_30d-a.sold_30d));
-  const data=rows.map((x,i)=>({ '#':i+1, 'المنتج':x.title, 'الباركود':String(x.barcode||''), 'مبيعات 30 يوم':x.sold_30d, 'المخزون الكلي':x.total_stock, 'سعر الموقع':x.price, 'سعر طلبات (×1.15)':(x.talabat_price!=null?x.talabat_price:Math.ceil((x.price||0)*1.15)) }));
+  const data=rows.map((x,i)=>({ '#':i+1, 'المنتج':x.title, 'الباركود':String(x.barcode||''), 'مبيعات 30 يوم':x.sold_30d, 'المخزون الكلي':x.total_stock, 'سعر الموقع':x.price, 'سعر طلبات (÷0.85)':(x.talabat_price!=null?x.talabat_price:Math.ceil((x.price||0)/0.85)) }));
   const ws=XLSX.utils.json_to_sheet(data);
   ws['!cols']=[{wch:5},{wch:40},{wch:16},{wch:14},{wch:14},{wch:12},{wch:16}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'فرص طلبات');
@@ -34788,7 +34839,7 @@ function talabatRender(){
   if($('tal-summary')) $('tal-summary').textContent=`${_talLinks.length} منتج · مطابق ${matchedCount} · متاح (active) ${activeCount}`;
   if(!rows.length){ box.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted)">مفيش منتجات — ارفع شيت طلبات الأول</div>'; return; }
   box.innerHTML=`<table style="width:100%;font-size:13px"><thead><tr>
-    <th style="text-align:right">المنتج على طلبات</th><th style="text-align:right">منتجك على الموقع</th><th>sku طلبات</th><th>مخزون ترفيوم</th><th>سعر الموقع</th><th>×1.15</th><th>سعر مثبّت</th><th>السعر النهائي</th><th>active</th>
+    <th style="text-align:right">المنتج على طلبات</th><th style="text-align:right">منتجك على الموقع</th><th>sku طلبات</th><th>مخزون ترفيوم</th><th>سعر الموقع</th><th>÷0.85</th><th>سعر مثبّت</th><th>السعر النهائي</th><th>active</th>
     </tr></thead><tbody>${rows.slice(0,800).map(l=>`<tr style="${l.matched?'':'background:#fef2f2'}">
       <td style="font-weight:600">${escapeHtml(l.talabat_name||'—')}</td>
       <td>${l.matched
