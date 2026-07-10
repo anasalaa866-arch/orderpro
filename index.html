@@ -1,6 +1,25 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v431 — smart token product search (any order) (2026-07-07)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v431: بحث المنتجات بمطابقة الكلمات بأي ترتيب (backend v361 لبحث المخزون/
+     الجرد + محلياً لجدول طلبات وتظبيط الصور). "illy Intenso" تلاقي
+     "illy Espresso Intenso".
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v430 — checks: disburse without closing modal (2026-07-07)
+  ═══════════════════════════════════════════════════════════════════
+  🔧 v430: صرف/إلغاء صرف من نافذة شيكات الأسبوع/الشهر مكانش بيقفل النافذة
+     ويطلّع برا — دلوقتي بينفّذ ويعيد رسم النافذة في مكانها.
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v429 — checks: image z-index + leading-zero numbers (2026-07-07)
+  ═══════════════════════════════════════════════════════════════════
+  🔧 v429: (1) صورة الشيك بتفتح فوق التقرير (z-index). (2) أرقام الشيكات
+     تقبل الأصفار البادئة (حقل نصي + padLen). backend v359.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v428 — sidebar favorites (per user) (2026-07-07)
   ═══════════════════════════════════════════════════════════════════
   🆕 v428: نجمة ⭐ جنب كل عنصر في القايمة + قسم "المفضلة" فوق. محفوظة
@@ -2674,7 +2693,7 @@ tr:hover td{background:#fafbff}
           <div class="fg" style="margin:0"><label>البنك</label><input id="bk-bank" placeholder="اسم البنك"></div>
           <div class="fg" style="margin:0"><label>رقم الحساب</label><input id="bk-account"></div>
           <div class="fg" style="margin:0"><label>عدد الأوراق</label><input id="bk-pages" type="number" value="48" min="1"></div>
-          <div class="fg" style="margin:0"><label>رقم أول شيك *</label><input id="bk-first-num" type="number" placeholder="مثال: 1001" min="1"></div>
+          <div class="fg" style="margin:0"><label>رقم أول شيك *</label><input id="bk-first-num" type="text" inputmode="numeric" placeholder="مثال: 0001001" pattern="[0-9]*"></div>
           <div class="fg" style="margin:0"><label>رقم آخر شيك</label><input id="bk-last-num" type="number" placeholder="يُحسب تلقائياً" readonly style="background:var(--bg);color:var(--muted)"></div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="saveChkBook()" style="width:100%;margin-bottom:12px">+ إضافة دفتر</button>
@@ -2710,7 +2729,7 @@ tr:hover td{background:#fafbff}
   </div>
 
   <!-- MODAL: صورة الشيك -->
-  <div class="overlay" id="m-chk-img" onclick="closeM('m-chk-img')">
+  <div class="overlay" id="m-chk-img" onclick="closeM('m-chk-img')" style="z-index:100002">
     <div style="background:#000;border-radius:12px;overflow:hidden;max-width:90vw;max-height:90vh">
       <img id="chk-img-full" style="max-width:90vw;max-height:90vh;display:block">
     </div>
@@ -16704,6 +16723,15 @@ async function imgfixScan(){
   }
 }
 
+// 🆕 v431: بحث بمطابقة الكلمات بأي ترتيب (كل كلمة لازم توجد)
+function matchTokens(haystack, query){
+  const h = String(haystack||'').toLowerCase();
+  if(!h) return false;
+  const toks = String(query||'').toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if(!toks.length) return false;
+  return toks.every(t => h.includes(t));
+}
+
 function imgfixRender(){
   const cont = document.getElementById('imgfix-results');
   if(!cont) return;
@@ -16711,7 +16739,7 @@ function imgfixRender(){
   const search = (document.getElementById('imgfix-search')?.value || '').trim().toLowerCase();
   let list = _imgfixItems.slice();
   if(onlyNeeded) list = list.filter(i => i.needsFix);
-  if(search) list = list.filter(i => (i.title || '').toLowerCase().includes(search));
+  if(search) list = list.filter(i => matchTokens(i.title, search));
 
   // 🆕 v396: فلتر بالحجم (KB)
   const sizeFilter = document.getElementById('imgfix-size-filter')?.value || 'all';
@@ -18902,11 +18930,13 @@ function saveChkBook(){
   if(!name){toast('❗ أدخل اسم الدفتر');return;}
   const firstNumRaw = $('bk-first-num')?.value?.trim();
   if(!firstNumRaw){ toast('❗ أدخل رقم أول شيك في الدفتر'); $('bk-first-num')?.focus(); return; }
-  const firstNum = parseInt(firstNumRaw);
+  const _digits = (firstNumRaw||'').replace(/\D/g,'');
+  const firstNum = parseInt(_digits);
   if(!firstNum || firstNum < 1){ toast('❗ رقم أول شيك غير صحيح'); return; }
+  const padLen = _digits.length; // 🆕 v429: عدد الخانات (يحافظ على الأصفار البادئة)
   const pages = parseInt($('bk-pages').value)||48;
   const lastNum = firstNum + pages - 1;
-  const b = {id:Date.now()+'_bk', name, bank:$('bk-bank').value.trim(), account:$('bk-account').value.trim(), pages, firstNum, lastNum};
+  const b = {id:Date.now()+'_bk', name, bank:$('bk-bank').value.trim(), account:$('bk-account').value.trim(), pages, firstNum, lastNum, padLen};
   
   console.log('📘 Creating new book:', b);
   
@@ -19249,7 +19279,7 @@ function openEditChkBook(id){
           <div class="fg" style="margin:0"><label>البنك</label><input id="ebk-bank" value="${b.bank||''}"></div>
           <div class="fg" style="margin:0"><label>رقم الحساب</label><input id="ebk-account" value="${b.account||''}"></div>
           <div class="fg" style="margin:0"><label>عدد الأوراق</label><input id="ebk-pages" type="number" value="${b.pages||48}" min="1"></div>
-          <div class="fg" style="margin:0"><label>رقم أول شيك *</label><input id="ebk-first-num" type="number" value="${first}" min="1"></div>
+          <div class="fg" style="margin:0"><label>رقم أول شيك *</label><input id="ebk-first-num" type="text" inputmode="numeric" value="${first}" pattern="[0-9]*"></div>
           <div class="fg" style="margin:0"><label>رقم آخر شيك</label><input id="ebk-last-num" type="number" value="${last}" readonly style="background:var(--bg);color:var(--muted)"></div>
         </div>
         ${used > 0 ? `<div style="background:#fef3c7;border:1px solid #fde047;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;margin-bottom:12px">⚠️ في ${used} شيك محفوظ على الدفتر ده. لو غيرت رقم أول شيك هتتأكد الأرقام متطابقة.</div>`: ''}
@@ -19281,8 +19311,10 @@ function saveEditChkBook(id){
   if(!b){ toast('❗ الدفتر غير موجود'); return; }
   const name = document.getElementById('ebk-name')?.value.trim();
   if(!name){ toast('❗ اسم الدفتر مطلوب'); return; }
-  const firstNum = parseInt(document.getElementById('ebk-first-num')?.value);
+  const _ebkDigits = (document.getElementById('ebk-first-num')?.value||'').replace(/\D/g,'');
+  const firstNum = parseInt(_ebkDigits);
   if(!firstNum || firstNum < 1){ toast('❗ رقم أول شيك غير صحيح'); return; }
+  const padLen = _ebkDigits.length; // 🆕 v429
   const pages = parseInt(document.getElementById('ebk-pages')?.value)||48;
   const lastNum = firstNum + pages - 1;
 
@@ -19293,6 +19325,7 @@ function saveEditChkBook(id){
   b.pages = pages;
   b.firstNum = firstNum;
   b.lastNum = lastNum;
+  b.padLen = padLen;
 
   saveChks(true);
 
@@ -23474,10 +23507,11 @@ function onChkBookChange(){
   }
   const first=book.firstNum||1;
   const pages=book.pages||48;
+  const padLen=book.padLen||String(first).length; // 🆕 v429: تصفير
   const used=chkList.filter(c=>c.bookId===bookId).map(c=>String(c.num));
   const opts=[];
   for(let i=0;i<pages;i++){
-    const num=String(first+i);
+    const num=String(first+i).padStart(padLen,'0');
     if(!used.includes(num)){
       opts.push(`<option value="${num}">${num}</option>`);
     }
@@ -24323,6 +24357,16 @@ function renderWeeklyReport(){
 }
 
 // 🆕 v332: فتح modal بتفاصيل شيكات أسبوع معين
+// 🔧 v430: صرف/إلغاء صرف من نافذة الأسبوع/الشهر — من غير ما النافذة تتقفل (كانت بتطلّع برا)
+async function chkWeekAction(id, action, weekNum){
+  if(action==='done') await chkMarkDone(id); else await chkMarkPending(id);
+  openWeekChecksModal(weekNum); // إعادة رسم النافذة في مكانها
+}
+async function chkMonthAction(id, action, monthNum, yearNum){
+  if(action==='done') await chkMarkDone(id); else await chkMarkPending(id);
+  openMonthChecksModal(monthNum, yearNum);
+}
+
 function openWeekChecksModal(weekNum){
   const year = new Date().getFullYear();
   
@@ -24396,8 +24440,8 @@ function openWeekChecksModal(weekNum){
         </td>
         <td style="padding:8px">
           <div style="display:flex;gap:3px;flex-wrap:wrap">
-            ${c.status === 'pending' ? `<button class="btn btn-xs" style="background:var(--success);color:#fff;border:none" onclick="chkMarkDone('${c.id}');closeWeekChecksModal();" title="ضع كمصروف">✅</button>` : ''}
-            ${c.status === 'done' ? `<button class="btn btn-ghost btn-xs" onclick="chkMarkPending('${c.id}');closeWeekChecksModal();" title="إلغاء الصرف">↩️</button>` : ''}
+            ${c.status === 'pending' ? `<button class="btn btn-xs" style="background:var(--success);color:#fff;border:none" onclick="chkWeekAction('${c.id}','done',${weekNum})" title="ضع كمصروف">✅</button>` : ''}
+            ${c.status === 'done' ? `<button class="btn btn-ghost btn-xs" onclick="chkWeekAction('${c.id}','pending',${weekNum})" title="إلغاء الصرف">↩️</button>` : ''}
             <button class="btn btn-ghost btn-xs" onclick="openEditChk('${c.id}');document.getElementById('week-checks-modal').remove();" title="تعديل">✏️</button>
           </div>
         </td>
@@ -24559,8 +24603,8 @@ function openMonthChecksModal(monthNum, yearNum){
         </td>
         <td style="padding:8px">
           <div style="display:flex;gap:3px;flex-wrap:wrap">
-            ${c.status === 'pending' ? `<button class="btn btn-xs" style="background:var(--success);color:#fff;border:none" onclick="chkMarkDone('${c.id}');closeMonthChecksModal();" title="ضع كمصروف">✅</button>` : ''}
-            ${c.status === 'done' ? `<button class="btn btn-ghost btn-xs" onclick="chkMarkPending('${c.id}');closeMonthChecksModal();" title="إلغاء الصرف">↩️</button>` : ''}
+            ${c.status === 'pending' ? `<button class="btn btn-xs" style="background:var(--success);color:#fff;border:none" onclick="chkMonthAction('${c.id}','done',${monthNum},${yearNum})" title="ضع كمصروف">✅</button>` : ''}
+            ${c.status === 'done' ? `<button class="btn btn-ghost btn-xs" onclick="chkMonthAction('${c.id}','pending',${monthNum},${yearNum})" title="إلغاء الصرف">↩️</button>` : ''}
             <button class="btn btn-ghost btn-xs" onclick="openEditChk('${c.id}');document.getElementById('month-checks-modal').remove();" title="تعديل">✏️</button>
           </div>
         </td>
@@ -34906,7 +34950,7 @@ function talabatRender(){
   const onlyU=$('tal-only-unmatched')?.checked;
   let rows=_talLinks;
   if(onlyU) rows=rows.filter(l=>!l.matched);
-  if(q) rows=rows.filter(l=>(l.talabat_name||'').toLowerCase().includes(q)||(l.matched_name||'').toLowerCase().includes(q)||String(l.talabat_sku).includes(q));
+  if(q) rows=rows.filter(l=>matchTokens([l.talabat_name,l.matched_name,l.talabat_sku].join(' '), q));
   const matchedCount=_talLinks.filter(l=>l.matched).length;
   const activeCount=_talLinks.filter(l=>l.active===1).length;
   if($('tal-summary')) $('tal-summary').textContent=`${_talLinks.length} منتج · مطابق ${matchedCount} · متاح (active) ${activeCount}`;
