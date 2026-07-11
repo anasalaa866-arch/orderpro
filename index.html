@@ -1,6 +1,26 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v434 — cashier English name (printed on receipt) (2026-07-07)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v434: في "حسابات موظفي المحل" — خانة "🖨️ الاسم على الريسيت" لكل كاشير
+     (إنجليزي). ده اللي بيتطبع على الفاتورة لأن الطابعة مش بتطبع عربي.
+     backend v363.
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v433 — settlement: clarify pickup COD is counted (2026-07-07)
+  ═══════════════════════════════════════════════════════════════════
+  🔧 v433: ملاحظة واضحة على قسم "تسليم Pickup COD" إنه محسوب بالفعل ضمن
+     كروت الدفع والإجمالي (مش مبلغ زيادة). التأكيد: cash_amount/total_amount
+     بيشملوا الـ pickup فعلاً (كود إنشاء التصفية: methods[m] += pickup).
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v432 — settlement: label talabat deferred clearly (2026-07-07)
+  ═══════════════════════════════════════════════════════════════════
+  🔧 v432: في تفاصيل التصفية، قسم الآجل بقى اسمه "آجل طلبات (مش محصّل)" 🛵
+     بدل "أخرى" — عشان يبقى واضح إنه في الإجمالي بس مش في الكاش المحصّل.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v431 — smart token product search (any order) (2026-07-07)
   ═══════════════════════════════════════════════════════════════════
   🆕 v431: بحث المنتجات بمطابقة الكلمات بأي ترتيب (backend v361 لبحث المخزون/
@@ -9691,13 +9711,23 @@ async function openShopUsersManager(){
   try{
     const usersHtml = users.length
       ? users.map(u => `
-        <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-          <div>
-            <div style="font-weight:700;font-size:13px">${_escapeHtml(u.display_name || u.username)}</div>
-            <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:2px">@${_escapeHtml(u.username)}</div>
-            ${u.last_login_at ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">آخر دخول: ${_timeAgo(u.last_login_at)}</div>` : ''}
+        <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+            <div>
+              <div style="font-weight:700;font-size:13px">${_escapeHtml(u.display_name || u.username)}</div>
+              <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:2px">@${_escapeHtml(u.username)}</div>
+              ${u.last_login_at ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">آخر دخول: ${_timeAgo(u.last_login_at)}</div>` : ''}
+            </div>
+            <button class="btn btn-ghost btn-xs" onclick="resetShopUserPassword('${_escapeHtml(u.username)}')" style="color:var(--accent);border-color:var(--accent)">🔑 تغيير كلمة المرور</button>
           </div>
-          <button class="btn btn-ghost btn-xs" onclick="resetShopUserPassword('${_escapeHtml(u.username)}')" style="color:var(--accent);border-color:var(--accent)">🔑 تغيير كلمة المرور</button>
+          <!-- 🆕 v434: الاسم الإنجليزي (اللي بيتطبع على الريسيت) -->
+          <div style="display:flex;gap:6px;align-items:center;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">
+            <span style="font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap">🖨️ الاسم على الريسيت</span>
+            <input id="sune-${u.id}" type="text" value="${_escapeHtml(u.display_name_en || '')}" placeholder="English name (e.g. Ahmed)"
+                   style="flex:1;min-width:120px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;direction:ltr;font-family:Roboto,sans-serif;font-size:12px;background:var(--elev);color:var(--text)">
+            <button class="btn btn-xs" onclick="saveShopUserNameEn(${u.id}, this)" style="background:#16a34a;color:#fff;border:none">💾</button>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">الطابعة مش بتطبع عربي — الاسم ده هو اللي هيظهر على الفاتورة</div>
         </div>
       `).join('')
       : '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">لا توجد حسابات — أنشئ أول حساب</div>';
@@ -9728,6 +9758,25 @@ async function openShopUsersManager(){
   }
 }
 
+// 🆕 v434: حفظ الاسم الإنجليزي للكاشير (بيتطبع على الريسيت)
+async function saveShopUserNameEn(id, btn){
+  const inp = document.getElementById('sune-'+id);
+  if(!inp) return;
+  const val = inp.value.trim();
+  if(/[\u0600-\u06FF]/.test(val)){ toast('❗ الاسم لازم يكون بالإنجليزي (الطابعة مش بتطبع عربي)'); inp.focus(); return; }
+  const orig = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = '⏳'; }
+  try{
+    const r = await apiFetch(`/api/shop-users/${id}/name-en`, 'PUT', { displayNameEn: val });
+    if(r && r.error) throw new Error(r.error);
+    toast('✅ اتحفظ');
+    if(btn){ btn.textContent = '✅'; setTimeout(()=>{ btn.textContent = orig; btn.disabled = false; }, 1200); }
+  }catch(e){
+    toast('❌ '+e.message);
+    if(btn){ btn.textContent = orig; btn.disabled = false; }
+  }
+}
+
 async function createShopUser(){
   // بدل prompt() نستخدم modal نضيف
   let modal = document.getElementById('m-create-shop-user');
@@ -9751,6 +9800,10 @@ async function createShopUser(){
         <div class="fg" style="margin-bottom:10px">
           <label>الاسم المعروض</label>
           <input id="csu-display" type="text" placeholder="مثلاً: أحمد" autocomplete="off">
+        </div>
+        <div class="fg" style="margin-bottom:10px">
+          <label>🖨️ الاسم على الريسيت <span style="font-size:11px;color:var(--muted)">(إنجليزي — الطابعة مش بتطبع عربي)</span></label>
+          <input id="csu-display-en" type="text" placeholder="e.g. Ahmed" autocomplete="off" style="direction:ltr">
         </div>
         <div class="fg" style="margin-bottom:10px">
           <label>كلمة المرور * <span style="font-size:11px;color:var(--muted)">(4 أحرف على الأقل)</span></label>
@@ -9787,8 +9840,9 @@ async function submitCreateShopUser(){
 
   try{
     const passHash = await _sha256Hash(password);
+    const displayNameEn = document.getElementById('csu-display-en')?.value.trim() || '';
     const r = await apiFetch('/api/shop-users', 'POST', {
-      username, passHash, displayName: displayName || username
+      username, passHash, displayName: displayName || username, displayNameEn
     });
     if(r && r.success){
       document.getElementById('m-create-shop-user').remove();
@@ -14001,6 +14055,7 @@ async function printSettlementA4(kind, sessionId){
     visa:     { icon: '💳', label: 'فيزا',    color: '#6366f1' },
     instapay: { icon: '📱', label: 'انستاباي', color: '#4f46e5' },
     mixed:    { icon: '🔀', label: 'مدمج',    color: '#a855f7' },
+    talabat_deferred: { icon: '🛵', label: 'آجل طلبات (مش محصّل)', color: '#FF5A00' },
     other:    { icon: '📌', label: 'أخرى',    color: '#6b7280' }
   };
   
@@ -14954,6 +15009,7 @@ async function openSettlementDetails(id){
             <span>📦 تسليم طلبات Pickup بـ COD <span style="opacity:.85;font-weight:600">(${pickupColl.length} طلب)</span></span>
             <span>${pickupTotal.toLocaleString()} ج</span>
           </div>
+          <div style="background:#fff7ed;color:#9a3412;font-size:11px;font-weight:600;padding:6px 12px;border-left:1px solid var(--border);border-right:1px solid var(--border)">✓ المبالغ دي <b>محسوبة بالفعل</b> ضمن كروت الدفع والإجمالي فوق (حسب طريقة تحصيل كل طلب) — مش مبلغ زيادة عليهم.</div>
           <table style="width:100%;border-collapse:collapse;font-size:12px;border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;overflow:hidden">
             <thead>
               <tr style="background:var(--bg)">
