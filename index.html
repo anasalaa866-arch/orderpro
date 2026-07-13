@@ -1,6 +1,33 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v438 — 🚑 cancel stuck sync (409 forever) (2026-07-11)
+  ═══════════════════════════════════════════════════════════════════
+  🚑 v438: زرار "🛑 إلغاء مزامنة معلّقة" في صفحة المخزون — لو مزامنة فضلت
+     "شغّالة" (السيرفر عمل restart في نصها) وقفلت النظام بـ 409. backend v366
+     كمان بيحرّر أي مزامنة ميتة تلقائياً (مامتحدّثتش من 15 دقيقة).
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v437 — 🚑 FIX: check images were being ERASED (2026-07-11)
+  ═══════════════════════════════════════════════════════════════════
+  🚑 v437: السبب الحقيقي لاختفاء الصور — الصور lazy، فأي حفظ/صرف للشيك كان
+     بيبعت img فاضي فيمسح الصورة من الداتابيز. دلوقتي img مابيتبعتش خالص
+     إلا لو صورة حقيقية. (backend v365 فيه نفس الحماية + img-audit)
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v436 — 🚑 FIX: broken check images (__lazy__ in src) (2026-07-11)
+  ═══════════════════════════════════════════════════════════════════
+  🚑 v436: صور الشيكات كانت بتطلع مكسورة — الـ placeholder "__lazy__" كان
+     بيتحط في img.src فالمتصفح يحاول يحمّله كملف → 404. دلوقتي الـ src
+     مابيتحطش إلا لو الصورة حقيقية (data:/http). helper: _isRealImg/_setImgSrc.
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v435 — stocktake: "أصناف طلبات" mode (2026-07-11)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v435: نوع جرد جديد "🛵 أصناف طلبات" — الأصناف المربوطة بطلبات ومخزونها
+     في المخزن > 0 (بيعرض العدد قبل البدء). blind. backend v364.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v434 — cashier English name (printed on receipt) (2026-07-07)
   ═══════════════════════════════════════════════════════════════════
   🆕 v434: في "حسابات موظفي المحل" — خانة "🖨️ الاسم على الريسيت" لكل كاشير
@@ -3400,6 +3427,7 @@ tr:hover td{background:#fafbff}
       <button class="btn btn-ghost btn-sm" onclick="bulkActivateStart()" title="تفعيل كل المخازن لكل المنتجات على Shopify" style="color:#7c3aed">🏬 تفعيل كل المخازن</button>
       <button class="btn btn-ghost btn-sm" onclick="syncInventoryLevels()">🔄 مزامنة الكميات</button>
       <button class="btn btn-primary btn-sm" onclick="syncInventoryFull()">🔁 مزامنة كاملة</button>
+      <button class="btn btn-ghost btn-sm" onclick="cancelStuckSync()" title="لو فيه مزامنة معلّقة ومش بتخلص" style="color:var(--danger);border-color:var(--danger)">🛑 إلغاء مزامنة معلّقة</button>
     </div>
   </div>
 
@@ -5899,7 +5927,7 @@ tr:hover td{background:#fafbff}
     <div class="modal-body">
       <div class="form-group">
         <label>المخزن:</label>
-        <select id="new-stk-warehouse" class="form-input"></select>
+        <select id="new-stk-warehouse" onchange="if(document.querySelector('input[name=&quot;stk-mode&quot;]:checked')?.value==='talabat') stkLoadTalabatCount();" class="form-input"></select>
       </div>
       <div class="form-group">
         <label>اسم الجلسة:</label>
@@ -5909,12 +5937,19 @@ tr:hover td{background:#fafbff}
       <!-- 🆕 v254 + v362: نمط الجرد (5 modes الآن) -->
       <div class="form-group">
         <label>نوع الجرد:</label>
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:6px">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px">
           <label style="border:2px solid var(--border);border-radius:10px;padding:10px 6px;cursor:pointer;text-align:center" id="stk-mode-full-lbl">
             <input type="radio" name="stk-mode" value="full" checked onchange="onStkModeChange()" style="display:none">
             <div style="font-size:22px">📦</div>
             <div style="font-weight:700;margin-top:3px;font-size:12px">كامل</div>
             <div style="font-size:9px;color:var(--muted)">كل المنتجات</div>
+          </label>
+          <!-- 🆕 v435: جرد أصناف طلبات النشطة -->
+          <label style="border:2px solid var(--border);border-radius:10px;padding:10px 6px;cursor:pointer;text-align:center" id="stk-mode-talabat-lbl">
+            <input type="radio" name="stk-mode" value="talabat" onchange="onStkModeChange()" style="display:none">
+            <div style="font-size:22px">🛵</div>
+            <div style="font-weight:700;margin-top:3px;font-size:12px">أصناف طلبات</div>
+            <div style="font-size:9px;color:var(--muted)">نشطة على طلبات</div>
           </label>
           <label style="border:2px solid var(--border);border-radius:10px;padding:10px 6px;cursor:pointer;text-align:center" id="stk-mode-partial-lbl">
             <input type="radio" name="stk-mode" value="partial" onchange="onStkModeChange()" style="display:none">
@@ -5943,6 +5978,13 @@ tr:hover td{background:#fafbff}
         </div>
       </div>
       
+      <!-- 🆕 v435: معلومات أصناف طلبات -->
+      <div class="form-group" id="stk-talabat-section" style="display:none">
+        <div id="stk-talabat-info" style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:12px;font-size:13px;color:#9a3412">
+          🛵 هيتجرد الأصناف المربوطة بطلبات اللي مخزونها في المخزن ده أكبر من صفر.
+        </div>
+      </div>
+
       <!-- 🆕 v254: قائمة المنتجات للـ partial mode -->
       <div id="stk-partial-section" class="form-group" style="display:none">
         <label>اختار المنتجات: <span id="stk-partial-count" style="color:var(--accent);font-weight:700">0 منتج</span></label>
@@ -18612,8 +18654,7 @@ async function openEditChk(id){
   $('chk-invoice').value=c.invoice||'';
   $('chk-note').value=c.note||'';
 
-  if(chkImgData){$('chk-img-show').src=chkImgData;$('chk-img-show').style.display='block';$('chk-img-placeholder').style.display='none';}
-  else{$('chk-img-show').style.display='none';$('chk-img-placeholder').style.display='block';}
+  if(_setImgSrc($('chk-img-show'), chkImgData)){ $('chk-img-placeholder').style.display='none'; } else { $('chk-img-placeholder').style.display='block'; }
   openM('m-chk');
 }
 function fillChkBookSel(){
@@ -18627,20 +18668,16 @@ function saveChk(){
   if(!num){toast('❗ اختر رقم الشيك');return;}
   if(!payee){toast('❗ اختر المورد من القائمة');return;}
   if(!amount||!date){toast('❗ يرجى ملء الحقول المطلوبة');return;}
-  // 🆕 v291: ما نسمحش بـ __lazy__ placeholder يـ save كصورة
-  const imgToSave = (chkImgData === '__lazy__') ? '' : (chkImgData || '');
+  // 🚑 v437: مانبعتش img إلا لو صورة حقيقية — أي حاجة تانية بتمسح الصورة الأصلية
+  const imgToSave = _isRealImg(chkImgData) ? chkImgData : '';
   const data={id:editingChkId||(Date.now()+'_'+Math.random().toString(36).slice(2,5)),
     num,payee,amount,date,bookId:$('chk-book-sel').value||'',
     invoice:$('chk-invoice').value.trim(),note:$('chk-note').value.trim(),
     img:imgToSave,status:editingChkId?(chkList.find(x=>x.id===editingChkId)?.status||'pending'):'pending',
     createdAt:editingChkId?(chkList.find(x=>x.id===editingChkId)?.createdAt||new Date().toISOString()):new Date().toISOString()};
   
-  // 🆕 v291: لو editing وفيه صورة original في DB لكن ما اتحملش (chkImgData فاضي)
-  // ما نبعتش img فاضي عشان ما نمسحش الصورة الأصلية
-  const original = editingChkId ? chkList.find(x=>x.id===editingChkId) : null;
-  if(editingChkId && original && original.hasImg && !imgToSave){
-    delete data.img; // ما نبعتش img → الـ backend يحتفظ بالأصلية
-  }
+  // 🚑 v437: لو مفيش صورة جديدة حقيقية → ماتبعتش img خالص (الباك اند يسيب الأصلية)
+  if(!_isRealImg(imgToSave)) delete data.img;
   
   if(editingChkId){const idx=chkList.findIndex(x=>x.id===editingChkId);if(idx>=0){
     chkList[idx]={...chkList[idx], ...data}; // merge عشان hasImg ما يتحذفش
@@ -18657,7 +18694,7 @@ async function chkMarkDone(id){
   // 🆕 v291: ما نبعتش "__lazy__" placeholder كـ img — هـ يدمر الصورة الأصلية
   // إعمل copy ونشيل الـ placeholder
   const payload = { ...c };
-  if(payload.img === '__lazy__') delete payload.img;
+  if(!_isRealImg(payload.img)) delete payload.img;   // 🚑 v437: ماتمسحش الصورة
   // 🔧 v298: await + غير في الـ queue لو فشل
   if(API_URL){
     try {
@@ -18691,23 +18728,26 @@ async function chkMarkPending(id){
   c.status='pending';delete c.doneAt;
   saveChks(true);
   chkRenderActive();
+  // 🚑 v437: ماتبعتش img إلا لو حقيقية (كان بيمسح الصورة)
+  const payload = { ...c };
+  if(!_isRealImg(payload.img)) delete payload.img;
   if(API_URL){
     try {
-      const r = await apiFetch('/api/checks','POST',c);
+      const r = await apiFetch('/api/checks','POST',payload);
       if(r){
         toast('↩️ تم إرجاع الشيك لغير مصروف');
       } else {
         toast('⏳ تم محلياً - هيتسجل لما النت يرجع');
         if(typeof addToOfflineQueue==='function'){
           const exists = _offlineQueue?.some(it => it.path==='/api/checks' && it.body?.id===c.id);
-          if(!exists) addToOfflineQueue('/api/checks','POST',c);
+          if(!exists) addToOfflineQueue('/api/checks','POST',payload);
         }
       }
     } catch(e) {
       toast('⚠️ ' + (e.message || 'فشل الحفظ'));
       if(typeof addToOfflineQueue==='function'){
         const exists = _offlineQueue?.some(it => it.path==='/api/checks' && it.body?.id===c.id);
-        if(!exists) addToOfflineQueue('/api/checks','POST',c);
+        if(!exists) addToOfflineQueue('/api/checks','POST',payload);
       }
     }
   } else {
@@ -18808,10 +18848,21 @@ async function rejectChkVoid(id){
     }
   }catch(e){ toast('❌ ' + e.message); }
 }
+// 🆕 v436: امنع __lazy__ (أو أي نص مش صورة) من إنه يتحط في src → كان بيعمل 404 وصورة مكسورة
+function _isRealImg(v){
+  const x = String(v || '').trim();
+  return !!x && x !== '__lazy__' && (x.startsWith('data:') || x.startsWith('http://') || x.startsWith('https://') || x.startsWith('blob:'));
+}
+function _setImgSrc(el, v){
+  if(!el) return false;
+  if(_isRealImg(v)){ el.src = v; el.style.display = 'block'; return true; }
+  el.removeAttribute('src'); el.style.display = 'none'; return false;
+}
+
 function previewChkImg(input){
   if(!input.files[0])return;
   const reader=new FileReader();
-  reader.onload=e=>{chkImgData=e.target.result;$('chk-img-show').src=chkImgData;$('chk-img-show').style.display='block';$('chk-img-placeholder').style.display='none';};
+  reader.onload=e=>{chkImgData=e.target.result; if(_setImgSrc($('chk-img-show'), chkImgData)){ $('chk-img-placeholder').style.display='none'; }};
   reader.readAsDataURL(input.files[0]);
 }
 function clearChkImg(){chkImgData='';$('chk-img-show').style.display='none';$('chk-img-placeholder').style.display='block';$('chk-img-input').value='';}
@@ -18826,12 +18877,12 @@ async function viewChkImg(id){
     toast('🔄 جاري تحميل الصورة...');
     try {
       const r = await apiFetch(`/api/checks/${encodeURIComponent(id)}/img`);
-      if(r?.img){
+      if(r?.img && _isRealImg(r.img)){
         c.img = r.img; // cache في الـ list
         $('chk-img-full').src = r.img;
         openM('m-chk-img');
       } else {
-        toast('❌ مفيش صورة', 'error');
+        toast('❌ الصورة مش متاحة', 'error');
       }
     } catch(e){
       toast('❌ ' + e.message, 'error');
@@ -18840,6 +18891,7 @@ async function viewChkImg(id){
   }
   
   // الصورة موجودة بالفعل
+  if(!_isRealImg(c.img)){ toast('❌ الصورة مش متاحة', 'error'); return; }
   $('chk-img-full').src = c.img;
   openM('m-chk-img');
 }
@@ -25142,6 +25194,18 @@ async function toggleWarehouseMaster(warehouseId, isMaster, checkbox){
   }
 }
 
+// 🆕 v438: إلغاء مزامنة معلّقة (لو السيرفر عمل restart في نصها وفضلت "شغّالة")
+async function cancelStuckSync(){
+  if(!confirm('إلغاء المزامنة الشغّالة دلوقتي؟\n\nاستخدمها لو المزامنة معلّقة ومش بتخلص (مثلاً من إمبارح).')) return;
+  try{
+    const r = await apiFetch('/api/inventory/sync-cancel', 'POST', {});
+    if(r && r.error) throw new Error(r.error);
+    const n = (r && r.cancelled) || 0;
+    toast(n ? `✅ اتلغت ${n} مزامنة معلّقة — جرّب تزامن تاني دلوقتي` : 'مفيش مزامنة شغّالة');
+    if(typeof loadInventory === 'function') loadInventory();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
 async function syncInventoryLevels(){
   if(!confirm('مزامنة الكميات من Shopify؟')) return;
   try{
@@ -25150,7 +25214,7 @@ async function syncInventoryLevels(){
       toast('🔄 بدأت مزامنة الكميات');
       syncTrackJob(r.jobId);
     } else if(r && r.jobId){
-      toast('⚠️ فيه مزامنة شغّالة');
+      toast('⚠️ فيه مزامنة شغّالة — لو معلّقة اضغط "🛑 إلغاء مزامنة معلّقة"');
       syncTrackJob(r.jobId);
     } else {
       toast('❌ ' + (r?.error || 'فشل'));
@@ -25166,7 +25230,7 @@ async function syncInventoryFull(){
       toast('🔄 بدأت المزامنة الكاملة');
       syncTrackJob(r.jobId);
     } else if(r && r.jobId){
-      toast('⚠️ فيه مزامنة شغّالة');
+      toast('⚠️ فيه مزامنة شغّالة — لو معلّقة اضغط "🛑 إلغاء مزامنة معلّقة"');
       syncTrackJob(r.jobId);
     } else {
       toast('❌ ' + (r?.error || 'فشل'));
@@ -35457,7 +35521,7 @@ function onStkModeChange(){
   const mode = document.querySelector('input[name="stk-mode"]:checked')?.value || 'full';
   
   // 🆕 v362: 5 modes الآن (full/partial/random/template/scan)
-  ['full','partial','random','template','scan'].forEach(m => {
+  ['full','talabat','partial','random','template','scan'].forEach(m => {
     const lbl = document.getElementById(`stk-mode-${m}-lbl`);
     if(lbl){
       lbl.style.borderColor = m === mode ? 'var(--accent)' : 'var(--border)';
@@ -35467,6 +35531,9 @@ function onStkModeChange(){
   
   // Show/hide sections
   document.getElementById('stk-partial-section').style.display = mode === 'partial' ? 'block' : 'none';
+  const talSec = document.getElementById('stk-talabat-section');
+  if(talSec) talSec.style.display = mode === 'talabat' ? 'block' : 'none';
+  if(mode === 'talabat') stkLoadTalabatCount();   // 🆕 v435
   document.getElementById('stk-random-section').style.display = mode === 'random' ? 'block' : 'none';
   document.getElementById('stk-template-section').style.display = mode === 'template' ? 'block' : 'none';
   
@@ -35927,6 +35994,25 @@ function updateStkPartialCount(){
   if(el) el.textContent = `${_stkSelectedVariants.size} منتج محدد`;
 }
 
+// 🆕 v435: عدّ أصناف طلبات النشطة في المخزن المختار
+let _stkTalabatIds = [];
+async function stkLoadTalabatCount(){
+  const box = document.getElementById('stk-talabat-info');
+  const wh = document.getElementById('new-stk-warehouse')?.value;
+  if(!box) return;
+  if(!wh){ box.innerHTML = '🛵 اختار المخزن الأول'; _stkTalabatIds = []; return; }
+  box.innerHTML = '⏳ جاري العد...';
+  try{
+    const r = await apiFetch(`/api/stocktake/talabat-items?warehouseId=${wh}`);
+    _stkTalabatIds = (r && r.variantIds) || [];
+    box.innerHTML = `🛵 الأصناف المربوطة بطلبات ومخزونها &gt; 0 في المخزن ده:
+      <div style="margin-top:6px;font-weight:800;font-size:18px;color:#c2410c">${(r && r.count) || 0} صنف</div>`;
+  }catch(e){
+    _stkTalabatIds = [];
+    box.innerHTML = `<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`;
+  }
+}
+
 async function startStocktake(){
   const warehouseId = document.getElementById('new-stk-warehouse').value;
   const title = document.getElementById('new-stk-title').value.trim();
@@ -35936,6 +36022,23 @@ async function startStocktake(){
   
   if(!warehouseId){ toast('❌ اختار مخزن'); return; }
   
+  // 🆕 v435: branching لـ أصناف طلبات → partial بالـ variantIds بتوعها
+  if(mode === 'talabat'){
+    if(!_stkTalabatIds.length){ toast('❌ مفيش أصناف طلبات نشطة في المخزن ده'); return; }
+    try{
+      const r = await apiFetch('/api/stocktake/start', 'POST', {
+        warehouseId, mode: 'partial', variantIds: _stkTalabatIds,
+        title: 'جرد أصناف طلبات - ' + new Date().toLocaleDateString('ar-EG'),
+        showSystemQty: false, notes: notes || ''
+      });
+      if(r && r.error) throw new Error(r.error);
+      toast(`✅ اتفتحت جلسة جرد أصناف طلبات (${_stkTalabatIds.length} صنف)`);
+      closeM('m-new-stocktake');
+      loadStocktakeSessions();
+    }catch(e){ toast('❌ ' + e.message); }
+    return;
+  }
+
   // 🆕 v362: branching للـ template mode (call غير)
   if(mode === 'template'){
     if(!_stkSelectedTemplate){ toast('❌ اختار template'); return; }
