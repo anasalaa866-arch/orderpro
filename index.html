@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v440 — Stars reviews history tab (2026-07-26)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v440: صفحة "⭐ مراجعات Stars" بقى فيها تبويب "📜 الهيستوري" — كل اللي
+     فات (تحويلات مدفوع + تسويات) معتمد/مرفوض، بفلتر حالة ومدة، مع سبب
+     الرفض ووقت المراجعة وزرار عرض الصورة. backend v379.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v439 — inventory page: smart token search (2026-07-11)
   ═══════════════════════════════════════════════════════════════════
   🆕 v439: بحث المخزون (صفحة المخزون) بقى بمطابقة الكلمات بأي ترتيب
@@ -2951,6 +2958,26 @@ tr:hover td{background:#fafbff}
       </div>
     </div>
 
+    <!-- 🆕 v440: تبويبات معلّقة / هيستوري -->
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-sm" id="stars-tab-pending" onclick="starsSetTab('pending')">⏳ المعلّقة</button>
+      <button class="btn btn-sm" id="stars-tab-history" onclick="starsSetTab('history')">📜 الهيستوري (كل اللي فات)</button>
+      <span id="stars-history-filters" style="display:none;gap:6px;align-items:center">
+        <select id="stars-hist-status" class="form-input" style="width:auto;padding:6px 10px" onchange="loadStarsHistory()">
+          <option value="all">الكل</option>
+          <option value="approved">✅ المعتمد</option>
+          <option value="rejected">❌ المرفوض</option>
+        </select>
+        <select id="stars-hist-days" class="form-input" style="width:auto;padding:6px 10px" onchange="loadStarsHistory()">
+          <option value="7">آخر 7 أيام</option>
+          <option value="30" selected>آخر 30 يوم</option>
+          <option value="90">آخر 90 يوم</option>
+          <option value="365">آخر سنة</option>
+        </select>
+      </span>
+    </div>
+
+    <div id="stars-pending-wrap">
     <div class="card" style="margin-bottom:16px">
       <div class="card-hd">
         <h3>💳 طلبات تحويل من COD لمدفوع</h3>
@@ -2964,6 +2991,24 @@ tr:hover td{background:#fafbff}
         <h3>➕ تسويات إضافية من المناديب</h3>
       </div>
       <div class="card-body" id="stars-adj-list"></div>
+    </div>
+    </div>
+
+    <!-- 🆕 v440: الهيستوري -->
+    <div id="stars-history-wrap" style="display:none">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-hd">
+          <h3>💳 تحويلات مدفوع — الهيستوري</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadStarsHistory()" title="تحديث">🔄</button>
+        </div>
+        <div class="card-body" id="stars-hist-payment-list"></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">
+          <h3>➕ التسويات — الهيستوري</h3>
+        </div>
+        <div class="card-body" id="stars-hist-adj-list"></div>
+      </div>
     </div>
   </div>
 
@@ -40977,7 +41022,7 @@ function goPage(el,page){
   if(page==='hr-penalties') loadHrPenalties();
   if(page==='hr-purchases') loadHrPurchases();
   if(page==='hr-leaves') loadHrLeaves();
-  if(page==='stars-reviews')loadStarsReviews();
+  if(page==='stars-reviews'){loadStarsReviews(); starsSetTab(_starsTab||'pending');}
   if(page==='shop-transfers')loadShopTransfers();
   if(page==='shipping-transfers')loadShippingTransfers();
   if(page==='customer-risk'){ loadRiskSettings(); loadRiskList(); }
@@ -42566,6 +42611,87 @@ function renderStarsReviews(){
         </div>`;
       }).join('');
     }
+  }
+}
+
+// 🆕 v440: تبويب معلّقة/هيستوري
+let _starsTab = 'pending';
+function starsSetTab(t){
+  _starsTab = t;
+  const pw = document.getElementById('stars-pending-wrap');
+  const hw = document.getElementById('stars-history-wrap');
+  const hf = document.getElementById('stars-history-filters');
+  const bp = document.getElementById('stars-tab-pending');
+  const bh = document.getElementById('stars-tab-history');
+  if(pw) pw.style.display = t === 'pending' ? '' : 'none';
+  if(hw) hw.style.display = t === 'history' ? '' : 'none';
+  if(hf) hf.style.display = t === 'history' ? 'inline-flex' : 'none';
+  if(bp) bp.className = 'btn btn-sm ' + (t === 'pending' ? 'btn-primary' : 'btn-ghost');
+  if(bh) bh.className = 'btn btn-sm ' + (t === 'history' ? 'btn-primary' : 'btn-ghost');
+  if(t === 'history') loadStarsHistory();
+}
+
+async function loadStarsHistory(){
+  const st = document.getElementById('stars-hist-status')?.value || 'all';
+  const dy = document.getElementById('stars-hist-days')?.value || '30';
+  const payList = document.getElementById('stars-hist-payment-list');
+  const adjList = document.getElementById('stars-hist-adj-list');
+  if(payList) payList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div>';
+  if(adjList) adjList.innerHTML = '';
+  try{
+    const r = await apiFetch(`/api/stars-reviews/history?status=${st}&days=${dy}`);
+    const stBadge = (x) => x.status === 'approved'
+      ? '<span style="background:#dcfce7;color:#166534;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">✅ معتمد</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">❌ مرفوض</span>';
+    const when = (x) => x.reviewedAt ? new Date(x.reviewedAt).toLocaleString('ar-EG') : '—';
+
+    if(payList){
+      const rows = (r && r.payments) || [];
+      payList.innerHTML = !rows.length
+        ? '<div style="padding:24px;text-align:center;color:var(--muted)">مفيش تحويلات في الفترة دي</div>'
+        : rows.map(x => `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;background:var(--bg)">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+              <div style="flex:1;min-width:200px">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                  <span style="font-family:monospace;font-size:12px;color:var(--muted)">${x.orderId || ''}</span>
+                  ${stBadge(x)}
+                </div>
+                <div style="font-weight:700;margin-top:3px">${_escapeHtml(x.customerName || '—')}</div>
+                <div style="font-size:13px;color:var(--muted)">🚴 ${_escapeHtml(x.courierName || '—')} · 💰 ${(x.orderTotal||0).toLocaleString()} ج</div>
+                ${x.note ? `<div style="font-size:12px;color:var(--muted);margin-top:4px">📝 ${_escapeHtml(x.note)}</div>` : ''}
+                ${x.status==='rejected' && x.rejectionReason ? `<div style="font-size:12px;color:var(--danger);margin-top:4px">سبب الرفض: ${_escapeHtml(x.rejectionReason)}</div>` : ''}
+                <div style="font-size:11px;color:var(--muted);margin-top:5px">🕒 اتراجعت: ${when(x)}</div>
+              </div>
+              <div>${x.hasProof ? `<button class="btn btn-primary btn-sm" onclick="viewStarsProof('payment',${x.id})">🔍 عرض الصورة</button>` : '<span style="font-size:11px;color:var(--muted)">بدون صورة</span>'}</div>
+            </div>
+          </div>`).join('');
+    }
+    if(adjList){
+      const rows = (r && r.adjustments) || [];
+      adjList.innerHTML = !rows.length
+        ? '<div style="padding:24px;text-align:center;color:var(--muted)">مفيش تسويات في الفترة دي</div>'
+        : rows.map(a => {
+            const amountColor = a.amount >= 0 ? 'var(--success)' : 'var(--danger)';
+            const amountSign = a.amount > 0 ? '+' : '';
+            return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;background:var(--bg)">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+                <div style="flex:1;min-width:200px">
+                  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span style="font-weight:700">🚴 ${_escapeHtml(a.courierName || '—')}</span>
+                    ${stBadge(a)}
+                  </div>
+                  <div style="font-size:16px;font-weight:800;color:${amountColor};margin-top:3px">${amountSign}${(a.amount||0).toLocaleString()} ج</div>
+                  <div style="font-size:13px;color:var(--muted)">📝 ${_escapeHtml(a.reason || '')}</div>
+                  ${a.status==='rejected' && a.rejectionReason ? `<div style="font-size:12px;color:var(--danger);margin-top:4px">سبب الرفض: ${_escapeHtml(a.rejectionReason)}</div>` : ''}
+                  <div style="font-size:11px;color:var(--muted);margin-top:5px">🕒 اتراجعت: ${when(a)}${a.settlementId ? ' · 🔗 تصفية #' + a.settlementId : ''}</div>
+                </div>
+                <div>${a.hasProof ? `<button class="btn btn-primary btn-sm" onclick="viewStarsProof('adjustment',${a.id})">🔍 عرض الصورة</button>` : '<span style="font-size:11px;color:var(--muted)">بدون صورة</span>'}</div>
+              </div>
+            </div>`;
+          }).join('');
+    }
+  }catch(e){
+    if(payList) payList.innerHTML = `<div style="padding:20px;text-align:center;color:var(--danger)">❌ ${_escapeHtml(e.message)}</div>`;
   }
 }
 
