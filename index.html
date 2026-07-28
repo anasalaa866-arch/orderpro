@@ -1,6 +1,21 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v442 — تنبيه تحويل لتريفيوم (طلبات) (2026-07-28)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v442: تاب تالت في صفحة طلبات "🚚 محتاج تحويل" — أصناف مربوطة على
+     طلبات ومخزونها في تريفيوم = 0 بس فيها مخزون في العبور. بادچ أحمر
+     بالعدد بيظهر مع فتح الصفحة + إشعار لو فيه أصناف بتتباع فعلاً.
+     فلتر "اللي بتتباع بس" + تنزيل Excel. backend v385.
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v441 — net sales + excluded card (2026-07-28)
+  ═══════════════════════════════════════════════════════════════════
+  🚑 v441: "المبيعات حسب المصدر" — الإجمالي والكروت بقت صافي (الملغي
+     والمرتجع والمدمج اتشالوا)، وزوّدنا كارت "🚫 مستبعد من المبيعات"
+     منفصل بيوضّح ملغي / مرتجع / مدمج + إجمالي الفاقد ونسبته. backend v380.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v440 — Stars reviews history tab (2026-07-26)
   ═══════════════════════════════════════════════════════════════════
   🆕 v440: صفحة "⭐ مراجعات Stars" بقى فيها تبويب "📜 الهيستوري" — كل اللي
@@ -1028,6 +1043,7 @@ tr:hover td{background:#fafbff}
     <div style="display:flex;gap:8px;margin-bottom:14px">
       <button class="btn" id="tal-tabbtn-links" onclick="talTab('links')" style="background:#2563eb;color:#fff">📋 المنتجات المربوطة</button>
       <button class="btn btn-ghost" id="tal-tabbtn-opps" onclick="talTab('opps')">🎯 فرص طلبات</button>
+      <button class="btn btn-ghost" id="tal-tabbtn-restock" onclick="talTab('restock')">🚚 محتاج تحويل <span id="tal-restock-badge" style="display:none;background:#dc2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:900;margin-inline-start:4px">0</span></button>
     </div>
     <div id="tal-tab-links">
     <div class="card" style="margin-bottom:14px">
@@ -1066,6 +1082,23 @@ tr:hover td{background:#fafbff}
         </div>
       </div>
       <div id="talopp-list" style="padding:6px 14px;overflow-x:auto"></div>
+    </div>
+    </div>
+    <div id="tal-tab-restock" style="display:none">
+    <div class="card" style="margin-bottom:14px">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+        <div style="font-weight:800">🚚 محتاج تحويل من العبور لتريفيوم</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">أصناف <strong>مربوطة على طلبات</strong> ومخزونها في تريفيوم = 0 (يعني مقفولة ومش بتبيع) بس لسه فيها مخزون في العبور. مرتّبة بمبيعات آخر 30 يوم — حوّل اللي فوق الأول.</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">
+          <button class="btn btn-primary" onclick="talRestockLoad()">🔄 تحديث</button>
+          <label style="font-size:12px;display:flex;align-items:center;gap:4px">تريفيوم أقل من أو يساوي
+            <input type="number" id="tal-restock-th" value="0" min="0" style="width:60px" class="form-input" onchange="talRestockLoad()"></label>
+          <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="tal-restock-hot" onchange="talRestockRender()"> اللي بتتباع بس</label>
+          <span id="tal-restock-summary" style="font-size:12px;color:var(--muted)"></span>
+          <button class="btn" id="tal-restock-dl" onclick="talRestockExcel()" style="background:#16a34a;color:#fff;display:none;margin-inline-start:auto">⬇️ تنزيل Excel</button>
+        </div>
+      </div>
+      <div id="tal-restock-list" style="padding:6px 14px;overflow-x:auto"></div>
     </div>
     </div>
   </div>
@@ -35019,15 +35052,101 @@ async function photoDelete(id){
 
 // 🆕 v422: تبويبات صفحة طلبات
 function talTab(which){
-  const isLinks = which === 'links';
-  $('tal-tab-links').style.display = isLinks ? 'block' : 'none';
-  $('tal-tab-opps').style.display = isLinks ? 'none' : 'block';
-  const bl=$('tal-tabbtn-links'), bo=$('tal-tabbtn-opps');
-  if(bl&&bo){
-    bl.className = isLinks ? 'btn' : 'btn btn-ghost'; bl.style.cssText = isLinks ? 'background:#2563eb;color:#fff' : '';
-    bo.className = isLinks ? 'btn btn-ghost' : 'btn'; bo.style.cssText = isLinks ? '' : 'background:#2563eb;color:#fff';
+  // 🔧 v442: بقت 3 تابات بدل 2
+  const tabs = ['links','opps','restock'];
+  if(!tabs.includes(which)) which = 'links';
+  tabs.forEach(t => {
+    const panel = $('tal-tab-'+t);
+    if(panel) panel.style.display = (t === which) ? 'block' : 'none';
+    const btn = $('tal-tabbtn-'+t);
+    if(btn){
+      btn.className = (t === which) ? 'btn' : 'btn btn-ghost';
+      btn.style.cssText = (t === which) ? 'background:#2563eb;color:#fff' : '';
+    }
+  });
+  if(which === 'opps'    && !_talOpp.length)     talOppLoad();
+  if(which === 'restock' && !_talRestock.length) talRestockLoad();
+}
+
+// 🆕 v442: محتاج تحويل من العبور لتريفيوم (أصناف طلبات مقفولة ومعاها مخزون)
+let _talRestock = [];
+async function talRestockLoad(){
+  const box = $('tal-restock-list'); if(!box) return;
+  box.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div>';
+  const th = parseInt(($('tal-restock-th')||{}).value ?? 0, 10) || 0;
+  try{
+    const r = await apiFetch(`/api/talabat/restock-alerts?threshold=${th}`,'GET');
+    if(!r || r.error){ box.innerHTML = `<div style="padding:16px;color:#dc2626">❌ ${escapeHtml(String(r&&r.error||'فشل التحميل'))}</div>`; return; }
+    _talRestock = r.rows || [];
+    talRestockBadge(r.count || 0, r.hot || 0);
+    talRestockRender(r);
+  }catch(e){
+    box.innerHTML = `<div style="padding:16px;color:#dc2626">❌ ${escapeHtml(e.message||'خطأ')}</div>`;
   }
-  if(!isLinks && !_talOpp.length) talOppLoad(); // حمّل الفرص أول ما تفتح التاب
+}
+
+function talRestockBadge(count, hot){
+  const b = $('tal-restock-badge'); if(!b) return;
+  if(count > 0){ b.style.display='inline-block'; b.textContent = String(count); }
+  else { b.style.display='none'; }
+  // 🔔 التنبيه — بس لو فيه أصناف بتتباع فعلاً، عشان مايبقاش ضوضاء
+  if(hot > 0 && !window._talRestockNotified){
+    window._talRestockNotified = true;
+    try{ pushNotif('🚚','أصناف طلبات محتاجة تحويل',`${hot} صنف بيتباع ومخزونه في تريفيوم خلص — لسه فيه مخزون في العبور`); }catch(e){}
+  }
+}
+
+function talRestockRender(meta){
+  const box = $('tal-restock-list'); if(!box) return;
+  const hotOnly = ($('tal-restock-hot')||{}).checked;
+  const rows = hotOnly ? _talRestock.filter(x => x.sold_30d > 0) : _talRestock;
+  const dl = $('tal-restock-dl'); if(dl) dl.style.display = rows.length ? 'inline-block' : 'none';
+  const sum = $('tal-restock-summary');
+  if(sum){
+    const units = rows.reduce((s,x)=>s+(x.obour_qty||0),0);
+    sum.textContent = rows.length
+      ? `${rows.length} صنف · ${units.toLocaleString('en-US')} قطعة متاحة في العبور`
+      : '';
+  }
+  if(!rows.length){
+    box.innerHTML = '<div style="padding:22px;text-align:center;color:var(--muted)">✅ مفيش صنف محتاج تحويل دلوقتي</div>';
+    return;
+  }
+  box.innerHTML = `<table style="width:100%;font-size:13px;border-collapse:collapse">
+    <thead><tr style="border-bottom:2px solid var(--border)">
+      <th style="text-align:right;padding:8px">المنتج</th>
+      <th style="padding:8px">sku طلبات</th>
+      <th style="padding:8px">مبيعات 30 يوم</th>
+      <th style="padding:8px">العبور</th>
+      <th style="padding:8px">تريفيوم</th>
+      <th style="padding:8px">السعر</th>
+    </tr></thead><tbody>
+    ${rows.map(x=>`<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px">${escapeHtml(x.title||x.talabat_name||'')}</td>
+      <td style="padding:8px;text-align:center;font-family:monospace;font-size:12px">${escapeHtml(String(x.talabat_sku||''))}</td>
+      <td style="padding:8px;text-align:center;font-weight:${x.sold_30d>0?'900':'400'};color:${x.sold_30d>0?'#dc2626':'var(--muted)'}">${x.sold_30d}</td>
+      <td style="padding:8px;text-align:center;font-weight:800;color:#16a34a">${x.obour_qty}</td>
+      <td style="padding:8px;text-align:center;color:#dc2626;font-weight:800">${x.trivium_qty}</td>
+      <td style="padding:8px;text-align:center">${x.final_price}</td>
+    </tr>`).join('')}
+    </tbody></table>`;
+}
+
+function talRestockExcel(){
+  const hotOnly = ($('tal-restock-hot')||{}).checked;
+  const rows = hotOnly ? _talRestock.filter(x => x.sold_30d > 0) : _talRestock;
+  if(!rows.length) return;
+  const ws = XLSX.utils.json_to_sheet(rows.map(x=>({
+    'المنتج': x.title || x.talabat_name || '',
+    'sku طلبات': x.talabat_sku || '',
+    'باركود': x.barcode || '',
+    'مبيعات 30 يوم': x.sold_30d,
+    'مخزون العبور': x.obour_qty,
+    'مخزون تريفيوم': x.trivium_qty,
+    'السعر على طلبات': x.final_price,
+  })));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'محتاج تحويل');
+  XLSX.writeFile(wb, `talabat-restock-${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 // 🆕 v421: فرص طلبات — منتجات ليها ستوك ومش على طلبات
@@ -35079,6 +35198,11 @@ function talOppExcel(){
 let _talLinks = [];
 async function loadTalabat(){
   await talabatLoadLinks();
+  // 🆕 v442: حمّل عدّاد "محتاج تحويل" مع فتح الصفحة عشان البادچ ينبّه من غير ما تفتح التاب
+  try{
+    const r = await apiFetch('/api/talabat/restock-alerts?threshold=0','GET');
+    if(r && !r.error){ _talRestock = r.rows || []; talRestockBadge(r.count||0, r.hot||0); }
+  }catch(e){}
 }
 async function talabatLoadLinks(){
   try{
@@ -35331,17 +35455,49 @@ async function loadSalesSources(){
       </div>`;
     };
     const othRows=(r.other_breakdown||[]).map(o=>`<tr><td style="font-size:12px">${escapeHtml(String(o.source))}</td><td style="text-align:center">${o.count}</td><td style="text-align:left;font-weight:700">${_ssrcMoney(o.amount)}</td></tr>`).join('');
+    // 🆕 v441: كارت المستبعد (ملغي / مرتجع / مدمج) — منفصل عن الإجمالي الصافي
+    const ex=r.excluded||{}, exPrev=r.excluded_previous||{};
+    const exG=ex.total||{count:0,amount:0};
+    const exBox=(icon,name,key,color)=>{
+      const d=ex[key]||{count:0,amount:0};
+      return `<div style="text-align:center;background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px">
+        <div style="font-size:12px;color:var(--muted);font-weight:700">${icon} ${name}</div>
+        <div style="font-size:20px;font-weight:900;color:${color};margin-top:4px">${_ssrcMoney(d.amount)}</div>
+        <div style="font-size:11px;color:var(--muted)">${d.count.toLocaleString('en-US')} طلب</div>
+      </div>`;
+    };
+    const exCard = exG.count ? `
+      <div class="card" style="margin-bottom:14px;border:1px solid #fecaca">
+        <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <span style="font-weight:800">🚫 مستبعد من المبيعات</span>
+          <span style="font-size:11px;color:var(--muted)">مش داخل في الإجمالي فوق</span>
+        </div>
+        <div style="padding:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">
+          ${exBox('❌','ملغي','cancelled','#dc2626')}
+          ${exBox('↩️','مرتجع','returned','#ea580c')}
+          ${exBox('🔗','مدمج','merged','#4338ca')}
+          <div style="text-align:center;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:12px">
+            <div style="font-size:12px;color:var(--muted);font-weight:700">📉 إجمالي الفاقد</div>
+            <div style="font-size:20px;font-weight:900;color:#b91c1c;margin-top:4px">${_ssrcMoney(exG.amount)}</div>
+            <div style="font-size:11px;color:var(--muted)">${exG.count.toLocaleString('en-US')} طلب${pctLine(exG.amount,(exPrev.total||{}).amount||0)}</div>
+          </div>
+        </div>
+        <div style="padding:0 14px 12px;font-size:11px;color:var(--muted)">
+          نسبة الفاقد من (الصافي + الفاقد): <strong>${(grand.amount+exG.amount)>0?Math.round(exG.amount/(grand.amount+exG.amount)*100):0}%</strong>
+          · المدمج مش فاقد حقيقي — قيمته محسوبة في الطلب الأساسي.
+        </div>
+      </div>` : '';
     box.innerHTML=`
       <div class="card" style="margin-bottom:14px">
         <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
           <div style="text-align:center;background:#eff6ff;border-radius:12px;padding:16px">
-            <div style="font-size:12px;color:var(--muted)">إجمالي الطلبات</div>
+            <div style="font-size:12px;color:var(--muted)">إجمالي الطلبات <span style="color:#16a34a;font-weight:700">(صافي)</span></div>
             <div style="font-size:30px;font-weight:900;color:#2563eb">${grand.count.toLocaleString('en-US')}</div>
             ${pctLine(grand.count, prevG.count)}
             <div style="font-size:10px;color:var(--muted);margin-top:3px">متوسط/يوم — 30ي: ${(l30G.count/30).toFixed(1)} · 7ي: ${(l7G.count/7).toFixed(1)} طلب</div>
           </div>
           <div style="text-align:center;background:#f0fdf4;border-radius:12px;padding:16px">
-            <div style="font-size:12px;color:var(--muted)">إجمالي المبلغ</div>
+            <div style="font-size:12px;color:var(--muted)">إجمالي المبلغ <span style="color:#16a34a;font-weight:700">(صافي بعد خصم المرتجع)</span></div>
             <div style="font-size:30px;font-weight:900;color:#16a34a">${_ssrcMoney(grand.amount)}</div>
             ${pctLine(grand.amount, prevG.amount)}
             <div style="font-size:10px;color:var(--muted);margin-top:3px">متوسط/يوم — 30ي: ${_ssrcMoney(l30G.amount/30)} · 7ي: ${_ssrcMoney(l7G.amount/7)}</div>
@@ -35360,8 +35516,9 @@ async function loadSalesSources(){
         ${card('✍️','طلبات يدوية','manual','#d97706','cafelax_manual')}
         ${card('❓','أخرى','other','#64748b')}
       </div>
+      ${exCard}
       ${othRows?`<div class="card" style="margin-bottom:14px"><div style="padding:12px 14px;font-weight:800;border-bottom:1px solid var(--border)">تفصيل "أخرى"</div><div style="padding:8px 14px;overflow-x:auto"><table style="width:100%;font-size:13px"><thead><tr><th style="text-align:right">المصدر</th><th>عدد</th><th style="text-align:left">المبلغ</th></tr></thead><tbody>${othRows}</tbody></table></div></div>`:''}
-      <div style="padding:8px 4px;font-size:11px;color:var(--muted)">📅 ${from} → ${to} · المقارنة مع نفس طول الفترة السابقة · المتوسط اليومي محسوب على 30/7 يوم منتهية في ${to}. طلبات "طلب جديد" (MN) مش متحسبة. اليدوي = cafelax_manual.</div>`;
+      <div style="padding:8px 4px;font-size:11px;color:var(--muted)">📅 ${from} → ${to} · المقارنة مع نفس طول الفترة السابقة · المتوسط اليومي محسوب على 30/7 يوم منتهية في ${to}. طلبات "طلب جديد" (MN) مش متحسبة. اليدوي = cafelax_manual. 🆕 v441: الملغي/المرتجع/المدمج مستبعدين من كل الكروت والإجمالي.</div>`;
   }catch(e){
     box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`;
   }
