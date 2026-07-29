@@ -1,6 +1,55 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v447 — 🚑 صفحتين لكل صورة + وضع 2 في الصفحة (2026-07-29)
+  ═══════════════════════════════════════════════════════════════════
+  🚑 v447: 100 صورة كانت بتطلع 201 صفحة — الجدول في صفحة والصورة في
+     اللي بعدها. السبب: الـ page-break كان على الكارت نفسه والصورة
+     (max-height بالـ vh) كانت بتعدّي المساحة الفاضلة فتتزحلق.
+     الإصلاح: الـ page-break بقى على .sheet، والكارت طوله ثابت بالـ cm
+     والصورة flex جوه المساحة الفاضلة (object-fit:contain).
+  🆕 v447: قايمة "2 في الصفحة / 1 في الصفحة" (الافتراضي 2). في وضع 2
+     جدول البيانات بيتحط عمودين عشان يوفّر طول للصورة. @page A4 8mm.
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v446 — فلتر مندوب + اسم العميل في الطباعة (2026-07-28)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v446: قايمة "🚴 كل المناديب" في فلاتر الهيستوري — الفلترة بتروح
+     للسيرفر (courierId) مش في المتصفح، عشان الـ LIMIT 300 يتطبق بعد
+     الفلتر. الطباعة بتاخد نفس الفلتر تلقائياً والغلاف بيكتب اسم المندوب.
+     🆕 اسم العميل بقى في عنوان صفحة الطباعة كمان: "مراجعة طلب SH-xxxx
+     — اسم العميل" (وبرضه موجود في جدول البيانات). backend v387.
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v445 — طباعة على دفعات + تصغير الصور (2026-07-28)
+  ═══════════════════════════════════════════════════════════════════
+  🔧 v445: الحد الأقصى (120) اتشال. بدل ما نرفع الرقم ونوقّع المتصفح:
+     (1) الصور بتتصغّر لـ 1400px / JPEG 0.72 قبل الطباعة — توفير ذاكرة
+         كبير والنص في سكرين شوت التحويل يفضل واضح.
+     (2) التقسيم على دفعات 100 صورة، كل دفعة نافذة طباعة لوحدها، وزرار
+         "▶️ الدفعة التالية" بيظهر بعد كل واحدة (فتح كذا نافذة مرة واحدة
+         المتصفح بيمنعه).
+     الغلاف بقى صفحة لوحده وبيقول دفعة كام من كام وأرقام الصور.
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v444 — طباعة كل صور الهيستوري (2026-07-28)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v444: زرار "🖨️ طباعة كل الصور" في تبويب الهيستوري — بيحمّل كل صور
+     الفترة المعروضة (4 بالتوازي مع عدّاد) ويطلّع ورقة طباعة: صفحة غلاف
+     بالملخص + صفحة لكل صورة فيها رقم الطلب والمندوب والعميل والمبلغ
+     والحالة وتاريخ المراجعة والمراجع وسبب الرفض (وللتسويات: السبب
+     ورقم التصفية). حد أقصى 120 صورة. backend v386.
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v443 — سياق صورة الإثبات (2026-07-28)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v443: modal صورة الإثبات بقى يعرض فوق الصورة رقم الطلب (SH-xxxxx)
+     واسم المندوب والعميل والمبلغ — بدل "إثبات الدفع #294" لوحده.
+     للتسويات: اسم المندوب + المبلغ + السبب. البيانات بتتسجّل في
+     registry وقت رسم الصفوف (مش جوه onclick) عشان الأسماء العربية
+     والعلامات ماتكسرش الـ HTML. لو مفيش سياق بيرجع للشكل القديم.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v442 — تنبيه تحويل لتريفيوم (طلبات) (2026-07-28)
   ═══════════════════════════════════════════════════════════════════
   🆕 v442: تاب تالت في صفحة طلبات "🚚 محتاج تحويل" — أصناف مربوطة على
@@ -3007,6 +3056,15 @@ tr:hover td{background:#fafbff}
           <option value="90">آخر 90 يوم</option>
           <option value="365">آخر سنة</option>
         </select>
+        <select id="stars-hist-courier" class="form-input" style="width:auto;padding:6px 10px" onchange="loadStarsHistory()">
+          <option value="">🚴 كل المناديب</option>
+        </select>
+        <select id="stars-print-perpage" class="form-input" style="width:auto;padding:6px 10px" title="عدد الصور في الصفحة">
+          <option value="2" selected>2 في الصفحة</option>
+          <option value="1">1 في الصفحة</option>
+        </select>
+        <button class="btn btn-sm" id="stars-print-btn" onclick="printStarsProofs()" style="background:#7c3aed;color:#fff">🖨️ طباعة كل الصور</button>
+        <span id="stars-print-status" style="font-size:12px;color:var(--muted)"></span>
       </span>
     </div>
 
@@ -42714,6 +42772,7 @@ function renderStarsReviews(){
       payList.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">✅ لا توجد طلبات تحويل قيد المراجعة</div>';
     } else {
       payList.innerHTML = _starsPendingPayment.map(r => {
+        _proofCtxSet('payment', r.id, { orderId: r.orderId, courier: r.courierName, customer: r.customerName, amount: r.orderTotal });  // 🆕 v443
         const age = _timeAgo(r.createdAt);
         const note = r.data && r.data.note ? r.data.note : '';
         return `<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;background:var(--bg)">
@@ -42748,6 +42807,7 @@ function renderStarsReviews(){
       adjList.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">✅ لا توجد تسويات قيد المراجعة</div>';
     } else {
       adjList.innerHTML = _starsPendingAdj.map(a => {
+        _proofCtxSet('adjustment', a.id, { courier: a.courierName, amount: a.amount, reason: a.reason });  // 🆕 v443
         const age = _timeAgo(a.createdAt);
         const amountColor = a.amount >= 0 ? 'var(--success)' : 'var(--danger)';
         const amountSign = a.amount > 0 ? '+' : '';
@@ -42771,6 +42831,260 @@ function renderStarsReviews(){
   }
 }
 
+// 🆕 v444: طباعة كل صور الهيستوري مع بياناتها
+// 🔧 v445: شيلنا الحد الأقصى (كان 120) — بقى بيقسّم على دفعات + بيصغّر
+//   الصور قبل الطباعة. 305 صورة فوتو موبايل خام بتوقّع المتصفح، فالحل
+//   مش رفع الرقم — الحل التقسيم + التصغير.
+let _starsHistory = { payments: [], adjustments: [], status: 'all', days: '30' };
+const STARS_PRINT_BATCH = 100;   // صور في الدفعة الواحدة
+const STARS_IMG_MAXPX   = 1400;  // أقصى بُعد بعد التصغير
+const STARS_IMG_QUALITY = 0.72;  // جودة JPEG بعد التصغير
+let _spBatch = null;             // { items, size, index }
+
+function _spStatus(html){
+  const el = document.getElementById('stars-print-status');
+  if(el) el.innerHTML = html || '';
+}
+function _spDate(v){
+  if(!v) return '—';
+  try{ return new Date(v).toLocaleString('ar-EG'); }catch(e){ return '—'; }
+}
+
+// 🆕 v445: صغّر الصورة قبل الطباعة — بيوفر ذاكرة كتير جداً والطباعة تفضل واضحة
+async function _spDownscale(blob){
+  try{
+    const bmp = await createImageBitmap(blob);
+    const scale = Math.min(1, STARS_IMG_MAXPX / Math.max(bmp.width, bmp.height));
+    if(scale >= 1 && blob.size < 400*1024){ bmp.close && bmp.close(); return blob; }
+    const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const cx = cv.getContext('2d');
+    cx.fillStyle = '#fff'; cx.fillRect(0,0,w,h);
+    cx.drawImage(bmp, 0, 0, w, h);
+    bmp.close && bmp.close();
+    const out = await new Promise(res => cv.toBlob(res, 'image/jpeg', STARS_IMG_QUALITY));
+    cv.width = cv.height = 0;   // فضّي الكانفس
+    return out || blob;
+  }catch(e){
+    return blob;   // لو التصغير فشل، اطبع الأصلية
+  }
+}
+
+async function _spFetchProof(kind, id){
+  const token = localStorage.getItem('admin_token');
+  const url = API_URL.replace(/\/$/,'') +
+    (kind === 'payment' ? '/api/pending-reviews/'+id+'/proof' : '/api/courier-adjustments/'+id+'/proof');
+  const resp = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+  if(!resp.ok) throw new Error('HTTP ' + resp.status);
+  const ct = resp.headers.get('content-type') || '';
+  if(!ct.startsWith('image/')) throw new Error('مش صورة');
+  const blob = await _spDownscale(await resp.blob());
+  return URL.createObjectURL(blob);
+}
+
+function printStarsProofs(){
+  const pays = (_starsHistory.payments || []).filter(x => x.hasProof);
+  const adjs = (_starsHistory.adjustments || []).filter(a => a.hasProof);
+  const items = [
+    ...pays.map(x => ({ kind:'payment', id:x.id, row:x })),
+    ...adjs.map(a => ({ kind:'adjustment', id:a.id, row:a })),
+  ];
+  if(!items.length){ toast('مفيش صور في الفترة دي'); return; }
+
+  const size = STARS_PRINT_BATCH;
+  const total = Math.ceil(items.length / size);
+  const msg = total > 1
+    ? `${items.length} صورة.\n\nهتتقسم ${total} دفعات × ${size} صورة — كل دفعة في نافذة طباعة لوحدها، واحدة ورا التانية.\nالصور بتتصغّر تلقائياً عشان المتصفح ما يتقلش.\n\nنبدأ بالدفعة 1؟`
+    : `هيتم تحميل وطباعة ${items.length} صورة.\nكل صورة في صفحة لوحدها مع بياناتها.\n\nكمّل؟`;
+  if(!confirm(msg)) return;
+
+  _spBatch = { items, size, index: 0 };
+  _spRunBatch();
+}
+
+async function _spRunBatch(){
+  if(!_spBatch) return;
+  const { items, size, index } = _spBatch;
+  const total = Math.ceil(items.length / size);
+  const from = index * size;
+  const slice = items.slice(from, from + size).map(x => ({ ...x }));   // نسخة نضيفة كل دفعة
+
+  const btn = document.getElementById('stars-print-btn');
+  if(btn) btn.disabled = true;
+  // 🆕 v447: 1 أو 2 في الصفحة
+  const perPage = (document.getElementById('stars-print-perpage')?.value === '1') ? 1 : 2;
+
+  const failed = [];
+  let done = 0;
+  const queue = slice.slice();
+  async function worker(){
+    while(queue.length){
+      const it = queue.shift();
+      try{ it.blobUrl = await _spFetchProof(it.kind, it.id); }
+      catch(e){ failed.push(`${it.kind}#${it.id}`); }
+      done++;
+      _spStatus(`⏳ دفعة ${index+1}/${total} — ${done}/${slice.length}`);
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]);
+
+  const ok = slice.filter(it => it.blobUrl);
+  if(!ok.length){
+    _spStatus(''); if(btn) btn.disabled = false; _spBatch = null;
+    toast('❌ مفيش ولا صورة اتحمّلت في الدفعة دي'); return;
+  }
+
+  _spStatus(`⏳ بيجهّز الطباعة...`);
+  await Promise.all(ok.map(it => new Promise(res => {
+    const im = new Image(); im.onload = res; im.onerror = res; im.src = it.blobUrl;
+  })));
+
+  const cardList = ok.map((it, i) => {
+    const x = it.row;
+    const isPay = it.kind === 'payment';
+    const rows = isPay ? [
+      ['رقم الطلب', x.orderId || '—'],
+      ['المندوب', x.courierName || '—'],
+      ['العميل', x.customerName || '—'],
+      ['المبلغ', (Number(x.orderTotal)||0).toLocaleString('en-US') + ' ج'],
+      ['الحالة', x.status === 'approved' ? '✅ معتمد' : '❌ مرفوض'],
+      ['تاريخ المراجعة', _spDate(x.reviewedAt)],
+      ['المراجع', x.reviewedBy || '—'],
+      ['ملاحظة', x.note || '—'],
+      ...(x.status === 'rejected' ? [['سبب الرفض', x.rejectionReason || '—']] : []),
+    ] : [
+      ['النوع', 'تسوية مندوب'],
+      ['المندوب', x.courierName || '—'],
+      ['المبلغ', ((Number(x.amount)||0) > 0 ? '+' : '') + (Number(x.amount)||0).toLocaleString('en-US') + ' ج'],
+      ['السبب', x.reason || '—'],
+      ['الحالة', x.status === 'approved' ? '✅ معتمد' : '❌ مرفوض'],
+      ['تاريخ المراجعة', _spDate(x.reviewedAt)],
+      ['المراجع', x.reviewedBy || '—'],
+      ['رقم التصفية', x.settlementId ? '#' + x.settlementId : '—'],
+      ...(x.status === 'rejected' ? [['سبب الرفض', x.rejectionReason || '—']] : []),
+    ];
+    // 🆕 v446: اسم العميل في عنوان الصفحة نفسه مش في الجدول بس
+    const head = isPay
+      ? `مراجعة طلب ${escapeHtml(String(x.orderId || it.id))}${x.customerName ? ' — ' + escapeHtml(String(x.customerName)) : ''}`
+      : `تسوية مندوب — ${escapeHtml(String(x.courierName || ''))}`;
+    // 🆕 v447: في وضع 2 في الصفحة الجدول بيتحط عمودين عشان يوفّر طول
+    let metaHtml;
+    if(perPage === 2){
+      const cells = [];
+      for(let k = 0; k < rows.length; k += 2){
+        const a = rows[k], b = rows[k+1];
+        cells.push(`<tr><th>${escapeHtml(a[0])}</th><td>${escapeHtml(String(a[1]))}</td>` +
+          (b ? `<th>${escapeHtml(b[0])}</th><td>${escapeHtml(String(b[1]))}</td>` : `<th></th><td></td>`) + `</tr>`);
+      }
+      metaHtml = `<table class="meta two">${cells.join('')}</table>`;
+    } else {
+      metaHtml = `<table class="meta">${rows.map(([k,v]) =>
+        `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(String(v))}</td></tr>`).join('')}</table>`;
+    }
+    return `<div class="card">
+      <div class="hd">
+        <div class="ttl">${head}</div>
+        <div class="idx">${from + i + 1} / ${items.length}</div>
+      </div>
+      ${metaHtml}
+      <div class="imgwrap"><img src="${it.blobUrl}"></div>
+    </div>`;
+  });
+
+  // 🆕 v447: لمّ الكروت في صفحات — الـ page-break على الورقة مش على الكارت
+  let cards = '';
+  if(perPage === 2){
+    for(let k = 0; k < cardList.length; k += 2){
+      cards += `<div class="sheet">${cardList[k]}${cardList[k+1] || ''}</div>`;
+    }
+  } else {
+    cards = cardList.map(c => `<div class="sheet one">${c}</div>`).join('');
+  }
+
+  const stLbl = { all:'الكل', approved:'المعتمد', rejected:'المرفوض' }[_starsHistory.status] || _starsHistory.status;
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+<title>صور مراجعات Cafelax Stars${_starsHistory.courierName ? ' — ' + _starsHistory.courierName : ''} — دفعة ${index+1}/${total}</title>
+<style>
+@page{ size:A4 portrait; margin:8mm; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,Tahoma,sans-serif;direction:rtl;color:#111}
+.cover{padding:24px;border-bottom:2px solid #111;page-break-after:always}
+.cover h1{font-size:20px;margin-bottom:6px}
+.cover .s{font-size:12px;color:#555;line-height:1.8}
+
+/* الورقة هي اللي بتكسر — مش الكارت. الكارت له طول ثابت عشان الصورة
+   ماتتزحلقش لصفحة لوحدها (ده اللي كان بيخلي 100 صورة = 201 صفحة). */
+.sheet{page-break-after:always;page-break-inside:avoid}
+.sheet:last-child{page-break-after:auto}
+.card{height:13.2cm;overflow:hidden;padding:4mm 5mm;display:flex;flex-direction:column}
+.sheet.one .card{height:26.8cm}
+.card + .card{border-top:1px dashed #94a3b8}
+
+.hd{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5px solid #111;padding-bottom:3px;margin-bottom:4px;flex:0 0 auto}
+.ttl{font-size:13px;font-weight:800}
+.idx{font-size:10px;color:#666}
+table.meta{width:100%;border-collapse:collapse;margin-bottom:4px;font-size:10px;flex:0 0 auto}
+table.meta th{background:#f1f5f9;text-align:right;padding:2px 6px;width:80px;border:1px solid #cbd5e1;font-weight:700;white-space:nowrap}
+table.meta td{padding:2px 6px;border:1px solid #cbd5e1}
+table.meta.two th{width:70px}
+.sheet.one .ttl{font-size:16px}
+.sheet.one table.meta{font-size:12px}
+.sheet.one table.meta th, .sheet.one table.meta td{padding:4px 8px}
+
+.imgwrap{flex:1 1 auto;display:flex;align-items:center;justify-content:center;min-height:0}
+.imgwrap img{max-width:100%;max-height:100%;object-fit:contain;border:1px solid #cbd5e1;border-radius:3px}
+@media print{ body{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
+</style></head><body>
+<div class="cover">
+  <h1>⭐ صور مراجعات Cafelax Stars</h1>
+  <div class="s">
+    <strong>دفعة ${index+1} من ${total}</strong> · صور ${from+1}–${from+ok.length} من ${items.length}<br>
+    الفترة: آخر ${escapeHtml(String(_starsHistory.days))} يوم · الحالة: ${escapeHtml(stLbl)} · المندوب: ${escapeHtml(_starsHistory.courierName || 'كل المناديب')}<br>
+    في الدفعة دي — تحويلات: ${ok.filter(i=>i.kind==='payment').length} · تسويات: ${ok.filter(i=>i.kind==='adjustment').length}${failed.length ? ` · فشل: ${failed.length}` : ''}<br>
+    طُبع: ${new Date().toLocaleString('ar-EG')}
+  </div>
+</div>
+${cards}
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  if(!w){
+    _spStatus(''); if(btn) btn.disabled = false; _spBatch = null;
+    ok.forEach(it => URL.revokeObjectURL(it.blobUrl));
+    toast('❌ المتصفح منع فتح النافذة — اسمح بالنوافذ المنبثقة وجرّب تاني');
+    return;
+  }
+  w.document.open(); w.document.write(html); w.document.close();
+  setTimeout(() => { try{ w.focus(); w.print(); }catch(e){} }, 700);
+  setTimeout(() => { ok.forEach(it => URL.revokeObjectURL(it.blobUrl)); }, 180000);
+
+  _spBatch.index++;
+  if(btn) btn.disabled = false;
+
+  if(_spBatch.index < total){
+    _spStatus(`<button class="btn btn-sm" onclick="_spRunBatch()" style="background:#7c3aed;color:#fff">▶️ الدفعة ${_spBatch.index+1} من ${total}</button>`);
+    toast(`✅ دفعة ${index+1}/${total} جاهزة — بعد ما تطبعها اضغط "الدفعة ${_spBatch.index+1}"`);
+  } else {
+    _spBatch = null;
+    _spStatus('');
+    toast(`✅ خلصت كل الدفعات (${total})`);
+  }
+  if(failed.length) toast(`⚠️ فشل ${failed.length} صورة: ${failed.slice(0,3).join('، ')}`);
+}
+
+// 🆕 v446: املا قايمة المناديب في فلتر الهيستوري (مع الحفاظ على المختار)
+function _starsFillCourierSelect(){
+  const sel = document.getElementById('stars-hist-courier');
+  if(!sel) return;
+  const cur = sel.value;
+  const list = (couriers || []).slice().sort((a,b) =>
+    String(a.name||'').localeCompare(String(b.name||''), 'ar'));
+  sel.innerHTML = '<option value="">🚴 كل المناديب</option>' +
+    list.map(c => `<option value="${c.id}">${escapeHtml(String(c.name||('#'+c.id)))}</option>`).join('');
+  if(cur) sel.value = cur;
+}
+
 // 🆕 v440: تبويب معلّقة/هيستوري
 let _starsTab = 'pending';
 function starsSetTab(t){
@@ -42785,18 +43099,23 @@ function starsSetTab(t){
   if(hf) hf.style.display = t === 'history' ? 'inline-flex' : 'none';
   if(bp) bp.className = 'btn btn-sm ' + (t === 'pending' ? 'btn-primary' : 'btn-ghost');
   if(bh) bh.className = 'btn btn-sm ' + (t === 'history' ? 'btn-primary' : 'btn-ghost');
-  if(t === 'history') loadStarsHistory();
+  if(t === 'history'){ _starsFillCourierSelect(); loadStarsHistory(); }
 }
 
 async function loadStarsHistory(){
   const st = document.getElementById('stars-hist-status')?.value || 'all';
   const dy = document.getElementById('stars-hist-days')?.value || '30';
+  const cid = document.getElementById('stars-hist-courier')?.value || '';   // 🆕 v446
   const payList = document.getElementById('stars-hist-payment-list');
   const adjList = document.getElementById('stars-hist-adj-list');
   if(payList) payList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div>';
   if(adjList) adjList.innerHTML = '';
   try{
-    const r = await apiFetch(`/api/stars-reviews/history?status=${st}&days=${dy}`);
+    const r = await apiFetch(`/api/stars-reviews/history?status=${st}&days=${dy}${cid ? '&courierId='+encodeURIComponent(cid) : ''}`);
+    // 🆕 v444: خزّن الصفوف عشان زرار الطباعة يستخدمها
+    const _cName = cid ? ((couriers.find(c => String(c.id) === String(cid)) || {}).name || '') : '';
+    _starsHistory = { payments: (r && r.payments) || [], adjustments: (r && r.adjustments) || [],
+                      status: st, days: dy, courierId: cid, courierName: _cName };   // 🆕 v446
     const stBadge = (x) => x.status === 'approved'
       ? '<span style="background:#dcfce7;color:#166534;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">✅ معتمد</span>'
       : '<span style="background:#fee2e2;color:#991b1b;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">❌ مرفوض</span>';
@@ -42804,6 +43123,7 @@ async function loadStarsHistory(){
 
     if(payList){
       const rows = (r && r.payments) || [];
+      rows.forEach(x => _proofCtxSet('payment', x.id, { orderId: x.orderId, courier: x.courierName, customer: x.customerName, amount: x.orderTotal }));  // 🆕 v443
       payList.innerHTML = !rows.length
         ? '<div style="padding:24px;text-align:center;color:var(--muted)">مفيش تحويلات في الفترة دي</div>'
         : rows.map(x => `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;background:var(--bg)">
@@ -42825,6 +43145,7 @@ async function loadStarsHistory(){
     }
     if(adjList){
       const rows = (r && r.adjustments) || [];
+      rows.forEach(a => _proofCtxSet('adjustment', a.id, { courier: a.courierName, amount: a.amount, reason: a.reason }));  // 🆕 v443
       adjList.innerHTML = !rows.length
         ? '<div style="padding:24px;text-align:center;color:var(--muted)">مفيش تسويات في الفترة دي</div>'
         : rows.map(a => {
@@ -42865,6 +43186,13 @@ function _escapeHtml(s){
   if(s == null) return '';
   return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
+
+// 🆕 v443: سياق صورة الإثبات — بنسجّله وقت رسم الصفوف ونقراه وقت فتح الصورة.
+//   بنستخدم registry بدل ما نبعت البيانات جوه onclick عشان الأسماء العربية
+//   والعلامات (' " &) ماتكسرش الـ HTML attribute.
+const _proofCtx = {};
+function _proofCtxSet(kind, id, ctx){ _proofCtx[kind + ':' + id] = ctx || null; }
+function _proofCtxGet(kind, id){ return _proofCtx[kind + ':' + id] || null; }
 
 // 🔧 v218 FIX: viewStarsProof - بنستخدم fetch مع token بدل window.open المباشر
 // المشكلة كانت: window.open بيفتح URL في tab جديد بدون authorization header
@@ -42943,12 +43271,28 @@ function showProofImageModal(blobUrl, kind, id){
   };
   
   const title = kind === 'payment' ? 'إثبات الدفع' : 'إثبات التعديل';
-  
+  // 🆕 v443: هات سياق المراجعة (رقم الطلب / المندوب / المبلغ) لو متسجّل
+  const ctx = _proofCtxGet(kind, id) || {};
+  const heading = kind === 'payment'
+    ? (ctx.orderId ? `مراجعة طلب ${_escapeHtml(ctx.orderId)}` : `${title} #${id}`)
+    : (ctx.courier ? `تسوية مندوب — ${_escapeHtml(ctx.courier)}` : `${title} #${id}`);
+  const bits = [];
+  if(kind === 'payment' && ctx.courier) bits.push(`🚴 المندوب: <strong>${_escapeHtml(ctx.courier)}</strong>`);
+  if(ctx.customer)                      bits.push(`👤 ${_escapeHtml(ctx.customer)}`);
+  if(ctx.amount != null)                bits.push(`💰 <strong>${Number(ctx.amount).toLocaleString('en-US')} ج</strong>`);
+  if(ctx.reason)                        bits.push(`📝 ${_escapeHtml(ctx.reason)}`);
+  const subLine = bits.length
+    ? `<div style="font-size:13px;color:#e5e7eb;margin-top:3px">${bits.join(' · ')}</div>`
+    : '';
+
   overlay.innerHTML = `
     <div style="position:relative;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;gap:10px;align-items:center">
-      <div style="display:flex;justify-content:space-between;align-items:center;width:100%;color:#fff;padding:0 8px">
-        <div style="font-size:14px;font-weight:700">📄 ${title} #${id}</div>
-        <div style="display:flex;gap:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;width:100%;color:#fff;padding:0 8px;gap:12px">
+        <div style="min-width:0">
+          <div style="font-size:15px;font-weight:800">📄 ${heading}</div>
+          ${subLine}
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
           <a href="${blobUrl}" download="proof-${kind}-${id}.jpg" 
              style="background:var(--success);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;text-decoration:none;cursor:pointer">
             ⬇️ تحميل
