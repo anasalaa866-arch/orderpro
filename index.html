@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v480 — 🔁 إعادة فوترة من الصفر (2026-08-01)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v480: زرار "إعادة فوترة من الصفر" (بعد مسح المسودات من Zoho) —
+     backend v421 اللي بيحل ربط Zoho الضمني بالاسم: بنود ما قبل القطع
+     بقت بذيل "— ما قبل القطع" فمفيش خصم مخزون، والتلقائي زي ما هو.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v479 — 🏷️ باركودات في الفاتورة المطبوعة (2026-08-01)
   ═══════════════════════════════════════════════════════════════════
   🆕 v479: الفاتورة المطبوعة (القالبين) بقت تحت كل صنف باركوداته كلها
@@ -3828,6 +3835,7 @@ tr:hover td{background:#fafbff}
       <button class="btn btn-sm" onclick="zhSyncItems()" style="background:#0d9488;color:#fff">📦 مزامنة الأصناف دلوقتي</button>
       <button class="btn btn-sm" id="zh-del-btn" onclick="zhDeleteAllItems()" style="background:#991b1b;color:#fff">🗑️ مسح كل أصناف Zoho</button>
       <button class="btn btn-sm" onclick="zhResetCache()" style="background:#4b5563;color:#fff">🔄 تصفير الكاش (بعد تغيير Organization)</button>
+      <button class="btn btn-sm" onclick="zhResetInvoices()" style="background:#b45309;color:#fff">🔁 إعادة فوترة من الصفر</button>
       <span id="zh-msg" style="font-size:12px"></span>
     </div>
   </div>
@@ -43682,6 +43690,20 @@ async function zhResetCache(){
     const r = await apiFetch('/api/zoho/reset-cache', 'POST', { confirm: 'RESET' });
     if(!r || r.error){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(String(r&&r.error||'فشل'))}</span>`; return; }
     if(m) m.innerHTML = `<span style="color:#16a34a">✅ الكاش اتصفّر — الخرايط هتتبني من الـ Organization الجديدة لوحدها</span>`;
+    zhStatus();
+  }catch(e){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; }
+}
+
+// 🆕 v480: إعادة فوترة من الصفر — بعد مسح المسودات من Zoho
+async function zhResetInvoices(){
+  if(!confirm('⚠️ اعملها بس لو مسحت الفواتير القديمة من Zoho الأول.\n\nهيصفّر مؤشرات الفوترة لكل الأوردرات — التلقائي هيعيد فوترة بتوعه، وما قبل القطع يتقبل من الزرار تاني.\n\nلو الفواتير لسه موجودة في Zoho هتتكرر! كمّل؟')) return;
+  const typed = prompt('اكتب RESET للتأكيد:');
+  if(typed !== 'RESET'){ toast('اتلغى'); return; }
+  const m = $('zh-msg'); if(m) m.textContent = '⏳...';
+  try{
+    const r = await apiFetch('/api/zoho/reset-invoices', 'POST', { confirm: 'RESET' });
+    if(!r || r.error){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(String(r&&r.error||'فشل'))}</span>`; return; }
+    if(m) m.innerHTML = `<span style="color:#16a34a">✅ ${r.reset} أوردر اتصفّروا — السكانر هيعيد فوترة التلقائي، وما قبل القطع من الزرار</span>`;
     zhStatus();
   }catch(e){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; }
 }
