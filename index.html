@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v479 — 🏷️ باركودات في الفاتورة المطبوعة (2026-08-01)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v479: الفاتورة المطبوعة (القالبين) بقت تحت كل صنف باركوداته كلها
+     جنب بعض " , " (حقل barcode بتاع Shopify + الأكواد الإضافية) بدل
+     سطر الـ SKU — بيتجابوا من الكتالوج بمطابقة SKU/باركود/اسم حتى لو
+     بنود الأوردر القديمة ملهاش أكواد. backend v417.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v478 — 🛍️ فوترة Shopify بس (2026-08-01)
   ═══════════════════════════════════════════════════════════════════
   🔧 v478: توضيح إن المزامنة التلقائية لأوردرات Shopify بس (backend
@@ -11539,6 +11547,14 @@ async function printPackingSlipLegacy(orderId){
     }).filter(i=>i.name);
   }
   if(!lineItems.length) lineItems=[{name:o.details||'—', quantity:1, price:o.total||0, totalPrice:o.total||0}];
+  // 🆕 v479: باركودات كل بند من الكتالوج (Shopify + الإضافية) للطباعة
+  try{
+    const bc = await apiFetch('/api/catalog/barcodes-for-items', 'POST', {
+      items: lineItems.map(i => ({ sku: i.sku || '', barcode: i.barcode || '', name: (i.name || '') })),
+    });
+    if(bc && Array.isArray(bc.codes)) lineItems.forEach((i, idx) => { i._codes = bc.codes[idx] || ''; });
+  }catch(e){}
+
 
   const fmtDate = d => new Date(d).toLocaleDateString('en-GB',{year:'numeric',month:'long',day:'numeric'});
   const orderDate = o.createdAt ? fmtDate(o.createdAt) : fmtDate(new Date());
@@ -11577,7 +11593,7 @@ async function printPackingSlipLegacy(orderId){
         <p>
           <span class="line-item-description-line" style="${isDiff?'font-weight:700;':''}">${i.name||''}</span>
           ${i.variantTitle?`<span class="line-item-description-line">${i.variantTitle}</span>`:''}
-          ${i.sku?`<span class="line-item-description-line">SKU: ${i.sku}</span>`:''}
+          ${i._codes?`<span class="line-item-description-line" style="direction:ltr;unicode-bidi:plaintext">${i._codes}</span>`:''}
           ${i.price>0?`<span class="line-item-description-line">${fmtMoney(i.price)}</span>`:''}
         </p>
       </div>
@@ -23446,6 +23462,14 @@ async function buildPackingSlipHtml(o){
     }).filter(i=>i.name);
   }
   if(!lineItems.length) lineItems=[{name:o.details||'—', quantity:1, price:o.total||0, totalPrice:o.total||0}];
+  // 🆕 v479: باركودات كل بند من الكتالوج (Shopify + الإضافية) للطباعة
+  try{
+    const bc = await apiFetch('/api/catalog/barcodes-for-items', 'POST', {
+      items: lineItems.map(i => ({ sku: i.sku || '', barcode: i.barcode || '', name: (i.name || '') })),
+    });
+    if(bc && Array.isArray(bc.codes)) lineItems.forEach((i, idx) => { i._codes = bc.codes[idx] || ''; });
+  }catch(e){}
+
 
   const addrParts = [];
   if(o.addr) addrParts.push(o.addr);
@@ -23494,7 +23518,7 @@ async function buildPackingSlipHtml(o){
         <div style="flex:1">
           <div style="${isDiff?'font-weight:700;':''}font-size:14px">${i.name||''}</div>
           ${i.variantTitle?`<div style="font-size:11px;color:#6b7280">${i.variantTitle}</div>`:''}
-          ${i.sku?`<div style="font-size:11px;color:#6b7280">SKU: ${i.sku}</div>`:''}
+          ${i._codes?`<div style="font-size:11px;color:#6b7280;direction:ltr;unicode-bidi:plaintext">${i._codes}</div>`:''}
           ${i.price>0?`<div style="font-size:11px;color:#6b7280">${fmtMoney(i.price)}</div>`:''}
         </div>
         <div style="text-align:left;font-weight:700;font-size:14px">${lineTotal>0?fmtMoney(lineTotal):''}</div>
