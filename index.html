@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v481 — 🖼️ صور الدفعات في الطباعة (2026-08-01)
+  ═══════════════════════════════════════════════════════════════════
+  🔧 v481: الحل الجذري لصور الدفعات الفاضية — الـ prefetch كان بيحوّل
+     الصور لـ blob URLs مؤقتة، ودي بتموت أول ما نافذة الطباعة تفتح
+     (سياق مختلف). بقت data URI (base64) مدمجة جوه الـ HTML فبتتنقل
+     مع الطباعة في أي نافذة. الطباعة الفردية ماكانتش متأثرة.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v480 — 🔁 إعادة فوترة من الصفر (2026-08-01)
   ═══════════════════════════════════════════════════════════════════
   🆕 v480: زرار "إعادة فوترة من الصفر" (بعد مسح المسودات من Zoho) —
@@ -22660,7 +22668,15 @@ async function _prefetchBatchImages(allPagesArr){
           console.warn('[v379] image too large, skipping:', url, blob.size);
           return null;
         }
-        return URL.createObjectURL(blob);
+        // 🔧 v481: data URI (base64) بدل blob URL — الـ blob URLs بتموت
+        //   في نافذة الطباعة (سياق مختلف) فالصور كانت بتطبع فاضية.
+        //   الـ data URI مدمجة جوه الـ HTML فبتتنقل مع الطباعة.
+        return await new Promise((resolve) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(fr.result);
+          fr.onerror = () => resolve(null);
+          fr.readAsDataURL(blob);
+        });
       } catch(e){
         if(attempt === retries){
           console.warn('[v379] failed after retries:', url, e.message);
@@ -22680,9 +22696,9 @@ async function _prefetchBatchImages(allPagesArr){
   for(let i = 0; i < urlsList.length; i += CONCURRENCY){
     const chunk = urlsList.slice(i, i + CONCURRENCY);
     await Promise.all(chunk.map(async (url) => {
-      const blobUrl = await fetchOne(url);
-      if(blobUrl){
-        urlToBlob[url] = blobUrl;
+      const dataUri = await fetchOne(url);
+      if(dataUri){
+        urlToBlob[url] = dataUri;
       } else {
         failed++;
       }
