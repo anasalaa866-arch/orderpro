@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v492 — 🤖 الحل التلقائي للبنود (2026-08-15)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v492: "بنود بدون ربط" — زرار 🤖 حل تلقائي لكل بند + "حل الكل":
+     مطابقة بالاسم، خصم فعلي من مخزن الأوردر، إصلاح الكتالوج، وتعليم
+     تم الحل. الغامض بيترفض بسبب واضح ويتحل يدوي. backend v432.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v491 — 🏷️ جدول باركودات الطباعة (2026-08-09)
   ═══════════════════════════════════════════════════════════════════
   🆕 v491: كارت "جدول باركودات الطباعة" في صفحة فحص SKU — بيبني جدول
@@ -3993,6 +4000,7 @@ tr:hover td{background:#fafbff}
           </select>
         </label>
         <button class="btn btn-sm" onclick="ulRetroScan()" id="ul-retro-btn" style="background:#b45309;color:#fff">🔎 افحص بأثر رجعي</button>
+        <button class="btn btn-sm" onclick="ulAutoAll()" id="ul-auto-btn" style="background:#7c3aed;color:#fff">🤖 حل الكل تلقائياً</button>
         <label style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="ul-show-all" onchange="ulLoad()"> اعرض المحلولة كمان</label>
         <span id="ul-msg" style="font-size:12px"></span>
       </div>
@@ -44391,10 +44399,36 @@ async function ulLoad(){
         <td style="text-align:center">${x.qty}</td>
         <td style="text-align:center">${Number(x.price).toLocaleString('en-US')}</td>
         <td style="text-align:center;font-size:11px;color:var(--muted)">${x.detected_at?new Date(x.detected_at).toLocaleDateString('ar-EG'):''}</td>
-        <td style="text-align:center;padding:5px">${x.resolved?'✅':`<button class="btn btn-sm" onclick="ulResolve(${x.id})" style="background:#16a34a;color:#fff;font-size:11px">تم الحل</button>`}</td>
+        <td style="text-align:center;padding:5px;white-space:nowrap">${x.resolved?'✅':`<button class="btn btn-sm" onclick="ulAutoOne(${x.id},this)" style="background:#7c3aed;color:#fff;font-size:11px">🤖 حل تلقائي</button> <button class="btn btn-sm" onclick="ulResolve(${x.id})" style="background:#16a34a;color:#fff;font-size:11px">تم يدوي</button>`}</td>
       </tr>`).join('')}
       </tbody></table>`;
   }catch(e){ box.innerHTML = `<div style="padding:20px;color:#dc2626">❌ ${escapeHtml(e.message)}</div>`; }
+}
+// 🆕 v492: الحل التلقائي — خصم فعلي من مخزن الأوردر + إصلاح الكتالوج
+async function ulAutoOne(id, btn){
+  if(btn){ btn.disabled = true; btn.textContent = '⏳...'; }
+  try{
+    const r = await apiFetch(`/api/pos/unlinked-lines/${id}/auto-resolve`, 'POST', {});
+    if(r && r.ok){ toast('✅ ' + (r.note || 'اتحل')); }
+    else { alert('❌ محتاج يدوي: ' + ((r && (r.reason || r.error)) || 'فشل')); }
+  }catch(e){ alert('❌ ' + e.message); }
+  ulLoad();
+}
+async function ulAutoAll(){
+  if(!confirm('🤖 هيحاول يحل كل البنود المفتوحة تلقائياً:\n— يطابق الاسم بالكتالوج (الغامض بيتساب)\n— يخصم الكمية من مخزن الأوردر نفسه في Shopify\n— يصلّح الكتالوج\n\nلو خصمت مخزون لبند منهم يدوياً قبل كده، حله يدوي بدل ما يتخصم مرتين. كمّل؟')) return;
+  const btn = $('ul-auto-btn'), m = $('ul-msg');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ بيحل...'; }
+  try{
+    const r = await apiFetch('/api/pos/unlinked-lines/auto-resolve-all', 'POST', {});
+    if(!r || r.error){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(String(r&&r.error||'فشل'))}</span>`; }
+    else {
+      const fails = (r.results||[]).filter(x=>!x.ok);
+      if(m) m.innerHTML = `<span style="color:${r.failed?'#d97706':'#16a34a'}">🤖 اتحل ${r.resolved}/${r.total}${r.failed?` — ${r.failed} محتاجين يدوي`:''}</span>`;
+      if(fails.length) alert('محتاجين يدوي:\n' + fails.map(x=>`#${x.id}: ${x.reason||'؟'}`).join('\n'));
+    }
+  }catch(e){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; }
+  if(btn){ btn.disabled = false; btn.textContent = '🤖 حل الكل تلقائياً'; }
+  ulLoad();
 }
 async function ulResolve(id){
   try{ await apiFetch(`/api/pos/unlinked-lines/${id}/resolve`, 'POST', {}); }catch(e){}
