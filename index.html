@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v493 — 🧹 منضّف الأشباح (2026-08-15)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v493: كارت "الأصناف الشبح" في صفحة فحص SKU — فحص بيقارن الكتالوج
+     بـ Shopify الفعلي، قايمة بالأشباح (سبب التكرار في Stars والبنود
+     غير المرتبطة)، وأرشفة بتأكيد مزدوج. backend v433.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v492 — 🤖 الحل التلقائي للبنود (2026-08-15)
   ═══════════════════════════════════════════════════════════════════
   🆕 v492: "بنود بدون ربط" — زرار 🤖 حل تلقائي لكل بند + "حل الكل":
@@ -4118,6 +4125,20 @@ tr:hover td{background:#fafbff}
         <button class="btn btn-sm" id="bc-rebuild-btn" onclick="bcRebuild()" style="background:#1d4ed8;color:#fff">🔄 ابني الجدول من Shopify</button>
         <span id="bc-msg" style="font-size:12px"></span>
       </div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px;border:1px solid #ddd6fe">
+    <div style="padding:12px 14px">
+      <div style="font-weight:800">🧹 الأصناف الشبح (اتمسحت من Shopify وفاضلة عندنا)</div>
+      <div style="font-size:12px;color:var(--muted);margin:4px 0 10px">
+        صف كتالوج الـ variant بتاعه مات في Shopify — بيظهر <strong>مكرر</strong> في Stars وبيعه بيطلع <strong>بند حر بدون خصم مخزون</strong>. افحص، راجع القايمة، وأرشف. بعد الأرشفة: زامن جهاز Stars عشان الكاش المحلي.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-sm" id="gh-scan-btn" onclick="ghScan()" style="background:#0e7490;color:#fff">🔎 افحص الأشباح</button>
+        <button class="btn btn-sm" id="gh-archive-btn" onclick="ghArchive()" style="background:#7c3aed;color:#fff" disabled>🗄️ أرشف الأشباح</button>
+        <span id="gh-msg" style="font-size:12px"></span>
+      </div>
+      <div id="gh-list" style="margin-top:10px"></div>
     </div>
   </div>
   <div class="card" style="margin-bottom:14px;border:1px solid #fde68a">
@@ -44486,6 +44507,68 @@ async function ulCheckAlert(){
 }
 setTimeout(ulCheckAlert, 6000);
 setInterval(ulCheckAlert, 10 * 60 * 1000);
+
+// 🆕 v493: منضّف الأشباح
+let _ghPoll = null;
+async function ghScan(){
+  const m = $('gh-msg');
+  try{
+    const r = await apiFetch('/api/catalog/ghosts/scan', 'POST', {});
+    if(!r || r.error){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(String(r&&r.error||'فشل'))}</span>`; return; }
+    ghWatch();
+  }catch(e){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; }
+}
+function ghWatch(){
+  const sb = $('gh-scan-btn'), ab = $('gh-archive-btn');
+  if(sb){ sb.disabled = true; sb.textContent = '⏳ بيفحص...'; }
+  if(ab) ab.disabled = true;
+  if(_ghPoll) clearInterval(_ghPoll);
+  const tick = async () => {
+    const m = $('gh-msg'), box = $('gh-list');
+    try{
+      const st = await apiFetch('/api/catalog/ghosts/status', 'GET');
+      if(!st) return;
+      if(st.running){
+        if(m) m.innerHTML = `🔎 ${st.phase==='fetching'?'بيجيب من Shopify':'بيقارن'}... variants: <strong>${(st.shopifyVariants||0).toLocaleString('en-US')}</strong>`;
+      } else {
+        clearInterval(_ghPoll); _ghPoll = null;
+        if(sb){ sb.disabled = false; sb.textContent = '🔎 افحص الأشباح'; }
+        if(st.lastError){ if(m) m.innerHTML = `<span style="color:#dc2626">⛔ ${escapeHtml(st.lastError)}</span>`; return; }
+        if(st.archived != null && m){ m.innerHTML = `<span style="color:#16a34a">✅ اتأرشف ${st.archived} صنف شبح — زامن جهاز Stars دلوقتي</span>`; if(box) box.innerHTML=''; return; }
+        if(m) m.innerHTML = st.ghostCount
+          ? `<span style="color:#d97706">👻 لقى <strong>${st.ghostCount}</strong> شبح (من ${(st.localActive||0).toLocaleString('en-US')} نشط · Shopify فيه ${(st.shopifyVariants||0).toLocaleString('en-US')})</span>`
+          : `<span style="color:#16a34a">✅ مفيش أشباح — الكتالوج مطابق لـ Shopify</span>`;
+        if(ab) ab.disabled = !st.ghostCount;
+        if(box && st.ghostCount){
+          box.innerHTML = `<table style="width:100%;font-size:12px;border-collapse:collapse">
+            <thead><tr style="border-bottom:2px solid var(--border)"><th style="text-align:right;padding:5px">الصنف الشبح</th><th style="padding:5px">SKU</th><th style="padding:5px">باركود</th></tr></thead>
+            <tbody>${st.ghosts.map(g=>`<tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:5px">${escapeHtml(g.title)}</td>
+              <td style="text-align:center;font-family:monospace;font-size:11px">${escapeHtml(g.sku||'—')}</td>
+              <td style="text-align:center;font-family:monospace;font-size:11px">${escapeHtml((g.barcode||'—').slice(0,30))}</td>
+            </tr>`).join('')}</tbody></table>
+            ${st.ghostCount>100?`<div style="font-size:11px;color:var(--muted);margin-top:6px">معروض أول 100 من ${st.ghostCount}</div>`:''}`;
+        }
+      }
+    }catch(e){}
+  };
+  tick();
+  _ghPoll = setInterval(tick, 4000);
+}
+async function ghArchive(){
+  const st = await apiFetch('/api/catalog/ghosts/status', 'GET').catch(()=>null);
+  const n = (st && st.ghostCount) || 0;
+  if(!confirm(`🗄️ هيأرشف ${n} صنف شبح — هيختفوا من Stars ومن كل القوائم (مش بيتمسحوا من الداتابيز).\n\nراجعت القايمة؟`)) return;
+  const typed = prompt('اكتب ARCHIVE للتأكيد:');
+  if(typed !== 'ARCHIVE'){ toast('اتلغى'); return; }
+  const m = $('gh-msg'); if(m) m.textContent = '⏳ بيأرشف...';
+  try{
+    const r = await apiFetch('/api/catalog/ghosts/archive', 'POST', { confirm: 'ARCHIVE' });
+    if(!r || r.error){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(String(r&&r.error||'فشل'))}</span>`; return; }
+    if(m) m.innerHTML = `<span style="color:#16a34a">✅ اتأرشف ${r.archived} — زامن جهاز Stars دلوقتي، والتكرار في السلة هيختفي</span>`;
+    $('gh-archive-btn').disabled = true; const box=$('gh-list'); if(box) box.innerHTML='';
+  }catch(e){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; }
+}
 
 // 🆕 v491: بناء جدول باركودات الطباعة
 let _bcPoll = null;
