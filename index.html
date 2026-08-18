@@ -1,6 +1,35 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v497 — 🛵 نسبة طلبات قابلة للتغيير (2026-08-18)
+  ───────────────────────────────────────────────────────────
+  🆕 v497: خانة "نسبة طلبات" في صفحة طلبات — نسبة واحدة بتتحكم في شيت
+    التحديث وفي أسعار وضع طلبات على الكاشير مع بعض. معاينة حية قبل الحفظ
+    (عيّنة أسعار + عدد المتأثرين + عدد المثبّتين اللي مش هيتأثروا) وتأكيد
+    قبل التطبيق. عمود "÷0.85" في الجدول بقى "+ن%" بيتغيّر مع النسبة.
+    الاستثناءات = عمود "سعر مثبّت" زي ما هو. backend v437 · Stars v113.
+
+  OrderPro v496 — 🔍 عرض أخطاء مزامنة الأصناف (2026-08-15)
+  ═══════════════════════════════════════════════════════════════════
+  🔧 v496: زرار "مزامنة الأصناف دلوقتي" بقى يعرض أسباب الفشل (أول 10
+     أخطاء بالاسم والـ SKU ونص خطأ Zoho) — كانت بترجع من السيرفر
+     والشاشة بتتجاهلها. للـ 449 الفاشلين.
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v495 — 🗺️ بناء خريطة الأصناف بالجملة (2026-08-15)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v495: زرار "بناء الخريطة من Zoho" في صفحة الربط — بعد رفع xlsx:
+     ~35 نداء بدل 6,443، مطابقة SKU ثم الاسم الفريد، مع تشخيص أصناف
+     Zoho اللي SKU بتاعها فاضي. backend v436.
+
+  ═══════════════════════════════════════════════════════════════════
+  OrderPro v494 — 🔬 فحص كود + صحة Webhooks (2026-08-15)
+  ═══════════════════════════════════════════════════════════════════
+  🆕 v494: كارت "فحص كود" — السلسلة كاملة لأي SKU/باركود/اسم: Shopify
+     لايف / الكتالوج / جدول الطباعة / الإضافية / واللي الطباعة هتطلعه.
+     + زرار حالة الـ Webhooks (المسجل + آخر استقبال فعلي). backend v434.
+
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v493 — 🧹 منضّف الأشباح (2026-08-15)
   ═══════════════════════════════════════════════════════════════════
   🆕 v493: كارت "الأصناف الشبح" في صفحة فحص SKU — فحص بيقارن الكتالوج
@@ -1448,6 +1477,32 @@ tr:hover td{background:#fafbff}
         <div id="tal-report" style="margin-top:10px;font-size:13px"></div>
       </div>
     </div>
+
+    <!-- 🆕 v497: نسبة طلبات العامة -->
+    <div class="card" style="margin-bottom:14px;border:2px solid #FF5A00">
+      <div style="padding:14px">
+        <div style="font-weight:800;margin-bottom:6px">🛵 نسبة طلبات</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+          النسبة دي بتتحكم في <b>شيت التحديث</b> و<b>أسعار وضع طلبات على الكاشير</b> مع بعض.
+          المعادلة: <span style="font-family:Roboto,sans-serif">ceil(سعر الموقع ÷ (1 − النسبة))</span> —
+          <b>قسمة مش ضرب</b>: نسبة 15% معناها ÷0.85 (زيادة 17.65% فعلياً)، وهي اللي بتخليك
+          تقبض سعر الموقع كامل بعد عمولة طلبات. 0% معناها السعر زي الموقع والعمولة عليك.
+          المنتج اللي ليه <b>سعر مثبّت</b> مابيتأثرش بالنسبة.
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:13px;font-weight:700">النسبة:</span>
+          <input type="number" id="tal-margin" min="0" max="90" step="0.5" value="15"
+                 oninput="talabatMarginPreview()"
+                 style="width:90px;padding:8px;border:1px solid var(--border);border-radius:8px;text-align:center;font-family:Roboto,sans-serif;font-weight:800;font-size:15px">
+          <span style="font-size:15px;font-weight:800">%</span>
+          <button class="btn" id="tal-margin-save" onclick="talabatMarginSave()" style="background:#FF5A00;color:#fff" disabled>💾 حفظ النسبة</button>
+          <button class="btn btn-ghost" onclick="talabatMarginReset()">↩️ رجّع الحالية</button>
+          <span id="tal-margin-cur" style="font-size:12px;color:var(--muted);margin-inline-start:auto"></span>
+        </div>
+        <div id="tal-margin-preview" style="margin-top:12px;font-size:13px"></div>
+      </div>
+    </div>
+
     <div class="card" style="margin-bottom:14px">
       <div style="padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
         <span style="font-weight:800">📋 المنتجات المربوطة</span>
@@ -3933,6 +3988,7 @@ tr:hover td{background:#fafbff}
       <button class="btn btn-sm" id="zh-del-btn" onclick="zhDeleteAllItems()" style="background:#991b1b;color:#fff">🗑️ مسح كل أصناف Zoho</button>
       <button class="btn btn-sm" onclick="zhResetCache()" style="background:#4b5563;color:#fff">🔄 تصفير الكاش (بعد تغيير Organization)</button>
       <button class="btn btn-sm" onclick="zhResetInvoices()" style="background:#b45309;color:#fff">🔁 إعادة فوترة من الصفر</button>
+      <button class="btn btn-sm" id="zm-btn" onclick="zmBuild()" style="background:#0e7490;color:#fff">🗺️ بناء الخريطة من Zoho (بعد رفع الإكسل)</button>
       <span id="zh-msg" style="font-size:12px"></span>
     </div>
   </div>
@@ -4125,6 +4181,20 @@ tr:hover td{background:#fafbff}
         <button class="btn btn-sm" id="bc-rebuild-btn" onclick="bcRebuild()" style="background:#1d4ed8;color:#fff">🔄 ابني الجدول من Shopify</button>
         <span id="bc-msg" style="font-size:12px"></span>
       </div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px;border:1px solid #a7f3d0">
+    <div style="padding:12px 14px">
+      <div style="font-weight:800">🔬 فحص كود — فين الحلقة المقطوعة؟</div>
+      <div style="font-size:12px;color:var(--muted);margin:4px 0 10px">
+        حط SKU أو باركود أو اسم منتج — بيوريك السلسلة كاملة: Shopify لايف ← الكتالوج المحلي ← جدول الطباعة ← واللي الطباعة هتطلعه فعلاً. + حالة الـ webhooks.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="cp-q" class="form-input" placeholder="SKU / باركود / اسم" style="width:260px;direction:ltr" onkeydown="if(event.key==='Enter')cpProbe()">
+        <button class="btn btn-sm" onclick="cpProbe()" style="background:#059669;color:#fff">🔬 افحص</button>
+        <button class="btn btn-sm" onclick="cpWebhooks()" style="background:#4b5563;color:#fff">📡 حالة الـ Webhooks</button>
+      </div>
+      <div id="cp-result" style="margin-top:10px;font-size:12.5px"></div>
     </div>
   </div>
   <div class="card" style="margin-bottom:14px;border:1px solid #ddd6fe">
@@ -35966,7 +36036,89 @@ function talOppExcel(){
 
 // 🆕 v418: طلبات (Talabat) — ربط + توليد شيت التحديث
 let _talLinks = [];
+// 🆕 v497: نسبة طلبات العامة — تحميل / معاينة حية / حفظ
+let _talMarginCur = 15, _talMarginTimer = null;
+
+function _talMarginBtnState(){
+  const inp = $('tal-margin'); const btn = $('tal-margin-save');
+  if(!inp || !btn) return;
+  const v = Number(inp.value);
+  const valid = isFinite(v) && v >= 0 && v <= 90;
+  btn.disabled = !valid || v === _talMarginCur;
+}
+async function talabatLoadMargin(){
+  try{
+    const r = await apiFetch('/api/talabat/margin','GET');
+    if(r && r.margin_pct != null){
+      _talMarginCur = Number(r.margin_pct);
+      if($('tal-margin')) $('tal-margin').value = _talMarginCur;
+      if($('tal-margin-cur')) $('tal-margin-cur').textContent = `الحالية: ${_talMarginCur}% · القسمة على ${(1-_talMarginCur/100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}`;
+    }
+  }catch(e){ /* الصفحة تشتغل عادي حتى لو الإعداد مش متاح */ }
+  _talMarginBtnState();
+  if($('tal-margin-preview')) $('tal-margin-preview').innerHTML = '';
+}
+function talabatMarginReset(){
+  if($('tal-margin')) $('tal-margin').value = _talMarginCur;
+  if($('tal-margin-preview')) $('tal-margin-preview').innerHTML = '';
+  _talMarginBtnState();
+}
+function talabatMarginPreview(){
+  _talMarginBtnState();
+  clearTimeout(_talMarginTimer);
+  const box = $('tal-margin-preview'); if(!box) return;
+  const v = Number($('tal-margin').value);
+  if(!isFinite(v) || v < 0 || v > 90){ box.innerHTML = '<span style="color:var(--danger)">النسبة لازم تكون بين 0 و 90</span>'; return; }
+  if(v === _talMarginCur){ box.innerHTML = ''; return; }
+  box.innerHTML = '<span style="color:var(--muted)">⏳ بيحسب المعاينة...</span>';
+  _talMarginTimer = setTimeout(async()=>{
+    try{
+      const r = await apiFetch(`/api/talabat/margin-preview?pct=${encodeURIComponent(v)}`,'GET');
+      if(!r || r.error){ box.innerHTML = `<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
+      const up = (r.sample||[]).filter(s=>s.new_price>s.old_price).length;
+      const dn = (r.sample||[]).filter(s=>s.new_price<s.old_price).length;
+      box.innerHTML = `
+        <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:10px 12px">
+          <div style="font-weight:800;margin-bottom:8px">
+            معاينة ${r.current_pct}% ← ${r.pct}% ·
+            <span style="color:#b45309">${r.affected.toLocaleString()} منتج هيتغيّر</span>
+            ${r.pinned ? ` · <span style="color:var(--muted)">${r.pinned.toLocaleString()} سعر مثبّت مش هيتأثر</span>` : ''}
+          </div>
+          <table style="width:100%;font-size:12px">
+            <thead><tr style="color:var(--muted)">
+              <th style="text-align:right">المنتج</th><th>الموقع</th><th>دلوقتي</th><th>هيبقى</th>
+            </tr></thead>
+            <tbody>${(r.sample||[]).map(s=>`<tr>
+              <td style="padding:2px 0">${escapeHtml(s.name)}</td>
+              <td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted)">${s.web_price.toLocaleString()}</td>
+              <td style="text-align:center;font-family:Roboto,sans-serif">${s.old_price.toLocaleString()}</td>
+              <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:${s.new_price>s.old_price?'#16a34a':(s.new_price<s.old_price?'#dc2626':'inherit')}">${s.new_price.toLocaleString()}</td>
+            </tr>`).join('')}</tbody>
+          </table>
+          <div style="margin-top:8px;font-size:11px;color:var(--muted)">
+            ${dn?'⬇️ الأسعار نازلة — ':''}${up?'⬆️ الأسعار طالعة — ':''}دي عيّنة من أول ${(r.sample||[]).length} منتج، والتغيير هيطبّق على الكل.
+          </div>
+        </div>`;
+    }catch(e){ box.innerHTML = `<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+  }, 400);
+}
+async function talabatMarginSave(){
+  const v = Number($('tal-margin').value);
+  if(!isFinite(v) || v < 0 || v > 90){ toast('❌ النسبة لازم تكون بين 0 و 90'); return; }
+  if(!confirm(`تغيّر نسبة طلبات من ${_talMarginCur}% لـ ${v}%؟\n\nده هيغيّر أسعار كل المنتجات غير المثبّتة في:\n• شيت التحديث اللي هتولّده\n• وضع طلبات على الكاشير\n\nالكاشير هياخد الأسعار الجديدة أول ما يفعّل وضع طلبات.`)) return;
+  try{
+    const r = await apiFetch('/api/talabat/margin','POST',{ margin_pct: v });
+    if(!r || r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    _talMarginCur = Number(r.margin_pct);
+    toast(`✅ النسبة بقت ${_talMarginCur}%`);
+    if($('tal-margin-preview')) $('tal-margin-preview').innerHTML = '';
+    await talabatLoadMargin();
+    await talabatLoadLinks();     // الجدول يتحدّث بالأسعار الجديدة
+  }catch(e){ toast('❌ '+e.message); }
+}
+
 async function loadTalabat(){
+  await talabatLoadMargin();
   await talabatLoadLinks();
   // 🆕 v442: حمّل عدّاد "محتاج تحويل" مع فتح الصفحة عشان البادچ ينبّه من غير ما تفتح التاب
   try{
@@ -35978,6 +36130,7 @@ async function talabatLoadLinks(){
   try{
     const r = await apiFetch('/api/talabat/links','GET');
     _talLinks = (r && r.links) || [];
+    if(r && r.margin_pct != null) _talMarginCur = Number(r.margin_pct);  // 🆕 v497: عمود الجدول يطابق النسبة الفعلية
     if(_talLinks.length && $('tal-export')) $('tal-export').style.display='inline-flex';
     talabatRender();
   }catch(e){ if($('tal-list')) $('tal-list').innerHTML=`<div style="padding:16px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`; }
@@ -36019,7 +36172,7 @@ function talabatRender(){
   if($('tal-summary')) $('tal-summary').textContent=`${_talLinks.length} منتج · مطابق ${matchedCount} · متاح (active) ${activeCount}`;
   if(!rows.length){ box.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted)">مفيش منتجات — ارفع شيت طلبات الأول</div>'; return; }
   box.innerHTML=`<table style="width:100%;font-size:13px"><thead><tr>
-    <th style="text-align:right">المنتج على طلبات</th><th style="text-align:right">منتجك على الموقع</th><th>sku طلبات</th><th>مخزون ترفيوم</th><th>سعر الموقع</th><th>÷0.85</th><th>سعر مثبّت</th><th>السعر النهائي</th><th>active</th>
+    <th style="text-align:right">المنتج على طلبات</th><th style="text-align:right">منتجك على الموقع</th><th>sku طلبات</th><th>مخزون ترفيوم</th><th>سعر الموقع</th><th>÷${(1-_talMarginCur/100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}<div style="font-weight:400;font-size:10px;color:var(--muted)">نسبة ${_talMarginCur}%</div></th><th>سعر مثبّت</th><th>السعر النهائي</th><th>active</th>
     </tr></thead><tbody>${rows.slice(0,800).map(l=>`<tr style="${l.matched?'':'background:#fef2f2'}">
       <td style="font-weight:600">${escapeHtml(l.talabat_name||'—')}</td>
       <td>${l.matched
@@ -43948,7 +44101,14 @@ async function zhSyncItems(){
   try{
     const r = await apiFetch('/api/zoho/sync-items', 'POST', { limit: 50 });
     if(!r || r.error){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(String(r&&r.error||'فشل'))}</span>`; return; }
-    if(m) m.innerHTML = `<span style="color:#16a34a">🆕 اتسجل ${r.created||0} · موجود أصلاً ${r.found||0}</span>${r.failed?` · <span style="color:#dc2626">❌ ${r.failed}</span>`:''}${r.rateLimited?' · ⏸️ حد Zoho':''} · فاضل ${(r.remaining||0).toLocaleString('en-US')}`;
+    let html = `<span style="color:#16a34a">🆕 اتسجل ${r.created||0} · موجود أصلاً ${r.found||0}</span>${r.failed?` · <span style="color:#dc2626">❌ ${r.failed}</span>`:''}${r.rateLimited?' · ⏸️ حد Zoho':''} · فاضل ${(r.remaining||0).toLocaleString('en-US')}`;
+    // 🆕 v496: اعرض أسباب الفشل — السيرفر بيرجعهم من زمان والشاشة كانت بتتجاهلهم
+    if((r.errors||[]).length){
+      html += `<div style="margin-top:6px;padding:8px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:11.5px;text-align:right">`
+        + r.errors.map(e => `<div style="margin:2px 0"><strong>${escapeHtml(e.title||e.sku||'؟')}</strong> <code style="direction:ltr">${escapeHtml(e.sku||'')}</code>: <span style="color:#b91c1c">${escapeHtml(e.error||'؟')}</span></div>`).join('')
+        + `</div>`;
+    }
+    if(m) m.innerHTML = html;
     zhStatus();
   }catch(e){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; }
 }
@@ -44064,6 +44224,47 @@ async function zhResetInvoices(){
     if(m) m.innerHTML = `<span style="color:#16a34a">✅ ${r.reset} أوردر اتصفّروا — السكانر هيعيد فوترة التلقائي، وما قبل القطع من الزرار</span>`;
     zhStatus();
   }catch(e){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; }
+}
+
+// 🆕 v495: بناء خريطة الأصناف بالجملة
+let _zmPoll = null;
+async function zmBuild(){
+  const m = $('zh-msg');
+  try{
+    const r = await apiFetch('/api/zoho/build-item-map', 'POST', {});
+    if(!r || r.error){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(String(r&&r.error||'فشل'))}</span>`; return; }
+    zmWatch();
+  }catch(e){ if(m) m.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; }
+}
+function zmWatch(){
+  const btn = $('zm-btn');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ بيبني الخريطة...'; }
+  if(_zmPoll) clearInterval(_zmPoll);
+  const tick = async () => {
+    const m = $('zh-msg');
+    try{
+      const st = await apiFetch('/api/zoho/build-item-map-status', 'GET');
+      const j = (st && st.job) || {};
+      if(j.running){
+        if(m) m.innerHTML = `🗺️ صفحة ${j.pages||0} · Zoho: <strong>${(j.zohoTotal||0).toLocaleString('en-US')}</strong> صنف · اتربط: <strong style="color:#16a34a">${((j.mappedBySku||0)+(j.mappedByName||0)).toLocaleString('en-US')}</strong>`;
+      } else {
+        clearInterval(_zmPoll); _zmPoll = null;
+        if(btn){ btn.disabled = false; btn.textContent = '🗺️ بناء الخريطة من Zoho (بعد رفع الإكسل)'; }
+        if(m){
+          if(j.lastError) m.innerHTML = `<span style="color:#dc2626">⛔ ${escapeHtml(j.lastError)}</span>`;
+          else if(j.finishedAt){
+            const mapped = (j.mappedBySku||0)+(j.mappedByName||0);
+            let html = `<span style="color:#16a34a">✅ Zoho فيه ${(j.zohoTotal||0).toLocaleString('en-US')} صنف · اتربط ${mapped.toLocaleString('en-US')} (بالـ SKU: ${(j.mappedBySku||0).toLocaleString('en-US')} · بالاسم: ${(j.mappedByName||0).toLocaleString('en-US')}) · بلا مطابقة: ${(j.unmatched||0).toLocaleString('en-US')}</span>`;
+            if(j.emptySku > 0) html += `<br><span style="color:#dc2626">⚠️ ${(j.emptySku||0).toLocaleString('en-US')} صنف في Zoho الـ SKU بتاعهم <strong>فاضي</strong> — الاستيراد ماربطش عمود SKU. اتربطوا بالاسم مؤقتاً، بس يفضّل تصليح الاستيراد.</span>`;
+            m.innerHTML = html;
+          }
+        }
+        zhStatus();
+      }
+    }catch(e){}
+  };
+  tick();
+  _zmPoll = setInterval(tick, 4000);
 }
 
 async function zhStatus(){
@@ -44507,6 +44708,48 @@ async function ulCheckAlert(){
 }
 setTimeout(ulCheckAlert, 6000);
 setInterval(ulCheckAlert, 10 * 60 * 1000);
+
+// 🆕 v494: فحص كود + حالة webhooks
+async function cpProbe(){
+  const q = (($('cp-q')||{}).value || '').trim();
+  const box = $('cp-result');
+  if(!q){ toast('اكتب كود أو اسم'); return; }
+  if(box) box.innerHTML = '⏳ بيفحص السلسلة...';
+  try{
+    const r = await apiFetch('/api/catalog/code-probe?q=' + encodeURIComponent(q), 'GET');
+    if(!r || r.error){ if(box) box.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(String(r&&r.error||'فشل'))}</span>`; return; }
+    const codeChip = c => `<code style="background:var(--bg);padding:1px 6px;border-radius:5px;direction:ltr;display:inline-block">${escapeHtml(c||'—')}</code>`;
+    let html = '';
+    html += `<div style="margin-bottom:8px"><strong>1️⃣ Shopify لايف:</strong> ` +
+      (r.shopify_live === null ? '<span style="color:#d97706">مفيش منتج متطابق في الكتالوج نجيب بيه</span>'
+       : r.shopify_live_error ? `<span style="color:#dc2626">${escapeHtml(r.shopify_live_error)}</span>`
+       : (r.shopify_live||[]).map(v => `<div style="margin:3px 0">variant ${codeChip(v.variant_id)} · SKU ${codeChip(v.sku)} · Barcode ${codeChip(v.barcode)}</div>`).join('')) + `</div>`;
+    html += `<div style="margin-bottom:8px"><strong>2️⃣ الكتالوج المحلي:</strong> ` +
+      ((r.local_catalog||[]).length ? r.local_catalog.map(c => `<div style="margin:3px 0">${escapeHtml(c.product_title)}${c.archived?' <span style="color:#dc2626">(مؤرشف)</span>':''} · SKU ${codeChip(c.sku)} · Barcode ${codeChip(c.barcode)}</div>`).join('') : '<span style="color:#dc2626">مش موجود!</span>') + `</div>`;
+    html += `<div style="margin-bottom:8px"><strong>3️⃣ جدول الطباعة:</strong> ` +
+      ((r.print_table||[]).length ? r.print_table.map(t => `<div style="margin:3px 0">SKU ${codeChip(t.sku)} → ${codeChip(t.barcodes)} <span style="color:var(--muted);font-size:11px">(${t.updated_at?new Date(t.updated_at).toLocaleString('ar-EG'):'؟'})</span></div>`).join('') : '<span style="color:#dc2626">مش في الجدول!</span>') + `</div>`;
+    if((r.extra_barcodes||[]).length)
+      html += `<div style="margin-bottom:8px"><strong>➕ أكواد إضافية:</strong> ${r.extra_barcodes.map(x=>codeChip(x.barcode)).join(' ')}</div>`;
+    html += `<div style="padding:8px;background:var(--bg);border-radius:8px"><strong>🖨️ الطباعة هتطلع:</strong> ${codeChip(r.print_would_show||'؟')}</div>`;
+    if(box) box.innerHTML = html;
+  }catch(e){ if(box) box.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; }
+}
+async function cpWebhooks(){
+  const box = $('cp-result');
+  if(box) box.innerHTML = '⏳...';
+  try{
+    const r = await apiFetch('/api/webhooks/health', 'GET');
+    if(!r || r.error){ if(box) box.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(String(r&&r.error||'فشل'))}</span>`; return; }
+    let html = `<div style="margin-bottom:8px"><strong>📡 المسجل عند Shopify:</strong></div>`;
+    if(r.registered_error) html += `<span style="color:#dc2626">${escapeHtml(r.registered_error)}</span>`;
+    else if(!(r.registered||[]).length) html += '<span style="color:#dc2626">مفيش webhooks مسجلة خالص!</span>';
+    else html += `<table style="width:100%;font-size:12px;border-collapse:collapse">${r.registered.map(w=>`<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px;font-weight:700">${escapeHtml(w.topic)}</td><td style="padding:4px;direction:ltr;font-size:11px;color:var(--muted)">${escapeHtml(w.address)}</td></tr>`).join('')}</table>`;
+    const hasProducts = (r.registered||[]).some(w=>String(w.topic).startsWith('products/'));
+    html += `<div style="margin-top:8px">${hasProducts?'✅ products/update مسجل':'<span style="color:#dc2626">❌ products/update مش مسجل — دي المشكلة</span>'}</div>`;
+    html += `<div style="margin-top:4px"><strong>آخر webhook منتجات وصل فعلاً:</strong> ${r.last_wh_products?escapeHtml(String(r.last_wh_products).slice(0,19)):'<span style="color:#dc2626">ولا مرة (من ساعة v434)</span>'}</div>`;
+    if(box) box.innerHTML = html;
+  }catch(e){ if(box) box.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; }
+}
 
 // 🆕 v493: منضّف الأشباح
 let _ghPoll = null;
