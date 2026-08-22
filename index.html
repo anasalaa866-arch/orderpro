@@ -1,6 +1,43 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v502 — 🔤 فيد جوجل التكميلي (2026-08-19)
+  ───────────────────────────────────────────────────────────
+  🆕 v502: كارت في صفحة الأكثر تكراراً — بناء/معاينة فيد الـ custom
+    labels لـ Merchant Center، مع صيغة id قابلة للتعديل و token للرابط.
+    بيوري عيّنة id عشان تقارنها بملف Merchant Center قبل الربط.
+    backend v441.
+
+  OrderPro v501 — 🏷️ كود الماركت بليس في فاتورة Zoho (2026-08-19)
+  ───────────────────────────────────────────────────────────
+  🆕 v501: من قائمة الحقول المخصصة تقدر تختار الحقل اللي كود الماركت
+    بليس يتكتب فيه ويتحفظ (الاسم التقني cf_... من Zoho نفسها، مفيش
+    تخمين). الكود بيتقري من note بتاع الأوردر ("الكود: X") فبيشتغل على
+    الأوردرات الموجودة كمان. backend v440.
+
+  OrderPro v500 — 🏷️ اكتشاف حقول Zoho المخصصة (2026-08-19)
+  ───────────────────────────────────────────────────────────
+  🆕 v500: زرار "الحقول المخصصة للفواتير" في صفحة ربط Zoho — بيجيب من
+    Zoho الاسم التقني (cf_...) لكل حقل مخصص ونوعه، عشان نعرف نكتب فيه
+    من الـ API. الحقول من نوع Number متعلّمة بتحذير لأنها بترفض أي قيمة
+    فيها حروف. backend v439.
+
+  OrderPro v499 — 🚑 وقف ضياع صور الشيكات + فحص (2026-08-18)
+  ───────────────────────────────────────────────────────────
+  🆕 v499: زرار "فحص صور الشيكات" في صفحة الشيكات — بيوضّح كام صورة
+    سليمة/فاضية/بايظة، وبيكشف الشيكات اللي اتكتب فيها '__lazy__' مكان
+    الصورة (حفظ قبل حماية v365 كان بيمسح الأصلية). مع زرار تصفية
+    للخانات الميتة. زرار 🖼️ بقى مايظهرش إلا لو الصورة تتعرض فعلاً
+    (backend v438). الصور الممسوحة مش بترجع — لازم ترفعها من جديد.
+
+  OrderPro v498 — 📇 فلتر مصدر عملاء الكاشير (2026-08-18)
+  ───────────────────────────────────────────────────────────
+  🆕 v498: صفحة "عملاء المحل (Export)" كانت بتفلتر cafelax_pos بس، فعملاء
+    وضع طلبات (cafelax_talabat) مكانوش بيظهروا خالص. ضفنا قايمة "المصدر"
+    (المحل بس / طلبات بس / الاتنين) — الافتراضي المحل بس زي ما كان.
+    مع عمود "المصدر" في الجدول والإكسل لما تختار غير المحل، وتنبيه إن
+    أرقام طلبات مش دايماً بتاعة الزبون. backend v437.
+
   OrderPro v497 — 🛵 نسبة طلبات قابلة للتغيير (2026-08-18)
   ───────────────────────────────────────────────────────────
   🆕 v497: خانة "نسبة طلبات" في صفحة طلبات — نسبة واحدة بتتحكم في شيت
@@ -1571,12 +1608,21 @@ tr:hover td{background:#fafbff}
             <input type="date" id="posc-from" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"></div>
           <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">إلى</label>
             <input type="date" id="posc-to" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"></div>
+          <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">المصدر</label>
+            <select id="posc-source" onchange="loadPosCustomers()" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
+              <option value="pos" selected>🏪 المحل بس</option>
+              <option value="talabat">🛵 طلبات بس</option>
+              <option value="all">الاتنين</option>
+            </select></div>
           <button class="btn btn-primary" onclick="loadPosCustomers()">🔍 عرض</button>
           <button class="btn btn-ghost btn-sm" onclick="posCustPreset('month')">الشهر ده</button>
           <button class="btn btn-ghost btn-sm" onclick="posCustPreset('lastmonth')">الشهر اللي فات</button>
           <button class="btn" id="posc-dl" onclick="downloadPosExcel()" style="background:#16a34a;color:#fff;display:none">⬇️ تنزيل Excel</button>
         </div>
-        <div style="margin-top:6px;font-size:11px;color:var(--muted)">عملاء اشتروا من كاشير المحل (POS) في الفترة · أرقام حقيقية بس (بدون الافتراضي) · مجمّعين بالتليفون.</div>
+        <div style="margin-top:6px;font-size:11px;color:var(--muted)">عملاء اشتروا من الكاشير في الفترة · أرقام حقيقية بس (بدون الافتراضي) · مجمّعين بالتليفون.</div>
+        <div id="posc-talabat-warn" style="display:none;margin-top:8px;padding:8px 12px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;font-size:12px;color:#9a3412">
+          ⚠️ أرقام طلبات: الرقم أحياناً بيكون بتاع مندوب طلبات مش الزبون، وصاحب العلاقة بالعميل هو طلبات. راجع قبل ما تبعت رسائل تسويقية.
+        </div>
       </div>
     </div>
     <div id="posc-result"></div>
@@ -2976,6 +3022,14 @@ tr:hover td{background:#fafbff}
       <div class="sc" style="background:var(--danger-light)"><div class="sc-icon">⚠️</div><div class="sc-label">متأخرة</div><div class="sc-val" style="color:var(--danger)" id="chk-overdue-val">0</div></div>
       <div class="sc green"><div class="sc-icon">✅</div><div class="sc-label">تم صرفها</div><div class="sc-val" id="chk-done-val">0</div></div>
     </div>
+    <!-- 🆕 v499: فحص صور الشيكات -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-body" style="padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="chkImgAudit()">🩺 فحص صور الشيكات</button>
+        <span style="font-size:11px;color:var(--muted)">بيقولك كل شيك صورته سليمة ولا فاضية ولا اتمسحت</span>
+      </div>
+      <div id="chk-img-audit" style="padding:0 14px 12px;font-size:13px"></div>
+    </div>
     <div class="card" style="margin-bottom:14px">
       <div class="card-body" style="padding:10px 14px">
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -3989,8 +4043,10 @@ tr:hover td{background:#fafbff}
       <button class="btn btn-sm" onclick="zhResetCache()" style="background:#4b5563;color:#fff">🔄 تصفير الكاش (بعد تغيير Organization)</button>
       <button class="btn btn-sm" onclick="zhResetInvoices()" style="background:#b45309;color:#fff">🔁 إعادة فوترة من الصفر</button>
       <button class="btn btn-sm" id="zm-btn" onclick="zmBuild()" style="background:#0e7490;color:#fff">🗺️ بناء الخريطة من Zoho (بعد رفع الإكسل)</button>
+      <button class="btn btn-sm" onclick="zhCustomFields()" style="background:#be185d;color:#fff">🏷️ الحقول المخصصة للفواتير</button>
       <span id="zh-msg" style="font-size:12px"></span>
     </div>
+    <div id="zh-cf-box" style="padding:0 14px 14px;font-size:13px"></div>
   </div>
   <div class="card" style="margin-bottom:14px;border:1px solid #fde68a">
     <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
@@ -4073,6 +4129,28 @@ tr:hover td{background:#fafbff}
 </div>
 
 <div class="page" id="page-top-products">
+  <!-- 🆕 v502: فيد جوجل التكميلي -->
+  <div class="card" style="margin-bottom:14px;border:2px solid #4285F4">
+    <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+      <div style="font-weight:800">🔤 فيد جوجل التكميلي (Custom Labels)</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px">
+        CSV بيتبني من الداتا بتاعتنا و Merchant Center بيسحبه بجدول — من غير app ولا اشتراك ولا تاجز زيادة على Shopify.
+        <b>label_0</b> شريحة الأداء · <b>label_1</b> شريحة الهامش · <b>label_2</b> حالة المخزون.
+        بيتحدّث <b>أسبوعياً</b> بالقصد (التحديث اليومي بيرجّع الحملة للـ learning ومابتستقرش).
+      </div>
+    </div>
+    <div style="padding:12px 14px">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <span style="font-size:12px;font-weight:700">صيغة الـ id:</span>
+        <input id="gf-idfmt" class="form-input" style="width:320px;font-family:Roboto,sans-serif" placeholder="shopify_EG_{product}_{variant}">
+        <span style="font-size:12px;font-weight:700">token:</span>
+        <input id="gf-token" class="form-input" style="width:180px;font-family:Roboto,sans-serif" placeholder="كلمة سر للرابط">
+        <button class="btn btn-sm btn-primary" onclick="gfSave()">💾 حفظ</button>
+        <button class="btn btn-sm" onclick="gfBuild()" style="background:#4285F4;color:#fff">🔨 ابنِ دلوقتي</button>
+      </div>
+      <div id="gf-box" style="font-size:13px"></div>
+    </div>
+  </div>
   <!-- 🔧 v488: الكارتين فوق جنب بعض -->
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px" id="autotag-grid">
   <div class="card" style="margin:0;border:1px solid #c7d2fe">
@@ -19110,7 +19188,7 @@ async function loadChks(){
       // الـ DB فاضي بس عندنا بيانات محلية — ارفعها للـ DB
       console.log('DB empty, syncing local data to DB...');
       apiFetch('/api/sync-checks','POST',{
-        books:chkBooks, checks:chkList, suppliers:chkSuppliers
+        books:chkBooks, checks:_chkSafeForSync(chkList), suppliers:chkSuppliers
       }).then(r => {
         if(r && r.ok){
           console.log(`✅ تم رفع ${r.books || 0} دفتر و ${r.checks || 0} شيك للـ DB`);
@@ -19149,7 +19227,7 @@ function saveChks(syncNow=true){
         let deleted_ids = [];
         try { deleted_ids = JSON.parse(localStorage.getItem('chk_deleted_ids') || '[]'); } catch(e){}
         const r = await apiFetch('/api/sync-checks','POST',{
-          books:chkBooks, checks:chkList, suppliers:chkSuppliers,
+          books:chkBooks, checks:_chkSafeForSync(chkList), suppliers:chkSuppliers,
           deleted_ids
         });
         console.log('✅ Sync checks success:', r);
@@ -19175,6 +19253,153 @@ function chkGetBadge(c){
   if(chkIsOverdue(c))return '<span style="background:var(--danger-light);color:#991b1b;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">⚠️ متأخر</span>';
   return '<span style="background:var(--warn-light);color:#92400e;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">⏳ لم يُصرف</span>';
 }
+// 🆕 v499: فحص صور الشيكات — بدل ما تشغّل حاجة في الكونسول
+async function chkImgAudit(){
+  const box = $('chk-img-audit'); if(!box) return;
+  box.innerHTML = '<span style="color:var(--muted)">⏳ بيفحص...</span>';
+  try{
+    const r = await apiFetch('/api/checks/img-audit','GET');
+    if(!r || r.error){ box.innerHTML = `<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
+    const bad = (r.checks||[]).filter(x => !x.ok && x.img_len > 0);
+    const lazy = Number(r.lazy||0);
+    const heads = r.broken_heads || {};
+    box.innerHTML = `
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;font-weight:700">
+        <span>الإجمالي: ${r.total}</span>
+        <span style="color:#16a34a">سليمة: ${r.ok}</span>
+        <span style="color:var(--muted)">فاضية: ${r.empty}</span>
+        <span style="color:#dc2626">بايظة: ${r.broken}</span>
+      </div>
+      ${lazy ? `<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:10px 12px;margin-bottom:10px">
+          <div style="font-weight:800;color:#991b1b;margin-bottom:4px">⚠️ ${lazy} شيك صورته اتمسحت</div>
+          <div style="font-size:12px;color:#7f1d1d">
+            اتكتب النص <code>__lazy__</code> مكان الصورة في حفظ قديم (قبل حماية v365).
+            الصور دي <b>مش هترجع</b> — لازم ترفعها من جديد. زرار 🖼️ بقى مخفي عنهم عشان مايكدبش عليك.
+          </div>
+          <button class="btn btn-sm" onclick="chkCleanDeadImg()" style="margin-top:8px;background:#dc2626;color:#fff">🧹 صفّي الخانات الميتة (${lazy})</button>
+        </div>` : ''}
+      ${Object.keys(heads).length ? `<div style="font-size:11px;color:var(--muted);margin-bottom:8px">أول حروف البواقي: ${Object.entries(heads).map(([k,v])=>`<code>${escapeHtml(k)}</code> ×${v}`).join(' · ')}</div>` : ''}
+      ${bad.length ? `<div style="max-height:240px;overflow:auto;border:1px solid var(--border);border-radius:8px">
+        <table style="width:100%;font-size:12px">
+          <thead><tr style="color:var(--muted)"><th style="text-align:right">رقم</th><th style="text-align:right">المستفيد</th><th>الحالة</th></tr></thead>
+          <tbody>${bad.map(x=>`<tr>
+            <td style="padding:3px 8px;font-family:Roboto,sans-serif">${escapeHtml(String(x.num||''))}</td>
+            <td style="padding:3px 8px">${escapeHtml(x.payee||'')}</td>
+            <td style="padding:3px 8px;text-align:center;color:#dc2626">${escapeHtml(x.state||'')}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : '<div style="color:#16a34a;font-weight:700">✅ مفيش صور بايظة</div>'}`;
+  }catch(e){ box.innerHTML = `<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+async function chkCleanDeadImg(){
+  if(!confirm('هيصفّي خانة الصورة للشيكات اللي صورتها اتمسحت.\n\nالصور مش هترجع — ده بيخلي الشيك يبان "مفيش صورة" عشان تقدر ترفعها من جديد.\n\nتكمّل؟')) return;
+  try{
+    const r = await apiFetch('/api/checks/clean-dead-img','POST',{ confirm:'CLEAN' });
+    if(!r || r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    toast(`✅ اتصفّى ${r.cleaned} شيك`);
+    await chkImgAudit();
+    if(typeof loadChecks === 'function') loadChecks();
+  }catch(e){ toast('❌ '+e.message); }
+}
+
+// 🚑 v499: متبعتش placeholder الصورة للسيرفر أبداً.
+//   القايمة بترجّع img:'__lazy__' لكل شيك فيه صورة، ولو المزامنة بعتته
+//   السيرفر كان بيكتبه فوق الصورة الأصلية ويضيّعها (338 شيك اتضربوا كده).
+//   بنشيل أي قيمة مش data:/http قبل الإرسال — الصور الحقيقية بس بتعدّي.
+function _chkSafeForSync(list){
+  return (list||[]).map(c => {
+    const img = typeof c.img === 'string' ? c.img : '';
+    const real = img.startsWith('data:') || img.startsWith('http');
+    return real ? c : { ...c, img: '' };
+  });
+}
+// 🆕 v500: اعرض الحقول المخصصة للفواتير في Zoho باسمها التقني (cf_...)
+let _zhCodeField = '';
+async function zhSaveCodeField(){
+  const f = $('zh-code-field')?.value || '';
+  try{
+    const r = await apiFetch('/api/zoho/code-field','POST',{ field: f });
+    if(!r || r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    _zhCodeField = r.field || '';
+    toast(_zhCodeField ? '✅ الكود هيتكتب في '+_zhCodeField : '✅ اتوقف');
+  }catch(e){ toast('❌ '+e.message); }
+}
+async function zhCustomFields(){
+  const box = $('zh-cf-box'); if(!box) return;
+  box.innerHTML = '<span style="color:var(--muted)">⏳ بيجيب من Zoho...</span>';
+  try{
+    try{ const c = await apiFetch('/api/zoho/code-field','GET'); _zhCodeField = c?.field || ''; }catch(e){}
+    const r = await apiFetch('/api/zoho/invoice-custom-fields','GET');
+    if(!r || r.error){ box.innerHTML = `<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
+    const f = r.fields || [];
+    box.innerHTML = `
+      ${f.length ? `<table style="width:100%;font-size:12px;border:1px solid var(--border);border-radius:8px">
+        <thead><tr style="color:var(--muted)">
+          <th style="text-align:right;padding:6px">الاسم في الشاشة</th>
+          <th style="text-align:right">الاسم التقني (للـ API)</th>
+          <th>النوع</th></tr></thead>
+        <tbody>${f.map(x=>`<tr>
+          <td style="padding:4px 6px">${escapeHtml(x.label||'')}</td>
+          <td style="padding:4px 6px"><code style="font-family:Roboto,sans-serif;font-weight:800">${escapeHtml(x.api_name||'—')}</code></td>
+          <td style="padding:4px 6px;text-align:center;color:${/number|decimal/i.test(x.data_type||'')?'#dc2626':'var(--muted)'}">${escapeHtml(x.data_type||'')}${/number|decimal/i.test(x.data_type||'')?' ⚠️':''}</td>
+        </tr>`).join('')}</tbody></table>
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700">كود الماركت بليس يتكتب في:</span>
+          <select id="zh-code-field" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif">
+            <option value="">— متوقف —</option>
+            ${f.filter(x=>x.api_name).map(x=>`<option value="${escapeHtml(x.api_name)}" ${x.api_name===_zhCodeField?'selected':''}>${escapeHtml(x.label||x.api_name)} (${escapeHtml(x.data_type||'')})</option>`).join('')}
+          </select>
+          <button class="btn btn-sm" onclick="zhSaveCodeField()" style="background:#be185d;color:#fff">💾 حفظ</button>
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:var(--muted)">المصدر: ${escapeHtml(r.source||'—')} · الحقول من نوع Number بترفض أي قيمة فيها حروف.</div>`
+      : '<div style="color:var(--muted)">مفيش حقول مخصصة اتلاقت</div>'}
+      ${(r.warnings||[]).length ? `<div style="margin-top:8px;font-size:11px;color:#b45309">${(r.warnings||[]).map(w=>escapeHtml(w)).join('<br>')}</div>`:''}`;
+  }catch(e){ box.innerHTML = `<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+
+// 🆕 v502: فيد جوجل التكميلي
+async function gfLoad(){
+  const box=$('gf-box'); if(!box) return;
+  try{
+    const r=await apiFetch('/api/google-feed/status','GET');
+    if($('gf-idfmt')) $('gf-idfmt').value = r.id_format||'';
+    const url = location.origin.includes('github') ? '(رابط Railway بتاعك)' : '';
+    box.innerHTML = `
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-weight:700;margin-bottom:8px">
+        <span>صفوف: ${r.rows||0}</span>
+        <span style="color:var(--muted)">آخر بناء: ${r.built_at? new Date(r.built_at).toLocaleString('ar-EG'):'—'}</span>
+        <span style="color:${r.has_token?'#16a34a':'#dc2626'}">${r.has_token?'✅ token متظبط':'⚠️ محطش token — الرابط مقفول'}</span>
+      </div>
+      ${r.preview?`<pre style="background:var(--bg);padding:8px;border-radius:8px;overflow:auto;font-size:11px;font-family:Roboto,monospace;direction:ltr;text-align:left">${escapeHtml(r.preview)}</pre>`:''}`;
+  }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+async function gfSave(){
+  try{
+    const r=await apiFetch('/api/google-feed/settings','POST',{
+      google_feed_id_format: $('gf-idfmt')?.value||'',
+      ...($('gf-token')?.value ? { google_feed_token: $('gf-token').value } : {})
+    });
+    if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    toast('✅ اتحفظ'); if($('gf-token')) $('gf-token').value='';
+    gfLoad();
+  }catch(e){ toast('❌ '+e.message); }
+}
+async function gfBuild(){
+  const box=$('gf-box'); if(box) box.innerHTML='<span style="color:var(--muted)">⏳ بيبني...</span>';
+  try{
+    const r=await apiFetch('/api/google-feed/build','POST',{});
+    if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); gfLoad(); return; }
+    toast(`✅ اتبنى ${r.rows} صف`);
+    if(box) box.innerHTML = `
+      <div style="margin-bottom:8px;font-weight:700">اتبنى ${r.rows} صف · ${Object.entries(r.counts||{}).map(([k,v])=>`${escapeHtml(k)}: ${v}`).join(' · ')}</div>
+      <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px">
+        ⚠️ <b>قارن الـ id ده باللي في Merchant Center قبل ما تربط:</b>
+        <code style="font-family:Roboto,monospace;direction:ltr;display:inline-block">${escapeHtml(r.idSample||'—')}</code><br>
+        نزّل ملف المنتجات من Merchant Center وشوف الصيغة الفعلية. لو مختلفة، عدّل صيغة الـ id فوق وابنِ تاني — من غير الربط ده الفيد كله هيتجاهل.
+      </div>
+      <pre style="background:var(--bg);padding:8px;border-radius:8px;overflow:auto;font-size:11px;font-family:Roboto,monospace;direction:ltr;text-align:left">${escapeHtml(r.preview||'')}</pre>`;
+  }catch(e){ toast('❌ '+e.message); }
+}
+
 function chkSetFilter(f,btn){
   chkStatusFilter=f;
   document.querySelectorAll('#chk-status-chips .chip').forEach(c=>c.classList.remove('on'));
@@ -36282,15 +36507,19 @@ async function loadPosCustomers(){
   box.innerHTML=`<div class="card"><div style="padding:24px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div></div>`;
   $('posc-dl').style.display='none'; _poscData=[];
   try{
-    const r=await apiFetch(`/api/customers/pos-export?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,'GET');
+    const src=$('posc-source')?.value||'pos';
+    if($('posc-talabat-warn')) $('posc-talabat-warn').style.display = (src==='pos') ? 'none' : 'block';
+    const r=await apiFetch(`/api/customers/pos-export?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&source=${encodeURIComponent(src)}`,'GET');
     if(!r || r.error){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</div></div>`; return; }
     _poscData = r.customers || [];
-    if(!_poscData.length){ box.innerHTML=`<div class="card"><div style="padding:22px;text-align:center;color:var(--muted)">مفيش عملاء POS بأرقام في الفترة دي</div></div>`; return; }
+    if(!_poscData.length){ box.innerHTML=`<div class="card"><div style="padding:22px;text-align:center;color:var(--muted)">مفيش عملاء بأرقام في الفترة دي${src==='pos'?' — جرّب تغيّر المصدر':''}</div></div>`; return; }
     $('posc-dl').style.display='inline-flex';
+    const showSrc = src !== 'pos';   // عمود المصدر يبان بس لما يبقى فيه أكتر من مصدر
     const rows=_poscData.slice(0,500).map((c,i)=>`<tr>
       <td style="text-align:center;color:var(--muted)">${i+1}</td>
       <td>${escapeHtml(c.name||'—')}</td>
       <td style="font-family:Roboto,sans-serif;font-weight:700">${escapeHtml(c.phone)}</td>
+      ${showSrc?`<td style="text-align:center;font-size:11px;color:${c.source==='طلبات'?'#FF5A00':(c.source==='المحل'?'var(--muted)':'#7c3aed')};font-weight:700">${escapeHtml(c.source||'')}</td>`:''}
       <td style="text-align:center">${c.orders_count}</td>
       <td style="text-align:left;font-family:Roboto,sans-serif">${_poscMoney(c.total_amount)} ج</td>
       <td style="font-size:11px;color:var(--muted)">${c.last_order_at?new Date(c.last_order_at).toLocaleDateString('ar-EG'):''}</td>
@@ -36298,26 +36527,34 @@ async function loadPosCustomers(){
     box.innerHTML=`<div class="card">
       <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-weight:800">👥 ${_poscData.length} عميل${_poscData.length>500?' (بيظهر أول 500 — التنزيل بيشمل الكل)':''}</div>
       <div style="padding:6px 14px;overflow-x:auto"><table style="width:100%;font-size:13px">
-        <thead><tr><th>#</th><th style="text-align:right">الاسم</th><th style="text-align:right">التليفون</th><th>طلبات</th><th style="text-align:left">إجمالي</th><th>آخر طلب</th></tr></thead>
+        <thead><tr><th>#</th><th style="text-align:right">الاسم</th><th style="text-align:right">التليفون</th>${showSrc?'<th>المصدر</th>':''}<th>طلبات</th><th style="text-align:left">إجمالي</th><th>آخر طلب</th></tr></thead>
         <tbody>${rows}</tbody></table></div></div>`;
   }catch(e){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`; }
 }
 function downloadPosExcel(){
   if(!_poscData.length){ toast('مفيش بيانات'); return; }
   const from=$('posc-from')?.value, to=$('posc-to')?.value;
-  const data = _poscData.map((c,i)=>({
-    '#': i+1,
-    'الاسم': c.name||'',
-    'رقم التليفون': String(c.phone||''),
-    'عدد الطلبات': c.orders_count,
-    'إجمالي المبلغ': Number(c.total_amount)||0,
-    'آخر طلب': c.last_order_at ? new Date(c.last_order_at).toLocaleDateString('ar-EG') : ''
-  }));
+  const src=$('posc-source')?.value||'pos';
+  const srcLbl={pos:'المحل',talabat:'طلبات',all:'المحل_وطلبات'}[src]||'المحل';
+  const data = _poscData.map((c,i)=>{
+    const row = {
+      '#': i+1,
+      'الاسم': c.name||'',
+      'رقم التليفون': String(c.phone||''),
+    };
+    if(src!=='pos') row['المصدر'] = c.source||'';   // عشان تعرف كل رقم جاي منين
+    row['عدد الطلبات'] = c.orders_count;
+    row['إجمالي المبلغ'] = Number(c.total_amount)||0;
+    row['آخر طلب'] = c.last_order_at ? new Date(c.last_order_at).toLocaleDateString('ar-EG') : '';
+    return row;
+  });
   const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [{wch:5},{wch:26},{wch:16},{wch:12},{wch:14},{wch:14}];
+  ws['!cols'] = src!=='pos'
+    ? [{wch:5},{wch:26},{wch:16},{wch:14},{wch:12},{wch:14},{wch:14}]
+    : [{wch:5},{wch:26},{wch:16},{wch:12},{wch:14},{wch:14}];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'عملاء المحل');
-  XLSX.writeFile(wb, `عملاء_المحل_${from}_${to}.xlsx`);
+  XLSX.utils.book_append_sheet(wb, ws, 'عملاء الكاشير');
+  XLSX.writeFile(wb, `عملاء_${srcLbl}_${from}_${to}.xlsx`);
 }
 
 // 🆕 v405: داشبورد مبيعات حسب المصدر
@@ -42093,7 +42330,7 @@ function goPage(el,page){
   if(page==='sku-audit')skuAuditLoad(true);
   if(page==='zoho-sync'){zhLoadSettings();apiFetch('/api/zoho/delete-items-status','GET').then(st=>{if(st&&st.job&&st.job.running)zhDelWatch();}).catch(()=>{});}
   if(page==='profit'&&_gp===null){/* أول فتحة — سيبه يدوس احسب */}
-  if(page==='top-products'){tprepLoad();atLoad();rvLoad();}
+  if(page==='top-products'){tprepLoad();atLoad();rvLoad();gfLoad();}
   if(page==='unlinked-lines')ulLoad();
   if(page==='sku-audit')bcWatch();
   if(page==='bought-together')btLoad();
