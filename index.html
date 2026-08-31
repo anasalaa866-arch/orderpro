@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v504 — 📤 تصدير أوامر الشراء لـ Zoho (2026-08-27)
+  ───────────────────────────────────────────────────────────
+  🆕 v504: كارت "تصدير لـ Zoho" في صفحة أوامر الشراء — بيبعت الأوامر
+    المستوردة دفعات (20) بالـ item_id المضبوط، وبيعرض اتبعت/باقي/فشل
+    مع سبب كل فشل. backend v443.
+
   OrderPro v503 — 📥 استيراد أوامر الشراء من Zoho (2026-08-27)
   ───────────────────────────────────────────────────────────
   🆕 v503: زرار "استيراد من Zoho" في صفحة أوامر الشراء — بيقرا تصدير
@@ -5665,6 +5671,16 @@ tr:hover td{background:#fafbff}
     </div>
   </div>
   <div id="po-imp-box" style="margin-bottom:14px"></div>
+  <!-- 🆕 v504: تصدير أوامر الشراء المستوردة لـ Zoho -->
+  <div class="card" id="po-zh-card" style="margin-bottom:14px;border:1px solid #0d9488;display:none">
+    <div style="padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span style="font-weight:800">🔗 تصدير لـ Zoho</span>
+      <span id="po-zh-stats" style="font-size:12px;color:var(--muted)"></span>
+      <button class="btn btn-sm" onclick="poZhPush()" style="background:#0d9488;color:#fff;margin-inline-start:auto">📤 ابعت دفعة (20)</button>
+      <button class="btn btn-ghost btn-sm" onclick="poZhStatus()">🔄 تحديث</button>
+    </div>
+    <div id="po-zh-box" style="padding:0 14px 12px;font-size:13px"></div>
+  </div>
   
   <!-- Status filters -->
   <div style="display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px">
@@ -19491,6 +19507,36 @@ async function poLinkSuppliers(){
     if(!r || r.error){ toast('❌ '+(r?.error||'فشل')); return; }
     toast(`✅ اتربط ${r.linked} أمر بموردهم الحقيقي`);
   }catch(e){ toast('❌ '+e.message); }
+}
+
+// 🆕 v504: تصدير أوامر الشراء لـ Zoho
+async function poZhStatus(){
+  const card=$('po-zh-card'), box=$('po-zh-box'); if(!card) return;
+  try{
+    const r = await apiFetch('/api/purchase-orders/zoho-status','GET');
+    const total = (r.pushed||0)+(r.failed||0)+(r.pending||0);
+    if(!total){ card.style.display='none'; return; }
+    card.style.display='block';
+    $('po-zh-stats').innerHTML = `<b style="color:#16a34a">اتبعت: ${r.pushed}</b> · باقي: ${r.pending}`
+      + (r.failed?` · <b style="color:#dc2626">فشل: ${r.failed}</b>`:'');
+    box.innerHTML = (r.errors||[]).length
+      ? `<div style="max-height:160px;overflow:auto;border:1px solid var(--border);border-radius:8px">
+         <table style="width:100%;font-size:11px"><tbody>${r.errors.map(e=>`<tr>
+           <td style="padding:3px 6px;font-family:Roboto,sans-serif;font-weight:700">${escapeHtml(e.po_number)}</td>
+           <td style="padding:3px 6px;color:#dc2626">${escapeHtml(e.zoho_po_error||'')}</td></tr>`).join('')}</tbody></table></div>`
+      : '';
+  }catch(e){ /* الصفحة تشتغل عادي */ }
+}
+async function poZhPush(){
+  const box=$('po-zh-box');
+  if(box) box.innerHTML='<span style="color:var(--muted)">⏳ بيبعت... (كل أمر بيستنى شوية عشان حد نداءات Zoho)</span>';
+  try{
+    const r = await apiFetch('/api/purchase-orders/zoho-push-batch','POST',{ limit:20 });
+    if(!r || r.error){ toast('❌ '+(r?.error||'فشل')); poZhStatus(); return; }
+    toast(`✅ اتبعت ${r.pushed}${r.failed?` · فشل ${r.failed}`:''}${r.remaining?` · باقي ${r.remaining}`:''}`);
+    if(r.stopped) toast('⏸️ '+r.stopped);
+    poZhStatus();
+  }catch(e){ toast('❌ '+e.message); poZhStatus(); }
 }
 
 function chkSetFilter(f,btn){
@@ -42490,7 +42536,7 @@ function goPage(el,page){
   if(page==='whatsapp') loadWhatsappPage();
   if(page==='audit-log') loadAuditLogPage();
   if(page==='statements') loadStatementsPage();
-  if(page==='purchase-orders'){
+  if(page==='purchase-orders'){poZhStatus();
     loadPurchaseOrdersPage();
     // 🆕 v252: لو الـ user جاي من "ذكاء الشراء"، افتح الـ modal تلقائي
     try {
