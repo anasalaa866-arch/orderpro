@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v505 — 📤 تصدير أوامر الشراء لـ Zoho (مورد موحّد) (2026-08-27)
+  ───────────────────────────────────────────────────────────
+  🆕 v505: خانة "المورد في Zoho" في كارت التصدير — تكتب فيها مورد واحد
+    فتروح كل الأوامر عليه (والتعديل في Zoho بعدين)، أو تسيبها فاضية
+    فتروح بأسماء الموردين الحقيقية. backend v444.
+
   OrderPro v504 — 📤 تصدير أوامر الشراء لـ Zoho (2026-08-27)
   ───────────────────────────────────────────────────────────
   🆕 v504: كارت "تصدير لـ Zoho" في صفحة أوامر الشراء — بيبعت الأوامر
@@ -5676,7 +5682,9 @@ tr:hover td{background:#fafbff}
     <div style="padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <span style="font-weight:800">🔗 تصدير لـ Zoho</span>
       <span id="po-zh-stats" style="font-size:12px;color:var(--muted)"></span>
-      <button class="btn btn-sm" onclick="poZhPush()" style="background:#0d9488;color:#fff;margin-inline-start:auto">📤 ابعت دفعة (20)</button>
+      <span style="font-size:12px;font-weight:700;margin-inline-start:auto">المورد في Zoho:</span>
+      <input id="po-zh-vendor" class="form-input" style="width:170px" value="مورد نقدي" placeholder="سيبها فاضية = الاسم الحقيقي">
+      <button class="btn btn-sm" onclick="poZhPush()" style="background:#0d9488;color:#fff">📤 ابعت دفعة (20)</button>
       <button class="btn btn-ghost btn-sm" onclick="poZhStatus()">🔄 تحديث</button>
     </div>
     <div id="po-zh-box" style="padding:0 14px 12px;font-size:13px"></div>
@@ -19529,9 +19537,14 @@ async function poZhStatus(){
 }
 async function poZhPush(){
   const box=$('po-zh-box');
+  const fv = $('po-zh-vendor')?.value.trim() || '';
+  if(!confirm(fv
+      ? `كل الأوامر هتروح Zoho على المورد "${fv}".\n\nاسم المورد الحقيقي هيتكتب في مرجع الأمر وملاحظاته عشان تعدّله في Zoho بعدين.\n\nتكمّل؟`
+      : 'الأوامر هتروح بأسماء الموردين الحقيقية — Zoho هيعمل الموردين دول لو مش موجودين.\n\nتكمّل؟')) return;
   if(box) box.innerHTML='<span style="color:var(--muted)">⏳ بيبعت... (كل أمر بيستنى شوية عشان حد نداءات Zoho)</span>';
   try{
-    const r = await apiFetch('/api/purchase-orders/zoho-push-batch','POST',{ limit:20 });
+    const r = await apiFetch('/api/purchase-orders/zoho-push-batch','POST',{
+      limit:20, forceVendor: $('po-zh-vendor')?.value || '' });
     if(!r || r.error){ toast('❌ '+(r?.error||'فشل')); poZhStatus(); return; }
     toast(`✅ اتبعت ${r.pushed}${r.failed?` · فشل ${r.failed}`:''}${r.remaining?` · باقي ${r.remaining}`:''}`);
     if(r.stopped) toast('⏸️ '+r.stopped);
