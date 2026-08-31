@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v503 — 📥 استيراد أوامر الشراء من Zoho (2026-08-27)
+  ───────────────────────────────────────────────────────────
+  🆕 v503: زرار "استيراد من Zoho" في صفحة أوامر الشراء — بيقرا تصدير
+    Zoho (بالبنود) ويعمل معاينة قبل أي كتابة: كام أمر، كام بند اتربط،
+    وقايمة اللي مالقاش منتج. الاستيراد كـ draft على مورد مؤقت مع
+    تسجيل اسم المورد الحقيقي، وزرار "اربط الموردين" بعدين.
+    backend v442.
+
   OrderPro v502 — 🔤 فيد جوجل التكميلي (2026-08-19)
   ───────────────────────────────────────────────────────────
   🆕 v502: كارت في صفحة الأكثر تكراراً — بناء/معاينة فيد الـ custom
@@ -5651,9 +5659,12 @@ tr:hover td{background:#fafbff}
     <h2 style="margin:0">📋 أوامر الشراء</h2>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn btn-secondary btn-sm" onclick="loadPOSuggestions()">💡 منتجات قليلة</button>
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('po-imp-file').click()">📥 استيراد من Zoho</button>
+      <input type="file" id="po-imp-file" accept=".csv" style="display:none" onchange="poImpPick(this.files[0])">
       <button class="btn btn-primary btn-sm" onclick="openNewPO()">➕ أمر شراء جديد</button>
     </div>
   </div>
+  <div id="po-imp-box" style="margin-bottom:14px"></div>
   
   <!-- Status filters -->
   <div style="display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px">
@@ -19397,6 +19408,88 @@ async function gfBuild(){
         نزّل ملف المنتجات من Merchant Center وشوف الصيغة الفعلية. لو مختلفة، عدّل صيغة الـ id فوق وابنِ تاني — من غير الربط ده الفيد كله هيتجاهل.
       </div>
       <pre style="background:var(--bg);padding:8px;border-radius:8px;overflow:auto;font-size:11px;font-family:Roboto,monospace;direction:ltr;text-align:left">${escapeHtml(r.preview||'')}</pre>`;
+  }catch(e){ toast('❌ '+e.message); }
+}
+
+// 🆕 v503: استيراد أوامر الشراء من تصدير Zoho
+let _poImpRows = null;
+async function poImpPick(file){
+  if(!file) return;
+  const box = $('po-imp-box');
+  box.innerHTML = '<div class="card"><div style="padding:14px;color:var(--muted)">⏳ بيقرا الملف...</div></div>';
+  try{
+    const text = await file.text();
+    const wb = XLSX.read(text, { type:'string' });
+    _poImpRows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval:'', raw:false });
+    if(!_poImpRows.length){ box.innerHTML='<div class="card"><div style="padding:14px;color:var(--danger)">الملف فاضي</div></div>'; return; }
+    const need = ['Purchase Order Number','Item Name','SKU','QuantityOrdered','Item Price'];
+    const miss = need.filter(c => !(c in _poImpRows[0]));
+    if(miss.length){
+      box.innerHTML = `<div class="card"><div style="padding:14px;color:var(--danger)">
+        ❌ الملف ناقص أعمدة: ${miss.map(escapeHtml).join('، ')}<br>
+        <span style="font-size:12px;color:var(--muted)">لازم يكون تصدير أوامر الشراء <b>بالبنود</b> مش الرؤوس بس.</span></div></div>`;
+      _poImpRows = null; return;
+    }
+    box.innerHTML = '<div class="card"><div style="padding:14px;color:var(--muted)">⏳ بيفحص الربط...</div></div>';
+    const r = await apiFetch('/api/purchase-orders/import-preview','POST',{ rows:_poImpRows });
+    if(!r || r.error){ box.innerHTML=`<div class="card"><div style="padding:14px;color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</div></div>`; return; }
+    box.innerHTML = `<div class="card" style="border:2px solid var(--accent)">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-weight:800">📥 معاينة الاستيراد</div>
+      <div style="padding:14px">
+        <div style="display:flex;gap:18px;flex-wrap:wrap;font-weight:700;margin-bottom:10px">
+          <span>أوامر: ${r.pos}</span>
+          <span>بنود: ${r.line_items}</span>
+          <span style="color:#16a34a">اتربط: ${r.matched}</span>
+          <span style="color:${r.unmatched?'#dc2626':'var(--muted)'}">مش متربط: ${r.unmatched}</span>
+          <span style="color:var(--muted)">موردين: ${r.vendors.length}</span>
+        </div>
+        ${r.duplicates.length?`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px">
+          ⚠️ ${r.duplicates.length} أمر موجود عندك خلاص وهيتخطى: ${r.duplicates.slice(0,8).map(escapeHtml).join('، ')}${r.duplicates.length>8?'...':''}</div>`:''}
+        ${r.problems.length?`<div style="margin-bottom:10px">
+          <div style="font-weight:700;color:#dc2626;margin-bottom:4px">بنود مش لاقيين منتج (أول ${r.problems.length})</div>
+          <div style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:8px">
+          <table style="width:100%;font-size:11px"><tbody>${r.problems.map(p=>`<tr>
+            <td style="padding:3px 6px;font-family:Roboto,sans-serif">${escapeHtml(p.po)}</td>
+            <td style="padding:3px 6px">${escapeHtml(p.name)}</td>
+            <td style="padding:3px 6px;font-family:Roboto,sans-serif;color:var(--muted);direction:ltr">${escapeHtml(String(p.sku).slice(0,40))}</td>
+          </tr>`).join('')}</tbody></table></div></div>`:''}
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700">المورد المؤقت:</span>
+          <input id="po-imp-sup" class="form-input" style="width:200px" value="مورد نقدي">
+          <label style="font-size:12px"><input type="checkbox" id="po-imp-keep" checked> سيب البنود المش متربطة كبند حر</label>
+          <button class="btn btn-primary btn-sm" onclick="poImpRun()">📥 استورد ${r.pos - r.duplicates.length} أمر</button>
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:var(--muted)">
+          اسم المورد الحقيقي بيتسجّل على كل أمر — وبعد ما تعمل الموردين، زرار واحد بيربطهم كلهم.
+        </div>
+      </div></div>`;
+  }catch(e){ box.innerHTML=`<div class="card"><div style="padding:14px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`; }
+}
+async function poImpRun(){
+  if(!_poImpRows){ toast('حمّل الملف الأول'); return; }
+  const sup = $('po-imp-sup')?.value || 'مورد نقدي';
+  if(!confirm(`هيستورد أوامر الشراء كـ draft على المورد المؤقت "${sup}".\n\nتكمّل؟`)) return;
+  const box = $('po-imp-box');
+  box.innerHTML = '<div class="card"><div style="padding:14px;color:var(--muted)">⏳ بيستورد...</div></div>';
+  try{
+    const r = await apiFetch('/api/purchase-orders/import-zoho','POST',{
+      rows:_poImpRows, placeholderSupplier: sup, keepUnmatched: $('po-imp-keep')?.checked !== false });
+    if(!r || r.error){ box.innerHTML=`<div class="card"><div style="padding:14px;color:var(--danger)">❌ ${escapeHtml(r.error||'فشل')}</div></div>`; return; }
+    box.innerHTML = `<div class="card" style="border:2px solid #16a34a"><div style="padding:14px">
+      <div style="font-weight:800;margin-bottom:6px">✅ اتعمل ${r.created} أمر شراء · ${r.items} بند</div>
+      <div style="font-size:12px;color:var(--muted)">اتخطى ${r.skipped} (موجودين خلاص) · ${r.unmatched} بند حر من غير ربط منتج</div>
+      ${r.errors.length?`<div style="margin-top:8px;color:#dc2626;font-size:12px">${r.errors.map(e=>escapeHtml(e.po+': '+e.error)).join('<br>')}</div>`:''}
+      <button class="btn btn-sm btn-secondary" style="margin-top:10px" onclick="poLinkSuppliers()">🔗 اربط الموردين الحقيقيين</button>
+    </div></div>`;
+    _poImpRows = null;
+    if(typeof loadPurchaseOrders === 'function') loadPurchaseOrders();
+  }catch(e){ box.innerHTML=`<div class="card"><div style="padding:14px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`; }
+}
+async function poLinkSuppliers(){
+  try{
+    const r = await apiFetch('/api/purchase-orders/link-suppliers','POST',{});
+    if(!r || r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    toast(`✅ اتربط ${r.linked} أمر بموردهم الحقيقي`);
   }catch(e){ toast('❌ '+e.message); }
 }
 
