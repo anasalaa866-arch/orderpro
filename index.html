@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v507 — 🧾 مطابقة كشف حساب طلبات (2026-08-28)
+  ───────────────────────────────────────────────────────────
+  🆕 v507: كارت في صفحة طلبات — ارفع كشف الحساب (orderDetails.xlsx)
+    ويطلع شيت فيه بنود الحساب + رقم أوردر شوبيفاي وإجماليه + الفرق +
+    النسبة الفعلية اللي طلبات خدتها. المطابقة بكود طلبات من نوت الأوردر.
+    بينبّه كمان على أوردرات عندك مش موجودة في الكشف. backend v447.
+
+  OrderPro v506 — 🛵 مبيعات طلبات في جدول الربط (2026-08-28)
+  ───────────────────────────────────────────────────────────
+  🆕 v506: عمود "مبيعات طلبات — آخر 30 يوم" في جدول المنتجات المربوطة
+    (قطع + عدد أوردرات)، من أوردرات cafelax_talabat بس. دوس على عنوان
+    العمود للترتيب تنازلياً بالمبيعات. backend v446.
+
   OrderPro v505 — 📤 تصدير أوامر الشراء لـ Zoho (مورد موحّد) (2026-08-27)
   ───────────────────────────────────────────────────────────
   🆕 v505: خانة "المورد في Zoho" في كارت التصدير — تكتب فيها مورد واحد
@@ -1532,6 +1545,21 @@ tr:hover td{background:#fafbff}
           <button class="btn" id="tal-export" onclick="talabatExport()" style="background:#f5a623;color:#fff;display:none">⬇️ توليد شيت التحديث (CSV)</button>
         </div>
         <div id="tal-report" style="margin-top:10px;font-size:13px"></div>
+      </div>
+    </div>
+
+    <!-- 🆕 v507: مطابقة كشف حساب طلبات -->
+    <div class="card" style="margin-bottom:14px;border:2px solid #7c3aed">
+      <div style="padding:14px">
+        <div style="font-weight:800;margin-bottom:4px">🧾 مطابقة كشف حساب طلبات</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+          ارفع شيت الحساب اللي بيجي من طلبات (orderDetails.xlsx) → بيطلعلك شيت فيه كل بنود الحساب
+          + رقم الأوردر على شوبيفاي وإجماليه + الفرق + <b>النسبة الفعلية اللي طلبات خدتها</b>.
+          المطابقة بكود طلبات اللي الكاشير بيدخّله وقت الدفع.
+        </div>
+        <button class="btn" onclick="document.getElementById('tal-set-file').click()" style="background:#7c3aed;color:#fff">📤 ارفع كشف الحساب (xlsx.)</button>
+        <input type="file" id="tal-set-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="talSetPick(this.files[0])">
+        <div id="tal-set-box" style="margin-top:12px;font-size:13px"></div>
       </div>
     </div>
 
@@ -19552,6 +19580,84 @@ async function poZhPush(){
   }catch(e){ toast('❌ '+e.message); poZhStatus(); }
 }
 
+// 🆕 v507: مطابقة كشف حساب طلبات
+let _talSetRows = null;
+async function talSetPick(file){
+  if(!file) return;
+  const box=$('tal-set-box');
+  box.innerHTML='<span style="color:var(--muted)">⏳ بيقرا الشيت...</span>';
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type:'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    // الشيت بترويسة صفّين — الصف التاني هو أسماء الأعمدة الحقيقية
+    let rows = XLSX.utils.sheet_to_json(ws, { defval:'', raw:false, range:1 });
+    if(!rows.length || !('Order ID' in rows[0])) rows = XLSX.utils.sheet_to_json(ws, { defval:'', raw:false });
+    if(!rows.length || !('Order ID' in rows[0])){
+      box.innerHTML='<span style="color:var(--danger)">❌ مش لاقي عمود Order ID — اتأكد إنه شيت طلبات الأصلي</span>'; return;
+    }
+    box.innerHTML='<span style="color:var(--muted)">⏳ بيطابق مع أوردراتك...</span>';
+    const r = await apiFetch('/api/talabat/settlement-match','POST',{ rows });
+    if(!r || r.error){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
+    _talSetRows = r.rows;
+    const bad = r.rows.filter(x=>x.flag);
+    box.innerHTML = `
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-weight:700;margin-bottom:10px">
+        <span>صفوف: ${r.count}</span>
+        <span style="color:#16a34a">اتطابق: ${r.matched}</span>
+        <span style="color:${r.unmatched?'#dc2626':'var(--muted)'}">مش لاقي: ${r.unmatched}</span>
+        <span style="color:${r.with_diff?'#b45309':'var(--muted)'}">فرق مبلغ: ${r.with_diff}</span>
+        <span style="color:#7c3aed">متوسط نسبة طلبات: ${r.avg_take_rate!=null?r.avg_take_rate+'%':'—'}</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+        إجمالي الكشف ${r.totals.subtotal.toLocaleString()} ج · تحويل ${r.totals.payout.toLocaleString()} ج ·
+        كاش معاك ${r.totals.cash.toLocaleString()} ج · عمولة ${r.totals.commission.toLocaleString()} ج
+      </div>
+      ${r.missing_from_sheet.length?`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px">
+        ⚠️ ${r.missing_from_sheet.length} أوردر طلبات عندك مش موجود في الكشف ده — يمكن فترة تانية، أو طلبات مادفعتش عنه.</div>`:''}
+      ${bad.length?`<div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:10px">
+        <table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted)">
+          <th style="text-align:right;padding:4px">كود طلبات</th><th>شوبيفاي</th><th>الكشف</th><th>عندك</th><th>فرق</th><th>ملاحظة</th></tr></thead>
+        <tbody>${bad.slice(0,80).map(x=>`<tr>
+          <td style="padding:3px 6px;font-family:Roboto,sans-serif">${escapeHtml(x.order_id)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(x.shopify_order||'—')}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${x.subtotal.toLocaleString()}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${x.shopify_total!=null?x.shopify_total.toLocaleString():'—'}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:#dc2626">${x.diff!=null?x.diff.toLocaleString():'—'}</td>
+          <td style="text-align:center;color:#b45309">${escapeHtml(x.flag)}</td>
+        </tr>`).join('')}</tbody></table></div>`:'<div style="color:#16a34a;font-weight:700;margin-bottom:10px">✅ كل الصفوف اتطابقت ومفيش فروق</div>'}
+      <button class="btn btn-primary btn-sm" onclick="talSetExcel()">⬇️ نزّل الشيت المطابَق (Excel)</button>`;
+  }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+function talSetExcel(){
+  if(!_talSetRows||!_talSetRows.length){ toast('ارفع الشيت الأول'); return; }
+  const data=_talSetRows.map(x=>({
+    'Order ID': x.order_id,
+    'أوردر شوبيفاي': x.shopify_order||'',
+    'إجمالي شوبيفاي': x.shopify_total!=null?x.shopify_total:'',
+    'الفرق': x.diff!=null?x.diff:'',
+    'ملاحظة': x.flag||'',
+    'نسبة طلبات %': x.take_rate_pct!=null?x.take_rate_pct:'',
+    'صافي لك': x.net_to_you,
+    'Has Complaint?': x.has_complaint,
+    'Order status': x.order_status,
+    'Payment type': x.payment_type,
+    'Subtotal': x.subtotal,
+    'Vendor Refunds': x.vendor_refunds,
+    'Online Payment Fee': x.online_payment_fee,
+    'Commission': x.commission,
+    'Marketing Fees Total': x.marketing_fees_total,
+    'Estimated earnings': x.estimated_earnings,
+    'Cash amount already collected by you': x.cash_collected,
+    'Amount owed back to Talabat': x.owed_back,
+    'Payout Amount': x.payout_amount,
+  }));
+  const ws=XLSX.utils.json_to_sheet(data);
+  ws['!cols']=[{wch:14},{wch:14},{wch:14},{wch:10},{wch:16},{wch:12},{wch:12},{wch:14},{wch:12},{wch:12},{wch:11},{wch:13},{wch:16},{wch:12},{wch:16},{wch:16},{wch:22},{wch:20},{wch:14}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'مطابقة طلبات');
+  XLSX.writeFile(wb, `مطابقة_كشف_طلبات_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
 function chkSetFilter(f,btn){
   chkStatusFilter=f;
   document.querySelectorAll('#chk-status-chips .chip').forEach(c=>c.classList.remove('on'));
@@ -36537,6 +36643,12 @@ async function talabatUpload(file){
     $('tal-file').value='';
   }catch(e){ rep.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
 }
+// 🆕 v506: ترتيب بمبيعات طلبات (آخر 30 يوم)
+let _talSort = 'default';   // default | sales
+function talabatToggleSort(){
+  _talSort = _talSort === 'sales' ? 'default' : 'sales';
+  talabatRender();
+}
 function talabatRender(){
   const box=$('tal-list'); if(!box) return;
   const q=($('tal-search')?.value||'').trim().toLowerCase();
@@ -36544,12 +36656,13 @@ function talabatRender(){
   let rows=_talLinks;
   if(onlyU) rows=rows.filter(l=>!l.matched);
   if(q) rows=rows.filter(l=>matchTokens([l.talabat_name,l.matched_name,l.talabat_sku].join(' '), q));
+  if(_talSort==='sales') rows=[...rows].sort((x,y)=>(y.tal_qty_30d||0)-(x.tal_qty_30d||0));
   const matchedCount=_talLinks.filter(l=>l.matched).length;
   const activeCount=_talLinks.filter(l=>l.active===1).length;
   if($('tal-summary')) $('tal-summary').textContent=`${_talLinks.length} منتج · مطابق ${matchedCount} · متاح (active) ${activeCount}`;
   if(!rows.length){ box.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted)">مفيش منتجات — ارفع شيت طلبات الأول</div>'; return; }
   box.innerHTML=`<table style="width:100%;font-size:13px"><thead><tr>
-    <th style="text-align:right">المنتج على طلبات</th><th style="text-align:right">منتجك على الموقع</th><th>sku طلبات</th><th>مخزون ترفيوم</th><th>سعر الموقع</th><th>÷${(1-_talMarginCur/100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}<div style="font-weight:400;font-size:10px;color:var(--muted)">نسبة ${_talMarginCur}%</div></th><th>سعر مثبّت</th><th>السعر النهائي</th><th>active</th>
+    <th style="text-align:right">المنتج على طلبات</th><th style="text-align:right">منتجك على الموقع</th><th>sku طلبات</th><th>مخزون ترفيوم</th><th onclick="talabatToggleSort()" style="cursor:pointer;user-select:none" title="دوس للترتيب بالمبيعات">مبيعات طلبات<div style="font-weight:400;font-size:10px;color:var(--muted)">آخر 30 يوم ${_talSort==='sales'?'▼':'↕'}</div></th><th>سعر الموقع</th><th>÷${(1-_talMarginCur/100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}<div style="font-weight:400;font-size:10px;color:var(--muted)">نسبة ${_talMarginCur}%</div></th><th>سعر مثبّت</th><th>السعر النهائي</th><th>active</th>
     </tr></thead><tbody>${rows.slice(0,800).map(l=>`<tr style="${l.matched?'':'background:#fef2f2'}">
       <td style="font-weight:600">${escapeHtml(l.talabat_name||'—')}</td>
       <td>${l.matched
@@ -36557,6 +36670,11 @@ function talabatRender(){
           : `<button class="btn" style="background:#2563eb;color:#fff;padding:4px 12px;font-size:12px" onclick="talabatOpenLink(${l.id})">🔗 ربط</button>`}</td>
       <td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(l.talabat_sku)}</td>
       <td style="text-align:center;font-weight:700">${l.matched?l.trivium_qty:'—'}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif">${l.matched
+          ? (l.tal_qty_30d>0
+              ? `<span style="font-weight:800;color:#FF5A00">${l.tal_qty_30d}</span><div style="font-size:10px;color:var(--muted)">${l.tal_orders_30d} أوردر</div>`
+              : '<span style="color:var(--muted)">0</span>')
+          : '—'}</td>
       <td style="text-align:center;font-family:Roboto,sans-serif">${l.web_price?l.web_price.toLocaleString():'—'}</td>
       <td style="text-align:center;color:var(--muted);font-family:Roboto,sans-serif">${l.matched?l.auto_price.toLocaleString():'—'}</td>
       <td style="text-align:center"><input type="number" min="0" value="${l.price_override!=null?l.price_override:''}" placeholder="—" ${l.matched?'':'disabled'} onchange="talabatSetPrice(${l.id}, this.value)" style="width:70px;padding:4px;border:1px solid var(--border);border-radius:6px;text-align:center;font-family:Roboto,sans-serif"></td>
