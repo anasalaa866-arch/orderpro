@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v509 — 🚑 رقم أوردر شوبيفاي في المطابقة (2026-09-01)
+  ───────────────────────────────────────────────────────────
+  🚑 v509: عمود "أوردر شوبيفاي" كان بيطلّع اسم العميل بدل الرقم. بقى
+    أول عمود في الشيت بالرقم المجرد (166566)، واسم العميل في عمود
+    منفصل. الفرق اللي بيساوي المرتجع بقى "مرتجع جزئي" مش خطأ.
+    backend v449.
+
   OrderPro v508 — 🧾 كشف حساب طلبات في صفحة مستقلة (2026-09-01)
   ───────────────────────────────────────────────────────────
   🆕 v508: مطابقة كشف الحساب اتنقلت لصفحة لوحدها "🧾 كشف حساب طلبات"
@@ -19619,6 +19626,7 @@ async function talSetPick(file){
         <span style="color:#16a34a">اتطابق: ${r.matched}</span>
         <span style="color:${r.unmatched?'#dc2626':'var(--muted)'}">مش لاقي: ${r.unmatched}</span>
         <span style="color:${r.with_diff?'#b45309':'var(--muted)'}">فرق مبلغ: ${r.with_diff}</span>
+        ${r.partial_refunds?`<span style="color:var(--muted)">مرتجع جزئي: ${r.partial_refunds}</span>`:''}
         <span style="color:#7c3aed">متوسط نسبة طلبات: ${r.avg_take_rate!=null?r.avg_take_rate+'%':'—'}</span>
       </div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
@@ -19629,14 +19637,14 @@ async function talSetPick(file){
         ⚠️ ${r.missing_from_sheet.length} أوردر طلبات عندك مش موجود في الكشف ده — يمكن فترة تانية، أو طلبات مادفعتش عنه.</div>`:''}
       ${bad.length?`<div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:10px">
         <table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted)">
-          <th style="text-align:right;padding:4px">كود طلبات</th><th>شوبيفاي</th><th>الكشف</th><th>عندك</th><th>فرق</th><th>ملاحظة</th></tr></thead>
+          <th style="text-align:right;padding:4px">أوردر شوبيفاي</th><th>كود طلبات</th><th>الكشف</th><th>عندك</th><th>فرق</th><th>ملاحظة</th></tr></thead>
         <tbody>${bad.slice(0,80).map(x=>`<tr>
-          <td style="padding:3px 6px;font-family:Roboto,sans-serif">${escapeHtml(x.order_id)}</td>
-          <td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(x.shopify_order||'—')}</td>
+          <td style="padding:3px 6px;font-family:Roboto,sans-serif;font-weight:800">${escapeHtml(x.shopify_order||'—')}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted)">${escapeHtml(x.order_id)}</td>
           <td style="text-align:center;font-family:Roboto,sans-serif">${x.subtotal.toLocaleString()}</td>
           <td style="text-align:center;font-family:Roboto,sans-serif">${x.shopify_total!=null?x.shopify_total.toLocaleString():'—'}</td>
           <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:#dc2626">${x.diff!=null?x.diff.toLocaleString():'—'}</td>
-          <td style="text-align:center;color:#b45309">${escapeHtml(x.flag)}</td>
+          <td style="text-align:center;color:${x.flag==='مرتجع جزئي'?'var(--muted)':'#b45309'}">${escapeHtml(x.flag)}</td>
         </tr>`).join('')}</tbody></table></div>`:'<div style="color:#16a34a;font-weight:700;margin-bottom:10px">✅ كل الصفوف اتطابقت ومفيش فروق</div>'}
       <button class="btn btn-primary btn-sm" onclick="talSetExcel()">⬇️ نزّل الشيت المطابَق (Excel)</button>`;
   }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
@@ -19644,8 +19652,9 @@ async function talSetPick(file){
 function talSetExcel(){
   if(!_talSetRows||!_talSetRows.length){ toast('ارفع الشيت الأول'); return; }
   const data=_talSetRows.map(x=>({
-    'Order ID': x.order_id,
     'أوردر شوبيفاي': x.shopify_order||'',
+    'Order ID': x.order_id,
+    'العميل': x.customer_name||'',
     'إجمالي شوبيفاي': x.shopify_total!=null?x.shopify_total:'',
     'الفرق': x.diff!=null?x.diff:'',
     'ملاحظة': x.flag||'',
@@ -19665,7 +19674,7 @@ function talSetExcel(){
     'Payout Amount': x.payout_amount,
   }));
   const ws=XLSX.utils.json_to_sheet(data);
-  ws['!cols']=[{wch:14},{wch:14},{wch:14},{wch:10},{wch:16},{wch:12},{wch:12},{wch:14},{wch:12},{wch:12},{wch:11},{wch:13},{wch:16},{wch:12},{wch:16},{wch:16},{wch:22},{wch:20},{wch:14}];
+  ws['!cols']=[{wch:14},{wch:14},{wch:18},{wch:14},{wch:10},{wch:16},{wch:12},{wch:12},{wch:14},{wch:12},{wch:12},{wch:11},{wch:13},{wch:16},{wch:12},{wch:16},{wch:16},{wch:22},{wch:20},{wch:14}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'مطابقة طلبات');
   XLSX.writeFile(wb, `مطابقة_كشف_طلبات_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
