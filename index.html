@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v511 — 🔎 اقتراح الأوردر للصفوف اليتيمة (2026-09-02)
+  ───────────────────────────────────────────────────────────
+  🆕 v511: الصفوف اللي مالهاش أوردر اتقسمت لنوعين — الملغي بيتعلّم
+    "طبيعي" ويخرج من المشاكل، واللي الكاشير دخّل كوده غلط بيطلعله
+    اقتراح بالأوردر المقابل (مبلغ + تاريخ + قرب الكود) بدرجة ثقة
+    وزرار "صحّح" بيظبط الكود. backend v451.
+
   OrderPro v510 — 🕐 Ready to pick up at في الشيت (2026-09-02)
   ───────────────────────────────────────────────────────────
   🆕 v510: عمود "Ready to pick up at" اتضاف للشيت الناتج من المطابقة،
@@ -19650,9 +19657,19 @@ async function talSetPick(file){
           <td style="text-align:center;font-family:Roboto,sans-serif">${x.shopify_total!=null?x.shopify_total.toLocaleString():'—'}</td>
           <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:#dc2626">${x.diff!=null?x.diff.toLocaleString():'—'}</td>
           <td style="text-align:center;color:${x.flag==='مرتجع جزئي'?'var(--muted)':'#b45309'}">${escapeHtml(x.flag)}</td>
-        </tr>`).join('')}</tbody></table></div>`:'<div style="color:#16a34a;font-weight:700;margin-bottom:10px">✅ كل الصفوف اتطابقت ومفيش فروق</div>'}
+        </tr>`).join('')}</tbody></table></div>`:(sugg.length?'':'<div style="color:#16a34a;font-weight:700;margin-bottom:10px">✅ كل الصفوف اتطابقت ومفيش فروق</div>')}
       <button class="btn btn-primary btn-sm" onclick="talSetExcel()">⬇️ نزّل الشيت المطابَق (Excel)</button>`;
   }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+async function talSetFixCode(shopifyId, newCode, i){
+  if(!confirm(`هيتصحّح كود طلبات على الأوردر ده لـ ${newCode}.\n\nتكمّل؟`)) return;
+  try{
+    const r = await apiFetch('/api/talabat/fix-code','POST',{ shopify_id: shopifyId, new_code: newCode });
+    if(!r || r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    const row = document.getElementById('sg-'+i);
+    if(row){ row.style.opacity='.45'; const b=row.querySelector('button'); if(b) b.outerHTML='<span style="color:#16a34a;font-size:10px">✅ اتصحّح</span>'; }
+    toast(`✅ ${r.old_code||'—'} → ${r.new_code}`);
+  }catch(e){ toast('❌ '+e.message); }
 }
 function talSetExcel(){
   if(!_talSetRows||!_talSetRows.length){ toast('ارفع الشيت الأول'); return; }
@@ -19663,6 +19680,8 @@ function talSetExcel(){
     'إجمالي شوبيفاي': x.shopify_total!=null?x.shopify_total:'',
     'الفرق': x.diff!=null?x.diff:'',
     'ملاحظة': x.flag||'',
+    'أوردر مقترح': x.suggestion?x.suggestion.shopify_order:'',
+    'الكود الغلط': x.suggestion?x.suggestion.wrong_code:'',
     'نسبة طلبات %': x.take_rate_pct!=null?x.take_rate_pct:'',
     'صافي لك': x.net_to_you,
     'Has Complaint?': x.has_complaint,
@@ -19680,7 +19699,7 @@ function talSetExcel(){
     'Payout Amount': x.payout_amount,
   }));
   const ws=XLSX.utils.json_to_sheet(data);
-  ws['!cols']=[{wch:14},{wch:14},{wch:18},{wch:14},{wch:10},{wch:16},{wch:12},{wch:12},{wch:14},{wch:12},{wch:20},{wch:12},{wch:11},{wch:13},{wch:16},{wch:12},{wch:16},{wch:16},{wch:22},{wch:20},{wch:14}];
+  ws['!cols']=[{wch:14},{wch:14},{wch:18},{wch:14},{wch:10},{wch:16},{wch:14},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12},{wch:20},{wch:12},{wch:11},{wch:13},{wch:16},{wch:12},{wch:16},{wch:16},{wch:22},{wch:20},{wch:14}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'مطابقة طلبات');
   XLSX.writeFile(wb, `مطابقة_كشف_طلبات_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
