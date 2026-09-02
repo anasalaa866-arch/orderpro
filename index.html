@@ -1,6 +1,20 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v513 — 🧾 إشعار دائن تلقائي (2026-09-03)
+  ───────────────────────────────────────────────────────────
+  🆕 v513: كارت في صفحة ربط Zoho — الأوردر اللي اتفوتر وبعدين اتلغى
+    بياخد إشعار دائن تلقائي بنفس بنود الفاتورة ويتطبّق عليها. مع
+    مهلة سماح (افتراضي 60 دقيقة) ومفتاح إيقاف وسجل بكل اللي اتعمل.
+    backend v452.
+
+  OrderPro v512 — 🔍 بحث في الخزنة (2026-09-02)
+  ───────────────────────────────────────────────────────────
+  🆕 v512: خانة بحث في صفحة الخزنة — بالبيان (كل الكلمات لازم تكون
+    موجودة)، أو بمبلغ مضبوط، أو بمدى (5000-20000)، مع فلتر وارد/منصرف
+    ومجاميع المعروض. عمود "الرصيد" بيفضل الرصيد التراكمي الحقيقي لأن
+    الفلترة بتتم بعد حسابه.
+
   OrderPro v511 — 🔎 اقتراح الأوردر للصفوف اليتيمة (2026-09-02)
   ───────────────────────────────────────────────────────────
   🆕 v511: الصفوف اللي مالهاش أوردر اتقسمت لنوعين — الملغي بيتعلّم
@@ -3503,6 +3517,17 @@ tr:hover td{background:#fafbff}
             <button class="btn btn-sm" style="background:#6366f1;color:#fff" onclick="openTreasuryPrint()">🖨️ طباعة</button>
           </div>
         </div>
+        <!-- 🆕 v512: بحث في البنود أو المبالغ -->
+        <div style="padding:8px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input id="treasury-search" class="form-input" style="flex:1;min-width:200px" placeholder="🔍 دوّر في البيان أو بمبلغ (مثال: تيك توك · 10000 · 5000-20000)" oninput="treasurySearch()">
+          <select id="treasury-search-type" onchange="treasurySearch()" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
+            <option value="">الكل</option>
+            <option value="in">وارد بس</option>
+            <option value="out">منصرف بس</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="treasurySearchClear()">مسح</button>
+          <span id="treasury-search-info" style="font-size:12px;color:var(--muted)"></span>
+        </div>
         <div id="treasury-tx-list" style="padding:8px;max-height:500px;overflow-y:auto">
           <div style="text-align:center;padding:40px;color:var(--muted)">اختر خزنة من القائمة</div>
         </div>
@@ -4106,6 +4131,28 @@ tr:hover td{background:#fafbff}
       <span id="zh-msg" style="font-size:12px"></span>
     </div>
     <div id="zh-cf-box" style="padding:0 14px 14px;font-size:13px"></div>
+  </div>
+
+  <!-- 🆕 v513: إشعارات دائن تلقائية -->
+  <div class="card" style="margin-bottom:14px;border:1px solid #dc2626">
+    <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+      <div style="font-weight:800">🧾 إشعار دائن تلقائي (أوردر ملغي بعد الفوترة)</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px">
+        الأوردر اللي اتفوتر وبعدين اتلغى أو اترجّع → إشعار دائن في Zoho تلقائي بنفس بنود الفاتورة، وبيتطبّق عليها عشان الذمم تتقفل.
+        <b>ده قيد محاسبي بيتعمل من غير مراجعة</b> — مهلة السماح هي حمايتك.
+      </div>
+    </div>
+    <div style="padding:12px 14px">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <label style="font-size:13px;font-weight:700"><input type="checkbox" id="cn-enabled" onchange="cnSave()"> مفعّل</label>
+        <span style="font-size:13px;font-weight:700">مهلة السماح:</span>
+        <input type="number" id="cn-grace" min="0" max="1440" style="width:80px;padding:6px;border:1px solid var(--border);border-radius:8px;text-align:center;font-family:Roboto,sans-serif" onchange="cnSave()">
+        <span style="font-size:12px;color:var(--muted)">دقيقة — لو الحالة رجعت خلالها، مفيش قيد</span>
+        <button class="btn btn-sm" onclick="cnRun()" style="background:#dc2626;color:#fff;margin-inline-start:auto">▶️ نفّذ المستحق دلوقتي</button>
+        <button class="btn btn-ghost btn-sm" onclick="cnStatus()">🔄 تحديث</button>
+      </div>
+      <div id="cn-box" style="font-size:13px"></div>
+    </div>
   </div>
   <div class="card" style="margin-bottom:14px;border:1px solid #fde68a">
     <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
@@ -19417,6 +19464,53 @@ async function zhSaveCodeField(){
     toast(_zhCodeField ? '✅ الكود هيتكتب في '+_zhCodeField : '✅ اتوقف');
   }catch(e){ toast('❌ '+e.message); }
 }
+// 🆕 v513: إشعارات دائن تلقائية
+async function cnStatus(){
+  const box=$('cn-box'); if(!box) return;
+  try{
+    const r=await apiFetch('/api/zoho/credit-notes/status','GET');
+    if(!r||r.error){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
+    if($('cn-enabled')) $('cn-enabled').checked = !!r.enabled;
+    if($('cn-grace'))   $('cn-grace').value = r.grace_min;
+    box.innerHTML = `
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-weight:700;margin-bottom:10px">
+        <span style="color:#16a34a">اتعمل: ${r.done}</span>
+        <span style="color:${r.due?'#b45309':'var(--muted)'}">مستحق دلوقتي: ${r.due}</span>
+        <span style="color:var(--muted)">في المهلة: ${r.waiting}</span>
+        <span style="color:${r.failed?'#dc2626':'var(--muted)'}">فشل: ${r.failed}</span>
+      </div>
+      ${(r.recent||[]).length?`<div style="max-height:240px;overflow:auto;border:1px solid var(--border);border-radius:8px">
+        <table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted)">
+          <th style="text-align:right;padding:4px">أوردر</th><th>الحالة</th><th>المبلغ</th><th>الفاتورة</th><th>الإشعار</th><th>ملاحظة</th></tr></thead>
+        <tbody>${r.recent.map(x=>`<tr>
+          <td style="padding:3px 6px;font-family:Roboto,sans-serif;font-weight:700">${escapeHtml(String(x.id).replace(/^SH-/,''))}</td>
+          <td style="text-align:center">${escapeHtml(x.status||'')}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${(Number(x.total)||0).toLocaleString()}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted)">${escapeHtml(x.zoho_invoice_number||'')}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700;color:${x.zoho_creditnote_number?'#16a34a':'var(--muted)'}">${escapeHtml(x.zoho_creditnote_number||'—')}</td>
+          <td style="text-align:center;color:#dc2626;font-size:10px">${escapeHtml(x.zoho_creditnote_error||'')}</td>
+        </tr>`).join('')}</tbody></table></div>`:'<div style="color:var(--muted)">مفيش أوردرات ملغية متفوترة</div>'}`;
+  }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+async function cnSave(){
+  try{
+    await apiFetch('/api/zoho/credit-notes/settings','POST',{
+      enabled: $('cn-enabled')?.checked, grace_min: $('cn-grace')?.value });
+    toast('✅ اتحفظ'); cnStatus();
+  }catch(e){ toast('❌ '+e.message); }
+}
+async function cnRun(){
+  if(!confirm('هيعمل إشعارات دائن في Zoho للأوردرات المستحقة دلوقتي.\n\nدي قيود محاسبية حقيقية. تكمّل؟')) return;
+  const box=$('cn-box'); if(box) box.innerHTML='<span style="color:var(--muted)">⏳ بينفّذ...</span>';
+  try{
+    const r=await apiFetch('/api/zoho/credit-notes/run','POST',{ limit:20 });
+    if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); cnStatus(); return; }
+    if(r.off) toast('⚠️ المنظومة متوقفة — فعّلها الأول');
+    else toast(`✅ اتعمل ${r.done}${r.failed?` · فشل ${r.failed}`:''}`);
+    cnStatus();
+  }catch(e){ toast('❌ '+e.message); cnStatus(); }
+}
+
 async function zhCustomFields(){
   const box = $('zh-cf-box'); if(!box) return;
   box.innerHTML = '<span style="color:var(--muted)">⏳ بيجيب من Zoho...</span>';
@@ -22294,6 +22388,13 @@ function selectTreasury(tId){
   renderTreasuryList();
 }
 
+// 🆕 v512: بحث الخزنة
+function treasurySearch(){ if(_activeTreasuryId) renderTreasuryTx(_activeTreasuryId); }
+function treasurySearchClear(){
+  const i=document.getElementById('treasury-search'); if(i) i.value='';
+  const t=document.getElementById('treasury-search-type'); if(t) t.value='';
+  treasurySearch();
+}
 function renderTreasuryTx(tId){
   const el=document.getElementById('treasury-tx-list');
   if(!el) return;
@@ -22320,7 +22421,47 @@ function renderTreasuryTx(tId){
   });
 
   // اعرض الأحدث في الأول (descending)
-  const txsDesc = [...txsWithBal].reverse();
+  let txsDesc = [...txsWithBal].reverse();
+
+  // 🆕 v512: الفلترة بعد حساب الرصيد التراكمي — عشان عمود "الرصيد"
+  //   يفضل صح ومايتغيرش مع البحث (هو رصيد الخزنة وقتها مش مجموع المعروض)
+  const _q = (document.getElementById('treasury-search')?.value || '').trim();
+  const _ty = document.getElementById('treasury-search-type')?.value || '';
+  const _total = txsDesc.length;
+  if(_ty) txsDesc = txsDesc.filter(tx => _ty==='in' ? (tx.type==='in'||tx.type==='deposit') : !(tx.type==='in'||tx.type==='deposit'));
+  if(_q){
+    // مدى مبالغ: 5000-20000
+    const range = _q.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/);
+    // رقم مجرد = بحث بالمبلغ (بهامش جنيه)
+    const exact = /^\d+(?:\.\d+)?$/.test(_q) ? parseFloat(_q) : null;
+    const words = _q.toLowerCase().split(/\s+/).filter(Boolean);
+    txsDesc = txsDesc.filter(tx => {
+      const amt = parseFloat(tx.amount) || 0;
+      if(range) return amt >= parseFloat(range[1]) && amt <= parseFloat(range[2]);
+      if(exact !== null){
+        if(Math.abs(amt - exact) < 1) return true;   // مبلغ مطابق
+        // ولو مش لاقي بالمبلغ، دوّر عليه كنص في البيان (رقم أوردر مثلاً)
+        return String(tx.note||'').includes(_q);
+      }
+      const hay = String(tx.note||'').toLowerCase() + ' ' + String(amt);
+      return words.every(w => hay.includes(w));       // كل الكلمات لازم تكون موجودة
+    });
+  }
+  const _info = document.getElementById('treasury-search-info');
+  if(_info){
+    if(_q || _ty){
+      const sumIn  = txsDesc.filter(x=>x.type==='in'||x.type==='deposit').reduce((a,b)=>a+(parseFloat(b.amount)||0),0);
+      const sumOut = txsDesc.filter(x=>!(x.type==='in'||x.type==='deposit')).reduce((a,b)=>a+(parseFloat(b.amount)||0),0);
+      _info.innerHTML = `<b>${txsDesc.length}</b> من ${_total}`
+        + (sumIn?` · وارد <b style="color:#16a34a">${sumIn.toLocaleString()}</b>`:'')
+        + (sumOut?` · منصرف <b style="color:#dc2626">${sumOut.toLocaleString()}</b>`:'')
+        + ((sumIn&&sumOut)?` · صافي <b>${(sumIn-sumOut).toLocaleString()}</b>`:'');
+    } else _info.textContent = '';
+  }
+  if(!txsDesc.length){
+    el.innerHTML='<div style="text-align:center;padding:30px;color:var(--muted)">مفيش حركات مطابقة للبحث</div>';
+    return;
+  }
 
   const fmtDate = d => new Date(d).toLocaleDateString('ar-EG',{year:'numeric',month:'short',day:'numeric'});
 
@@ -42644,7 +42785,7 @@ function goPage(el,page){
   // 🆕 v202: اقفل الـ sidebar على الموبايل لما تختار صفحة
   if(window.innerWidth <= 1024) toggleSidebar(false);
   if(page==='sku-audit')skuAuditLoad(true);
-  if(page==='zoho-sync'){zhLoadSettings();apiFetch('/api/zoho/delete-items-status','GET').then(st=>{if(st&&st.job&&st.job.running)zhDelWatch();}).catch(()=>{});}
+  if(page==='zoho-sync'){zhLoadSettings();cnStatus();apiFetch('/api/zoho/delete-items-status','GET').then(st=>{if(st&&st.job&&st.job.running)zhDelWatch();}).catch(()=>{});}
   if(page==='profit'&&_gp===null){/* أول فتحة — سيبه يدوس احسب */}
   if(page==='top-products'){tprepLoad();atLoad();rvLoad();gfLoad();}
   if(page==='unlinked-lines')ulLoad();
