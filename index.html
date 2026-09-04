@@ -1,6 +1,26 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v516 — 🧊 الأصناف الراكدة (2026-09-05)
+  ───────────────────────────────────────────────────────────
+  🆕 v516: صفحة جديدة — الأصناف اللي عندها مخزون ومابعتش من فترة،
+    مرتّبة برأس المال المحبوس (مخزون × تكلفة) مش بعدد الأيام. مع
+    أقصى خصم ممكن قبل التكلفة، تصدير Excel، ووسم في Shopify عشان
+    تعمل Automated Collection للعروض. backend v455.
+
+  OrderPro v515 — 🚑 مرتجعات مش متخصومة من التصفية (2026-09-03)
+  ───────────────────────────────────────────────────────────
+  🆕 v515: كارت في صفحة مراجعات Stars — بيفحص المرتجعات اللي اتسجّلت
+    بـ cashier_id = NULL (باج req.cashier في backend v454) وبيوري
+    كام كاش خرج من الدرج من غير ما يتخصم، مع زرار تصليح بيرجّع
+    الكاشير من البيعة الأصلية. backend v454.
+
+  OrderPro v514 — 👁️ إظهار كمية النظام في جرد ستارز (2026-09-03)
+  ───────────────────────────────────────────────────────────
+  🆕 v514: توجل في صفحة الجرد — الجلسات اللي بتتفتح من ستارز تشوف رصيد
+    النظام بدل الجرد الأعمى المفروض (v356). افتراضي مقفول، وبيطبّق على
+    الجلسات الجديدة بس. backend v453.
+
   OrderPro v513 — 🧾 إشعار دائن تلقائي (2026-09-03)
   ───────────────────────────────────────────────────────────
   🆕 v513: كارت في صفحة ربط Zoho — الأوردر اللي اتفوتر وبعدين اتلغى
@@ -1427,6 +1447,7 @@ tr:hover td{background:#fafbff}
       </div>
       <div class="nav-group-body">
         <div class="ni" data-p="suppliers" onclick="goPage(this,'suppliers')"><span class="ni-icon">🏭</span><span class="ni-label">الموردين</span></div>
+        <div class="ni" data-p="dead-stock" onclick="goPage(this,'dead-stock')"><span class="ni-icon">🧊</span><span class="ni-label">الأصناف الراكدة</span></div>
         <div class="ni" data-p="purchase-orders" onclick="goPage(this,'purchase-orders')"><span class="ni-icon">📋</span><span class="ni-label">أوامر الشراء</span></div>
         <div class="ni" data-p="vendors" onclick="goPage(this,'vendors')"><span class="ni-icon">🏢</span><span class="ni-label">شركات الشحن</span></div>
       </div>
@@ -3556,6 +3577,16 @@ tr:hover td{background:#fafbff}
 
   <!-- ⭐ CAFELAX STARS REVIEWS -->
   <div class="page" id="page-stars-reviews">
+    <!-- 🆕 v515: المرتجعات اليتيمة -->
+    <div class="card" style="margin-bottom:14px;border:1px solid #dc2626">
+      <div style="padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+        <span style="font-weight:800">🚑 مرتجعات مش متخصومة من التصفية</span>
+        <button class="btn btn-ghost btn-sm" onclick="retOrphanAudit()" style="margin-inline-start:auto">🔍 افحص</button>
+      </div>
+      <div id="ret-orphan-box" style="padding:12px 14px;font-size:13px">
+        <span style="color:var(--muted)">مرتجعات اتسجّلت من غير كاشير، فحساب التصفية مش شايفها. دوس افحص.</span>
+      </div>
+    </div>
     <div class="stats-row" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
       <div class="sc" style="border-right:4px solid var(--warn)">
         <div class="sc-icon">💳</div>
@@ -4595,6 +4626,21 @@ tr:hover td{background:#fafbff}
       <button class="btn btn-ghost btn-sm" onclick="openFailedUploadsReport()" style="color:#dc2626;border-color:#dc2626" title="المنتجات اللي فشل رفعها لـ Shopify عبر كل الجلسات">⚠️ تقرير الرفع الفاشل</button>
       <button class="btn btn-ghost btn-sm" onclick="openStocktakers()" style="color:#16a34a;border-color:#16a34a">👷 موظفي الجرد</button>
       <button class="btn btn-primary btn-sm" onclick="openNewStocktake()">➕ بدء جرد جديد</button>
+    </div>
+  </div>
+
+  <!-- 🆕 v514: إظهار كمية النظام في جرد ستارز -->
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <label style="font-size:13px;font-weight:700;cursor:pointer">
+        <input type="checkbox" id="stk-stars-sysqty" onchange="stkStarsSysQtySave()">
+        👁️ الجرد اللي بيتفتح من ستارز يشوف كمية النظام
+      </label>
+      <span id="stk-stars-sysqty-info" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div style="padding:0 14px 10px;font-size:11px;color:var(--muted)">
+      مقفول = جرد أعمى (الافتراضي): اللي بيعد مايشوفش الرصيد، فالعدّة بتبقى مستقلة عن النظام.
+      مفتوح = بيشوف الرصيد وهو بيعد. الإعداد بيتطبّق على الجلسات <b>الجديدة</b> بس.
     </div>
   </div>
 
@@ -5770,6 +5816,38 @@ tr:hover td{background:#fafbff}
       </div>
     </div>
 
+</div>
+
+<div class="page" id="page-dead-stock">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">🧊 الأصناف الراكدة</h2>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:12px 14px;display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+      <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">مافيش بيع من</label>
+        <select id="ds-days" onchange="dsLoad()" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
+          <option value="60">60 يوم</option><option value="90" selected>90 يوم</option>
+          <option value="180">180 يوم</option><option value="365">سنة</option>
+        </select></div>
+      <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">أقل قيمة محبوسة</label>
+        <input type="number" id="ds-minval" value="0" min="0" onchange="dsLoad()" style="width:110px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif"></div>
+      <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">استبعد اللي أحدث من</label>
+        <select id="ds-minage" onchange="dsLoad()" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
+          <option value="0">مفيش</option><option value="30" selected>30 يوم</option><option value="60">60 يوم</option>
+        </select></div>
+      <button class="btn btn-primary btn-sm" onclick="dsLoad()">🔍 اعرض</button>
+      <button class="btn btn-ghost btn-sm" onclick="dsExcel()">⬇️ Excel</button>
+      <div style="margin-inline-start:auto;display:flex;gap:8px;align-items:end">
+        <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">تاج Shopify</label>
+          <input id="ds-tag" value="slow-moving" style="width:130px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif"></div>
+        <button class="btn btn-sm" onclick="dsTag()" style="background:#7c3aed;color:#fff">🏷️ وسم المعروض</button>
+      </div>
+    </div>
+    <div id="ds-stats" style="padding:0 14px 12px"></div>
+  </div>
+
+  <div id="ds-list"></div>
 </div>
 
 <div class="page" id="page-purchase-orders">
@@ -8644,7 +8722,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'talabat':'🛵 طلبات (Talabat)','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'talabat':'🛵 طلبات (Talabat)','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -19798,6 +19876,112 @@ function talSetExcel(){
   XLSX.writeFile(wb, `مطابقة_كشف_طلبات_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
+// 🆕 v515: المرتجعات اليتيمة (cashier_id = NULL)
+async function retOrphanAudit(){
+  const box=$('ret-orphan-box'); if(!box) return;
+  box.innerHTML='<span style="color:var(--muted)">⏳ بيفحص...</span>';
+  try{
+    const r=await apiFetch('/api/pos/returns/orphan-audit','GET');
+    if(!r||r.error){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
+    if(!r.total){ box.innerHTML='<span style="color:#16a34a;font-weight:700">✅ مفيش مرتجعات يتيمة</span>'; return; }
+    box.innerHTML=`
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-weight:700;margin-bottom:8px">
+        <span style="color:#dc2626">يتيمة: ${r.total}</span>
+        <span style="color:#16a34a">ينفع تتصلّح: ${r.fixable}</span>
+        <span style="color:#b45309">كاش مش متخصوم: ${r.cash_amount.toLocaleString()} ج</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+        دي مرتجعات الكاش خرج فيها من الدرج والتصفية محسبتهاش — يعني الكاشير طلع عليه عجز بالمبلغ ده.
+        التصليح بيرجّع الكاشير من البيعة الأصلية.
+      </div>
+      <div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:10px">
+        <table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted)">
+          <th style="text-align:right;padding:4px">المرتجع</th><th>التاريخ</th><th>المبلغ</th><th>الطريقة</th><th>البيعة</th><th>الكاشير المقترح</th></tr></thead>
+        <tbody>${r.rows.map(x=>`<tr>
+          <td style="padding:3px 6px;font-family:Roboto,sans-serif">${escapeHtml(x.return_number||'')}</td>
+          <td style="text-align:center;font-size:10px;color:var(--muted)">${x.created_at?new Date(x.created_at).toLocaleDateString('ar-EG'):''}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${(Number(x.refund_total)||0).toLocaleString()}</td>
+          <td style="text-align:center">${escapeHtml(x.refund_method||'')}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted)">${escapeHtml(x.original_sale_number||'—')}</td>
+          <td style="text-align:center;color:${x.sale_cashier_name?'#16a34a':'#dc2626'}">${escapeHtml(x.sale_cashier_name||'مش معروف')}</td>
+        </tr>`).join('')}</tbody></table></div>
+      ${r.fixable?`<button class="btn btn-sm" style="background:#dc2626;color:#fff" onclick="retFixOrphans()">🔧 صلّح الـ ${r.fixable}</button>`:''}`;
+  }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+async function retFixOrphans(){
+  if(!confirm('هيربط المرتجعات دي بالكاشير بتاع البيعة الأصلية.\n\n⚠️ ده هيغيّر تصفيات قديمة — الكاشير اللي كان عليه عجز هيتظبط.\n\nتكمّل؟')) return;
+  try{
+    const r=await apiFetch('/api/pos/returns/fix-orphans','POST',{ confirm:'FIX' });
+    if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    toast(`✅ اتصلّح ${r.fixed} مرتجع`);
+    retOrphanAudit();
+  }catch(e){ toast('❌ '+e.message); }
+}
+
+// 🆕 v516: الأصناف الراكدة
+let _dsRows = [];
+async function dsLoad(){
+  const box=$('ds-list'), st=$('ds-stats'); if(!box) return;
+  box.innerHTML='<div class="card"><div style="padding:20px;color:var(--muted)">⏳ بيحسب...</div></div>';
+  try{
+    const qs = `days=${$('ds-days').value}&min_value=${$('ds-minval').value||0}&min_age=${$('ds-minage').value}`;
+    const r = await apiFetch('/api/dead-stock?'+qs,'GET');
+    if(!r||r.error){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</div></div>`; return; }
+    _dsRows = r.rows||[];
+    st.innerHTML = `
+      <div style="display:flex;gap:14px;flex-wrap:wrap">
+        <div class="sc" style="flex:1;min-width:150px;background:var(--danger-light)"><div class="sc-label">رأس مال محبوس</div><div class="sc-val" style="color:var(--danger)">${r.tied_total.toLocaleString()} ج</div></div>
+        <div class="sc" style="flex:1;min-width:150px"><div class="sc-label">قيمتها بالبيع</div><div class="sc-val">${r.retail_total.toLocaleString()} ج</div></div>
+        <div class="sc" style="flex:1;min-width:130px"><div class="sc-label">أصناف</div><div class="sc-val">${r.count.toLocaleString()}</div></div>
+        <div class="sc" style="flex:1;min-width:130px"><div class="sc-label">قطع</div><div class="sc-val">${r.units_total.toLocaleString()}</div></div>
+        <div class="sc" style="flex:1;min-width:160px;background:#fff7ed"><div class="sc-label">مباعش ولا مرة</div><div class="sc-val" style="color:#b45309">${r.never_sold_count} · ${r.never_sold_value.toLocaleString()} ج</div></div>
+      </div>
+      ${r.no_cost_count?`<div style="margin-top:8px;font-size:11px;color:#b45309">⚠️ ${r.no_cost_count} صنف تكلفته صفر — رأس المال المحبوس بتاعهم مش محسوب، الرقم الحقيقي أكبر.</div>`:''}`;
+    if(!_dsRows.length){ box.innerHTML='<div class="card"><div style="padding:24px;text-align:center;color:#16a34a;font-weight:700">✅ مفيش أصناف راكدة بالمعايير دي</div></div>'; return; }
+    box.innerHTML = `<div class="card"><div style="padding:6px 14px;overflow-x:auto">
+      <table style="width:100%;font-size:12px">
+        <thead><tr style="color:var(--muted)">
+          <th style="text-align:right;padding:6px">المنتج</th><th>SKU</th><th>مخزون</th>
+          <th>تكلفة</th><th>محبوس</th><th>سعر البيع</th><th>آخر بيعة</th><th>أقصى خصم</th></tr></thead>
+        <tbody>${_dsRows.map(x=>`<tr style="border-top:1px solid var(--border)">
+          <td style="padding:5px 6px">${escapeHtml(x.title)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted);font-size:10px">${escapeHtml(String(x.sku).slice(0,20))}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${x.stock_qty}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;color:${x.cost?'inherit':'#b45309'}">${x.cost?x.cost.toLocaleString():'—'}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:var(--danger)">${x.tied_value.toLocaleString()}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${x.price.toLocaleString()}</td>
+          <td style="text-align:center;font-size:11px;color:${x.never_sold?'#dc2626':'var(--muted)'}">${x.never_sold?'مباعش خالص':(x.days_since_sale+' يوم')}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700;color:#16a34a">${x.max_discount_pct!=null?x.max_discount_pct+'%':'—'}</td>
+        </tr>`).join('')}</tbody></table></div></div>`;
+  }catch(e){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`; }
+}
+function dsExcel(){
+  if(!_dsRows.length){ toast('اعرض الأول'); return; }
+  const data=_dsRows.map(x=>({
+    'المنتج':x.title,'SKU':x.sku,'باركود':x.barcode,'مخزون':x.stock_qty,
+    'التكلفة':x.cost,'رأس المال المحبوس':x.tied_value,'سعر البيع':x.price,
+    'قيمتها بالبيع':x.retail_value,
+    'آخر بيعة (يوم)':x.never_sold?'مباعش خالص':x.days_since_sale,
+    'اتباع قبل كده':x.sold_ever,'أقصى خصم %':x.max_discount_pct??'',
+  }));
+  const ws=XLSX.utils.json_to_sheet(data);
+  ws['!cols']=[{wch:40},{wch:16},{wch:16},{wch:9},{wch:10},{wch:18},{wch:10},{wch:14},{wch:14},{wch:12},{wch:12}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'الرواكد');
+  XLSX.writeFile(wb, `الأصناف_الراكدة_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+async function dsTag(){
+  if(!_dsRows.length){ toast('اعرض الأول'); return; }
+  const tag=$('ds-tag')?.value.trim()||'slow-moving';
+  const ids=[...new Set(_dsRows.map(x=>x.product_id).filter(Boolean))];
+  if(!confirm(`هيتحط تاج "${tag}" على ${ids.length} منتج في Shopify.\n\nبعدها تعمل Automated Collection على التاج ده وتستخدمها في العروض والإعلانات.\n\nتكمّل؟`)) return;
+  toast('⏳ بيوسم... ثانية لكل منتج تقريباً');
+  try{
+    const r=await apiFetch('/api/dead-stock/tag','POST',{ tag, product_ids: ids });
+    if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    toast(`✅ اتوسم ${r.tagged}${r.failed?` · فشل ${r.failed}`:''}`);
+  }catch(e){ toast('❌ '+e.message); }
+}
+
 function chkSetFilter(f,btn){
   chkStatusFilter=f;
   document.querySelectorAll('#chk-status-chips .chip').forEach(c=>c.classList.remove('on'));
@@ -27009,6 +27193,30 @@ async function showProductHistory(variantId, productTitle){
 // ============================================================
 // 🆕 v257: STOCKTAKERS MANAGEMENT
 // ============================================================
+// 🆕 v514: إظهار كمية النظام في جرد ستارز
+async function stkStarsSysQtyLoad(){
+  try{
+    const r = await apiFetch('/api/stocktake/stars-sysqty','GET');
+    const cb=$('stk-stars-sysqty'); if(cb) cb.checked = !!r.enabled;
+    const i=$('stk-stars-sysqty-info');
+    if(i) i.innerHTML = r.enabled
+      ? '<b style="color:#b45309">الأعداد ظاهرة لموظف الجرد</b>'
+      : '<b style="color:#16a34a">جرد أعمى</b>';
+  }catch(e){}
+}
+async function stkStarsSysQtySave(){
+  const on = $('stk-stars-sysqty')?.checked;
+  if(on && !confirm('موظف الجرد هيشوف رصيد النظام وهو بيعد.\n\nده بيسهّل الشغل، بس بيقلل استقلالية العدّة — اللي بيعد ممكن يأكّد رقم النظام بدل ما يعد فعلاً.\n\nتكمّل؟')){
+    $('stk-stars-sysqty').checked = false; return;
+  }
+  try{
+    const r = await apiFetch('/api/stocktake/stars-sysqty','POST',{ enabled: on });
+    if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    toast(r.enabled ? '✅ الأعداد هتظهر في الجلسات الجديدة' : '✅ رجع جرد أعمى');
+    stkStarsSysQtyLoad();
+  }catch(e){ toast('❌ '+e.message); }
+}
+
 function openStocktakers(){
   renderStocktakersList();
   openM('m-stocktakers');
@@ -42837,7 +43045,8 @@ function goPage(el,page){
   if(page==='expiry') loadBatchesPage();
   // 🆕 v240: Inventory pages
   if(page==='inventory'){ loadInventoryPage(); bulkActivateCheckActive(); syncCheckActive(); }
-  if(page==='stocktake') loadStocktakePage();
+  if(page==='dead-stock') dsLoad();
+  if(page==='stocktake'){ loadStocktakePage(); stkStarsSysQtyLoad(); }
   if(page==='stk-report') stkrInit();
   if(page==='sales-sources') ssrcInit();
   if(page==='pos-customers') posCustInit();
