@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v518 — 📱 رسالة إنجليزي + مصدر العميل (2026-09-07)
+  ───────────────────────────────────────────────────────────
+  🔧 v518: الإيموجي كانت بتطلع مربعات — اتكتبت بأكواد هروب بدل نص
+    حرفي عشان الترميز مايبوظهاش.
+  🆕 v518: الرسالة بقت إنجليزي بخصم 100 ج على أول أوردر فوق 500 ج،
+    وخانة مستقلة لكود الخصم ({code})، ولينك الموقع في الآخر.
+  🆕 v518: عمودين جداد — مصدر العميل (محل/طلبات/الاتنين) وهل اشترى
+    أونلاين قبل كده، مع توجل لعرض اللي اتحوّلوا. backend v457.
+
   OrderPro v517 — 📱 تحويل عملاء المحل للتطبيق (2026-09-05)
   ───────────────────────────────────────────────────────────
   🆕 v517: صفحة جديدة — عملاء اشتروا من المحل ومعمروش اشتروا أونلاين،
@@ -5844,10 +5853,16 @@ tr:hover td{background:#fafbff}
       <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">أقل إنفاق</label>
         <input type="number" id="ap-min" value="0" min="0" onchange="apLoad()" style="width:100px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif"></div>
       <label style="font-size:12px;font-weight:700"><input type="checkbox" id="ap-hide" onchange="apLoad()"> اخفي اللي اتبعتلهم</label>
+      <label style="font-size:12px;font-weight:700"><input type="checkbox" id="ap-conv" onchange="apLoad()"> اعرض اللي اشتروا أونلاين كمان</label>
       <button class="btn btn-primary btn-sm" onclick="apLoad()">🔍 اعرض</button>
     </div>
     <div style="padding:12px 14px">
-      <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">نص الرسالة — <code>{name}</code> بيتبدل باسم العميل</label>
+      <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:8px">
+        <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">كود الخصم</label>
+          <input id="ap-code" value="APP100" oninput="localStorage.setItem('ap_code',this.value)" style="width:150px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif;font-weight:800;text-align:center"></div>
+        <span style="font-size:11px;color:var(--muted);padding-bottom:10px">اعمل الكود ده في Shopify: 100 ج خصم، حد أدنى 500 ج، أول أوردر بس</span>
+      </div>
+      <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">نص الرسالة — <code>{name}</code> الاسم الأول · <code>{code}</code> كود الخصم</label>
       <textarea id="ap-msg" rows="4" oninput="localStorage.setItem('ap_msg',this.value)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px"></textarea>
       <div style="font-size:11px;color:var(--muted);margin-top:4px">بيتحفظ في المتصفح. راجع الرسالة قبل الإرسال — واتساب بيفتح بالنص جاهز وإنت بتدوس إرسال.</div>
     </div>
@@ -20022,27 +20037,36 @@ async function dsTag(){
 }
 
 // 🆕 v517: تحويل عملاء المحل للتطبيق
-const AP_MSG_DEFAULT = `أهلاً {name} 👋
-معاك CAFELAX ☕
+// الإيموجي بأكواد هروب — النص المكتوب حرفياً كان بيتبوظ في الترميز
+const AP_EMOJI = { wave:'\u{1F44B}', coffee:'\u2615', gift:'\u{1F381}', phone:'\u{1F4F1}', web:'\u{1F310}' };
+const AP_MSG_DEFAULT = `Hi {name} ${AP_EMOJI.wave}
+This is CAFELAX ${AP_EMOJI.coffee}
 
-عشان تطلب من البيت وتوصلك لحد باب البيت، نزّل تطبيقنا من هنا:
+Order from home and get it delivered to your door \u2014 download our app:
 https://share.shopney.co/QVJPz43iOX
 
-ولأنك من عملائنا، أول أوردر من التطبيق عليه خصم خاص 🎁
+${AP_EMOJI.gift} As one of our customers, here is 100 EGP OFF your first app order above 500 EGP.
+Use code: {code}
 
-أي وقت تحتاج حاجة إحنا موجودين.`;
+${AP_EMOJI.web} You can also shop on our website: https://cafelax.com
+
+We are always here if you need anything.`;
 let _apRows=[];
 function apMsg(){ return $('ap-msg')?.value || AP_MSG_DEFAULT; }
 function apWaLink(x){
-  const txt = apMsg().replace(/\{name\}/g, (x.name||'').trim() || 'حضرتك');
+  const code = ($('ap-code')?.value || '').trim() || 'APP100';
+  const txt = apMsg()
+    .replace(/\{name\}/g, (x.name||'').trim().split(/\s+/)[0] || 'there')
+    .replace(/\{code\}/g, code);
   return `https://wa.me/${x.wa}?text=${encodeURIComponent(txt)}`;
 }
 async function apLoad(){
   const box=$('ap-list'), st=$('ap-stats'); if(!box) return;
   if($('ap-msg') && !$('ap-msg').value) $('ap-msg').value = localStorage.getItem('ap_msg') || AP_MSG_DEFAULT;
+  if($('ap-code')) $('ap-code').value = localStorage.getItem('ap_code') || 'APP100';
   box.innerHTML='<div class="card"><div style="padding:20px;color:var(--muted)">⏳ بيحسب...</div></div>';
   try{
-    const qs=`source=${$('ap-src').value}&days=${$('ap-days').value}&min_spend=${$('ap-min').value||0}&hide_contacted=${$('ap-hide').checked?1:0}`;
+    const qs=`source=${$('ap-src').value}&days=${$('ap-days').value}&min_spend=${$('ap-min').value||0}&hide_contacted=${$('ap-hide').checked?1:0}&include_converted=${$('ap-conv').checked?1:0}`;
     const r=await apiFetch('/api/app-conversion?'+qs,'GET');
     if(!r||r.error){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</div></div>`; return; }
     _apRows=r.rows||[];
@@ -20057,11 +20081,13 @@ async function apLoad(){
     if(!_apRows.length){ box.innerHTML='<div class="card"><div style="padding:24px;text-align:center;color:var(--muted)">مفيش عملاء بالمعايير دي</div></div>'; return; }
     box.innerHTML=`<div class="card"><div style="padding:6px 14px;overflow-x:auto">
       <table style="width:100%;font-size:13px">
-        <thead><tr style="color:var(--muted)"><th style="text-align:right;padding:6px">#</th><th style="text-align:right">العميل</th><th style="text-align:right">التليفون</th><th>طلبات</th><th>إنفاق</th><th>آخر شرا</th><th>واتساب</th></tr></thead>
+        <thead><tr style="color:var(--muted)"><th style="text-align:right;padding:6px">#</th><th style="text-align:right">العميل</th><th style="text-align:right">التليفون</th><th>المصدر</th><th>اشترى أونلاين</th><th>طلبات</th><th>إنفاق</th><th>آخر شرا</th><th>واتساب</th></tr></thead>
         <tbody>${_apRows.map((x,i)=>`<tr id="ap-r-${i}" style="border-top:1px solid var(--border);${x.contacted_at?'opacity:.5':''}">
           <td style="padding:5px 6px;color:var(--muted)">${i+1}</td>
           <td>${escapeHtml(x.name||'—')}</td>
           <td style="font-family:Roboto,sans-serif;font-weight:700">${escapeHtml(x.phone)}</td>
+          <td style="text-align:center;font-size:11px;font-weight:700;color:${x.from_pos&&x.from_talabat?'#7c3aed':(x.from_talabat?'#FF5A00':'var(--muted)')}">${x.from_pos&&x.from_talabat?'محل + طلبات':(x.from_talabat?'طلبات':'محل')}</td>
+          <td style="text-align:center;font-size:11px;font-weight:800;color:${x.bought_online?'#16a34a':'var(--muted)'}">${x.bought_online?'نعم':'لأ'}</td>
           <td style="text-align:center">${x.orders_count}</td>
           <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800">${x.spend.toLocaleString()}</td>
           <td style="text-align:center;font-size:11px;color:var(--muted)">${x.last_at?new Date(x.last_at).toLocaleDateString('ar-EG'):''}</td>
