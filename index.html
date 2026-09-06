@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v517 — 📱 تحويل عملاء المحل للتطبيق (2026-09-05)
+  ───────────────────────────────────────────────────────────
+  🆕 v517: صفحة جديدة — عملاء اشتروا من المحل ومعمروش اشتروا أونلاين،
+    مرتّبين بإجمالي إنفاقهم. زرار واتساب لكل عميل بيفتح شاته والرسالة
+    جاهزة (قالب معدّل بـ {name})، وبيتعلّم "اتبعتله" أوتوماتيك.
+    مع نسبة التحويل عشان تقيس. إرسال يدوي — مفيش bulk. backend v456.
+
   OrderPro v516 — 🧊 الأصناف الراكدة (2026-09-05)
   ───────────────────────────────────────────────────────────
   🆕 v516: صفحة جديدة — الأصناف اللي عندها مخزون ومابعتش من فترة،
@@ -1447,6 +1454,7 @@ tr:hover td{background:#fafbff}
       </div>
       <div class="nav-group-body">
         <div class="ni" data-p="suppliers" onclick="goPage(this,'suppliers')"><span class="ni-icon">🏭</span><span class="ni-label">الموردين</span></div>
+        <div class="ni" data-p="app-promo" onclick="goPage(this,'app-promo')"><span class="ni-icon">📱</span><span class="ni-label">تحويل للتطبيق</span></div>
         <div class="ni" data-p="dead-stock" onclick="goPage(this,'dead-stock')"><span class="ni-icon">🧊</span><span class="ni-label">الأصناف الراكدة</span></div>
         <div class="ni" data-p="purchase-orders" onclick="goPage(this,'purchase-orders')"><span class="ni-icon">📋</span><span class="ni-label">أوامر الشراء</span></div>
         <div class="ni" data-p="vendors" onclick="goPage(this,'vendors')"><span class="ni-icon">🏢</span><span class="ni-label">شركات الشحن</span></div>
@@ -5818,6 +5826,37 @@ tr:hover td{background:#fafbff}
 
 </div>
 
+<div class="page" id="page-app-promo">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">📱 تحويل عملاء المحل للتطبيق</h2>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:12px 14px;display:flex;gap:10px;align-items:end;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+      <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">المصدر</label>
+        <select id="ap-src" onchange="apLoad()" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
+          <option value="pos" selected>🏪 المحل</option><option value="talabat">🛵 طلبات</option><option value="all">الاتنين</option>
+        </select></div>
+      <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">آخر</label>
+        <select id="ap-days" onchange="apLoad()" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
+          <option value="90">90 يوم</option><option value="180">180 يوم</option><option value="365" selected>سنة</option><option value="1095">الكل</option>
+        </select></div>
+      <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">أقل إنفاق</label>
+        <input type="number" id="ap-min" value="0" min="0" onchange="apLoad()" style="width:100px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif"></div>
+      <label style="font-size:12px;font-weight:700"><input type="checkbox" id="ap-hide" onchange="apLoad()"> اخفي اللي اتبعتلهم</label>
+      <button class="btn btn-primary btn-sm" onclick="apLoad()">🔍 اعرض</button>
+    </div>
+    <div style="padding:12px 14px">
+      <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">نص الرسالة — <code>{name}</code> بيتبدل باسم العميل</label>
+      <textarea id="ap-msg" rows="4" oninput="localStorage.setItem('ap_msg',this.value)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px"></textarea>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">بيتحفظ في المتصفح. راجع الرسالة قبل الإرسال — واتساب بيفتح بالنص جاهز وإنت بتدوس إرسال.</div>
+    </div>
+    <div id="ap-stats" style="padding:0 14px 12px"></div>
+  </div>
+
+  <div id="ap-list"></div>
+</div>
+
 <div class="page" id="page-dead-stock">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">🧊 الأصناف الراكدة</h2>
@@ -8722,7 +8761,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'talabat':'🛵 طلبات (Talabat)','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'talabat':'🛵 طلبات (Talabat)','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -19980,6 +20019,66 @@ async function dsTag(){
     if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); return; }
     toast(`✅ اتوسم ${r.tagged}${r.failed?` · فشل ${r.failed}`:''}`);
   }catch(e){ toast('❌ '+e.message); }
+}
+
+// 🆕 v517: تحويل عملاء المحل للتطبيق
+const AP_MSG_DEFAULT = `أهلاً {name} 👋
+معاك CAFELAX ☕
+
+عشان تطلب من البيت وتوصلك لحد باب البيت، نزّل تطبيقنا من هنا:
+https://share.shopney.co/QVJPz43iOX
+
+ولأنك من عملائنا، أول أوردر من التطبيق عليه خصم خاص 🎁
+
+أي وقت تحتاج حاجة إحنا موجودين.`;
+let _apRows=[];
+function apMsg(){ return $('ap-msg')?.value || AP_MSG_DEFAULT; }
+function apWaLink(x){
+  const txt = apMsg().replace(/\{name\}/g, (x.name||'').trim() || 'حضرتك');
+  return `https://wa.me/${x.wa}?text=${encodeURIComponent(txt)}`;
+}
+async function apLoad(){
+  const box=$('ap-list'), st=$('ap-stats'); if(!box) return;
+  if($('ap-msg') && !$('ap-msg').value) $('ap-msg').value = localStorage.getItem('ap_msg') || AP_MSG_DEFAULT;
+  box.innerHTML='<div class="card"><div style="padding:20px;color:var(--muted)">⏳ بيحسب...</div></div>';
+  try{
+    const qs=`source=${$('ap-src').value}&days=${$('ap-days').value}&min_spend=${$('ap-min').value||0}&hide_contacted=${$('ap-hide').checked?1:0}`;
+    const r=await apiFetch('/api/app-conversion?'+qs,'GET');
+    if(!r||r.error){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</div></div>`; return; }
+    _apRows=r.rows||[];
+    const rate = r.total_customers ? ((r.converted/r.total_customers)*100).toFixed(1) : '0';
+    st.innerHTML=`<div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div class="sc" style="flex:1;min-width:150px"><div class="sc-label">عملاء بأرقام</div><div class="sc-val">${r.total_customers.toLocaleString()}</div></div>
+      <div class="sc green" style="flex:1;min-width:150px"><div class="sc-label">اشتروا أونلاين كمان</div><div class="sc-val">${r.converted.toLocaleString()} · ${rate}%</div></div>
+      <div class="sc orange" style="flex:1;min-width:160px"><div class="sc-label">هدف التحويل</div><div class="sc-val">${r.targets_count.toLocaleString()}</div></div>
+      <div class="sc blue" style="flex:1;min-width:170px"><div class="sc-label">إنفاقهم في المحل</div><div class="sc-val">${r.targets_value.toLocaleString()} ج</div></div>
+      <div class="sc" style="flex:1;min-width:130px"><div class="sc-label">اتبعتلهم</div><div class="sc-val">${r.contacted.toLocaleString()}</div></div>
+    </div>`;
+    if(!_apRows.length){ box.innerHTML='<div class="card"><div style="padding:24px;text-align:center;color:var(--muted)">مفيش عملاء بالمعايير دي</div></div>'; return; }
+    box.innerHTML=`<div class="card"><div style="padding:6px 14px;overflow-x:auto">
+      <table style="width:100%;font-size:13px">
+        <thead><tr style="color:var(--muted)"><th style="text-align:right;padding:6px">#</th><th style="text-align:right">العميل</th><th style="text-align:right">التليفون</th><th>طلبات</th><th>إنفاق</th><th>آخر شرا</th><th>واتساب</th></tr></thead>
+        <tbody>${_apRows.map((x,i)=>`<tr id="ap-r-${i}" style="border-top:1px solid var(--border);${x.contacted_at?'opacity:.5':''}">
+          <td style="padding:5px 6px;color:var(--muted)">${i+1}</td>
+          <td>${escapeHtml(x.name||'—')}</td>
+          <td style="font-family:Roboto,sans-serif;font-weight:700">${escapeHtml(x.phone)}</td>
+          <td style="text-align:center">${x.orders_count}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800">${x.spend.toLocaleString()}</td>
+          <td style="text-align:center;font-size:11px;color:var(--muted)">${x.last_at?new Date(x.last_at).toLocaleDateString('ar-EG'):''}</td>
+          <td style="text-align:center;white-space:nowrap">
+            <a href="${apWaLink(x)}" target="_blank" rel="noopener" onclick="apMark(${i})" class="btn btn-sm" style="background:#25D366;color:#fff;padding:3px 10px;font-size:11px;text-decoration:none">💬 واتساب</a>
+            ${x.contacted_at?`<span style="font-size:10px;color:#16a34a;margin-inline-start:6px">✅ ${new Date(x.contacted_at).toLocaleDateString('ar-EG')}</span>`:''}
+          </td>
+        </tr>`).join('')}</tbody></table></div></div>`;
+  }catch(e){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`; }
+}
+async function apMark(i){
+  const x=_apRows[i]; if(!x) return;
+  try{
+    await apiFetch('/api/app-conversion/contacted','POST',{ phone:x.phone });
+    const row=document.getElementById('ap-r-'+i); if(row) row.style.opacity='.5';
+    x.contacted_at=new Date().toISOString();
+  }catch(e){}
 }
 
 function chkSetFilter(f,btn){
@@ -43045,6 +43144,7 @@ function goPage(el,page){
   if(page==='expiry') loadBatchesPage();
   // 🆕 v240: Inventory pages
   if(page==='inventory'){ loadInventoryPage(); bulkActivateCheckActive(); syncCheckActive(); }
+  if(page==='app-promo') apLoad();
   if(page==='dead-stock') dsLoad();
   if(page==='stocktake'){ loadStocktakePage(); stkStarsSysQtyLoad(); }
   if(page==='stk-report') stkrInit();
