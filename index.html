@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v520 — 📅 فلتر فترة شراء محددة (2026-09-07)
+  ───────────────────────────────────────────────────────────
+  🆕 v520: فلتر من/إلى بالتاريخ (بيتجاوز "آخر X يوم" لما يتحدد) +
+    فلتر ساعات اليوم بتوقيت القاهرة للاستهداف حسب وقت الشرا.
+    وسطر بيوضّح الفلتر الشغال فوق القايمة. backend v459.
+
+  OrderPro v519 — 🚑 إصلاح الإيموجي في رسالة الواتساب (2026-09-07)
+  ───────────────────────────────────────────────────────────
+  🚑 v519: أكواد الهروب في v518 اتكتبت بباكسلاش مزدوج فطلعت نص حرفي
+    مش إيموجي. اتحولت لـ String.fromCodePoint (كود ASCII صافي).
+  🆕 v519: زرار "رجّع الرسالة الأصلية" — الرسالة بتتحفظ في المتصفح،
+    فلو اتحفظت نسخة مكسورة كانت هتفضل مستخدمة مهما اتصلح الكود.
+
   OrderPro v518 — 📱 رسالة إنجليزي + مصدر العميل (2026-09-07)
   ───────────────────────────────────────────────────────────
   🔧 v518: الإيموجي كانت بتطلع مربعات — اتكتبت بأكواد هروب بدل نص
@@ -5847,9 +5860,19 @@ tr:hover td{background:#fafbff}
           <option value="pos" selected>🏪 المحل</option><option value="talabat">🛵 طلبات</option><option value="all">الاتنين</option>
         </select></div>
       <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">آخر</label>
-        <select id="ap-days" onchange="apLoad()" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
+        <select id="ap-days" onchange="apClearRange();apLoad()" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
           <option value="90">90 يوم</option><option value="180">180 يوم</option><option value="365" selected>سنة</option><option value="1095">الكل</option>
         </select></div>
+      <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">أو فترة: من</label>
+        <input type="date" id="ap-from" onchange="apLoad()" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"></div>
+      <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">إلى</label>
+        <input type="date" id="ap-to" onchange="apLoad()" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"></div>
+      <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">ساعات اليوم</label>
+        <div style="display:flex;gap:4px;align-items:center">
+          <select id="ap-hfrom" onchange="apLoad()" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif"><option value="">أي</option><option value="0">00</option><option value="1">01</option><option value="2">02</option><option value="3">03</option><option value="4">04</option><option value="5">05</option><option value="6">06</option><option value="7">07</option><option value="8">08</option><option value="9">09</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option></select>
+          <span style="font-size:11px;color:var(--muted)">→</span>
+          <select id="ap-hto" onchange="apLoad()" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif"><option value="">أي</option><option value="0">00</option><option value="1">01</option><option value="2">02</option><option value="3">03</option><option value="4">04</option><option value="5">05</option><option value="6">06</option><option value="7">07</option><option value="8">08</option><option value="9">09</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option></select>
+        </div></div>
       <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">أقل إنفاق</label>
         <input type="number" id="ap-min" value="0" min="0" onchange="apLoad()" style="width:100px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif"></div>
       <label style="font-size:12px;font-weight:700"><input type="checkbox" id="ap-hide" onchange="apLoad()"> اخفي اللي اتبعتلهم</label>
@@ -5864,7 +5887,9 @@ tr:hover td{background:#fafbff}
       </div>
       <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">نص الرسالة — <code>{name}</code> الاسم الأول · <code>{code}</code> كود الخصم</label>
       <textarea id="ap-msg" rows="4" oninput="localStorage.setItem('ap_msg',this.value)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px"></textarea>
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">بيتحفظ في المتصفح. راجع الرسالة قبل الإرسال — واتساب بيفتح بالنص جاهز وإنت بتدوس إرسال.</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">
+        <button class="btn btn-ghost btn-sm" onclick="apResetMsg()" style="font-size:10px;padding:2px 8px">↩️ رجّع الرسالة الأصلية</button>
+        بيتحفظ في المتصفح. راجع الرسالة قبل الإرسال — واتساب بيفتح بالنص جاهز وإنت بتدوس إرسال.</div>
     </div>
     <div id="ap-stats" style="padding:0 14px 12px"></div>
   </div>
@@ -20037,20 +20062,27 @@ async function dsTag(){
 }
 
 // 🆕 v517: تحويل عملاء المحل للتطبيق
-// الإيموجي بأكواد هروب — النص المكتوب حرفياً كان بيتبوظ في الترميز
-const AP_EMOJI = { wave:'\u{1F44B}', coffee:'\u2615', gift:'\u{1F381}', phone:'\u{1F4F1}', web:'\u{1F310}' };
-const AP_MSG_DEFAULT = `Hi {name} ${AP_EMOJI.wave}
-This is CAFELAX ${AP_EMOJI.coffee}
-
-Order from home and get it delivered to your door \u2014 download our app:
-https://share.shopney.co/QVJPz43iOX
-
-${AP_EMOJI.gift} As one of our customers, here is 100 EGP OFF your first app order above 500 EGP.
-Use code: {code}
-
-${AP_EMOJI.web} You can also shop on our website: https://cafelax.com
-
-We are always here if you need anything.`;
+// الإيموجي بـ fromCodePoint — الكود كله ASCII فمستحيل الترميز يبوظه
+const AP_E = c => String.fromCodePoint(c);
+const AP_MSG_DEFAULT = [
+  'Hi {name} ' + AP_E(0x1F44B),
+  'This is CAFELAX ' + AP_E(0x2615),
+  '',
+  'Order from home and get it delivered to your door ' + AP_E(0x2014) + ' download our app:',
+  'https://share.shopney.co/QVJPz43iOX',
+  '',
+  AP_E(0x1F381) + ' As one of our customers, here is 100 EGP OFF your first app order above 500 EGP.',
+  'Use code: {code}',
+  '',
+  AP_E(0x1F310) + ' You can also shop on our website: https://cafelax.com',
+  '',
+  'We are always here if you need anything.',
+].join('\n');
+function apResetMsg(){
+  localStorage.removeItem('ap_msg');
+  if($('ap-msg')) $('ap-msg').value = AP_MSG_DEFAULT;
+  toast('\u2705 رجعت الرسالة الأصلية');
+}
 let _apRows=[];
 function apMsg(){ return $('ap-msg')?.value || AP_MSG_DEFAULT; }
 function apWaLink(x){
@@ -20066,7 +20098,11 @@ async function apLoad(){
   if($('ap-code')) $('ap-code').value = localStorage.getItem('ap_code') || 'APP100';
   box.innerHTML='<div class="card"><div style="padding:20px;color:var(--muted)">⏳ بيحسب...</div></div>';
   try{
-    const qs=`source=${$('ap-src').value}&days=${$('ap-days').value}&min_spend=${$('ap-min').value||0}&hide_contacted=${$('ap-hide').checked?1:0}&include_converted=${$('ap-conv').checked?1:0}`;
+    const f=$('ap-from')?.value||'', t=$('ap-to')?.value||'';
+    const hf=$('ap-hfrom')?.value??'', ht=$('ap-hto')?.value??'';
+    let qs=`source=${$('ap-src').value}&days=${$('ap-days').value}&min_spend=${$('ap-min').value||0}&hide_contacted=${$('ap-hide').checked?1:0}&include_converted=${$('ap-conv').checked?1:0}`;
+    if(f&&t) qs += `&from=${f}&to=${t}`;
+    if(hf!==''&&ht!=='') qs += `&hour_from=${hf}&hour_to=${ht}`;
     const r=await apiFetch('/api/app-conversion?'+qs,'GET');
     if(!r||r.error){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</div></div>`; return; }
     _apRows=r.rows||[];
@@ -20077,6 +20113,10 @@ async function apLoad(){
       <div class="sc orange" style="flex:1;min-width:160px"><div class="sc-label">هدف التحويل</div><div class="sc-val">${r.targets_count.toLocaleString()}</div></div>
       <div class="sc blue" style="flex:1;min-width:170px"><div class="sc-label">إنفاقهم في المحل</div><div class="sc-val">${r.targets_value.toLocaleString()} ج</div></div>
       <div class="sc" style="flex:1;min-width:130px"><div class="sc-label">اتبعتلهم</div><div class="sc-val">${r.contacted.toLocaleString()}</div></div>
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:var(--muted)">
+      الفلتر الشغال: ${r.from?`من <b>${escapeHtml(r.from)}</b> لـ <b>${escapeHtml(r.to)}</b>`:`آخر <b>${r.days}</b> يوم`}
+      ${r.hour_from!=null?` · شراء بين الساعة <b>${String(r.hour_from).padStart(2,'0')}:00</b> و<b>${String(r.hour_to).padStart(2,'0')}:59</b> بتوقيت القاهرة`:''}
     </div>`;
     if(!_apRows.length){ box.innerHTML='<div class="card"><div style="padding:24px;text-align:center;color:var(--muted)">مفيش عملاء بالمعايير دي</div></div>'; return; }
     box.innerHTML=`<div class="card"><div style="padding:6px 14px;overflow-x:auto">
@@ -20098,6 +20138,7 @@ async function apLoad(){
         </tr>`).join('')}</tbody></table></div></div>`;
   }catch(e){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`; }
 }
+function apClearRange(){ if($('ap-from'))$('ap-from').value=''; if($('ap-to'))$('ap-to').value=''; }
 async function apMark(i){
   const x=_apRows[i]; if(!x) return;
   try{
