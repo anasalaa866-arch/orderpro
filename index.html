@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v522 — ✏️ أوردرات اتعدّلت بعد الفوترة (2026-09-07)
+  ───────────────────────────────────────────────────────────
+  🆕 v522: كارت في صفحة ربط Zoho — الأوردرات اللي اتعدّلت على Shopify
+    بعد الفوترة والفاتورة مش قابلة للتعديل تلقائي (مدفوعة/عليها إشعار)،
+    مع سبب كل واحدة وزرار "اتعامل معاه". وزرار فحص احتياطي.
+    backend v461.
+
+  OrderPro v521 — 🆔 لينك العميل في Shopify (2026-09-07)
+  ───────────────────────────────────────────────────────────
+  🆕 v521: عمود "العميل في Shopify" في قايمة التحويل — رقم العميل
+    كلينك بيفتح صفحته في لوحة Shopify في تاب جديد، عشان تراجعه قبل
+    ما تبعتله. backend v460.
+
   OrderPro v520 — 📅 فلتر فترة شراء محددة (2026-09-07)
   ───────────────────────────────────────────────────────────
   🆕 v520: فلتر من/إلى بالتاريخ (بيتجاوز "آخر X يوم" لما يتحدد) +
@@ -4192,6 +4205,24 @@ tr:hover td{background:#fafbff}
       <span id="zh-msg" style="font-size:12px"></span>
     </div>
     <div id="zh-cf-box" style="padding:0 14px 14px;font-size:13px"></div>
+  </div>
+
+  <!-- 🆕 v522: أوردرات اتعدّلت بعد الفوترة -->
+  <div class="card" style="margin-bottom:14px;border:1px solid #b45309">
+    <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+      <div style="font-weight:800">✏️ أوردرات اتعدّلت على Shopify بعد الفوترة</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px">
+        الفاتورة <b>غير المدفوعة</b> بتتعدّل في Zoho تلقائي. المدفوعة أو اللي عليها إشعار دائن بتظهر هنا وإنت تقرر.
+      </div>
+    </div>
+    <div style="padding:12px 14px">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <button class="btn btn-sm" onclick="drScan()" style="background:#b45309;color:#fff">🔍 افحص المتفوترة</button>
+        <button class="btn btn-ghost btn-sm" onclick="drStatus()">🔄 تحديث</button>
+        <span style="font-size:11px;color:var(--muted)">الفحص احتياطي لو الـ webhook فشل</span>
+      </div>
+      <div id="dr-box" style="font-size:13px"></div>
+    </div>
   </div>
 
   <!-- 🆕 v513: إشعارات دائن تلقائية -->
@@ -19622,6 +19653,43 @@ async function zhSaveCodeField(){
   }catch(e){ toast('❌ '+e.message); }
 }
 // 🆕 v513: إشعارات دائن تلقائية
+// 🆕 v522: انحراف الأوردر بعد الفوترة
+async function drStatus(){
+  const box=$('dr-box'); if(!box) return;
+  try{
+    const r=await apiFetch('/api/zoho/drift-status','GET');
+    if(!r||r.error){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
+    if(!r.count){ box.innerHTML='<span style="color:#16a34a;font-weight:700">✅ مفيش أوردرات محتاجة تدخّل يدوي</span>'; return; }
+    box.innerHTML=`
+      <div style="font-weight:700;color:#b45309;margin-bottom:8px">${r.count} أوردر محتاج تدخّل يدوي في Zoho</div>
+      <div style="max-height:240px;overflow:auto;border:1px solid var(--border);border-radius:8px">
+      <table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted)">
+        <th style="text-align:right;padding:4px">أوردر</th><th>الفاتورة</th><th>الإجمالي دلوقتي</th><th>السبب</th><th>إمتى</th><th></th></tr></thead>
+      <tbody>${r.rows.map(x=>`<tr>
+        <td style="padding:3px 6px;font-family:Roboto,sans-serif;font-weight:700">${escapeHtml(String(x.id).replace(/^SH-/,''))}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(x.zoho_invoice_number||'')}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif">${(Number(x.total)||0).toLocaleString()}</td>
+        <td style="text-align:center;color:#b45309">${escapeHtml(x.zoho_drift_flag||'')}</td>
+        <td style="text-align:center;font-size:10px;color:var(--muted)">${x.zoho_drift_at?new Date(x.zoho_drift_at).toLocaleString('ar-EG'):''}</td>
+        <td style="text-align:center"><button class="btn btn-sm" style="padding:2px 8px;font-size:10px" onclick="drClear('${escapeHtml(x.id)}')">✔️ اتعامل معاه</button></td>
+      </tr>`).join('')}</tbody></table></div>`;
+  }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+async function drScan(){
+  const box=$('dr-box'); if(box) box.innerHTML='<span style="color:var(--muted)">⏳ بيفحص...</span>';
+  try{
+    const r=await apiFetch('/api/zoho/drift-scan','POST',{ limit:50 });
+    if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); drStatus(); return; }
+    toast(`✅ اتفحص ${r.checked} · اتعدّل ${r.drifted}`);
+    drStatus();
+  }catch(e){ toast('❌ '+e.message); drStatus(); }
+}
+async function drClear(id){
+  if(!confirm('يعني إنك ظبطت الفاتورة في Zoho بإيدك.\n\nتكمّل؟')) return;
+  try{ await apiFetch('/api/zoho/drift-clear/'+encodeURIComponent(id),'POST',{}); toast('✅ اتشال'); drStatus(); }
+  catch(e){ toast('❌ '+e.message); }
+}
+
 async function cnStatus(){
   const box=$('cn-box'); if(!box) return;
   try{
@@ -20083,7 +20151,7 @@ function apResetMsg(){
   if($('ap-msg')) $('ap-msg').value = AP_MSG_DEFAULT;
   toast('\u2705 رجعت الرسالة الأصلية');
 }
-let _apRows=[];
+let _apRows=[], _apShop='cafelax.myshopify.com';
 function apMsg(){ return $('ap-msg')?.value || AP_MSG_DEFAULT; }
 function apWaLink(x){
   const code = ($('ap-code')?.value || '').trim() || 'APP100';
@@ -20105,7 +20173,7 @@ async function apLoad(){
     if(hf!==''&&ht!=='') qs += `&hour_from=${hf}&hour_to=${ht}`;
     const r=await apiFetch('/api/app-conversion?'+qs,'GET');
     if(!r||r.error){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</div></div>`; return; }
-    _apRows=r.rows||[];
+    _apRows=r.rows||[]; if(r.shop_domain) _apShop=r.shop_domain;
     const rate = r.total_customers ? ((r.converted/r.total_customers)*100).toFixed(1) : '0';
     st.innerHTML=`<div style="display:flex;gap:14px;flex-wrap:wrap">
       <div class="sc" style="flex:1;min-width:150px"><div class="sc-label">عملاء بأرقام</div><div class="sc-val">${r.total_customers.toLocaleString()}</div></div>
@@ -20121,11 +20189,14 @@ async function apLoad(){
     if(!_apRows.length){ box.innerHTML='<div class="card"><div style="padding:24px;text-align:center;color:var(--muted)">مفيش عملاء بالمعايير دي</div></div>'; return; }
     box.innerHTML=`<div class="card"><div style="padding:6px 14px;overflow-x:auto">
       <table style="width:100%;font-size:13px">
-        <thead><tr style="color:var(--muted)"><th style="text-align:right;padding:6px">#</th><th style="text-align:right">العميل</th><th style="text-align:right">التليفون</th><th>المصدر</th><th>اشترى أونلاين</th><th>طلبات</th><th>إنفاق</th><th>آخر شرا</th><th>واتساب</th></tr></thead>
+        <thead><tr style="color:var(--muted)"><th style="text-align:right;padding:6px">#</th><th style="text-align:right">العميل</th><th style="text-align:right">التليفون</th><th>العميل في Shopify</th><th>المصدر</th><th>اشترى أونلاين</th><th>طلبات</th><th>إنفاق</th><th>آخر شرا</th><th>واتساب</th></tr></thead>
         <tbody>${_apRows.map((x,i)=>`<tr id="ap-r-${i}" style="border-top:1px solid var(--border);${x.contacted_at?'opacity:.5':''}">
           <td style="padding:5px 6px;color:var(--muted)">${i+1}</td>
           <td>${escapeHtml(x.name||'—')}</td>
           <td style="font-family:Roboto,sans-serif;font-weight:700">${escapeHtml(x.phone)}</td>
+          <td style="text-align:center">${x.customer_id
+            ? `<a href="https://${_apShop}/admin/customers/${escapeHtml(x.customer_id)}" target="_blank" rel="noopener" style="font-family:Roboto,sans-serif;font-size:11px;font-weight:700;color:#2563eb;text-decoration:none" title="افتح العميل في Shopify">${escapeHtml(x.customer_id)} \u2197</a>`
+            : '<span style="color:var(--muted);font-size:11px">—</span>'}</td>
           <td style="text-align:center;font-size:11px;font-weight:700;color:${x.from_pos&&x.from_talabat?'#7c3aed':(x.from_talabat?'#FF5A00':'var(--muted)')}">${x.from_pos&&x.from_talabat?'محل + طلبات':(x.from_talabat?'طلبات':'محل')}</td>
           <td style="text-align:center;font-size:11px;font-weight:800;color:${x.bought_online?'#16a34a':'var(--muted)'}">${x.bought_online?'نعم':'لأ'}</td>
           <td style="text-align:center">${x.orders_count}</td>
@@ -43159,7 +43230,7 @@ function goPage(el,page){
   // 🆕 v202: اقفل الـ sidebar على الموبايل لما تختار صفحة
   if(window.innerWidth <= 1024) toggleSidebar(false);
   if(page==='sku-audit')skuAuditLoad(true);
-  if(page==='zoho-sync'){zhLoadSettings();cnStatus();apiFetch('/api/zoho/delete-items-status','GET').then(st=>{if(st&&st.job&&st.job.running)zhDelWatch();}).catch(()=>{});}
+  if(page==='zoho-sync'){zhLoadSettings();cnStatus();drStatus();apiFetch('/api/zoho/delete-items-status','GET').then(st=>{if(st&&st.job&&st.job.running)zhDelWatch();}).catch(()=>{});}
   if(page==='profit'&&_gp===null){/* أول فتحة — سيبه يدوس احسب */}
   if(page==='top-products'){tprepLoad();atLoad();rvLoad();gfLoad();}
   if(page==='unlinked-lines')ulLoad();
