@@ -1,6 +1,29 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v526 — 🔄 الشيت يتنشر فور تنزيله (2026-09-08)
+  ───────────────────────────────────────────────────────────
+  🆕 v526: توجل "الشيت يتنشر فور تنزيله" (مفعّل افتراضياً) — تنزيل
+    الشيت بينشر الأسعار فوراً وأجهزة الكاشير بتاخدها خلال دقيقة.
+    اقفله لو بتولّد شيت للمعاينة من غير رفع. backend v464 · Stars v114.
+
+  OrderPro v525 — 💰 سعر طلبات المنشور مقابل المحسوب (2026-09-08)
+  ───────────────────────────────────────────────────────────
+  🆕 v525: شريط في صفحة طلبات بيوري آخر رفع وكام منتج سعره على طلبات
+    بقى قديم، مع تفاصيل الفروق. وزرار "أكّدت الرفع على طلبات" بيخلي
+    أسعار الشيت المولّد تروح للكاشير. backend v463.
+
+  OrderPro v524 — 🚑 إصلاح بحث الخزنة (2026-09-08)
+  ───────────────────────────────────────────────────────────
+  🚑 v524: بحث الخزنة (v512) كان بيفلتر على tx.note وهو حقل مش موجود —
+    البيان اسمه reason. فأي بحث بالنص كان بيرجّع صفر دايماً. دلوقتي
+    بيدوّر في كل الحقول النصية مع بعض بدل ما يعتمد على اسم واحد.
+
+  OrderPro v523 — 📅 السنة دي / السنة اللي فاتت (2026-09-08)
+  ───────────────────────────────────────────────────────────
+  🆕 v523: زرارين في مبيعات حسب المصدر — "السنة دي" (من 1 يناير لحد
+    النهاردة) و"السنة اللي فاتت" (السنة كاملة).
+
   OrderPro v522 — ✏️ أوردرات اتعدّلت بعد الفوترة (2026-09-07)
   ───────────────────────────────────────────────────────────
   🆕 v522: كارت في صفحة ربط Zoho — الأوردرات اللي اتعدّلت على Shopify
@@ -1649,6 +1672,8 @@ tr:hover td{background:#fafbff}
           <button class="btn" id="tal-export" onclick="talabatExport()" style="background:#f5a623;color:#fff;display:none">⬇️ توليد شيت التحديث (CSV)</button>
         </div>
         <div id="tal-report" style="margin-top:10px;font-size:13px"></div>
+        <!-- 🆕 v525: حالة الأسعار المنشورة على طلبات -->
+        <div id="tal-pub" style="margin-top:12px"></div>
       </div>
     </div>
 
@@ -1783,6 +1808,8 @@ tr:hover td{background:#fafbff}
           <button class="btn btn-ghost btn-sm" onclick="ssrcPreset('7d')">آخر 7 أيام</button>
           <button class="btn btn-ghost btn-sm" onclick="ssrcPreset('month')">الشهر ده</button>
           <button class="btn btn-ghost btn-sm" onclick="ssrcPreset('lastmonth')">الشهر اللي فات</button>
+          <button class="btn btn-ghost btn-sm" onclick="ssrcPreset('year')">السنة دي</button>
+          <button class="btn btn-ghost btn-sm" onclick="ssrcPreset('lastyear')">السنة اللي فاتت</button>
         </div>
       </div>
     </div>
@@ -22810,6 +22837,12 @@ function selectTreasury(tId){
 }
 
 // 🆕 v512: بحث الخزنة
+// 🚑 v524: البحث كان على tx.note وهو مش موجود — البيان اسمه reason.
+//   بنجمع كل الحقول النصية عشان البحث ما يعتمدش على اسم حقل واحد.
+function _txText(tx){
+  return [tx.reason, tx.note, tx.description, tx.desc, tx.notes, tx.ref, tx.type]
+    .filter(v => typeof v === 'string' && v).join(' ');
+}
 function treasurySearch(){ if(_activeTreasuryId) renderTreasuryTx(_activeTreasuryId); }
 function treasurySearchClear(){
   const i=document.getElementById('treasury-search'); if(i) i.value='';
@@ -22862,9 +22895,9 @@ function renderTreasuryTx(tId){
       if(exact !== null){
         if(Math.abs(amt - exact) < 1) return true;   // مبلغ مطابق
         // ولو مش لاقي بالمبلغ، دوّر عليه كنص في البيان (رقم أوردر مثلاً)
-        return String(tx.note||'').includes(_q);
+        return _txText(tx).includes(_q);
       }
-      const hay = String(tx.note||'').toLowerCase() + ' ' + String(amt);
+      const hay = _txText(tx).toLowerCase() + ' ' + String(amt);
       return words.every(w => hay.includes(w));       // كل الكلمات لازم تكون موجودة
     });
   }
@@ -37161,6 +37194,57 @@ function _talMarginBtnState(){
   const valid = isFinite(v) && v >= 0 && v <= 90;
   btn.disabled = !valid || v === _talMarginCur;
 }
+// 🆕 v525: فرق السعر بين الكاشير وطلبات
+async function talAutoPubSave(){
+  try{
+    const on = $('tal-autopub')?.checked;
+    await apiFetch('/api/talabat/autopublish','POST',{ enabled: on });
+    toast(on ? '✅ الشيت هيتنشر فور تنزيله' : '✅ هتأكّد بإيدك بعد الرفع');
+  }catch(e){ toast('❌ '+e.message); }
+}
+async function talPubStatus(){
+  const box=$('tal-pub'); if(!box) return;
+  try{
+    const r=await apiFetch('/api/talabat/price-drift','GET');
+    if(!r||r.error){ box.innerHTML=''; return; }
+    try{ const ap=await apiFetch('/api/talabat/autopublish','GET'); setTimeout(()=>{ if($('tal-autopub')) $('tal-autopub').checked = !!ap.enabled; },0); }catch(e){}
+    const last = r.last_published ? new Date(r.last_published).toLocaleString('ar-EG') : 'مفيش';
+    const needsUpload = r.drift_count > 0;
+    box.innerHTML = `
+      <div style="border:1px solid ${r.pending?'#2563eb':(needsUpload?'#dc2626':'var(--border)')};border-radius:10px;padding:10px 12px">
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;font-weight:700">
+          <span>آخر رفع: <span style="font-weight:400;color:var(--muted)">${escapeHtml(last)}</span></span>
+          <span style="color:${needsUpload?'#dc2626':'#16a34a'}">${needsUpload?`⚠️ ${r.drift_count} منتج سعره على طلبات قديم`:'✅ الأسعار متطابقة'}</span>
+          ${r.never_published?`<span style="color:var(--muted)">${r.never_published} لسه ماترفعوش</span>`:''}
+          ${r.pending?`<span style="color:#2563eb">📄 ${r.pending} في شيت مولّد لسه ماتأكّدش</span>`:''}
+          ${r.pending?`<button class="btn btn-sm" style="background:#2563eb;color:#fff" onclick="talConfirmPub()">✅ أكّدت الرفع على طلبات</button>`:''}
+          <label style="font-size:11px;font-weight:700;margin-inline-start:auto"><input type="checkbox" id="tal-autopub" onchange="talAutoPubSave()"> الشيت يتنشر فور تنزيله</label>
+        </div>
+        ${needsUpload?`<div style="font-size:11px;color:var(--muted);margin-top:6px">
+          الكاشير بياخد السعر المنشور على طلبات، فمفيش فرق على العميل. ولّد شيت وارفعه عشان تحدّث أسعار طلبات.
+        </div>
+        <details style="margin-top:8px"><summary style="cursor:pointer;font-size:11px;color:#dc2626">شوف الفروق (${r.rows.length})</summary>
+        <div style="max-height:200px;overflow:auto;margin-top:6px"><table style="width:100%;font-size:11px">
+          <thead><tr style="color:var(--muted)"><th style="text-align:right">المنتج</th><th>على طلبات</th><th>المفروض</th><th>فرق</th></tr></thead>
+          <tbody>${r.rows.map(x=>`<tr>
+            <td style="padding:2px 4px">${escapeHtml(String(x.name).slice(0,45))}</td>
+            <td style="text-align:center;font-family:Roboto,sans-serif">${x.published}</td>
+            <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${x.target}</td>
+            <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:${x.diff>0?'#16a34a':'#dc2626'}">${x.diff>0?'+':''}${x.diff}</td>
+          </tr>`).join('')}</tbody></table></div></details>`:''}
+      </div>`;
+  }catch(e){ box.innerHTML=''; }
+}
+async function talConfirmPub(){
+  if(!confirm('تأكيد إنك رفعت الشيت على طلبات فعلاً؟\n\nالأسعار دي هتروح للكاشير على طول.\nمتأكّدش قبل ما ترفع — الكاشير هياخد أسعار طلبات لسه ماشفتهاش.')) return;
+  try{
+    const r=await apiFetch('/api/talabat/confirm-published','POST',{ confirm:'PUBLISHED' });
+    if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    toast(`✅ اتنشر ${r.published} سعر — الكاشير هياخدهم`);
+    talPubStatus(); talabatLoadLinks();
+  }catch(e){ toast('❌ '+e.message); }
+}
+
 async function talabatLoadMargin(){
   try{
     const r = await apiFetch('/api/talabat/margin','GET');
@@ -37233,6 +37317,7 @@ async function talabatMarginSave(){
 }
 
 async function loadTalabat(){
+  talPubStatus();
   await talabatLoadMargin();
   await talabatLoadLinks();
   // 🆕 v442: حمّل عدّاد "محتاج تحويل" مع فتح الصفحة عشان البادچ ينبّه من غير ما تفتح التاب
@@ -37474,6 +37559,9 @@ function ssrcPreset(p){
   else if(p==='7d'){ const d=new Date(now); d.setDate(d.getDate()-6); from=_ssrcYmd(d); }
   else if(p==='month'){ from=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`; }
   else if(p==='lastmonth'){ const fm=new Date(now.getFullYear(), now.getMonth()-1, 1); const lm=new Date(now.getFullYear(), now.getMonth(), 0); from=_ssrcYmd(fm); to=_ssrcYmd(lm); }
+  // 🆕 v523: السنة دي لحد النهاردة (مش لآخر ديسمبر — عشان المقارنة تبقى عادلة)
+  else if(p==='year'){ from=`${now.getFullYear()}-01-01`; }
+  else if(p==='lastyear'){ const y=now.getFullYear()-1; from=`${y}-01-01`; to=`${y}-12-31`; }
   $('ssrc-from').value=from; $('ssrc-to').value=to; loadSalesSources();
 }
 function _ssrcMoney(n){ return (Number(n)||0).toLocaleString('en-US',{maximumFractionDigits:0}) + ' ج'; }
