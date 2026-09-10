@@ -1,6 +1,20 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v528 — 💱 المدير يغيّر طريقة الدفع وقت الاستلام (2026-09-09)
+  ───────────────────────────────────────────────────────────
+  🆕 v528: زرار 💱 على كل بيعة في شاشة الشيفت المستني والشيفت المفتوح —
+    يغيّر طريقة الدفع (ويدعم الدفع المقسّم) والمجموع لازم يساوي إجمالي
+    البيعة. الإجماليات بتتحدّث فوراً. مش متاح على التصفية المقفولة
+    لأن أرقامها متجمّدة في الجدول.
+
+  OrderPro v527 — ↩️ المرتجعات تبان في التصفية (2026-09-09)
+  ───────────────────────────────────────────────────────────
+  🆕 v527: المرتجعات المخصومة بقت تظهر كبند مستقل في ورقة التصفية
+    وفي شاشة التفاصيل (كاش/فيزا/انستاباي + العدد). قبل كده كانت
+    بتتخصم من المبالغ من غير ما تبان، فالكاشير يشوف رقم أقل من غير
+    سبب. backend v465.
+
   OrderPro v526 — 🔄 الشيت يتنشر فور تنزيله (2026-09-08)
   ───────────────────────────────────────────────────────────
   🆕 v526: توجل "الشيت يتنشر فور تنزيله" (مفعّل افتراضياً) — تنزيل
@@ -15964,6 +15978,85 @@ function _renderOnlinePaidPickupsSection(onlinePaidPickups){
   `;
 }
 
+// 🆕 v528: المدير يغيّر طريقة دفع بيعة وهو بيستلم التصفية
+//   (الكاشير ضرب فيزا والعميل دفع كاش وهكذا). متاح للشيفت المفتوح أو
+//   المستني الاستلام بس — التصفية المقفولة أرقامها متجمّدة.
+let _pmSale = null;
+function pmOpen(saleId, total, saleNo, sessionId){
+  _pmSale = { id: saleId, total: Number(total)||0, no: saleNo, sessionId };
+  const box = document.getElementById('pm-modal') || (() => {
+    const d = document.createElement('div'); d.id='pm-modal';
+    d.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+    document.body.appendChild(d); return d;
+  })();
+  box.style.display='flex';
+  box.innerHTML = `
+    <div style="background:var(--card);border-radius:14px;padding:18px;max-width:420px;width:100%;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="margin:0;font-size:15px">💱 تغيير طريقة الدفع</h3>
+        <button onclick="pmClose()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)">×</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+        بيعة <b style="font-family:Roboto,sans-serif">${escapeHtml(saleNo)}</b> · إجمالي
+        <b style="font-family:Roboto,sans-serif">${_pmSale.total.toLocaleString()} ج</b>
+      </div>
+      <div id="pm-rows"></div>
+      <button class="btn btn-ghost btn-sm" onclick="pmAddRow()" style="margin-top:6px">➕ طريقة تانية (دفع مقسّم)</button>
+      <div id="pm-sum" style="margin:10px 0;font-size:12px;font-weight:700"></div>
+      <input id="pm-reason" class="form-input" placeholder="السبب (اختياري) — مثال: العميل دفع كاش" style="width:100%;margin-bottom:10px">
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="pmSave()" style="flex:1">💾 احفظ</button>
+        <button class="btn btn-ghost btn-sm" onclick="pmClose()">إلغاء</button>
+      </div>
+    </div>`;
+  pmSetRows([{ method:'cash', amount:_pmSale.total }]);
+}
+function pmClose(){ const b=document.getElementById('pm-modal'); if(b) b.style.display='none'; _pmSale=null; }
+function pmSetRows(rows){
+  const box=document.getElementById('pm-rows'); if(!box) return;
+  const opts=[['cash','💵 كاش'],['visa','💳 فيزا'],['instapay','📱 انستاباي'],['fawry','🏪 فوري'],['vodafone_cash','📲 فودافون كاش']];
+  box.innerHTML = rows.map((r,i)=>`
+    <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+      <select class="pm-m" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
+        ${opts.map(([v,l])=>`<option value="${v}" ${r.method===v?'selected':''}>${l}</option>`).join('')}
+      </select>
+      <input class="pm-a" type="number" step="0.01" value="${r.amount}" oninput="pmSum()"
+             style="width:110px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif;text-align:center">
+      ${rows.length>1?`<button onclick="pmDel(${i})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px">✕</button>`:''}
+    </div>`).join('');
+  pmSum();
+}
+function pmRead(){
+  const ms=[...document.querySelectorAll('.pm-m')], as=[...document.querySelectorAll('.pm-a')];
+  return ms.map((m,i)=>({ method:m.value, amount: parseFloat(as[i].value)||0 }));
+}
+function pmAddRow(){ const r=pmRead(); r.push({method:'visa', amount:0}); pmSetRows(r); }
+function pmDel(i){ const r=pmRead(); r.splice(i,1); pmSetRows(r); }
+function pmSum(){
+  const el=document.getElementById('pm-sum'); if(!el||!_pmSale) return;
+  const sum=pmRead().reduce((a,b)=>a+b.amount,0);
+  const ok=Math.abs(sum-_pmSale.total)<0.01;
+  el.innerHTML = `المجموع: <span style="font-family:Roboto,sans-serif;color:${ok?'#16a34a':'#dc2626'}">${sum.toLocaleString()}</span> / ${_pmSale.total.toLocaleString()} ج`
+    + (ok?' ✅':` — لازم يساوي الإجمالي (فرق ${(sum-_pmSale.total).toFixed(2)})`);
+}
+async function pmSave(){
+  if(!_pmSale) return;
+  const payments = pmRead().filter(p=>p.amount>0);
+  if(!payments.length){ toast('❌ حط مبلغ'); return; }
+  const sum = payments.reduce((a,b)=>a+b.amount,0);
+  if(Math.abs(sum-_pmSale.total) >= 0.01){ toast('❌ المجموع لازم يساوي إجمالي البيعة'); return; }
+  try{
+    const r = await apiFetch(`/api/pos/sales/${_pmSale.id}/payments`,'PATCH',
+      { payments, change_reason: document.getElementById('pm-reason')?.value || 'تعديل المدير وقت الاستلام' });
+    if(!r || r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    toast('✅ اتغيّرت طريقة الدفع');
+    const sid=_pmSale.sessionId; pmClose();
+    // أعد تحميل الشاشة عشان الإجماليات تتحدّث
+    if(typeof openPendingSessionDetails==='function' && document.getElementById('m-settlement-details')?.classList.contains('open')) openPendingSessionDetails(sid);
+    else if(typeof loadSettlementsReceipts==='function') loadSettlementsReceipts();
+  }catch(e){ toast('❌ '+e.message); }
+}
+
 async function openPendingSessionDetails(sessionId){
   const cont = document.getElementById('settlement-details-content');
   cont.innerHTML = '<div style="text-align:center;padding:30px">⏳ جاري التحميل...</div>';
@@ -16047,6 +16140,7 @@ async function openPendingSessionDetails(sessionId){
                 <th style="padding:6px 8px;text-align:right">العميل</th>
                 <th style="padding:6px 8px;text-align:right">طرق الدفع</th>
                 <th style="padding:6px 8px;text-align:left">المبلغ</th>
+                <th style="padding:6px 8px;text-align:center">تغيير</th>
               </tr>
             </thead>
             <tbody>
@@ -16065,6 +16159,11 @@ async function openPendingSessionDetails(sessionId){
                     <td style="padding:6px 8px">${escapeHtml(sale.customer_name || 'عميل عام')}</td>
                     <td style="padding:6px 8px;font-size:11px">${paysStr}</td>
                     <td style="padding:6px 8px;text-align:left;font-weight:700">${parseFloat(sale.total).toLocaleString()} ج</td>
+                    <td style="padding:6px 8px;text-align:center">
+                      <button onclick="pmOpen(${sale.id}, ${parseFloat(sale.total)||0}, '${escapeHtml(String(sale.sale_number||('#'+sale.id))).replace(/'/g,"\\'")}', ${sessionId})"
+                              style="padding:2px 8px;font-size:10px;background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:6px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700"
+                              title="غيّر طريقة الدفع">💱</button>
+                    </td>
                   </tr>
                 `;
               }).join('')}
@@ -16264,6 +16363,7 @@ async function openActiveShiftDetails(sessionId){
                 <th style="padding:6px 8px;text-align:right">العميل</th>
                 <th style="padding:6px 8px;text-align:right">طرق الدفع</th>
                 <th style="padding:6px 8px;text-align:left">المبلغ</th>
+                <th style="padding:6px 8px;text-align:center">تغيير</th>
               </tr>
             </thead>
             <tbody>
@@ -16282,6 +16382,11 @@ async function openActiveShiftDetails(sessionId){
                     <td style="padding:6px 8px">${escapeHtml(sale.customer_name || 'عميل عام')}</td>
                     <td style="padding:6px 8px;font-size:11px">${paysStr}</td>
                     <td style="padding:6px 8px;text-align:left;font-weight:700">${parseFloat(sale.total).toLocaleString()} ج</td>
+                    <td style="padding:6px 8px;text-align:center">
+                      <button onclick="pmOpen(${sale.id}, ${parseFloat(sale.total)||0}, '${escapeHtml(String(sale.sale_number||('#'+sale.id))).replace(/'/g,"\\'")}', ${sessionId})"
+                              style="padding:2px 8px;font-size:10px;background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:6px;cursor:pointer;font-family:Cairo,sans-serif;font-weight:700"
+                              title="غيّر طريقة الدفع">💱</button>
+                    </td>
                   </tr>
                 `;
               }).join('')}
@@ -16330,6 +16435,16 @@ async function openSettlementDetails(id){
           <div><div style="font-size:10px;color:#6366f1">💳 فيزا</div><div style="font-size:16px;font-weight:800;color:#6366f1">${parseFloat(s.visa_amount).toLocaleString()} ج</div></div>
           <div><div style="font-size:10px;color:#4f46e5">📱 انستاباي</div><div style="font-size:16px;font-weight:800;color:#4f46e5">${parseFloat(s.instapay_amount).toLocaleString()} ج</div></div>
         </div>
+        ${(parseFloat(s.refund_cash||0)+parseFloat(s.refund_visa||0)+parseFloat(s.refund_instapay||0)) > 0 ? `
+        <div style="margin-top:10px;padding:8px 10px;background:var(--danger-light);border-radius:8px">
+          <div style="font-size:11px;font-weight:800;color:#dc2626;margin-bottom:4px">↩️ مرتجعات مخصومة${s.refund_count?` (${s.refund_count})`:''}</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;font-weight:700;color:#dc2626">
+            ${parseFloat(s.refund_cash||0)>0?`<span>كاش −${parseFloat(s.refund_cash).toLocaleString()}</span>`:''}
+            ${parseFloat(s.refund_visa||0)>0?`<span>فيزا −${parseFloat(s.refund_visa).toLocaleString()}</span>`:''}
+            ${parseFloat(s.refund_instapay||0)>0?`<span>انستاباي −${parseFloat(s.refund_instapay).toLocaleString()}</span>`:''}
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">المبالغ فوق بعد الخصم</div>
+        </div>` : ''}
       </div>
     `;
 
@@ -16663,6 +16778,19 @@ async function printSettlement(id){
     <div class="visa"><span>💳 فيزا</span><b>${parseFloat(s.visa_amount||0).toLocaleString()}</b></div>
     <div class="insta"><span>📱 انستاباي</span><b>${parseFloat(s.instapay_amount||0).toLocaleString()}</b></div>
   </div>
+
+  ${(parseFloat(s.refund_cash||0)+parseFloat(s.refund_visa||0)+parseFloat(s.refund_instapay||0)) > 0 ? `
+  <div style="margin:8px 0;padding:8px 10px;border:1px dashed #dc2626;border-radius:6px">
+    <div style="font-weight:700;color:#dc2626;margin-bottom:4px;font-size:12px">
+      ↩️ مرتجعات مخصومة${s.refund_count ? ` (${s.refund_count})` : ''}
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px">
+      ${parseFloat(s.refund_cash||0)>0?`<span>💵 كاش: <b>-${parseFloat(s.refund_cash).toLocaleString()}</b></span>`:''}
+      ${parseFloat(s.refund_visa||0)>0?`<span>💳 فيزا: <b>-${parseFloat(s.refund_visa).toLocaleString()}</b></span>`:''}
+      ${parseFloat(s.refund_instapay||0)>0?`<span>📱 انستاباي: <b>-${parseFloat(s.refund_instapay).toLocaleString()}</b></span>`:''}
+    </div>
+    <div style="font-size:10px;color:#666;margin-top:3px">المبالغ فوق بعد خصم المرتجعات</div>
+  </div>` : ''}
 
   ${parseFloat(s.cash_difference||0) !== 0 || parseFloat(s.visa_difference||0) !== 0 || parseFloat(s.instapay_difference||0) !== 0 ? `
     <h3>⚠️ الفروقات</h3>
