@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v531 — 👁️ توضيح المخفيين في قايمة التحويل (2026-09-13)
+  ───────────────────────────────────────────────────────────
+  🔧 v531: كارت "اشتروا أونلاين كمان" كان بيقول 287 والجدول تحته كله
+    "لأ" من غير تفسير — القايمة بتعرض الهدف بس افتراضياً. الكارت بقى
+    بيقول "مخفيين" وبيشتغل كزرار لإظهارهم.
+
+  OrderPro v530 — 📋 تصفية الكاشير في تاريخ الطلب (2026-09-13)
+  ───────────────────────────────────────────────────────────
+  🆕 v530: تاريخ طلب المحل بقى يوري "تصفية كاشير #N" مع زرار يفتح
+    تفاصيلها مباشرة. backend v469.
+
   OrderPro v529 — 🛍️ رقم أوردر شوبيفاي في التصفيات (2026-09-12)
   ───────────────────────────────────────────────────────────
   🆕 v529: رقم أوردر شوبيفاي بقى ظاهر تحت رقم البيعة في جداول الشيفت
@@ -11688,7 +11699,7 @@ async function openOrderHistory(orderId){
   const iconMap = {
     'إنشاء الطلب':'🆕', 'تغيير الحالة':'🔄', 'تعيين مندوب':'🚴',
     'تعديل البيانات':'✏️', 'تغيير حالة الدفع':'💳', 'إلغاء':'❌',
-    'مكتمل':'✅', 'تسوية':'💰', 
+    'مكتمل':'✅', 'تسوية':'💰', 'تصفية كاشير':'🏪', 
     'printed':'🖨️', 'طباعة':'🖨️', // 🆕 v265
     // 🆕 v335: preparation actions
     'preparation_started':'📦',
@@ -11713,7 +11724,9 @@ async function openOrderHistory(orderId){
     // 🆕 v195: زر "اعرض التسوية" لو الحدث تسوية
     const settleBtn = h.action === 'تسوية' && h.settlementId
       ? `<button class="btn btn-ghost btn-xs" onclick="goToSettlement('${h.settlementId}')" style="margin-top:6px;font-size:11px">📜 اعرض التسوية</button>`
-      : '';
+      : (h.action === 'تصفية كاشير' && h.cashierSettlementId
+          ? `<button class="btn btn-ghost btn-xs" onclick="closeM('m-order-history');openSettlementDetails(${h.cashierSettlementId})" style="margin-top:6px;font-size:11px">🏪 اعرض التصفية</button>`
+          : '');
     
     // 🆕 v265: عرض خاص للطباعة
     let extraInfo = '';
@@ -20338,7 +20351,10 @@ async function apLoad(){
     const rate = r.total_customers ? ((r.converted/r.total_customers)*100).toFixed(1) : '0';
     st.innerHTML=`<div style="display:flex;gap:14px;flex-wrap:wrap">
       <div class="sc" style="flex:1;min-width:150px"><div class="sc-label">عملاء بأرقام</div><div class="sc-val">${r.total_customers.toLocaleString()}</div></div>
-      <div class="sc green" style="flex:1;min-width:150px"><div class="sc-label">اشتروا أونلاين كمان</div><div class="sc-val">${r.converted.toLocaleString()} · ${rate}%</div></div>
+      <div class="sc green" style="flex:1;min-width:150px;cursor:pointer" onclick="const c=$('ap-conv');c.checked=!c.checked;apLoad()" title="دوس لإظهارهم/إخفائهم في القايمة">
+        <div class="sc-label">اشتروا أونلاين كمان</div><div class="sc-val">${r.converted.toLocaleString()} · ${rate}%</div>
+        <div style="font-size:10px;margin-top:2px;color:${$('ap-conv')?.checked?'#16a34a':'var(--muted)'}">${$('ap-conv')?.checked?'👁️ ظاهرين في القايمة':'🙈 مخفيين — دوس لإظهارهم'}</div>
+      </div>
       <div class="sc orange" style="flex:1;min-width:160px"><div class="sc-label">هدف التحويل</div><div class="sc-val">${r.targets_count.toLocaleString()}</div></div>
       <div class="sc blue" style="flex:1;min-width:170px"><div class="sc-label">إنفاقهم في المحل</div><div class="sc-val">${r.targets_value.toLocaleString()} ج</div></div>
       <div class="sc" style="flex:1;min-width:130px"><div class="sc-label">اتبعتلهم</div><div class="sc-val">${r.contacted.toLocaleString()}</div></div>
