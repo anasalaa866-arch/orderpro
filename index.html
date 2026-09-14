@@ -1,6 +1,27 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v534 — 🚑 الشيت بيبلّغ السيرفر بالأسعار المنشورة (2026-09-14)
+  ───────────────────────────────────────────────────────────
+  🚑 v534: زرار "توليد شيت التحديث" بيولّد في المتصفح ومكانش بيبعت أي
+    نداء للسيرفر — فكود النشر بتاع v463/v464 مكانش بيتنادى أصلاً،
+    وpublished_price فضل NULL، والكاشير فضل على السعر اللحظي. الزرار
+    بقى يبعت الأسعار للسيرفر بعد التنزيل. backend v473.
+
+  OrderPro v533 — 🔍 بحث التصفيات من كل الفترات (2026-09-14)
+  ───────────────────────────────────────────────────────────
+  🔧 v533: البحث بقى يسأل السيرفر ويجيب من كل التصفيات مهما كان
+    عمرها — كان بيفلتر المتحمّل بس (آخر 30 يوم مستلمة + المعلّقة)،
+    فتصفية زي #305 المستلمة من 42 يوم مكانش بيلاقيها. backend v472.
+
+  OrderPro v532 — 🔍 بحث التصفيات + حسبة الدرج (2026-09-14)
+  ───────────────────────────────────────────────────────────
+  🆕 v532: بحث برقم التصفية أو اسم الكاشير في صفحة استلام التصفيات.
+  🆕 v532: قسم "حسبة الكاش في الدرج" في تفاصيل التصفية — رصيد افتتاحي
+    + مبيعات + وارد − منصرف = متوقع، مقابل اللي الكاشير عدّه واللي
+    المدير استلمه. كان الفرق بيظهر من غير ما يبان جاي منين — خصوصاً
+    التصفيات اللي مبيعاتها صفر وفرقها بالآلاف.
+
   OrderPro v531 — 👁️ توضيح المخفيين في قايمة التحويل (2026-09-13)
   ───────────────────────────────────────────────────────────
   🔧 v531: كارت "اشتروا أونلاين كمان" كان بيقول 287 والجدول تحته كله
@@ -2873,6 +2894,8 @@ tr:hover td{background:#fafbff}
 
     <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
       <h3 style="margin:0;flex:1;font-size:14px">📥 تصفيات في انتظار الاستلام</h3>
+      <input id="stl-search" class="form-input" placeholder="🔍 رقم التصفية أو اسم الكاشير" style="width:220px" oninput="stlSearchInput()">
+      <span id="stl-search-info" style="font-size:11px;color:var(--muted)"></span>
       <button class="btn btn-ghost btn-sm" onclick="loadSettlementsReceipts()">🔄 تحديث</button>
       <button class="btn btn-secondary btn-sm" onclick="openSettlementsHistory()" style="background:#3b82f6;color:#fff;border-color:#3b82f6">📋 السجل</button>
     </div>
@@ -15275,6 +15298,26 @@ async function loadSettlementsReceipts(){
   }
 }
 
+// 🆕 v533: بحث التصفيات على السيرفر (debounced)
+let _stlSearchTimer = null;
+function stlSearchInput(){
+  clearTimeout(_stlSearchTimer);
+  const q = (document.getElementById('stl-search')?.value || '').trim();
+  const info = document.getElementById('stl-search-info');
+  if(!q){ window._stlSearchResults = null; if(info) info.textContent=''; renderSettlementsReceipts(); return; }
+  renderSettlementsReceipts();   // فوري على المتحمّل
+  if(info) info.textContent = '⏳';
+  _stlSearchTimer = setTimeout(async () => {
+    try{
+      const r = await apiFetch('/api/accountant/settlements/search?q=' + encodeURIComponent(q));
+      window._stlSearchResults = r?.settlements || [];
+      if(info) info.textContent = window._stlSearchResults.length ? `${window._stlSearchResults.length} نتيجة من كل الفترات` : 'مفيش نتايج';
+      // لو فيه نتيجة مستلمة، حوّل التبويب عليها عشان تبان
+      if(window._stlSearchResults.some(x=>x.cash_received_at) && window._settlementsFilter==='pending') window._settlementsFilter='received';
+      renderSettlementsReceipts();
+    }catch(e){ if(info) info.textContent='❌'; }
+  }, 350);
+}
 function renderSettlementsReceipts(){
   const cont = document.getElementById('settlements-receipts-content');
   if(!cont) return;
@@ -15294,8 +15337,19 @@ function renderSettlementsReceipts(){
     return cashPending || instaPending;
   };
 
-  const pending = _pendingSettlements.filter(isPending);
-  const received = _pendingSettlements.filter(s => !isPending(s));
+  // 🔧 v533: البحث بيسأل السيرفر ويجيب من كل التصفيات — مش المتحمّل بس.
+  //   #305 كانت مستلمة من 42 يوم فمش متحمّلة وكان البحث مش لاقيها.
+  const _q = (document.getElementById('stl-search')?.value || '').trim().toLowerCase().replace(/^#/, '');
+  let _pool = _pendingSettlements;
+  if(_q && Array.isArray(window._stlSearchResults)){
+    const seen = new Set(_pendingSettlements.map(x=>x.id));
+    _pool = [..._pendingSettlements, ...window._stlSearchResults.filter(x=>!seen.has(x.id))];
+  }
+  const _match = (s) => !_q || String(s.id) === _q || String(s.id).includes(_q)
+    || String(s.cashier_name||'').toLowerCase().includes(_q)
+    || String(s.manager_name||'').toLowerCase().includes(_q);
+  const pending = _pool.filter(isPending).filter(_match);
+  const received = _pool.filter(s => !isPending(s)).filter(_match);
   const activeCount = (_activeShifts || []).length;
   const pendingSessionsCount = (_pendingSessions || []).length; // 🆕 v263
   
@@ -16453,6 +16507,21 @@ async function openSettlementDetails(id){
           <div><div style="font-size:10px;color:#16a34a">💵 كاش</div><div style="font-size:16px;font-weight:800;color:#16a34a">${parseFloat(s.cash_amount).toLocaleString()} ج</div></div>
           <div><div style="font-size:10px;color:#6366f1">💳 فيزا</div><div style="font-size:16px;font-weight:800;color:#6366f1">${parseFloat(s.visa_amount).toLocaleString()} ج</div></div>
           <div><div style="font-size:10px;color:#4f46e5">📱 انستاباي</div><div style="font-size:16px;font-weight:800;color:#4f46e5">${parseFloat(s.instapay_amount).toLocaleString()} ج</div></div>
+        </div>
+        <!-- 🆕 v532: حسبة الدرج — عشان الفرق يبقى مفهوم (خصوصاً لما المبيعات صفر) -->
+        <div style="margin-top:10px;padding:8px 10px;background:var(--bg);border:1px dashed var(--border);border-radius:8px;font-size:12px">
+          <div style="font-weight:800;margin-bottom:6px;color:var(--muted)">🧮 حسبة الكاش في الدرج</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px;text-align:center;font-family:Roboto,sans-serif">
+            <div><div style="font-size:10px;color:var(--muted);font-family:Cairo,sans-serif">رصيد افتتاحي</div><div style="font-weight:700">${parseFloat(s.opening_cash||0).toLocaleString()}</div></div>
+            <div><div style="font-size:10px;color:var(--muted);font-family:Cairo,sans-serif">+ مبيعات كاش</div><div style="font-weight:700">${parseFloat(s.cash_amount||0).toLocaleString()}</div></div>
+            <div><div style="font-size:10px;color:var(--muted);font-family:Cairo,sans-serif">+ وارد</div><div style="font-weight:700">${parseFloat(s.cash_in_total||0).toLocaleString()}</div></div>
+            <div><div style="font-size:10px;color:var(--muted);font-family:Cairo,sans-serif">− منصرف</div><div style="font-weight:700">${parseFloat(s.cash_out_total||0).toLocaleString()}</div></div>
+            <div><div style="font-size:10px;color:var(--muted);font-family:Cairo,sans-serif">= المتوقع</div><div style="font-weight:800;color:#2563eb">${(parseFloat(s.opening_cash||0)+parseFloat(s.cash_amount||0)-parseFloat(s.refund_cash||0)+parseFloat(s.cash_in_total||0)-parseFloat(s.cash_out_total||0)).toLocaleString()}</div></div>
+            <div><div style="font-size:10px;color:var(--muted);font-family:Cairo,sans-serif">الكاشير عدّ</div><div style="font-weight:700">${s.cashier_counted_cash!=null?parseFloat(s.cashier_counted_cash).toLocaleString():'<span style=\"color:#dc2626;font-family:Cairo,sans-serif\">ماعدّش</span>'}</div></div>
+            <div><div style="font-size:10px;color:var(--muted);font-family:Cairo,sans-serif">المدير استلم</div><div style="font-weight:700">${parseFloat(s.cash_collected||0).toLocaleString()}</div></div>
+            <div><div style="font-size:10px;color:var(--muted);font-family:Cairo,sans-serif">الفرق</div><div style="font-weight:800;color:${parseFloat(s.cash_difference||0)<0?'#dc2626':(parseFloat(s.cash_difference||0)>0?'#16a34a':'inherit')}">${parseFloat(s.cash_difference||0).toLocaleString()}</div></div>
+          </div>
+          ${parseInt(s.sales_count||0)===0 && Math.abs(parseFloat(s.cash_difference||0))>0 ? `<div style="margin-top:6px;font-size:11px;color:#b45309">⚠️ مفيش مبيعات بس فيه فرق — يعني الفرق جاي من الرصيد الافتتاحي أو الوارد/المنصرف، مش من بيع.</div>`:''}
         </div>
         ${(parseFloat(s.refund_cash||0)+parseFloat(s.refund_visa||0)+parseFloat(s.refund_instapay||0)) > 0 ? `
         <div style="margin-top:10px;padding:8px 10px;background:var(--danger-light);border-radius:8px">
@@ -37619,6 +37688,18 @@ function talabatExport(){
   a.download=`Cafelax_1105302.csv`; // اسم شيت طلبات الثابت
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
   toast('⬇️ اتنزّل شيت التحديث');
+  // 🚑 v534: الشيت بيتولّد في المتصفح — السيرفر مكانش بيعرف بيه، فكود
+  //   النشر (v463/v464) مكانش بيتنادى وpublished_price فضل NULL والكاشير
+  //   فضل على السعر اللحظي. دلوقتي بنبلّغ السيرفر بالأسعار اللي نزّلناها.
+  talabatReportSheet(_talLinks.map(l=>({ id:l.id, price:l.final_price })));
+}
+async function talabatReportSheet(rows){
+  try{
+    const r = await apiFetch('/api/talabat/sheet-generated','POST',{ rows });
+    if(r && r.published){ toast(`✅ ${r.published} سعر اتنشر — الكاشير هياخدهم خلال دقيقة`); }
+    else if(r && r.pending){ toast(`📄 ${r.pending} سعر قيد الرفع — أكّد بعد ما ترفع على طلبات`); }
+    talPubStatus();
+  }catch(e){ toast('⚠️ الشيت اتنزّل بس السيرفر ماتبلّغش: '+e.message); }
 }
 
 // 🆕 v414: عملاء المحل (POS) — عرض + تصدير Excel
