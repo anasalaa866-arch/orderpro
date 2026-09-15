@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v536 — 🎯 صف لكل باركود في إكسل فرص طلبات (2026-09-15)
+  ───────────────────────────────────────────────────────────
+  🆕 v536: الصنف اللي ليه أكتر من باركود بيطلع في الإكسل صف لكل كود
+    بنفس الاسم والسعر والمخزون — طلبات بتطابق بالكود الواحد. وعمود
+    السعر بقى بالنسبة الفعلية بدل ÷0.85 الثابتة. backend v475.
+
+  OrderPro v535 — 🖼️ صورة الصنف في طباعة أمر الشراء (2026-09-14)
+  ───────────────────────────────────────────────────────────
+  🆕 v535: عمود صورة 56×56 لكل بند في طباعة أمر الشراء (من الكتالوج
+    المحلي، ومكانها placeholder لو مفيش). backend v474.
+
   OrderPro v534 — 🚑 الشيت بيبلّغ السيرفر بالأسعار المنشورة (2026-09-14)
   ───────────────────────────────────────────────────────────
   🚑 v534: زرار "توليد شيت التحديث" بيولّد في المتصفح ومكانش بيبعت أي
@@ -31415,6 +31426,11 @@ async function printPO(id){
     const rows = items.map((it, i) => `
       <tr>
         <td style="padding:8px;text-align:center;border:1px solid #ddd">${i+1}</td>
+        <td style="padding:4px;text-align:center;border:1px solid #ddd;width:64px">
+          ${it.image_url
+            ? `<img src="${escapeHtml(it.image_url)}" alt="" style="width:56px;height:56px;object-fit:contain;border-radius:6px;background:#f7f7f7">`
+            : `<div style="width:56px;height:56px;display:flex;align-items:center;justify-content:center;background:#f3f4f6;border-radius:6px;color:#bbb;font-size:20px">📦</div>`}
+        </td>
         <td style="padding:8px;border:1px solid #ddd">
           <div style="font-weight:700">${escapeHtml(it.product_title || '')}${it.variant_title ? ' - '+escapeHtml(it.variant_title) : ''}</div>
           ${it.sku ? `<div style="font-size:11px;color:#666">SKU: ${escapeHtml(it.sku)}</div>` : ''}
@@ -31511,6 +31527,7 @@ async function printPO(id){
           <thead>
             <tr>
               <th style="width:36px">#</th>
+              <th style="width:64px">الصورة</th>
               <th>المنتج</th>
               <th style="width:70px">الكمية</th>
               <th style="width:90px">السعر</th>
@@ -37394,7 +37411,16 @@ function talOppRender(){
 function talOppExcel(){
   if(!_talOpp.length){ toast('مفيش بيانات'); return; }
   const rows=[..._talOpp].sort((a,b)=> _talOppSort==='stock' ? (b.total_stock-a.total_stock) : (b.sold_30d-a.sold_30d));
-  const data=rows.map((x,i)=>({ '#':i+1, 'المنتج':x.title, 'الباركود':String(x.barcode||''), 'مبيعات 30 يوم':x.sold_30d, 'المخزون الكلي':x.total_stock, 'سعر الموقع':x.price, 'سعر طلبات (÷0.85)':(x.talabat_price!=null?x.talabat_price:Math.ceil((x.price||0)/0.85)) }));
+  // 🆕 v536: صف لكل باركود — طلبات بتطابق بالكود الواحد، فالصنف اللي ليه
+  //   3 أكواد بيطلع 3 صفوف بنفس الاسم والسعر والمخزون.
+  const data=[]; let n=0;
+  for(const x of rows){
+    const codes = (x.barcodes && x.barcodes.length) ? x.barcodes : [String(x.barcode||'')];
+    const tp = x.talabat_price!=null ? x.talabat_price : Math.ceil((x.price||0)/(1-(_talMarginCur||15)/100));
+    for(const code of codes){
+      data.push({ '#':++n, 'المنتج':x.title, 'الباركود':code, 'مبيعات 30 يوم':x.sold_30d, 'المخزون الكلي':x.total_stock, 'سعر الموقع':x.price, ['سعر طلبات (نسبة '+(_talMarginCur||15)+'%)']:tp });
+    }
+  }
   const ws=XLSX.utils.json_to_sheet(data);
   ws['!cols']=[{wch:5},{wch:40},{wch:16},{wch:14},{wch:14},{wch:12},{wch:16}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'فرص طلبات');
