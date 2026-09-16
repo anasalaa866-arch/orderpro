@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v542 — 🏦 كشف بوسطة: كاش أو بنك + مصروف + زيادة (2026-09-16)
+  ───────────────────────────────────────────────────────────
+  🔧 v542: حساب الإيداع كاش أو بنك، حساب مصروف للعمولة، وزيادة ثابتة
+    لكل شحنة (افتراضي 20). المعاينة بتوري لكل Cash-out: COD، عمولة
+    الشيت، الزيادة، المصروف اللي هيتسجّل، والبنك المتوقع — عشان تقارنه
+    بالتحويل الفعلي. backend v480.
+
+  OrderPro v541 — 🚑 حساب البنك لازم يكون نوعه Bank (2026-09-16)
+  ───────────────────────────────────────────────────────────
+  🚑 v541: القايمة بتعلّم الحسابات اللي نوعها cash بـ 🚫 ومابتسمحش
+    باختيارها، وتحذير واضح لو الحساب المحفوظ مش bank. backend v479.
+
   OrderPro v540 — 🏦 كشف بوسطة → دفعات في Zoho (2026-09-16)
   ───────────────────────────────────────────────────────────
   🆕 v540: صفحة جديدة — ارفع شيت Cash Cycles من بوسطة → معاينة (كام
@@ -6009,11 +6021,19 @@ tr:hover td{background:#fafbff}
         وعمولة بوسطة كمصاريف بنك في نفس الدفعة — فالبنك يستلم Net Value بالظبط. المرتجعات بتتعرض منفصلة.
       </div>
       <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
-        <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">حساب البنك في Zoho (اللي التحويل بيوصله)</label>
-          <select id="bp-bank" style="min-width:260px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif" onchange="bpSaveBank()"><option value="">⏳ بيحمّل...</option></select></div>
+        <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">حساب الإيداع (كاش أو بنك — اللي التحويل بيوصله)</label>
+          <select id="bp-bank" style="min-width:240px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif" onchange="bpSaveSettings()"><option value="">⏳</option></select></div>
+        <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">حساب مصروف عمولة بوسطة</label>
+          <select id="bp-exp" style="min-width:240px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif" onchange="bpSaveSettings()"><option value="">⏳</option></select></div>
+        <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">زيادة ثابتة لكل شحنة (ج)</label>
+          <input type="number" id="bp-extra" step="0.5" min="0" value="20" style="width:90px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif;text-align:center" onchange="bpSaveSettings()"></div>
         <button class="btn" onclick="document.getElementById('bp-file').click()" style="background:#0ea5e9;color:#fff">📤 ارفع كشف بوسطة (xlsx.)</button>
         <input type="file" id="bp-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="bpPick(this.files[0])">
       </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+        الدفعة بتتسجّل بقيمة COD كاملة على حساب الإيداع. العمولة بتتسجّل مصروف واحد لكل Cash-out = عمولة الشيت + خصم المرتجعات + الزيادة الثابتة × عدد الشحنات. لو الزيادة مش دايماً 20، غيّرها لحد ما "البنك المتوقع" يطابق التحويل الفعلي.
+      </div>
+      <div id="bp-bank-warn" style="font-size:12px;color:#b45309;margin-bottom:8px"></div>
       <div id="bp-box" style="font-size:13px"></div>
     </div>
   </div>
@@ -20549,22 +20569,31 @@ async function apMark(i){
 // 🆕 v540: كشف تحويلات بوسطة → دفعات في Zoho
 let _bpRows=null, _bpPreview=null;
 async function bpLoadBanks(){
-  const sel=$('bp-bank'); if(!sel) return;
+  const dep=$('bp-bank'), exp=$('bp-exp'); if(!dep) return;
   try{
-    const r=await apiFetch('/api/bosta/bank-accounts','GET');
-    sel.innerHTML='<option value="">— اختار الحساب —</option>'+(r.accounts||[]).map(a=>`<option value="${escapeHtml(a.id)}" ${a.id===r.current?'selected':''}>${escapeHtml(a.name)} (${escapeHtml(a.type)})</option>`).join('');
-  }catch(e){ sel.innerHTML='<option value="">❌ '+escapeHtml(e.message)+'</option>'; }
+    const r=await apiFetch('/api/bosta/accounts','GET');
+    dep.innerHTML='<option value="">— اختار —</option>'+(r.deposit||[]).map(a=>`<option value="${escapeHtml(a.id)}" ${a.id===r.deposit_current?'selected':''}>${a.type==='bank'?'🏦':'💵'} ${escapeHtml(a.name)}</option>`).join('');
+    exp.innerHTML='<option value="">— اختار —</option>'+(r.expense||[]).map(a=>`<option value="${escapeHtml(a.id)}" ${a.id===r.expense_current?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
+    if($('bp-extra')) $('bp-extra').value = r.extra_per_order ?? 20;
+    const warn=$('bp-bank-warn'); if(warn) warn.innerHTML = (!r.deposit_current||!r.expense_current) ? '⚠️ اختار حساب الإيداع وحساب المصروف قبل الرفع' : '';
+  }catch(e){ dep.innerHTML='<option value="">❌ '+escapeHtml(e.message)+'</option>'; }
 }
-async function bpSaveBank(){
-  try{ await apiFetch('/api/bosta/bank-account','POST',{ account_id: $('bp-bank').value }); toast('✅ اتحفظ حساب البنك'); }catch(e){ toast('❌ '+e.message); }
+async function bpSaveSettings(){
+  try{
+    await apiFetch('/api/bosta/settings','POST',{ deposit_account:$('bp-bank')?.value, expense_account:$('bp-exp')?.value, extra_per_order:$('bp-extra')?.value });
+    toast('✅ اتحفظ'); bpLoadBanks();
+    if(_bpRows) bpPick(null, true);
+  }catch(e){ toast('❌ '+e.message); }
 }
-async function bpPick(file){
-  if(!file) return;
+async function bpPick(file, reuse){
+  if(!file && !reuse) return;
   const box=$('bp-box'); box.innerHTML='<span style="color:var(--muted)">⏳ بيقرا الشيت...</span>';
   try{
-    const buf=await file.arrayBuffer(); const wb=XLSX.read(buf,{type:'array'});
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    _bpRows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});
+    if(!reuse){
+      const buf=await file.arrayBuffer(); const wb=XLSX.read(buf,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      _bpRows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true});
+    }
     if(!_bpRows.length||!('Order Reference' in _bpRows[0])){ box.innerHTML='<span style="color:var(--danger)">❌ مش لاقي عمود Order Reference — اتأكد إنه شيت Cash Cycles من بوسطة</span>'; return; }
     box.innerHTML='<span style="color:var(--muted)">⏳ بيطابق مع الفواتير...</span>';
     const r=await apiFetch('/api/bosta/payout-preview','POST',{ rows:_bpRows });
@@ -20577,23 +20606,36 @@ async function bpPick(file){
         <div class="sc" style="flex:1;min-width:130px"><div class="sc-label">متسجل قبل كده</div><div class="sc-val">${r.already}</div></div>
         <div class="sc" style="flex:1;min-width:130px;${r.problems.length?'background:var(--danger-light)':''}"><div class="sc-label">مشاكل</div><div class="sc-val" style="${r.problems.length?'color:var(--danger)':''}">${r.problems.length}</div></div>
       </div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Cash-out: ${r.cashouts.map(escapeHtml).join(' · ')||'—'}</div>
+      ${(r.cashout_expenses||[]).length?`<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:auto">
+        <table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted)">
+          <th style="text-align:right;padding:4px">Cash-out</th><th>شحنات</th><th>COD</th><th>عمولة الشيت</th><th>زيادة ${r.extra_per_order}×</th><th>مصروف يتسجّل</th><th>البنك المتوقع</th></tr></thead>
+        <tbody>${r.cashout_expenses.map(c=>`<tr>
+          <td style="padding:3px 6px;font-family:Roboto,sans-serif;font-weight:700">${escapeHtml(c.cashout)}</td>
+          <td style="text-align:center">${c.shipments}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${c.cod.toLocaleString()}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${c.sheet_fees.toLocaleString()}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${c.extra.toLocaleString()}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:#dc2626">${c.total.toLocaleString()}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:#16a34a">${c.expected_bank.toLocaleString()}</td>
+        </tr>`).join('')}</tbody></table>
+        <div style="font-size:10px;color:var(--muted);padding:4px 8px">قارن "البنك المتوقع" بالتحويل الفعلي — لو مش مطابق، عدّل الزيادة الثابتة.</div></div>`:''}
       ${r.problems.length?`<div style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:10px">
         <table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted)"><th style="text-align:right;padding:4px">أوردر</th><th>COD</th><th>الفاتورة</th><th>المشكلة</th></tr></thead>
         <tbody>${r.problems.map(x=>`<tr><td style="padding:3px 6px;font-family:Roboto,sans-serif;font-weight:700">${escapeHtml(x.ref)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${x.cod}</td><td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted)">${escapeHtml(x.invoice||'—')}</td><td style="text-align:center;color:#dc2626">${escapeHtml(x.reason)}</td></tr>`).join('')}</tbody></table></div>`:''}
-      ${r.ok?`<button class="btn btn-primary" onclick="bpApply()">💳 سجّل ${r.ok} دفعة في Zoho</button>`:'<span style="color:var(--muted)">مفيش صفوف جاهزة للتسجيل</span>'}
+      ${r.ok?`<button class="btn btn-primary" onclick="bpApply()">💳 سجّل ${r.ok} دفعة + ${(r.cashout_expenses||[]).length} مصروف في Zoho</button>`:'<span style="color:var(--muted)">مفيش صفوف جاهزة للتسجيل</span>'}
       <span style="font-size:11px;color:var(--muted);margin-inline-start:10px">المشاكل والمرتجعات مش هتتسجّل — بتتخطى.</span>`;
   }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
 }
 async function bpApply(){
   if(!_bpRows||!_bpPreview) return;
-  if(!$('bp-bank')?.value){ toast('❌ اختار حساب البنك الأول'); return; }
-  if(!confirm(`هيتسجّل ${_bpPreview.ok} دفعة عميل في Zoho على حساب البنك المختار.\n\nإجمالي COD: ${_bpPreview.ok_cod.toLocaleString()} ج · البنك يستلم: ${_bpPreview.ok_net.toLocaleString()} ج\n\nدي قيود محاسبية حقيقية. تكمّل؟`)) return;
+  if(!$('bp-bank')?.value||!$('bp-exp')?.value){ toast('❌ اختار حساب الإيداع وحساب المصروف'); return; }
+  const exps=(_bpPreview.cashout_expenses||[]).reduce((a,c)=>a+c.total,0);
+  if(!confirm(`هيتسجّل في Zoho:\n• ${_bpPreview.ok} دفعة عميل بإجمالي ${_bpPreview.ok_cod.toLocaleString()} ج\n• ${(_bpPreview.cashout_expenses||[]).length} مصروف عمولة بإجمالي ${exps.toLocaleString()} ج\n\nدي قيود محاسبية حقيقية. تكمّل؟`)) return;
   const box=$('bp-box'); box.innerHTML='<span style="color:var(--muted)">⏳ بيسجّل في Zoho... (ثانية لكل دفعة تقريباً)</span>';
   try{
     const r=await apiFetch('/api/bosta/payout-apply','POST',{ rows:_bpRows });
     if(!r||r.error){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
-    box.innerHTML=`<div style="font-weight:800;color:#16a34a;margin-bottom:6px">✅ اتسجّل ${r.paid} دفعة</div>
+    box.innerHTML=`<div style="font-weight:800;color:#16a34a;margin-bottom:6px">✅ اتسجّل ${r.paid} دفعة + ${r.expenses||0} مصروف عمولة</div>
       <div style="font-size:12px;color:var(--muted)">اتخطى ${r.skipped}${r.failed?` · <span style="color:#dc2626">فشل ${r.failed}</span>`:''}</div>
       ${r.errors.length?`<div style="margin-top:8px;font-size:11px;color:#dc2626">${r.errors.map(e=>escapeHtml(e.ref+': '+e.error)).join('<br>')}</div>`:''}`;
     _bpRows=null; _bpPreview=null;
