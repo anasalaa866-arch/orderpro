@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v543 — 🔔 أصناف محتاجة تتقفل على طلبات (2026-09-17)
+  ───────────────────────────────────────────────────────────
+  🆕 v543: الشيت بيبعت حالة active مع السعر (published_active)، وسطر
+    في صفحة طلبات بيقول كام صنف مفتوح على طلبات ومخزونه صفر.
+    backend v481 · Stars v117.
+
   OrderPro v542 — 🏦 كشف بوسطة: كاش أو بنك + مصروف + زيادة (2026-09-16)
   ───────────────────────────────────────────────────────────
   🔧 v542: حساب الإيداع كاش أو بنك، حساب مصروف للعمولة، وزيادة ثابتة
@@ -37613,6 +37619,13 @@ async function talAutoPubSave(){
     toast(on ? '✅ الشيت هيتنشر فور تنزيله' : '✅ هتأكّد بإيدك بعد الرفع');
   }catch(e){ toast('❌ '+e.message); }
 }
+async function talNeedsClose(){
+  try{
+    const r=await apiFetch('/api/talabat/needs-close','GET');
+    const el=$('tal-needs-close'); if(!el) return;
+    el.innerHTML = r.count ? `🔔 ${r.count} صنف مفتوح على طلبات ومخزونه صفر — ولّد شيت يقفلهم <span style="font-weight:400;color:var(--muted)">(${r.rows.slice(0,4).map(x=>escapeHtml(x.talabat_name||x.product_title)).join('، ')}${r.count>4?'…':''})</span>` : '';
+  }catch(e){}
+}
 async function talPubStatus(){
   const box=$('tal-pub'); if(!box) return;
   try{
@@ -37629,6 +37642,7 @@ async function talPubStatus(){
           ${r.never_published?`<span style="color:var(--muted)">${r.never_published} لسه ماترفعوش</span>`:''}
           ${r.pending?`<span style="color:#2563eb">📄 ${r.pending} في شيت مولّد لسه ماتأكّدش</span>`:''}
           ${r.pending?`<button class="btn btn-sm" style="background:#2563eb;color:#fff" onclick="talConfirmPub()">✅ أكّدت الرفع على طلبات</button>`:''}
+        <span id="tal-needs-close" style="font-size:12px;font-weight:700;color:#dc2626"></span>
           <label style="font-size:11px;font-weight:700;margin-inline-start:auto"><input type="checkbox" id="tal-autopub" onchange="talAutoPubSave()"> الشيت يتنشر فور تنزيله</label>
         </div>
         ${needsUpload?`<div style="font-size:11px;color:var(--muted);margin-top:6px">
@@ -37728,7 +37742,7 @@ async function talabatMarginSave(){
 }
 
 async function loadTalabat(){
-  talPubStatus();
+  talPubStatus(); talNeedsClose();
   await talabatLoadMargin();
   await talabatLoadLinks();
   // 🆕 v442: حمّل عدّاد "محتاج تحويل" مع فتح الصفحة عشان البادچ ينبّه من غير ما تفتح التاب
@@ -37898,7 +37912,7 @@ function talabatExport(){
   // 🚑 v534: الشيت بيتولّد في المتصفح — السيرفر مكانش بيعرف بيه، فكود
   //   النشر (v463/v464) مكانش بيتنادى وpublished_price فضل NULL والكاشير
   //   فضل على السعر اللحظي. دلوقتي بنبلّغ السيرفر بالأسعار اللي نزّلناها.
-  talabatReportSheet(_talLinks.map(l=>({ id:l.id, price:l.final_price })));
+  talabatReportSheet(_talLinks.map(l=>({ id:l.id, price:l.final_price, active:l.active })));
 }
 async function talabatReportSheet(rows){
   try{
