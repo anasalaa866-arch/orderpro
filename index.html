@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v545 — 💳 كشف Paymob → دفعات في Zoho (2026-09-18)
+  ───────────────────────────────────────────────────────────
+  🆕 v545: صفحة جديدة — ارفع كشف Paymob → مطابقة بالمبلغ والوقت
+    (والتليفون للأونلاين) → أكيد/محتمل/مش لاقي. المحتمل فيه قايمة
+    تختار البيعة الصح. تسجيل دفعات + مصروف عمولة واحد + زيادة ثابتة.
+    backend v485.
+
   OrderPro v544 — 💰 رصيد البضاعة لكل مخزن (2026-09-18)
   ───────────────────────────────────────────────────────────
   🆕 v544: زرار "رصيد البضاعة" في صفحة المخزون — لكل مخزن: أصناف، قطع،
@@ -1626,6 +1633,7 @@ tr:hover td{background:#fafbff}
       <div class="nav-group-body">
         <div class="ni" data-p="suppliers" onclick="goPage(this,'suppliers')"><span class="ni-icon">🏭</span><span class="ni-label">الموردين</span></div>
         <div class="ni" data-p="bosta-payout" onclick="goPage(this,'bosta-payout')"><span class="ni-icon">🏦</span><span class="ni-label">كشف بوسطة → Zoho</span></div>
+        <div class="ni" data-p="paymob" onclick="goPage(this,'paymob')"><span class="ni-icon">💳</span><span class="ni-label">كشف Paymob → Zoho</span></div>
         <div class="ni" data-p="app-promo" onclick="goPage(this,'app-promo')"><span class="ni-icon">📱</span><span class="ni-label">تحويل للتطبيق</span></div>
         <div class="ni" data-p="dead-stock" onclick="goPage(this,'dead-stock')"><span class="ni-icon">🧊</span><span class="ni-label">الأصناف الراكدة</span></div>
         <div class="ni" data-p="purchase-orders" onclick="goPage(this,'purchase-orders')"><span class="ni-icon">📋</span><span class="ni-label">أوامر الشراء</span></div>
@@ -6023,6 +6031,31 @@ tr:hover td{background:#fafbff}
 
 </div>
 
+<div class="page" id="page-paymob">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">💳 كشف Paymob (فيزا) → Zoho</h2>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:14px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+        ارفع كشف المعاملات من Paymob. مفيش رقم أوردر فيه — المطابقة بالمبلغ والوقت (والتليفون للأونلاين).
+        <b>الأكيد</b> بيتسجّل على طول، <b>المحتمل</b> إنت بتختار البيعة الصح، واللي مش لاقي بيتعرض عشان تراجعه.
+      </div>
+      <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
+        <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">حساب الإيداع</label>
+          <select id="pm-dep" style="min-width:220px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif" onchange="pmSave()"><option value="">⏳</option></select></div>
+        <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">حساب مصروف عمولة Paymob</label>
+          <select id="pm-exp" style="min-width:220px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif" onchange="pmSave()"><option value="">⏳</option></select></div>
+        <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">زيادة ثابتة لكل عملية (ج)</label>
+          <input type="number" id="pm-extra" step="0.5" min="0" value="0" style="width:90px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif;text-align:center" onchange="pmSave()"></div>
+        <button class="btn" onclick="document.getElementById('pm-file').click()" style="background:#7c3aed;color:#fff">📤 ارفع كشف Paymob (csv.)</button>
+        <input type="file" id="pm-file" accept=".csv,.xlsx" style="display:none" onchange="pmPick(this.files[0])">
+      </div>
+      <div id="pm-box" style="font-size:13px"></div>
+    </div>
+  </div>
+</div>
+
 <div class="page" id="page-bosta-payout">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">🏦 كشف تحويلات بوسطة → Zoho</h2>
@@ -9007,7 +9040,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'talabat':'🛵 طلبات (Talabat)','bosta-payout':'🏦 كشف تحويلات بوسطة → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'talabat':'🛵 طلبات (Talabat)','paymob':'💳 كشف Paymob (فيزا) → Zoho','bosta-payout':'🏦 كشف تحويلات بوسطة → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -20717,6 +20750,81 @@ function invValExcel(){
   const ws=XLSX.utils.json_to_sheet(data); ws['!cols']=[{wch:26},{wch:9},{wch:10},{wch:16},{wch:16},{wch:14},{wch:14}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'رصيد البضاعة');
   XLSX.writeFile(wb,`رصيد_البضاعة_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// 🆕 v545: كشف Paymob
+let _pmRows=null, _pmPreview=null, _pmConfirmed={};
+async function pmLoad(){
+  const dep=$('pm-dep'), exp=$('pm-exp'); if(!dep) return;
+  try{
+    const r=await apiFetch('/api/paymob/settings','GET');
+    dep.innerHTML='<option value="">— اختار —</option>'+(r.deposit||[]).map(a=>`<option value="${escapeHtml(a.id)}" ${a.id===r.deposit_current?'selected':''}>${a.type==='bank'?'🏦':'💵'} ${escapeHtml(a.name)}</option>`).join('');
+    exp.innerHTML='<option value="">— اختار —</option>'+(r.expense||[]).map(a=>`<option value="${escapeHtml(a.id)}" ${a.id===r.expense_current?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
+    if($('pm-extra')) $('pm-extra').value=r.extra_per_txn??0;
+  }catch(e){ dep.innerHTML='<option value="">❌ '+escapeHtml(e.message)+'</option>'; }
+}
+async function pmSave(){
+  try{ await apiFetch('/api/paymob/settings','POST',{ deposit_account:$('pm-dep')?.value, expense_account:$('pm-exp')?.value, extra_per_txn:$('pm-extra')?.value }); toast('✅ اتحفظ'); if(_pmRows) pmPick(null,true); }catch(e){ toast('❌ '+e.message); }
+}
+async function pmPick(file, reuse){
+  if(!file&&!reuse) return;
+  const box=$('pm-box'); box.innerHTML='<span style="color:var(--muted)">⏳ بيقرا...</span>';
+  try{
+    if(!reuse){
+      const buf=await file.arrayBuffer(); const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]];
+      _pmRows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false}); _pmConfirmed={};
+      const k=Object.keys(_pmRows[0]||{}); if(!k.some(x=>x.includes('Transaction ID'))){ box.innerHTML='<span style="color:var(--danger)">❌ مش لاقي عمود Transaction ID — اتأكد إنه كشف Paymob</span>'; return; }
+    }
+    box.innerHTML='<span style="color:var(--muted)">⏳ بيطابق بالمبلغ والوقت...</span>';
+    const r=await apiFetch('/api/paymob/preview','POST',{ rows:_pmRows });
+    if(!r||r.error){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
+    _pmPreview=r;
+    const f=n=>Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2});
+    const K={sure:['#16a34a','✅ أكيد'],maybe:['#b45309','🤔 محتمل'],unmatched:['#dc2626','❌ مش لاقي'],already:['var(--muted)','متسجلة'],paid:['var(--muted)','مدفوعة قبل كده'],no_invoice:['#dc2626','مش متفوتر'],internal:['var(--muted)','داخلي'],skip:['var(--muted)','متخطى']};
+    const maybes=r.rows.filter(x=>x.kind==='maybe');
+    box.innerHTML=`
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+        <div class="sc green" style="flex:1;min-width:150px"><div class="sc-label">أكيد — هيتسجّل</div><div class="sc-val">${r.sure}</div><div style="font-size:11px;color:var(--muted)">${f(r.sure_amount)} ج</div></div>
+        <div class="sc orange" style="flex:1;min-width:150px"><div class="sc-label">محتمل — اختار</div><div class="sc-val">${r.maybe}</div></div>
+        <div class="sc" style="flex:1;min-width:130px;${r.unmatched?'background:var(--danger-light)':''}"><div class="sc-label">مش لاقي</div><div class="sc-val">${r.unmatched}</div></div>
+        <div class="sc" style="flex:1;min-width:130px"><div class="sc-label">متسجل / مدفوع</div><div class="sc-val">${r.already+r.paid}</div></div>
+        <div class="sc blue" style="flex:1;min-width:150px"><div class="sc-label">مصروف العمولة</div><div class="sc-val">${f(r.expense_total)} ج</div><div style="font-size:11px;color:var(--muted)">للأكيد + ${r.extra_per_txn}×</div></div>
+      </div>
+      ${maybes.length?`<div style="border:1px solid #b45309;border-radius:10px;padding:10px;margin-bottom:10px">
+        <div style="font-weight:800;color:#b45309;margin-bottom:6px">🤔 ${maybes.length} عملية ليها أكتر من بيعة بنفس المبلغ — اختار الصح (أو سيبها)</div>
+        ${maybes.map(x=>`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--border);font-size:12px">
+          <span style="font-family:Roboto,sans-serif;font-weight:700">${f(x.amount)} ج</span><span style="color:var(--muted)">${escapeHtml(x.at)} · ${escapeHtml(x.channel)}</span>
+          <select onchange="_pmConfirmed['${escapeHtml(x.txn)}']=this.value||undefined" style="padding:4px;border:1px solid var(--border);border-radius:6px;font-family:Roboto,sans-serif">
+            <option value="">— سيبها —</option>${x.candidates.map(c=>`<option value="${escapeHtml(c.order_id)}" ${_pmConfirmed[x.txn]===c.order_id?'selected':''}>${escapeHtml(c.label)} (${c.mins} دقيقة)</option>`).join('')}
+          </select></div>`).join('')}</div>`:''}
+      <div style="max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:10px">
+        <table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted)"><th style="text-align:right;padding:4px">الوقت</th><th>القناة</th><th>المبلغ</th><th>عمولة</th><th>الحالة</th><th>البيعة/الأوردر</th><th>السبب</th></tr></thead>
+        <tbody>${r.rows.map(x=>`<tr>
+          <td style="padding:3px 6px;font-family:Roboto,sans-serif;font-size:10px">${escapeHtml(x.at)}</td>
+          <td style="text-align:center">${escapeHtml(x.channel)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${f(x.amount)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted)">${f(x.fees)}</td>
+          <td style="text-align:center;font-weight:700;color:${(K[x.kind]||K.skip)[0]}">${(K[x.kind]||K.skip)[1]}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${x.match?escapeHtml(x.match.label||x.match.order_id)+(x.match.invoice?` <span style="color:var(--muted)">${escapeHtml(x.match.invoice)}</span>`:''):'—'}</td>
+          <td style="text-align:center;color:var(--muted);font-size:10px">${escapeHtml(x.reason||'')}</td>
+        </tr>`).join('')}</tbody></table></div>
+      ${r.sure||maybes.length?`<button class="btn btn-primary" onclick="pmApply()">💳 سجّل الأكيد${maybes.length?' + اللي اخترته':''} في Zoho</button>`:'<span style="color:var(--muted)">مفيش صفوف جاهزة</span>'}`;
+  }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+async function pmApply(){
+  if(!_pmRows||!_pmPreview) return;
+  if(!$('pm-dep')?.value||!$('pm-exp')?.value){ toast('❌ اختار الحسابين الأول'); return; }
+  const chosen=Object.values(_pmConfirmed).filter(Boolean).length;
+  if(!confirm(`هيتسجّل في Zoho:\n• ${_pmPreview.sure} دفعة أكيدة${chosen?` + ${chosen} اخترتها`:''}\n• مصروف عمولة واحد\n\nدي قيود محاسبية حقيقية. تكمّل؟`)) return;
+  const box=$('pm-box'); box.innerHTML='<span style="color:var(--muted)">⏳ بيسجّل...</span>';
+  try{
+    const r=await apiFetch('/api/paymob/apply','POST',{ rows:_pmRows, confirmed:_pmConfirmed });
+    if(!r||r.error){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
+    box.innerHTML=`<div style="font-weight:800;color:#16a34a;margin-bottom:6px">✅ اتسجّل ${r.paid} دفعة${r.expense?` + مصروف ${Number(r.expense.amount).toLocaleString()} ج`:''}</div>
+      <div style="font-size:12px;color:var(--muted)">اتخطى ${r.skipped}${r.failed?` · <span style="color:#dc2626">فشل ${r.failed}</span>`:''}</div>
+      ${r.errors.length?`<div style="margin-top:8px;font-size:11px;color:#dc2626">${r.errors.map(e=>escapeHtml(e.txn+': '+e.error)).join('<br>')}</div>`:''}`;
+    _pmRows=null; _pmPreview=null; _pmConfirmed={};
+  }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
 }
 
 function chkSetFilter(f,btn){
@@ -43893,6 +44001,7 @@ function goPage(el,page){
   if(page==='expiry') loadBatchesPage();
   // 🆕 v240: Inventory pages
   if(page==='inventory'){ loadInventoryPage(); bulkActivateCheckActive(); syncCheckActive(); }
+  if(page==='paymob') pmLoad();
   if(page==='bosta-payout') bpLoadBanks();
   if(page==='app-promo') apLoad();
   if(page==='dead-stock') dsLoad();
