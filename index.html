@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v544 — 💰 رصيد البضاعة لكل مخزن (2026-09-18)
+  ───────────────────────────────────────────────────────────
+  🆕 v544: زرار "رصيد البضاعة" في صفحة المخزون — لكل مخزن: أصناف، قطع،
+    القيمة بسعر البيع وبالتكلفة والهامش، مع إجمالي الشركة وأعلى
+    الأصناف قيمة في كل مخزن وتصدير Excel. backend v484.
+
   OrderPro v543 — 🔔 أصناف محتاجة تتقفل على طلبات (2026-09-17)
   ───────────────────────────────────────────────────────────
   🆕 v543: الشيت بيبعت حالة active مع السعر (published_active)، وسطر
@@ -4736,6 +4742,7 @@ tr:hover td{background:#fafbff}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">📦 المخزون</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="invValuation()" style="background:#16a34a;color:#fff" title="قيمة البضاعة في كل مخزن بسعر البيع والتكلفة">💰 رصيد البضاعة</button>
       <button class="btn btn-ghost btn-sm" onclick="openManageWarehousesModal()" title="ضبط المخازن والمخزن الرئيسي">⚙️ إدارة المخازن</button>
       <button class="btn btn-ghost btn-sm" onclick="bulkActivateStart()" title="تفعيل كل المخازن لكل المنتجات على Shopify" style="color:#7c3aed">🏬 تفعيل كل المخازن</button>
       <button class="btn btn-ghost btn-sm" onclick="syncInventoryLevels()">🔄 مزامنة الكميات</button>
@@ -20646,6 +20653,70 @@ async function bpApply(){
       ${r.errors.length?`<div style="margin-top:8px;font-size:11px;color:#dc2626">${r.errors.map(e=>escapeHtml(e.ref+': '+e.error)).join('<br>')}</div>`:''}`;
     _bpRows=null; _bpPreview=null;
   }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+
+// 🆕 v544: قيمة رصيد البضاعة لكل مخزن
+let _invValData=null;
+async function invValuation(){
+  let box=document.getElementById('inv-val-modal');
+  if(!box){ box=document.createElement('div'); box.id='inv-val-modal'; box.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px'; document.body.appendChild(box); }
+  box.style.display='flex';
+  box.innerHTML='<div style="background:var(--card);border-radius:14px;padding:18px;max-width:900px;width:100%;max-height:90vh;overflow:auto;border:1px solid var(--border)"><div style="color:var(--muted)">⏳ بيحسب...</div></div>';
+  try{
+    const r=await apiFetch('/api/inventory/valuation','GET');
+    if(!r||r.error) throw new Error(r?.error||'فشل');
+    _invValData=r;
+    const f=n=>Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
+    box.innerHTML=`<div style="background:var(--card);border-radius:14px;padding:18px;max-width:900px;width:100%;max-height:90vh;overflow:auto;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="margin:0;font-size:16px">💰 رصيد البضاعة في الشركة</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-ghost btn-sm" onclick="invValExcel()">⬇️ Excel</button>
+          <button onclick="document.getElementById('inv-val-modal').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)">×</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+        <div class="sc green" style="flex:1;min-width:170px"><div class="sc-label">إجمالي بسعر البيع</div><div class="sc-val">${f(r.total.retail_value)} ج</div></div>
+        <div class="sc" style="flex:1;min-width:150px"><div class="sc-label">إجمالي بالتكلفة</div><div class="sc-val">${f(r.total.cost_value)} ج</div></div>
+        <div class="sc blue" style="flex:1;min-width:150px"><div class="sc-label">هامش محتمل</div><div class="sc-val">${f(r.total.margin_value)} ج</div></div>
+        <div class="sc" style="flex:1;min-width:120px"><div class="sc-label">قطع</div><div class="sc-val">${f(r.total.units)}</div></div>
+      </div>
+      ${r.total.units_no_cost?`<div style="font-size:11px;color:#b45309;margin-bottom:10px">⚠️ ${f(r.total.units_no_cost)} قطعة تكلفتها صفر — رقم التكلفة والهامش أقل من الحقيقي.</div>`:''}
+      <table style="width:100%;font-size:13px">
+        <thead><tr style="color:var(--muted)"><th style="text-align:right;padding:6px">المخزن</th><th>أصناف</th><th>قطع</th><th>بسعر البيع</th><th>بالتكلفة</th><th>الهامش</th><th></th></tr></thead>
+        <tbody>${r.rows.map(x=>`<tr style="border-top:1px solid var(--border)">
+          <td style="padding:6px;font-weight:700">${escapeHtml(x.warehouse||'—')}</td>
+          <td style="text-align:center">${f(x.items)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${f(x.units)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:#16a34a">${f(x.retail_value)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${f(x.cost_value)}${x.units_no_cost?` <span style="font-size:10px;color:#b45309" title="${x.units_no_cost} قطعة تكلفتها صفر">⚠️</span>`:''}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;color:#2563eb">${f(x.margin_value)}</td>
+          <td style="text-align:center"><button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px" onclick="invValDetail(${x.warehouse_id},'${escapeHtml(x.warehouse||'')}')">🔍 أعلى الأصناف</button></td>
+        </tr>`).join('')}</tbody></table>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">الأسعار من الكتالوج الحالي · الكميات من آخر مزامنة.</div>
+      <div id="inv-val-detail" style="margin-top:12px"></div>
+    </div>`;
+  }catch(e){ box.innerHTML=`<div style="background:var(--card);border-radius:14px;padding:18px"><span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span> <button onclick="document.getElementById('inv-val-modal').style.display='none'" class="btn btn-ghost btn-sm">إغلاق</button></div>`; }
+}
+async function invValDetail(wid,name){
+  const el=document.getElementById('inv-val-detail'); if(!el) return;
+  el.innerHTML='<span style="color:var(--muted)">⏳</span>';
+  try{
+    const r=await apiFetch('/api/inventory/valuation/'+wid,'GET');
+    const f=n=>Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
+    el.innerHTML=`<div style="font-weight:800;margin-bottom:6px">🔍 ${escapeHtml(name)} — أعلى الأصناف قيمة (بسعر البيع)</div>
+      <div style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:8px"><table style="width:100%;font-size:12px">
+        <thead><tr style="color:var(--muted)"><th style="text-align:right;padding:4px">الصنف</th><th>قطع</th><th>السعر</th><th>القيمة</th></tr></thead>
+        <tbody>${r.rows.map(x=>`<tr><td style="padding:3px 6px">${escapeHtml(x.title)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${x.qty}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(x.price)}</td><td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${f(x.retail_value)}</td></tr>`).join('')}</tbody></table></div>`;
+  }catch(e){ el.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+function invValExcel(){
+  if(!_invValData) return;
+  const data=_invValData.rows.map(x=>({'المخزن':x.warehouse,'أصناف':x.items,'قطع':x.units,'بسعر البيع':x.retail_value,'بالتكلفة':x.cost_value,'الهامش':x.margin_value,'قطع بدون تكلفة':x.units_no_cost}));
+  data.push({'المخزن':'الإجمالي','أصناف':'','قطع':_invValData.total.units,'بسعر البيع':_invValData.total.retail_value,'بالتكلفة':_invValData.total.cost_value,'الهامش':_invValData.total.margin_value,'قطع بدون تكلفة':_invValData.total.units_no_cost});
+  const ws=XLSX.utils.json_to_sheet(data); ws['!cols']=[{wch:26},{wch:9},{wch:10},{wch:16},{wch:16},{wch:14},{wch:14}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'رصيد البضاعة');
+  XLSX.writeFile(wb,`رصيد_البضاعة_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 function chkSetFilter(f,btn){
