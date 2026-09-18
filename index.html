@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v546 — 🚑 وقت Paymob كان بيضيع في القراءة + عرض التوقيت (2026-09-18)
+  ───────────────────────────────────────────────────────────
+  🚑 v546: قراءة الكشف بـ raw:false كانت بتحوّل "2026-09-09 20:51:07"
+    لـ "9/9/26" وترمي الوقت → كل الصفوف "وقت غير مفهوم". بقت raw:true.
+  🆕 v546: شريط فوق الصفحة بيوري وقت القاهرة والمتصفح والسيرفر بمنطقته
+    الزمنية — عشان أي فرق يبان. backend v486.
+
   OrderPro v545 — 💳 كشف Paymob → دفعات في Zoho (2026-09-18)
   ───────────────────────────────────────────────────────────
   🆕 v545: صفحة جديدة — ارفع كشف Paymob → مطابقة بالمبلغ والوقت
@@ -6051,6 +6058,7 @@ tr:hover td{background:#fafbff}
         <button class="btn" onclick="document.getElementById('pm-file').click()" style="background:#7c3aed;color:#fff">📤 ارفع كشف Paymob (csv.)</button>
         <input type="file" id="pm-file" accept=".csv,.xlsx" style="display:none" onchange="pmPick(this.files[0])">
       </div>
+      <div id="pm-tz" style="font-size:11px;color:var(--muted);margin-bottom:8px;padding:6px 10px;background:var(--bg);border-radius:8px;font-family:Roboto,sans-serif;direction:ltr;text-align:left"></div>
       <div id="pm-box" style="font-size:13px"></div>
     </div>
   </div>
@@ -20754,7 +20762,19 @@ function invValExcel(){
 
 // 🆕 v545: كشف Paymob
 let _pmRows=null, _pmPreview=null, _pmConfirmed={};
+function pmShowTz(serverInfo){
+  const el=$('pm-tz'); if(!el) return;
+  const now=new Date();
+  const cairo=now.toLocaleString('en-GB',{timeZone:'Africa/Cairo',hour12:false});
+  const local=now.toLocaleString('en-GB',{hour12:false});
+  const off=-now.getTimezoneOffset()/60;
+  el.innerHTML = `🕐 Cairo now: <b>${cairo}</b> · Browser: ${local} (UTC${off>=0?'+':''}${off})`
+    + (serverInfo?` · Server: ${serverInfo.now} (${serverInfo.tz}, UTC${serverInfo.offset})`:'')
+    + ` · <span style="color:#b45309">Paymob times are read as Cairo (UTC+2/+3)</span>`;
+}
 async function pmLoad(){
+  pmShowTz();
+  try{ const t=await apiFetch('/api/time','GET'); if(t&&t.now) pmShowTz(t); }catch(e){}
   const dep=$('pm-dep'), exp=$('pm-exp'); if(!dep) return;
   try{
     const r=await apiFetch('/api/paymob/settings','GET');
@@ -20771,8 +20791,12 @@ async function pmPick(file, reuse){
   const box=$('pm-box'); box.innerHTML='<span style="color:var(--muted)">⏳ بيقرا...</span>';
   try{
     if(!reuse){
-      const buf=await file.arrayBuffer(); const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]];
-      _pmRows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false}); _pmConfirmed={};
+      // 🔧 v546: raw:true — raw:false كان بيحوّل "2026-09-09 20:51:07" لـ "9/9/26" ويرمي الوقت
+      const isCsv=/\.csv$/i.test(file.name);
+      const wb = isCsv ? XLSX.read(await file.text(),{type:'string',raw:true}) : XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      _pmRows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:true}).map(r=>{ for(const k in r){ if(r[k] instanceof Date) r[k]=r[k].toISOString().slice(0,19).replace('T',' '); } return r; });
+      _pmConfirmed={};
       const k=Object.keys(_pmRows[0]||{}); if(!k.some(x=>x.includes('Transaction ID'))){ box.innerHTML='<span style="color:var(--danger)">❌ مش لاقي عمود Transaction ID — اتأكد إنه كشف Paymob</span>'; return; }
     }
     box.innerHTML='<span style="color:var(--muted)">⏳ بيطابق بالمبلغ والوقت...</span>';
