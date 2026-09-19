@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v557 — 💵💳 الدفع المدمج في ملاحظات Paymob (2026-09-19)
+  ───────────────────────────────────────────────────────────
+  🔧 v557: جدول "دفع مدمج" في الملاحظات (إجمالي البيعة، جزء الفيزا،
+    الكاش) — كان بيظهر كتقريب بآلاف. backend v498.
+
   OrderPro v556 — 📦 كشف أمازون → Zoho (2026-09-19)
   ───────────────────────────────────────────────────────────
   🆕 v556: صفحة جديدة — ارفع كشف Transactions من Seller Central →
@@ -21011,6 +21016,9 @@ async function pmPick(file, reuse){
         ${r.notes.combo.length?`<details style="margin-bottom:8px"><summary style="cursor:pointer;font-weight:700;font-size:12px">🔗 فيزا واحدة لأكتر من بيعة (${r.notes.combo.length})</summary>
           <table style="width:100%;font-size:11px;margin-top:4px"><thead><tr style="color:var(--muted)"><th style="text-align:right">عملية</th><th>البيعات</th><th>Paymob</th><th>مجموع البيعات</th><th>الفرق</th></tr></thead>
           <tbody>${r.notes.combo.map(n=>`<tr><td style="font-family:Roboto,sans-serif;font-size:10px">${escapeHtml(String(n.txn))}</td><td style="text-align:center">${n.parts.map(p=>escapeHtml(p.label)+' ('+f(p.amount)+')').join(' + ')}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(n.paymob)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(n.orders_total)}</td><td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${n.diff>0?'+':''}${f(n.diff)}</td></tr>`).join('')}</tbody></table></details>`:''}
+        ${(r.notes.mixed||[]).length?`<details style="margin-bottom:8px"><summary style="cursor:pointer;font-weight:700;font-size:12px">💵💳 دفع مدمج — كاش + فيزا (${r.notes.mixed.length}) <span style="font-weight:400;color:var(--muted)">الكاش بييجي من تصفية الكاشير</span></summary>
+          <table style="width:100%;font-size:11px;margin-top:4px"><thead><tr style="color:var(--muted)"><th style="text-align:right">عملية</th><th>البيعة</th><th>فاتورة</th><th>إجمالي البيعة</th><th>فيزا (Paymob)</th><th>كاش</th></tr></thead>
+          <tbody>${r.notes.mixed.map(n=>`<tr><td style="font-family:Roboto,sans-serif;font-size:10px">${escapeHtml(String(n.txn))}</td><td style="text-align:center">${escapeHtml(n.label)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(n.invoice||'')}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(n.order_total)}</td><td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700;color:#2563eb">${f(n.paymob)}</td><td style="text-align:center;font-family:Roboto,sans-serif;color:#16a34a">${f(n.cash_part)}</td></tr>`).join('')}</tbody></table></details>`:''}
         ${r.notes.pickup.length?`<details><summary style="cursor:pointer;font-weight:700;font-size:12px">📦 بيك أب اتدفع فيزا عند الاستلام (${r.notes.pickup.length})</summary>
           <table style="width:100%;font-size:11px;margin-top:4px"><thead><tr style="color:var(--muted)"><th style="text-align:right">عملية</th><th>الأوردر</th><th>فاتورة</th><th>Paymob</th><th>الأوردر</th><th>فرق الوقت</th></tr></thead>
           <tbody>${r.notes.pickup.map(n=>`<tr><td style="font-family:Roboto,sans-serif;font-size:10px">${escapeHtml(String(n.txn))}</td><td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(n.order)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(n.invoice||'')}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(n.paymob)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(n.order_total)}</td><td style="text-align:center">${n.mins} د</td></tr>`).join('')}</tbody></table></details>`:''}
@@ -21028,6 +21036,7 @@ function pmNotesExcel(){
   if(n.split.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(n.split.map(x=>({'عمليات':x.txns.join(' + '),'البيعة':x.label,'مجموع Paymob':x.paymob_sum,'الأوردر':x.order_total,'الفرق':x.diff}))),'مقسّم');
   if(n.combo.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(n.combo.map(x=>({'عملية':x.txn,'البيعات':x.parts.map(p=>p.label+' ('+p.amount+')').join(' + '),'Paymob':x.paymob,'مجموع البيعات':x.orders_total,'الفرق':x.diff}))),'دمج');
   if(n.pickup.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(n.pickup.map(x=>({'عملية':x.txn,'الأوردر':x.order,'فاتورة':x.invoice,'Paymob':x.paymob,'الأوردر':x.order_total,'فرق الوقت (د)':x.mins}))),'بيك أب');
+  if((n.mixed||[]).length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(n.mixed.map(x=>({'عملية':x.txn,'البيعة':x.label,'فاتورة':x.invoice,'إجمالي البيعة':x.order_total,'فيزا (Paymob)':x.paymob,'كاش':x.cash_part}))),'دفع مدمج');
   XLSX.writeFile(wb,`Paymob_ملاحظات_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 function pmNotesPrint(){
