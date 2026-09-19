@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v554 — 📝 ملاحظات المراجعة + التقريب على العمولة (2026-09-19)
+  ───────────────────────────────────────────────────────────
+  🆕 v554: صندوق "ملاحظات للمراجعة" قبل زرار التسجيل: الإجماليات (مدفوع،
+    عمولة، ثابت، فروق التقريب ±، صافي المصروف) + جداول التقريب والمقسّم
+    والدمج والبيك أب بالتفصيل. Excel + طباعة. اتشال حساب دخل التقريب —
+    الفرق بيتخصم/يتزود على مصروف العمولة. backend v495.
+
+  OrderPro v553 — 💳 Paymob: حساب دخل فروق التقريب (2026-09-19)
+  ───────────────────────────────────────────────────────────
+  🆕 v553: إعداد "حساب دخل فروق التقريب" — الزيادة اللي Paymob حصّلها فوق
+    الفاتورة بتتسجّل دخل بدل ما تضيع، والنقص الصغير write-off.
+    backend v494.
+
   OrderPro v552 — 💳 Paymob: تقريب + فاتورة على فيزتين (2026-09-19)
   ───────────────────────────────────────────────────────────
   🆕 v552: مرشح ✂️ مقسّم (عمليتين/تلاتة متتاليين = فاتورة واحدة).
@@ -6105,6 +6118,7 @@ tr:hover td{background:#fafbff}
           <select id="pm-exp" style="min-width:220px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif" onchange="pmSave()"><option value="">⏳</option></select></div>
         <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">زيادة ثابتة لكل عملية (ج)</label>
           <input type="number" id="pm-extra" step="0.5" min="0" value="0" style="width:90px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif;text-align:center" onchange="pmSave()"></div>
+
         <button class="btn" onclick="document.getElementById('pm-file').click()" style="background:#7c3aed;color:#fff">📤 ارفع كشف Paymob (csv.)</button>
         <input type="file" id="pm-file" accept=".csv,.xlsx" style="display:none" onchange="pmPick(this.files[0])">
       </div>
@@ -20922,8 +20936,51 @@ async function pmPick(file, reuse){
           <td style="text-align:center;font-family:Roboto,sans-serif">${x.match?escapeHtml(x.match.label||x.match.order_id)+(x.match.shopify_no?` <span style="color:#16a34a">#${escapeHtml(x.match.shopify_no)}</span>`:'')+(x.match.invoice?` <span style="color:var(--muted)">${escapeHtml(x.match.invoice)}</span>`:''):'—'}</td>
           <td style="text-align:center;color:var(--muted);font-size:10px">${escapeHtml(x.reason||'')}${x.diag&&x.diag.label?`<div style="color:#2563eb">أقرب بنفس المبلغ: ${escapeHtml(String(x.diag.label))} (${escapeHtml(x.diag.method)}) ${x.diag.delta_min>0?'+':''}${x.diag.delta_min} دقيقة</div>`:(x.diag&&x.diag.none?'<div style="color:#dc2626">مفيش بنفس المبلغ في ±24س</div>':'')}</td>
         </tr>`).join('')}</tbody></table></div>
+      ${r.notes?`<div id="pm-notes" style="border:2px solid #7c3aed;border-radius:10px;padding:12px;margin-bottom:12px;background:#fdf4ff">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-weight:900;color:#7c3aed;font-size:14px">📝 ملاحظات للمراجعة قبل التسجيل</div>
+          <div style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" onclick="pmNotesExcel()" style="font-size:11px">⬇️ Excel</button><button class="btn btn-ghost btn-sm" onclick="pmNotesPrint()" style="font-size:11px">🖨️ طباعة</button></div>
+        </div>
+        <table style="width:100%;font-size:12px;margin-bottom:10px;background:var(--card);border-radius:8px">
+          <tr><td style="padding:5px 8px">مدفوع (الأكيد)</td><td style="text-align:left;font-family:Roboto,sans-serif;font-weight:700">${f(r.notes.totals.paid)}</td></tr>
+          <tr><td style="padding:5px 8px">عمولة Paymob</td><td style="text-align:left;font-family:Roboto,sans-serif">${f(r.notes.totals.fees)}</td></tr>
+          <tr><td style="padding:5px 8px">زيادة ثابتة ${r.extra_per_txn}×${r.sure}</td><td style="text-align:left;font-family:Roboto,sans-serif">${f(r.notes.totals.extra)}</td></tr>
+          <tr><td style="padding:5px 8px">فروق التقريب <span style="color:var(--muted)">(${r.notes.rounding.length} حالة — موجب = جالنا زيادة، بيتخصم من العمولة)</span></td><td style="text-align:left;font-family:Roboto,sans-serif;font-weight:700;color:${r.notes.totals.rounding>=0?'#16a34a':'#dc2626'}">${r.notes.totals.rounding>=0?'+':''}${f(r.notes.totals.rounding)}</td></tr>
+          <tr style="border-top:2px solid #7c3aed"><td style="padding:6px 8px;font-weight:900">صافي مصروف العمولة اللي هيتسجّل</td><td style="text-align:left;font-family:Roboto,sans-serif;font-weight:900;font-size:14px">${f(r.notes.totals.net_expense)} ج</td></tr>
+        </table>
+        ${r.notes.rounding.length?`<details open style="margin-bottom:8px"><summary style="cursor:pointer;font-weight:700;font-size:12px">🔢 التقريب (${r.notes.rounding.length})</summary>
+          <table style="width:100%;font-size:11px;margin-top:4px"><thead><tr style="color:var(--muted)"><th style="text-align:right">عملية</th><th>البيعة</th><th>فاتورة</th><th>Paymob</th><th>الأوردر</th><th>الفرق</th></tr></thead>
+          <tbody>${r.notes.rounding.map(n=>`<tr><td style="font-family:Roboto,sans-serif;font-size:10px">${escapeHtml(String(n.txn))}</td><td style="text-align:center">${escapeHtml(n.label||'')}</td><td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(n.invoice||'')}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(n.paymob)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(n.order_total)}</td><td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700;color:${n.diff>0?'#16a34a':'#dc2626'}">${n.diff>0?'+':''}${f(n.diff)}</td></tr>`).join('')}</tbody></table></details>`:''}
+        ${r.notes.split.length?`<details style="margin-bottom:8px"><summary style="cursor:pointer;font-weight:700;font-size:12px">✂️ فاتورة على أكتر من فيزا (${r.notes.split.length})</summary>
+          <table style="width:100%;font-size:11px;margin-top:4px"><thead><tr style="color:var(--muted)"><th style="text-align:right">عمليات</th><th>البيعة</th><th>مجموع Paymob</th><th>الأوردر</th><th>الفرق</th></tr></thead>
+          <tbody>${r.notes.split.map(n=>`<tr><td style="font-family:Roboto,sans-serif;font-size:10px">${n.txns.map(escapeHtml).join(' + ')}</td><td style="text-align:center">${escapeHtml(n.label)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(n.paymob_sum)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(n.order_total)}</td><td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${n.diff>0?'+':''}${f(n.diff)}</td></tr>`).join('')}</tbody></table></details>`:''}
+        ${r.notes.combo.length?`<details style="margin-bottom:8px"><summary style="cursor:pointer;font-weight:700;font-size:12px">🔗 فيزا واحدة لأكتر من بيعة (${r.notes.combo.length})</summary>
+          <table style="width:100%;font-size:11px;margin-top:4px"><thead><tr style="color:var(--muted)"><th style="text-align:right">عملية</th><th>البيعات</th><th>Paymob</th><th>مجموع البيعات</th><th>الفرق</th></tr></thead>
+          <tbody>${r.notes.combo.map(n=>`<tr><td style="font-family:Roboto,sans-serif;font-size:10px">${escapeHtml(String(n.txn))}</td><td style="text-align:center">${n.parts.map(p=>escapeHtml(p.label)+' ('+f(p.amount)+')').join(' + ')}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(n.paymob)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(n.orders_total)}</td><td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${n.diff>0?'+':''}${f(n.diff)}</td></tr>`).join('')}</tbody></table></details>`:''}
+        ${r.notes.pickup.length?`<details><summary style="cursor:pointer;font-weight:700;font-size:12px">📦 بيك أب اتدفع فيزا عند الاستلام (${r.notes.pickup.length})</summary>
+          <table style="width:100%;font-size:11px;margin-top:4px"><thead><tr style="color:var(--muted)"><th style="text-align:right">عملية</th><th>الأوردر</th><th>فاتورة</th><th>Paymob</th><th>الأوردر</th><th>فرق الوقت</th></tr></thead>
+          <tbody>${r.notes.pickup.map(n=>`<tr><td style="font-family:Roboto,sans-serif;font-size:10px">${escapeHtml(String(n.txn))}</td><td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(n.order)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(n.invoice||'')}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(n.paymob)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(n.order_total)}</td><td style="text-align:center">${n.mins} د</td></tr>`).join('')}</tbody></table></details>`:''}
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">الأرقام تقديرية من رصيد الأوردر عندنا؛ التسجيل بيستخدم رصيد الفاتورة الفعلي في Zoho.</div>
+      </div>`:''}
       ${r.sure||maybes.length?`<button class="btn btn-primary" onclick="pmApply()">💳 سجّل الأكيد${maybes.length?' + اللي اخترته':''} في Zoho</button>`:'<span style="color:var(--muted)">مفيش صفوف جاهزة</span>'}`;
   }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+function pmNotesExcel(){
+  if(!_pmPreview?.notes) return;
+  const n=_pmPreview.notes; const wb=XLSX.utils.book_new();
+  const t=[['البند','المبلغ'],['مدفوع',n.totals.paid],['عمولة Paymob',n.totals.fees],['زيادة ثابتة',n.totals.extra],['فروق التقريب (+ زيادة / − نقص)',n.totals.rounding],['صافي مصروف العمولة',n.totals.net_expense]];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(t),'الإجماليات');
+  if(n.rounding.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(n.rounding.map(x=>({'عملية':x.txn,'البيعة':x.label,'فاتورة':x.invoice,'Paymob':x.paymob,'الأوردر':x.order_total,'الفرق':x.diff}))),'التقريب');
+  if(n.split.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(n.split.map(x=>({'عمليات':x.txns.join(' + '),'البيعة':x.label,'مجموع Paymob':x.paymob_sum,'الأوردر':x.order_total,'الفرق':x.diff}))),'مقسّم');
+  if(n.combo.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(n.combo.map(x=>({'عملية':x.txn,'البيعات':x.parts.map(p=>p.label+' ('+p.amount+')').join(' + '),'Paymob':x.paymob,'مجموع البيعات':x.orders_total,'الفرق':x.diff}))),'دمج');
+  if(n.pickup.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(n.pickup.map(x=>({'عملية':x.txn,'الأوردر':x.order,'فاتورة':x.invoice,'Paymob':x.paymob,'الأوردر':x.order_total,'فرق الوقت (د)':x.mins}))),'بيك أب');
+  XLSX.writeFile(wb,`Paymob_ملاحظات_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+function pmNotesPrint(){
+  const el=document.getElementById('pm-notes'); if(!el) return;
+  const w=window.open('','_blank','width=900,height=1000'); if(!w) return;
+  w.document.write(`<html dir="rtl"><head><meta charset="utf-8"><title>ملاحظات Paymob</title><style>body{font-family:Cairo,Arial,sans-serif;padding:20px}table{border-collapse:collapse;width:100%;margin-bottom:12px}td,th{border:1px solid #ddd;padding:5px;font-size:12px}details{display:block}summary{font-weight:700;margin:8px 0}button{display:none}</style></head><body><h2>📝 ملاحظات مراجعة كشف Paymob — ${new Date().toLocaleDateString('ar-EG')}</h2>${el.innerHTML.replace(/<details/g,'<details open')}</body></html>`);
+  w.document.close(); setTimeout(()=>w.print(),300);
 }
 async function pmApply(){
   if(!_pmRows||!_pmPreview) return;
@@ -20934,7 +20991,8 @@ async function pmApply(){
   try{
     const r=await apiFetch('/api/paymob/apply','POST',{ rows:_pmRows, confirmed:_pmConfirmed });
     if(!r||r.error){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
-    box.innerHTML=`<div style="font-weight:800;color:#16a34a;margin-bottom:6px">✅ اتسجّل ${r.paid} دفعة${r.expense?` + مصروف ${Number(r.expense.amount).toLocaleString()} ج`:''}</div>
+    box.innerHTML=`<div style="font-weight:800;color:#16a34a;margin-bottom:6px">✅ اتسجّل ${r.paid} دفعة${r.expense?` + مصروف صافي ${Number(r.expense.amount).toLocaleString()} ج`:''}</div>
+      ${r.expense_breakdown?`<div style="font-size:12px;color:var(--muted)">عمولة ${r.expense_breakdown.fees} + ثابت ${r.expense_breakdown.extra} ${r.expense_breakdown.rounding>=0?'−':'+'} تقريب ${Math.abs(r.expense_breakdown.rounding)} = ${r.expense_breakdown.net}</div>`:''}
       <div style="font-size:12px;color:var(--muted)">اتخطى ${r.skipped}${r.failed?` · <span style="color:#dc2626">فشل ${r.failed}</span>`:''}</div>
       ${r.errors.length?`<div style="margin-top:8px;font-size:11px;color:#dc2626">${r.errors.map(e=>escapeHtml(e.txn+': '+e.error)).join('<br>')}</div>`:''}`;
     _pmRows=null; _pmPreview=null; _pmConfirmed={};
