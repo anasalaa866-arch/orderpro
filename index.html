@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v547 — 🔬 دليل المطابقة في كشف Paymob (2026-09-18)
+  ───────────────────────────────────────────────────────────
+  🔬 v547: 80/82 مش لاقي. بدل التخمين: لكل صف مش لاقي، أقرب بيعة بنفس
+    المبلغ في ±24 ساعة وفرق الوقت — وصندوق فوق بيجمّع الفروق وطرق
+    الدفع المسجّلة في اليوم ده. الدليل بيقول توقيت ولا مبلغ ولا طريقة.
+    backend v488.
+
   OrderPro v546 — 🚑 وقت Paymob كان بيضيع في القراءة + عرض التوقيت (2026-09-18)
   ───────────────────────────────────────────────────────────
   🚑 v546: قراءة الكشف بـ raw:false كانت بتحوّل "2026-09-09 20:51:07"
@@ -20814,6 +20821,13 @@ async function pmPick(file, reuse){
         <div class="sc" style="flex:1;min-width:130px"><div class="sc-label">متسجل / مدفوع</div><div class="sc-val">${r.already+r.paid}</div></div>
         <div class="sc blue" style="flex:1;min-width:150px"><div class="sc-label">مصروف العمولة</div><div class="sc-val">${f(r.expense_total)} ج</div><div style="font-size:11px;color:var(--muted)">للأكيد + ${r.extra_per_txn}×</div></div>
       </div>
+      ${r.diagnosis && r.unmatched ? `<div style="border:1px solid #2563eb;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px">
+        <div style="font-weight:800;color:#2563eb;margin-bottom:6px">🔬 دليل — ليه ${r.unmatched} مش لاقيين؟</div>
+        <div>بيعات بنفس المبلغ موجودة في ±24 ساعة بس بعيدة عن الوقت: <b>${Object.entries(r.diagnosis.delta_hours_hist).sort((a,b)=>b[1]-a[1]).map(([h,n])=>`${n} عملية فرقها ~${h>0?'+':''}${h} ساعة`).join(' · ')||'—'}</b></div>
+        <div>مفيش بيعة بنفس المبلغ خالص في ±24 ساعة: <b>${r.diagnosis.no_same_amount_at_all}</b></div>
+        <div>طرق الدفع المسجّلة على الكاشير في اليوم ده: <b style="font-family:Roboto,sans-serif">${(r.diagnosis.pos_payment_methods_that_day||[]).map(m=>`${escapeHtml(m.method)}=${m.n}`).join(', ')||'—'}</b></div>
+        <div style="color:var(--muted);margin-top:4px">لو الفروق كلها حوالين رقم واحد (مثلاً +3) → المشكلة توقيت. لو "مفيش بنفس المبلغ" هو الأغلب → المشكلة مبلغ أو طريقة دفع.</div>
+      </div>`:''}
       ${maybes.length?`<div style="border:1px solid #b45309;border-radius:10px;padding:10px;margin-bottom:10px">
         <div style="font-weight:800;color:#b45309;margin-bottom:6px">🤔 ${maybes.length} عملية ليها أكتر من بيعة بنفس المبلغ — اختار الصح (أو سيبها)</div>
         ${maybes.map(x=>`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--border);font-size:12px">
@@ -20830,7 +20844,7 @@ async function pmPick(file, reuse){
           <td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted)">${f(x.fees)}</td>
           <td style="text-align:center;font-weight:700;color:${(K[x.kind]||K.skip)[0]}">${(K[x.kind]||K.skip)[1]}</td>
           <td style="text-align:center;font-family:Roboto,sans-serif">${x.match?escapeHtml(x.match.label||x.match.order_id)+(x.match.invoice?` <span style="color:var(--muted)">${escapeHtml(x.match.invoice)}</span>`:''):'—'}</td>
-          <td style="text-align:center;color:var(--muted);font-size:10px">${escapeHtml(x.reason||'')}</td>
+          <td style="text-align:center;color:var(--muted);font-size:10px">${escapeHtml(x.reason||'')}${x.diag&&x.diag.label?`<div style="color:#2563eb">أقرب بنفس المبلغ: ${escapeHtml(String(x.diag.label))} (${escapeHtml(x.diag.method)}) ${x.diag.delta_min>0?'+':''}${x.diag.delta_min} دقيقة</div>`:(x.diag&&x.diag.none?'<div style="color:#dc2626">مفيش بنفس المبلغ في ±24س</div>':'')}</td>
         </tr>`).join('')}</tbody></table></div>
       ${r.sure||maybes.length?`<button class="btn btn-primary" onclick="pmApply()">💳 سجّل الأكيد${maybes.length?' + اللي اخترته':''} في Zoho</button>`:'<span style="color:var(--muted)">مفيش صفوف جاهزة</span>'}`;
   }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
