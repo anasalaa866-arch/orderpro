@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v556 — 📦 كشف أمازون → Zoho (2026-09-19)
+  ───────────────────────────────────────────────────────────
+  🆕 v556: صفحة جديدة — ارفع كشف Transactions من Seller Central →
+    مطابقة بكود أمازون ↔ كود الأوردر → دفعة لكل أوردر + مصروف واحد
+    (عمولة + عروض + رسوم خدمة + إلغاءات − زيادات). ملاحظات مراجعة
+    بصافي التحويل المتوقع عشان يتقارن بالـ PDF. backend v497.
+
+  OrderPro v555 — 🧪 اختبار خانة الكود على أوردر (2026-09-19)
+  ───────────────────────────────────────────────────────────
+  🆕 v555: في صفحة ربط Zoho — اكتب رقم أوردر وشوف: الحقل المحفوظ، الكود
+    اللي اتلاقى ومن أنهي مصدر، اللي هيتبعت، والخانات اللي على الفاتورة
+    فعلاً. backend v496.
+
   OrderPro v554 — 📝 ملاحظات المراجعة + التقريب على العمولة (2026-09-19)
   ───────────────────────────────────────────────────────────
   🆕 v554: صندوق "ملاحظات للمراجعة" قبل زرار التسجيل: الإجماليات (مدفوع،
@@ -1688,6 +1701,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="suppliers" onclick="goPage(this,'suppliers')"><span class="ni-icon">🏭</span><span class="ni-label">الموردين</span></div>
         <div class="ni" data-p="bosta-payout" onclick="goPage(this,'bosta-payout')"><span class="ni-icon">🏦</span><span class="ni-label">كشف بوسطة → Zoho</span></div>
         <div class="ni" data-p="paymob" onclick="goPage(this,'paymob')"><span class="ni-icon">💳</span><span class="ni-label">كشف Paymob → Zoho</span></div>
+        <div class="ni" data-p="amazon-payout" onclick="goPage(this,'amazon-payout')"><span class="ni-icon">📦</span><span class="ni-label">كشف أمازون → Zoho</span></div>
         <div class="ni" data-p="courier-settlements-zoho" onclick="goPage(this,'courier-settlements-zoho')"><span class="ni-icon">🚚</span><span class="ni-label">تصفيات المناديب → Zoho</span></div>
         <div class="ni" data-p="app-promo" onclick="goPage(this,'app-promo')"><span class="ni-icon">📱</span><span class="ni-label">تحويل للتطبيق</span></div>
         <div class="ni" data-p="dead-stock" onclick="goPage(this,'dead-stock')"><span class="ni-icon">🧊</span><span class="ni-label">الأصناف الراكدة</span></div>
@@ -6101,6 +6115,24 @@ tr:hover td{background:#fafbff}
   <div id="csz-list"></div>
 </div>
 
+<div class="page" id="page-amazon-payout">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">📦 كشف أمازون → Zoho</h2>
+  </div>
+  <div class="card" style="margin-bottom:14px"><div style="padding:14px">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">ارفع كشف Transactions من Seller Central (csv). المطابقة بكود أمازون ↔ كود الأوردر عندك. كل Order Payment = دفعة على فاتورته، وعمولات أمازون + العروض + رسوم الخدمة + الإلغاءات = مصروف واحد. مجموع الصافي لازم يطابق التحويل اللي في الـ PDF.</div>
+    <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
+      <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">حساب الإيداع (البنك اللي أمازون بيحوّل له)</label>
+        <select id="am-dep" style="min-width:230px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif" onchange="amSave()"><option value="">⏳</option></select></div>
+      <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">حساب مصروف عمولة أمازون</label>
+        <select id="am-exp" style="min-width:230px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif" onchange="amSave()"><option value="">⏳</option></select></div>
+      <button class="btn" onclick="document.getElementById('am-file').click()" style="background:#f59e0b;color:#000">📤 ارفع كشف أمازون (csv.)</button>
+      <input type="file" id="am-file" accept=".csv,.xlsx" style="display:none" onchange="amPick(this.files[0])">
+    </div>
+    <div id="am-box" style="font-size:13px"></div>
+  </div></div>
+</div>
+
 <div class="page" id="page-paymob">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">💳 كشف Paymob (فيزا) → Zoho</h2>
@@ -9112,7 +9144,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'talabat':'🛵 طلبات (Talabat)','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','paymob':'💳 كشف Paymob (فيزا) → Zoho','bosta-payout':'🏦 كشف تحويلات بوسطة → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'talabat':'🛵 طلبات (Talabat)','amazon-payout':'📦 كشف أمازون → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','paymob':'💳 كشف Paymob (فيزا) → Zoho','bosta-payout':'🏦 كشف تحويلات بوسطة → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -20085,6 +20117,23 @@ function _chkSafeForSync(list){
 }
 // 🆕 v500: اعرض الحقول المخصصة للفواتير في Zoho باسمها التقني (cf_...)
 let _zhCodeField = '';
+// 🧪 v555: اختبار الكود على أوردر — بيوري المصادر واللي هيتبعت واللي على الفاتورة
+async function zhCodeTest(){
+  const id=($('zh-code-test')?.value||'').trim(); if(!id){ toast('اكتب رقم أوردر'); return; }
+  const out=$('zh-code-test-out'); out.style.display='block'; out.textContent='⏳';
+  try{
+    const r=await apiFetch('/api/zoho/code-test/'+encodeURIComponent(id),'GET');
+    const lines=[];
+    lines.push('الحقل المحفوظ:      '+(r.field_setting||'❌ مش متظبط — اختار الحقل فوق ودوس حفظ'));
+    if(r.field_meta) lines.push('معلومات الحقل:      id='+(r.field_meta.id||'?')+' · '+r.field_meta.label+' ('+r.field_meta.type+')');
+    lines.push('الكود اللي اتلاقى:  '+(r.code_found||'❌ مفيش'));
+    lines.push('المصادر:            note='+(r.sources?.note||'—')+' · customer_note='+(r.sources?.customer_note||'—')+' · order_note='+(r.sources?.order_note||'—')+' · tags='+(r.sources?.tags||'—'));
+    lines.push('هيتبعت:             '+(r.would_send?JSON.stringify(r.would_send):'❌ مفيش (ناقص حقل أو كود)'));
+    lines.push('الفاتورة:           '+(r.invoice||'مش متفوتر'));
+    lines.push('الخانات على الفاتورة دلوقتي: '+(typeof r.custom_fields_on_invoice==='string'?r.custom_fields_on_invoice:JSON.stringify(r.custom_fields_on_invoice)));
+    out.textContent=lines.join('\n');
+  }catch(e){ out.textContent='❌ '+e.message; }
+}
 async function zhSaveCodeField(){
   const f = $('zh-code-field')?.value || '';
   try{
@@ -20205,7 +20254,12 @@ async function zhCustomFields(){
           </select>
           <button class="btn btn-sm" onclick="zhSaveCodeField()" style="background:#be185d;color:#fff">💾 حفظ</button>
         </div>
-        <div style="margin-top:8px;font-size:11px;color:var(--muted)">المصدر: ${escapeHtml(r.source||'—')} · الحقول من نوع Number بترفض أي قيمة فيها حروف.</div>`
+        <div style="margin-top:8px;font-size:11px;color:var(--muted)">المصدر: ${escapeHtml(r.source||'—')} · الحقول من نوع Number بترفض أي قيمة فيها حروف.</div>
+        <div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input id="zh-code-test" placeholder="رقم أوردر (مثلاً 175121)" style="width:170px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif">
+          <button class="btn btn-ghost btn-sm" onclick="zhCodeTest()">🧪 اختبر على الأوردر ده</button>
+        </div>
+        <pre id="zh-code-test-out" style="display:none;margin-top:8px;font-size:11px;background:var(--bg);padding:10px;border-radius:8px;white-space:pre-wrap;direction:ltr;text-align:left;max-height:260px;overflow:auto"></pre>`
       : '<div style="color:var(--muted)">مفيش حقول مخصصة اتلاقت</div>'}
       ${(r.warnings||[]).length ? `<div style="margin-top:8px;font-size:11px;color:#b45309">${(r.warnings||[]).map(w=>escapeHtml(w)).join('<br>')}</div>`:''}`;
   }catch(e){ box.innerHTML = `<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
@@ -21062,6 +21116,81 @@ async function cszPost(id){
     if(r.errors.length) alert('أخطاء:\n'+r.errors.map(e=>e.item+': '+e.error).join('\n'));
     cszLoad();
   }catch(e){ toast('❌ '+e.message); if(btn){ btn.disabled=false; btn.textContent='📤 سجّل في Zoho'; } }
+}
+
+// 🆕 v556: كشف أمازون → Zoho
+let _amRows=null, _amPreview=null;
+async function amLoad(){
+  const dep=$('am-dep'), exp=$('am-exp'); if(!dep) return;
+  try{ const r=await apiFetch('/api/amazon/settings','GET');
+    dep.innerHTML='<option value="">— اختار —</option>'+(r.deposit||[]).map(a=>`<option value="${escapeHtml(a.id)}" ${a.id===r.deposit_current?'selected':''}>${a.type==='bank'?'🏦':'💵'} ${escapeHtml(a.name)}</option>`).join('');
+    exp.innerHTML='<option value="">— اختار —</option>'+(r.expense||[]).map(a=>`<option value="${escapeHtml(a.id)}" ${a.id===r.expense_current?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
+  }catch(e){ dep.innerHTML='<option value="">❌ '+escapeHtml(e.message)+'</option>'; }
+}
+async function amSave(){ try{ await apiFetch('/api/amazon/settings','POST',{ deposit_account:$('am-dep')?.value, expense_account:$('am-exp')?.value }); toast('✅ اتحفظ'); }catch(e){ toast('❌ '+e.message); } }
+async function amPick(file){
+  if(!file) return; const box=$('am-box'); box.innerHTML='<span style="color:var(--muted)">⏳</span>';
+  try{
+    const wb=/\.csv$/i.test(file.name)?XLSX.read(await file.text(),{type:'string',raw:true}):XLSX.read(await file.arrayBuffer(),{type:'array'});
+    _amRows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:true});
+    if(!_amRows.length||!('Transaction type' in _amRows[0])){ box.innerHTML='<span style="color:var(--danger)">❌ مش لاقي عمود Transaction type — اتأكد إنه كشف Transactions من أمازون</span>'; return; }
+    const r=await apiFetch('/api/amazon/preview','POST',{ rows:_amRows });
+    if(!r||r.error){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
+    _amPreview=r; const t=r.totals; const f=n=>Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2});
+    const K={sure:['#16a34a','✅ أكيد'],unmatched:['#dc2626','❌ مش لاقي'],already:['var(--muted)','متسجلة'],paid:['var(--muted)','مدفوعة قبل كده'],no_invoice:['#dc2626','مش متفوتر'],service:['#7c3aed','رسوم خدمة'],cancel:['#b45309','إلغاء'],skip:['var(--muted)','متخطى']};
+    box.innerHTML=`
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+        <div class="sc green" style="flex:1;min-width:150px"><div class="sc-label">أكيد — هيتسجّل</div><div class="sc-val">${r.sure}</div><div style="font-size:11px;color:var(--muted)">${f(t.sure_charges)} ج</div></div>
+        <div class="sc" style="flex:1;min-width:130px;${r.unmatched||r.no_invoice?'background:var(--danger-light)':''}"><div class="sc-label">مش لاقي / مش متفوتر</div><div class="sc-val" style="${r.unmatched||r.no_invoice?'color:var(--danger)':''}">${r.unmatched+r.no_invoice}</div></div>
+        <div class="sc" style="flex:1;min-width:130px"><div class="sc-label">متسجل / مدفوع</div><div class="sc-val">${r.already+r.paid}</div></div>
+        <div class="sc blue" style="flex:1;min-width:150px"><div class="sc-label">مصروف أمازون</div><div class="sc-val">${f(t.expense)} ج</div><div style="font-size:11px;color:var(--muted)">عمولة ${t.fee_rate_pct}% من المبيعات</div></div>
+        <div class="sc" style="flex:1;min-width:170px;background:#fffbeb"><div class="sc-label">صافي التحويل المتوقع</div><div class="sc-val" style="color:#b45309">${f(t.expected_bank)} ج</div><div style="font-size:11px;color:var(--muted)">قارنه بالـ PDF</div></div>
+      </div>
+      <div style="border:2px solid #f59e0b;border-radius:10px;padding:12px;margin-bottom:12px;background:#fffbeb">
+        <div style="font-weight:900;color:#b45309;margin-bottom:8px">📝 ملاحظات للمراجعة</div>
+        <table style="width:100%;font-size:12px;background:var(--card);border-radius:8px">
+          <tr><td style="padding:4px 8px">مبيعات (product charges)</td><td style="text-align:left;font-family:Roboto,sans-serif">${f(t.charges)}</td></tr>
+          <tr><td style="padding:4px 8px">شحن/أخرى جالنا (Other)</td><td style="text-align:left;font-family:Roboto,sans-serif;color:#16a34a">+${f(t.other)}</td></tr>
+          <tr><td style="padding:4px 8px">عمولة أمازون</td><td style="text-align:left;font-family:Roboto,sans-serif;color:#dc2626">${f(t.fees)}</td></tr>
+          <tr><td style="padding:4px 8px">عروض (promo rebates)</td><td style="text-align:left;font-family:Roboto,sans-serif;color:#dc2626">${f(t.promo)}</td></tr>
+          <tr><td style="padding:4px 8px">رسوم خدمة (${r.service})</td><td style="text-align:left;font-family:Roboto,sans-serif;color:#dc2626">${f(t.service_fees)}</td></tr>
+          <tr><td style="padding:4px 8px">إلغاءات (${r.cancel})</td><td style="text-align:left;font-family:Roboto,sans-serif;color:#dc2626">${f(t.cancellations)}</td></tr>
+          <tr style="border-top:2px solid #f59e0b"><td style="padding:6px 8px;font-weight:900">صافي التحويل</td><td style="text-align:left;font-family:Roboto,sans-serif;font-weight:900;font-size:14px">${f(t.net)} ج</td></tr>
+        </table>
+        ${r.cancel?`<div style="font-size:11px;color:#b45309;margin-top:6px">⚠️ الإلغاءات بتتخصم من التحويل وبتتحط في المصروف — اتأكد إن الأوردر الملغي عليه إشعار دائن في Zoho.</div>`:''}
+      </div>
+      <div style="max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:10px">
+        <table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted)"><th style="text-align:right;padding:4px">التاريخ</th><th>النوع</th><th>كود أمازون</th><th>المنتج</th><th>بضاعة</th><th>عمولة</th><th>أخرى</th><th>صافي</th><th>الحالة</th><th>الأوردر</th><th>السبب</th></tr></thead>
+        <tbody>${r.rows.map(x=>`<tr>
+          <td style="padding:3px 6px;font-family:Roboto,sans-serif;font-size:10px">${escapeHtml(x.date)}</td>
+          <td style="text-align:center;font-size:10px">${escapeHtml(x.type)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-size:10px">${escapeHtml(x.code||'')}</td>
+          <td style="font-size:10px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(x.product||'')}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${f(x.charges)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;color:#dc2626">${f(x.fees)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${f(x.other)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${f(x.total)}</td>
+          <td style="text-align:center;font-weight:700;color:${(K[x.kind]||K.skip)[0]}">${(K[x.kind]||K.skip)[1]}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${x.order_id?escapeHtml(String(x.order_id).replace(/^SH-/,''))+(x.invoice?` <span style="color:var(--muted)">${escapeHtml(x.invoice)}</span>`:''):'—'}</td>
+          <td style="text-align:center;color:var(--muted);font-size:10px">${escapeHtml(x.reason||'')}</td>
+        </tr>`).join('')}</tbody></table></div>
+      ${r.sure?`<button class="btn btn-primary" onclick="amApply()">📦 سجّل ${r.sure} دفعة + مصروف أمازون في Zoho</button>`:'<span style="color:var(--muted)">مفيش صفوف جاهزة</span>'}`;
+  }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+async function amApply(){
+  if(!_amRows||!_amPreview) return;
+  if(!$('am-dep')?.value||!$('am-exp')?.value){ toast('❌ اختار الحسابين'); return; }
+  const t=_amPreview.totals;
+  if(!confirm(`هيتسجّل في Zoho:\n• ${_amPreview.sure} دفعة عميل\n• مصروف أمازون واحد ${t.expense.toLocaleString()} ج\n\nالبنك المتوقع بعدها: ${t.expected_bank.toLocaleString()} ج\n\nقيود حقيقية. تكمّل؟`)) return;
+  const box=$('am-box'); box.innerHTML='<span style="color:var(--muted)">⏳ بيسجّل...</span>';
+  try{
+    const r=await apiFetch('/api/amazon/apply','POST',{ rows:_amRows });
+    if(!r||r.error){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
+    box.innerHTML=`<div style="font-weight:800;color:#16a34a;margin-bottom:6px">✅ اتسجّل ${r.paid} دفعة${r.expense?` + مصروف ${Number(r.expense.amount).toLocaleString()} ج`:''}</div>
+      <div style="font-size:12px;color:var(--muted)">اتخطى ${r.skipped}${r.failed?` · <span style="color:#dc2626">فشل ${r.failed}</span>`:''}</div>
+      ${r.errors.length?`<div style="margin-top:8px;font-size:11px;color:#dc2626">${r.errors.map(e=>escapeHtml(e.code+': '+e.error)).join('<br>')}</div>`:''}`;
+    _amRows=null; _amPreview=null;
+  }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
 }
 
 function chkSetFilter(f,btn){
@@ -44239,6 +44368,7 @@ function goPage(el,page){
   // 🆕 v240: Inventory pages
   if(page==='inventory'){ loadInventoryPage(); bulkActivateCheckActive(); syncCheckActive(); }
   if(page==='courier-settlements-zoho') cszLoad();
+  if(page==='amazon-payout') amLoad();
   if(page==='paymob') pmLoad();
   if(page==='bosta-payout') bpLoadBanks();
   if(page==='app-promo') apLoad();
