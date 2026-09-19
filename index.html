@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v565 — 💰 تكلفة تقديرية بالجملة (2026-09-19)
+  ───────────────────────────────────────────────────────────
+  🆕 v565: في كارت "أصناف من غير تكلفة": نسبة (افتراضي 80%) + زرار
+    يحط التكلفة = النسبة من سعر البيع لكل الأصناف المعروضة بالفلاتر،
+    مع معاينة بالعدد قبل التنفيذ واختيار "اللي عنده مخزون بس".
+    backend v507.
+
   OrderPro v564 — 🏷️ أكواد Shopify المتعددة (2026-09-19)
   ───────────────────────────────────────────────────────────
   🆕 v564: حالة بناء sku_barcodes بتوري المصدر (GraphQL 2026-10 = كل
@@ -4804,6 +4811,12 @@ tr:hover td{background:#fafbff}
         <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="zc-bundles" onchange="zcLoad(true)"> يشمل البندلز</label>
         <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="zc-archived" onchange="zcLoad(true)"> يشمل المؤرشف</label>
         <span id="zc-summary" style="font-size:12px;color:var(--muted)"></span>
+        <span style="margin-inline-start:auto;display:flex;gap:6px;align-items:center">
+          <input type="number" id="zc-pct" value="80" min="1" max="100" style="width:64px;padding:6px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif;text-align:center">
+          <span style="font-size:12px">% من سعر البيع</span>
+          <label style="font-size:11px;display:flex;align-items:center;gap:3px"><input type="checkbox" id="zc-stock"> اللي عنده مخزون بس</label>
+          <button class="btn btn-sm" onclick="zcSetPct()" style="background:#16a34a;color:#fff">💰 حط تكلفة تقديرية</button>
+        </span>
       </div>
     </div>
     <div id="zc-list" style="padding:0 14px 10px;overflow-x:auto"></div>
@@ -47554,6 +47567,21 @@ function dupSkuExcel(){
 // 🆕 v463: أصناف من غير تكلفة — تعديل يدوي
 let _zc = { offset: 0, limit: 100, total: 0, rows: [] };
 
+// 🆕 v565: تكلفة تقديرية بالجملة
+async function zcSetPct(){
+  const pct=parseFloat($('zc-pct')?.value)||80;
+  const body={ pct, search:($('zc-search')?.value||'').trim(), includeBundles:!!$('zc-bundles')?.checked, includeArchived:!!$('zc-archived')?.checked, onlyWithStock:!!$('zc-stock')?.checked };
+  try{
+    const pv=await apiFetch('/api/catalog/zero-cost-items/set-pct','POST',{ ...body, preview:true });
+    if(!pv||pv.error){ toast('❌ '+(pv?.error||'فشل')); return; }
+    if(!pv.count){ toast('مفيش أصناف تنطبق عليها'); return; }
+    if(!confirm(`هيتحط تكلفة = ${pct}% من سعر البيع لـ ${pv.count.toLocaleString()} صنف (بنفس الفلاتر الحالية).\n\nدي تكلفة تقديرية بتتحفظ في OrderPro بس (مش Shopify)، ومعلّمة "pct:${pct}" عشان تعرف تميّزها عن التكلفة الحقيقية.\n\nتكمّل؟`)) return;
+    const r=await apiFetch('/api/catalog/zero-cost-items/set-pct','POST',body);
+    if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    toast(`✅ اتحطت تكلفة ${pct}% لـ ${r.updated.toLocaleString()} صنف`);
+    zcLoad(true);
+  }catch(e){ toast('❌ '+e.message); }
+}
 async function zcLoad(reset){
   if(reset) _zc.offset = 0;
   const box = $('zc-list'); if(!box) return;
