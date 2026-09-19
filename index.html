@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v560 — 🧾 تسويات المدير في تصفية الكاشير (2026-09-19)
+  ───────────────────────────────────────────────────────────
+  🆕 v560: تسويات المدير بتظهر في تفاصيل التصفية، وفي صفحة Zoho لكل
+    واحدة اختيار تجاهل/مصروف/دخول كاش (الافتراضي حسب الإشارة).
+    backend v501 · Stars v118.
+
+  OrderPro v559 — 🏪 تصفيات الكاشيرز → Zoho (2026-09-19)
+  ───────────────────────────────────────────────────────────
+  🆕 v559: صفحة للمحاسب — كل تصفية كاشير بزرار واحد: جزء الكاش من كل
+    بيعة/بيك أب → دفعة على حساب الكاش، جزء الانستاباي → دفعة على حساب
+    الانستاباي، الفيزا بتتخطى (Paymob). تحذير لو الحساب ≠ التصفية
+    المسجلة أو فيه بند مش متفوتر. backend v500.
+
   OrderPro v558 — 🏦 كشوف التحويلات الموحّدة (2026-09-19)
   ───────────────────────────────────────────────────────────
   🆕 v558: صفحة واحدة بدل 3 — زرار رفع واحد، كاشف تلقائي بيعرف الكشف من
@@ -1712,6 +1725,7 @@ tr:hover td{background:#fafbff}
       <div class="nav-group-body">
         <div class="ni" data-p="suppliers" onclick="goPage(this,'suppliers')"><span class="ni-icon">🏭</span><span class="ni-label">الموردين</span></div>
         <div class="ni" data-p="payouts" onclick="goPage(this,'payouts')"><span class="ni-icon">🏦</span><span class="ni-label">كشوف التحويلات → Zoho</span></div>
+        <div class="ni" data-p="cashier-settlements-zoho" onclick="goPage(this,'cashier-settlements-zoho')"><span class="ni-icon">🏪</span><span class="ni-label">تصفيات الكاشيرز → Zoho</span></div>
         <div class="ni" data-p="courier-settlements-zoho" onclick="goPage(this,'courier-settlements-zoho')"><span class="ni-icon">🚚</span><span class="ni-label">تصفيات المناديب → Zoho</span></div>
         <div class="ni" data-p="app-promo" onclick="goPage(this,'app-promo')"><span class="ni-icon">📱</span><span class="ni-label">تحويل للتطبيق</span></div>
         <div class="ni" data-p="dead-stock" onclick="goPage(this,'dead-stock')"><span class="ni-icon">🧊</span><span class="ni-label">الأصناف الراكدة</span></div>
@@ -6201,6 +6215,21 @@ tr:hover td{background:#fafbff}
   </div>
 </div>
 
+<div class="page" id="page-cashier-settlements-zoho">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">🏪 تصفيات الكاشيرز → Zoho</h2>
+    <select id="cst-days" onchange="cstLoad()" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"><option value="30">آخر 30 يوم</option><option value="60" selected>آخر 60 يوم</option><option value="180">آخر 6 شهور</option></select>
+  </div>
+  <div class="card" style="margin-bottom:14px"><div style="padding:12px 14px;display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+    <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">💵 حساب الكاش</label>
+      <select id="cst-cash" style="min-width:220px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif" onchange="cstSave()"><option value="">⏳</option></select></div>
+    <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:700">📱 حساب الانستاباي</label>
+      <select id="cst-insta" style="min-width:220px;padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif" onchange="cstSave()"><option value="">⏳</option></select></div>
+    <div style="font-size:11px;color:var(--muted);padding-bottom:8px">كل بيعة/بيك أب في التصفية: جزء الكاش → دفعة على حساب الكاش، جزء الانستاباي → دفعة على حساب الانستاباي. الفيزا بتتخطى (Paymob بيسجّلها).</div>
+  </div></div>
+  <div id="cst-list"></div>
+</div>
+
 <div class="page" id="page-courier-settlements-zoho">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">🚚 تصفيات المناديب → Zoho</h2>
@@ -9171,7 +9200,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'talabat':'🛵 طلبات (Talabat)','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'talabat':'🛵 طلبات (Talabat)','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -16781,6 +16810,12 @@ async function openSettlementDetails(id){
           </div>
           ${parseInt(s.sales_count||0)===0 && Math.abs(parseFloat(s.cash_difference||0))>0 ? `<div style="margin-top:6px;font-size:11px;color:#b45309">⚠️ مفيش مبيعات بس فيه فرق — يعني الفرق جاي من الرصيد الافتتاحي أو الوارد/المنصرف، مش من بيع.</div>`:''}
         </div>
+        ${(()=>{ let adj=[]; try{ adj=typeof s.adj==='string'?JSON.parse(s.adj):(s.adj||[]); }catch(e){} return adj.length?`
+        <div style="margin-top:10px;padding:8px 10px;border:1px dashed #7c3aed;border-radius:8px;font-size:12px">
+          <div style="font-weight:800;color:#7c3aed;margin-bottom:4px">🧾 تسويات المدير (${adj.length})</div>
+          ${adj.map(a=>`<div style="display:flex;justify-content:space-between;padding:2px 0"><span>${escapeHtml(a.label||'')}</span><b style="font-family:Roboto,sans-serif;color:${Number(a.amount)<0?'#dc2626':'#16a34a'}">${Number(a.amount)>0?'+':''}${Number(a.amount||0).toLocaleString()}</b></div>`).join('')}
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">محسوبة في المتوقع فوق</div>
+        </div>`:''; })()}
         ${(parseFloat(s.refund_cash||0)+parseFloat(s.refund_visa||0)+parseFloat(s.refund_instapay||0)) > 0 ? `
         <div style="margin-top:10px;padding:8px 10px;background:var(--danger-light);border-radius:8px">
           <div style="font-size:11px;font-weight:800;color:#dc2626;margin-bottom:4px">↩️ مرتجعات مخصومة${s.refund_count?` (${s.refund_count})`:''}</div>
@@ -21292,6 +21327,82 @@ async function payoutLog(){
 async function payoutLogWrite(source, r, paidAmount){
   try{ await apiFetch('/api/payouts/log','POST',{ source, filename:window._poLastFile?.name||'', payments:r.paid||0, paid_amount:paidAmount||0,
         expense_amount:r.expense?.amount||0, bank_amount:+((paidAmount||0)-(r.expense?.amount||0)).toFixed(2), errors:(r.errors||[]).length }); }catch(e){}
+}
+
+// 🆕 v559: تصفيات الكاشيرز → Zoho
+let _cstRows=[];
+async function cstSave(){ try{ await apiFetch('/api/cashier-settlements/zoho-settings','POST',{ cash_account:$('cst-cash')?.value, instapay_account:$('cst-insta')?.value }); toast('✅ اتحفظ'); }catch(e){ toast('❌ '+e.message); } }
+async function cstLoad(){
+  const list=$('cst-list'); if(!list) return;
+  list.innerHTML='<div class="card"><div style="padding:20px;color:var(--muted)">⏳</div></div>';
+  try{
+    const st=await apiFetch('/api/cashier-settlements/zoho-settings','GET');
+    const opts=(st.accounts||[]).map(a=>`<option value="${escapeHtml(a.id)}">${a.type==='bank'?'🏦':'💵'} ${escapeHtml(a.name)}</option>`).join('');
+    $('cst-cash').innerHTML='<option value="">— اختار —</option>'+opts; $('cst-cash').value=st.cash_current||'';
+    $('cst-insta').innerHTML='<option value="">— اختار —</option>'+opts; $('cst-insta').value=st.instapay_current||'';
+    window._cstExpOpts=(st.expense||[]).map(a=>`<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join('');
+    window._cstIncOpts=(st.income||[]).map(a=>`<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join('');
+    const r=await apiFetch('/api/cashier-settlements/zoho-list?days='+($('cst-days')?.value||60),'GET');
+    _cstRows=r.rows||[]; const f=n=>Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2});
+    if(!_cstRows.length){ list.innerHTML='<div class="card"><div style="padding:24px;text-align:center;color:var(--muted)">مفيش تصفيات</div></div>'; return; }
+    list.innerHTML=_cstRows.map(s=>`<div class="card" style="margin-bottom:12px;${s.synced_at?'opacity:.7':''}" id="cst-${s.id}">
+      <div style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--border)">
+        <div><b style="font-size:15px">#${s.id} · ${escapeHtml(s.cashier||'')}</b> <span style="color:var(--muted);font-size:12px">· ${escapeHtml(s.store||'')} · ${new Date(s.settled_at).toLocaleDateString('ar-EG')}${s.manager?` · استلمها ${escapeHtml(s.manager)}`:''}</span>
+          ${!s.received?'<span style="font-size:11px;color:#b45309;margin-inline-start:8px">⏳ لسه ماتسلّمتش</span>':''}</div>
+        ${s.synced_at?`<span style="color:#16a34a;font-weight:700;font-size:12px">✅ اتسجّلت ${new Date(s.synced_at).toLocaleDateString('ar-EG')}${s.summary?` · كاش ${f(s.summary.cash?.amount)} · انستا ${f(s.summary.instapay?.amount)}`:''}</span>`
+          :`<button class="btn btn-primary btn-sm" onclick="cstPost(${s.id})" ${!s.received?'title="الأفضل بعد ما المدير يستلمها"':''}>📤 سجّل في Zoho</button>`}
+      </div>
+      <div style="padding:10px 14px;display:flex;gap:16px;flex-wrap:wrap;font-size:12px;align-items:center">
+        <span>🧾 بنود: <b>${s.items}</b></span>
+        <span>💵 كاش: <b style="font-family:Roboto,sans-serif;color:#16a34a">${f(s.cash)}</b>${Math.abs(s.cash-s.rec_cash)>=1?` <span style="color:#b45309;font-size:10px" title="التصفية المسجلة ${f(s.rec_cash)}">≠ تصفية ${f(s.rec_cash)}</span>`:''}</span>
+        <span>📱 انستاباي: <b style="font-family:Roboto,sans-serif;color:#4f46e5">${f(s.instapay)}</b>${Math.abs(s.instapay-s.rec_instapay)>=1?` <span style="color:#b45309;font-size:10px">≠ تصفية ${f(s.rec_instapay)}</span>`:''}</span>
+        <span style="color:var(--muted)">💳 فيزا: ${f(s.visa)} <span style="font-size:10px">(Paymob)</span></span>
+        ${s.no_invoice?`<span style="color:#dc2626">⚠️ ${s.no_invoice} بند مش متفوتر</span>`:''}
+        <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px;margin-inline-start:auto" onclick="cstItems(${s.id})">🔍 البنود</button>
+      </div>
+      ${(s.adj||[]).length?`<div style="padding:0 14px 12px">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px">🧾 تسويات المدير — اختار لكل واحدة:</div>
+        ${s.adj.map(a=>`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 0;font-size:12px;border-top:1px dashed var(--border)">
+          <span style="flex:1;min-width:160px">${escapeHtml(a.label)}</span>
+          <b style="font-family:Roboto,sans-serif;color:${a.amount<0?'#dc2626':'#16a34a'}">${a.amount>0?'+':''}${a.amount.toLocaleString()}</b>
+          ${s.synced_at?'':`<select class="cst-mode" data-sid="${s.id}" data-i="${a.i}" onchange="cstModeChange(this)" style="padding:4px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:11px">
+            <option value="ignore">تجاهل</option><option value="expense" ${a.amount<0?'selected':''}>مصروف على…</option><option value="income" ${a.amount>0?'selected':''}>دخول كاش على…</option></select>
+          <select class="cst-acc" data-sid="${s.id}" data-i="${a.i}" style="padding:4px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:11px;min-width:180px"></select>`}
+        </div>`).join('')}</div>`:''}
+      <div id="cst-items-${s.id}" style="display:none;padding:0 14px 12px"></div>
+    </div>`).join('');
+    document.querySelectorAll('.cst-mode').forEach(m=>cstModeChange(m));
+  }catch(e){ list.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`; }
+}
+function cstModeChange(sel){
+  const acc=sel.parentElement.querySelector('.cst-acc'); if(!acc) return;
+  if(sel.value==='ignore'){ acc.style.display='none'; return; }
+  acc.innerHTML='<option value="">— الحساب —</option>'+(sel.value==='expense'?window._cstExpOpts:window._cstIncOpts); acc.style.display='';
+}
+async function cstItems(id){
+  const el=$('cst-items-'+id); if(!el) return;
+  if(el.style.display!=='none'){ el.style.display='none'; return; }
+  el.style.display=''; el.innerHTML='<span style="color:var(--muted)">⏳</span>';
+  try{ const r=await apiFetch('/api/cashier-settlements/'+id+'/zoho-items','GET'); const f=n=>Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2});
+    el.innerHTML=`<table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted)"><th style="text-align:right">بند</th><th>أوردر</th><th>فاتورة</th><th>كاش</th><th>انستاباي</th><th>فيزا</th></tr></thead>
+      <tbody>${(r.items||[]).map(x=>`<tr style="${!x.has_invoice&&(x.cash>0||x.instapay>0)?'color:#dc2626':''}"><td style="padding:2px 4px;font-family:Roboto,sans-serif">${x.kind==='pickup'?'📦 ':''}${escapeHtml(x.ref)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(String(x.order_id||'—').replace(/^SH-/,''))}</td><td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(x.invoice||(x.has_invoice?'':'❌'))}</td><td style="text-align:center;font-family:Roboto,sans-serif">${x.cash?f(x.cash):''}</td><td style="text-align:center;font-family:Roboto,sans-serif">${x.instapay?f(x.instapay):''}</td><td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted)">${x.visa?f(x.visa):''}</td></tr>`).join('')}</tbody></table>`;
+  }catch(e){ el.innerHTML='❌ '+escapeHtml(e.message); }
+}
+async function cstPost(id){
+  if(!$('cst-cash')?.value||!$('cst-insta')?.value){ toast('❌ اختار حساب الكاش والانستاباي'); return; }
+  const s=_cstRows.find(x=>x.id===id); if(!s) return;
+  const adj=[...document.querySelectorAll(`.cst-mode[data-sid="${id}"]`)].map(m=>{ const acc=m.parentElement.querySelector('.cst-acc'); return { i:+m.dataset.i, mode:m.value, account_id:acc?.value||'' }; });
+  const bad=adj.filter(a=>a.mode!=='ignore'&&!a.account_id); if(bad.length){ toast('❌ اختار الحساب للتسويات اللي مش "تجاهل"'); return; }
+  const posting=adj.filter(a=>a.mode!=='ignore').length;
+  if(!confirm(`تصفية #${id} — ${s.cashier}\n• كاش ${s.cash.toLocaleString()} ج → حساب الكاش\n• انستاباي ${s.instapay.toLocaleString()} ج → حساب الانستاباي\n• فيزا ${s.visa.toLocaleString()} ج بتتخطى (Paymob)${posting?`\n• ${posting} تسوية`:''}\n\nقيود حقيقية في Zoho. تكمّل؟`)) return;
+  const btn=$('cst-'+id)?.querySelector('button.btn-primary'); if(btn){ btn.disabled=true; btn.textContent='⏳ بيسجّل...'; }
+  try{
+    const r=await apiFetch('/api/cashier-settlements/'+id+'/zoho','POST',{ adj });
+    if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); if(btn){ btn.disabled=false; btn.textContent='📤 سجّل في Zoho'; } return; }
+    toast(`✅ #${id}: كاش ${r.cash.paid} دفعة (${r.cash.amount}) · انستا ${r.instapay.paid} (${r.instapay.amount})${r.skipped?` · اتخطى ${r.skipped}`:''}${r.errors.length?` · ⚠️ ${r.errors.length}`:''}`);
+    if(r.errors.length) alert('أخطاء:\n'+r.errors.map(e=>e.item+': '+e.error).join('\n'));
+    cstLoad();
+  }catch(e){ toast('❌ '+e.message); if(btn){ btn.disabled=false; btn.textContent='📤 سجّل في Zoho'; } }
 }
 
 function chkSetFilter(f,btn){
@@ -44469,6 +44580,7 @@ function goPage(el,page){
   // 🆕 v240: Inventory pages
   if(page==='inventory'){ loadInventoryPage(); bulkActivateCheckActive(); syncCheckActive(); }
   if(page==='payouts'){ bpLoadBanks(); pmLoad(); amLoad(); payoutLog(); if(!window._poShown) payoutShow('log'); }
+  if(page==='cashier-settlements-zoho') cstLoad();
   if(page==='courier-settlements-zoho') cszLoad();
   if(page==='app-promo') apLoad();
   if(page==='dead-stock') dsLoad();
