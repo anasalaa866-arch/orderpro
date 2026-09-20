@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v573 — 🧾 بيعات من غير تصفية (2026-09-21)
+  ───────────────────────────────────────────────────────────
+  🆕 v573: صفحة بتوري البيعات اليتيمة بالكاشير والسبب (فجوة بين شيفتين /
+    أوفلاين متأخر / بعد القفل)، وإلحاق المحدد بتصفية موجودة. backend v513.
+
   OrderPro v572 — 🚑 الهيدر الثابت في مودال إنشاء الطلب (2026-09-20)
   ───────────────────────────────────────────────────────────
   🚑 v572: الجدول جوه modal والـ modal-body هو اللي بيسكرول. أي حاوية
@@ -1798,6 +1803,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="suppliers" onclick="goPage(this,'suppliers')"><span class="ni-icon">🏭</span><span class="ni-label">الموردين</span></div>
         <div class="ni" data-p="open-invoices" onclick="goPage(this,'open-invoices')"><span class="ni-icon">📊</span><span class="ni-label">الفواتير المفتوحة</span></div>
         <div class="ni" data-p="payouts" onclick="goPage(this,'payouts')"><span class="ni-icon">🏦</span><span class="ni-label">كشوف التحويلات → Zoho</span></div>
+        <div class="ni" data-p="sales-orphans" onclick="goPage(this,'sales-orphans')"><span class="ni-icon">🧾</span><span class="ni-label">بيعات من غير تصفية</span></div>
         <div class="ni" data-p="cashier-settlements-zoho" onclick="goPage(this,'cashier-settlements-zoho')"><span class="ni-icon">🏪</span><span class="ni-label">تصفيات الكاشيرز → Zoho</span></div>
         <div class="ni" data-p="courier-settlements-zoho" onclick="goPage(this,'courier-settlements-zoho')"><span class="ni-icon">🚚</span><span class="ni-label">تصفيات المناديب → Zoho</span></div>
         <div class="ni" data-p="app-promo" onclick="goPage(this,'app-promo')"><span class="ni-icon">📱</span><span class="ni-label">تحويل للتطبيق</span></div>
@@ -6323,6 +6329,15 @@ tr:hover td{background:#fafbff}
   </div>
 </div>
 
+<div class="page" id="page-sales-orphans">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">🧾 بيعات من غير تصفية</h2>
+    <button class="btn btn-primary btn-sm" onclick="orphLoad()">🔄 تحديث</button>
+  </div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:12px">بيعات كاشير مكتملة من أكتر من 6 ساعات ومالهاش تصفية. من v513 التصفية الجاية بتلمّها تلقائي — دي للي وقعوا قبل كده، تقدر تلحقهم بتصفية موجودة.</div>
+  <div id="orph-box"></div>
+</div>
+
 <div class="page" id="page-cashier-settlements-zoho">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">🏪 تصفيات الكاشيرز → Zoho</h2>
@@ -9318,7 +9333,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'talabat':'🛵 طلبات (Talabat)','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'talabat':'🛵 طلبات (Talabat)','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -21623,6 +21638,42 @@ function oiExcel(){
   ws['!cols']=[{wch:12},{wch:11},{wch:9},{wch:24},{wch:10},{wch:12},{wch:20},{wch:16},{wch:30},{wch:10},{wch:10}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'مفتوحة');
   XLSX.writeFile(wb,`فواتير_مفتوحة_${_oiFilter}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// 🆕 v573: بيعات من غير تصفية
+let _orph=[];
+async function orphLoad(){
+  const box=$('orph-box'); box.innerHTML='<div class="card"><div style="padding:20px;color:var(--muted)">⏳</div></div>';
+  try{
+    const r=await apiFetch('/api/pos/sales/orphans','GET'); _orph=r.rows||[];
+    if(!_orph.length){ box.innerHTML='<div class="card"><div style="padding:24px;text-align:center;color:#16a34a;font-weight:700">✅ مفيش بيعات يتيمة</div></div>'; return; }
+    const f=n=>Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2});
+    const byCashier={}; for(const x of _orph){ (byCashier[x.cashier_id]=byCashier[x.cashier_id]||{name:x.cashier_name,rows:[]}).rows.push(x); }
+    box.innerHTML=Object.entries(byCashier).map(([cid,g])=>`<div class="card" style="margin-bottom:12px">
+      <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <b>${escapeHtml(g.name||('#'+cid))} — ${g.rows.length} بيعة · ${f(g.rows.reduce((a,x)=>a+Number(x.total),0))} ج</b>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="orph-st-${cid}" style="padding:6px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px"><option value="">⏳ تصفيات الكاشير...</option></select>
+          <button class="btn btn-sm btn-primary" onclick="orphAttach(${cid})">📎 ألحق المحدد</button>
+        </div>
+      </div>
+      <div style="padding:6px 14px"><table style="width:100%;font-size:12px"><thead><tr style="color:var(--muted)"><th></th><th style="text-align:right">البيعة</th><th>Shopify</th><th>الوقت (القاهرة)</th><th>المبلغ</th><th>الدفع</th><th style="text-align:right">السبب</th></tr></thead>
+        <tbody>${g.rows.map(x=>`<tr style="border-top:1px solid var(--border)">
+          <td><input type="checkbox" class="orph-chk" data-cid="${cid}" value="${x.id}" checked></td>
+          <td style="font-family:Roboto,sans-serif;font-weight:700">${escapeHtml(x.sale_number)}${x.offline_created?' <span style="font-size:10px;color:#b45309">📴 أوفلاين</span>':''}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(x.shopify_order_name||'')}</td>
+          <td style="text-align:center;font-size:11px">${new Date(x.created_at).toLocaleString('en-GB',{timeZone:'Africa/Cairo',hour12:false})}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${f(x.total)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-size:10px;color:var(--muted)">${escapeHtml(x.payments||'')}</td>
+          <td style="font-size:11px;color:#b45309">${escapeHtml(x.why)}</td></tr>`).join('')}</tbody></table></div></div>`).join('');
+    for(const cid of Object.keys(byCashier)){ try{ const st=await apiFetch('/api/pos/sales/orphans/settlements/'+cid,'GET'); const sel=$('orph-st-'+cid); if(sel) sel.innerHTML='<option value="">— اختار تصفية —</option>'+(st.rows||[]).map(t=>`<option value="${t.id}">#${t.id} · ${new Date(t.settled_at).toLocaleDateString('ar-EG')} · كاش ${f(t.cash_amount)}${t.cash_received_at?' ✅':' ⏳'}</option>`).join(''); }catch(e){} }
+  }catch(e){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`; }
+}
+async function orphAttach(cid){
+  const sid=$('orph-st-'+cid)?.value; if(!sid){ toast('❌ اختار التصفية'); return; }
+  const ids=[...document.querySelectorAll(`.orph-chk[data-cid="${cid}"]:checked`)].map(c=>+c.value); if(!ids.length){ toast('مفيش بيعات محددة'); return; }
+  if(!confirm(`إلحاق ${ids.length} بيعة بالتصفية #${sid}؟\n\nمبالغ التصفية المحفوظة مش هتتغير — هتتسجّل ملاحظة عليها. لو التصفية اتسلّمت خلاص، الكاش بتاع البيعات دي محتاج يتحاسب عليه يدوي.`)) return;
+  try{ const r=await apiFetch('/api/pos/sales/orphans/attach','POST',{ sale_ids:ids, settlement_id:+sid }); if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); return; } toast(`✅ اتلحق ${r.attached} بيعة بالتصفية #${sid}`); orphLoad(); }catch(e){ toast('❌ '+e.message); }
 }
 
 function chkSetFilter(f,btn){
@@ -44829,6 +44880,7 @@ function goPage(el,page){
   if(page==='open-invoices' && !_oi) oiLoad();
   if(page==='payouts'){ bpLoadBanks(); pmLoad(); amLoad(); payoutLog(); if(!window._poShown) payoutShow('log'); }
   if(page==='pos-team') svcLoad();
+  if(page==='sales-orphans') orphLoad();
   if(page==='cashier-settlements-zoho') cstLoad();
   if(page==='courier-settlements-zoho') cszLoad();
   if(page==='app-promo') apLoad();
