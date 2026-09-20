@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v571 — 💲 سعر الموقع في جدول المخزون (2026-09-20)
+  ───────────────────────────────────────────────────────────
+  🆕 v571: عمود "سعر الموقع" في جدول المخزون بعد الإجمالي.
+
+  OrderPro v570 — 🚑 هيدر ذكاء الشراء + أعمدة المعاينة + الصور (2026-09-20)
+  ───────────────────────────────────────────────────────────
+  🚑 v570: (١) الهيدر الثابت كان جوه حاوية overflow-x فمش بيلزق — الحاوية
+    بقت هي اللي بتسكرول. (٢) هيدر المعاينة كان 5 خلايا والصف 6 → الأعمدة
+    اتزحلقت. (٣) الصور: لو ناقصة بتتجاب بالـ SKU من الكتالوج قبل المعاينة.
+    backend v512.
+
   OrderPro v569 — 🖼️ صور في معاينة أمر الشراء من ذكاء الشراء (2026-09-20)
   ───────────────────────────────────────────────────────────
   🔧 v569: "معاينة + PDF" في إنشاء طلب من المورد بقت بعمود صورة —
@@ -5876,7 +5887,7 @@ tr:hover td{background:#fafbff}
       </div>
       
       <!-- Products table -->
-      <div id="reorder-table-container" style="overflow-x:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+      <div id="reorder-table-container" style="overflow:auto;max-height:calc(100vh - 140px);background:var(--bg);border:1px solid var(--border);border-radius:8px">
         <div id="reorder-loading" style="padding:30px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div>
         <div id="reorder-table-wrapper" style="display:none"></div>
       </div>
@@ -28455,6 +28466,7 @@ function renderInventoryTable(){
       </td>
       ${whCells}
       <td style="text-align:center;font-weight:800;font-size:14px">${item.totalQty}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700;color:#16a34a">${item.price!=null&&item.price!==''?Number(item.price).toLocaleString(undefined,{maximumFractionDigits:2})+' ج':'<span style="color:var(--muted)">—</span>'}</td>
       <td style="text-align:center">${statusBadge}</td>
       <td style="text-align:center">
         <button class="btn btn-ghost btn-xs" onclick="showProductHistory('${escapeHtml(item.variantId)}','${escapeHtml((item.productTitle||'').replace(/'/g,"\\'"))}')">📜</button>
@@ -28476,6 +28488,7 @@ function renderInventoryTable(){
           <th style="text-align:right;padding:10px;font-size:11px;font-weight:700;color:var(--muted)">المنتج</th>
           ${whCols}
           <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:80px">الإجمالي</th>
+          <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:90px">سعر الموقع</th>
           <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:100px">الحالة</th>
           <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:60px">حركة</th>
         </tr>
@@ -33842,7 +33855,19 @@ async function saveReorderAsPO(status){
 }
 
 // ─── PDF Export ───
-function exportReorderPDF(){
+// 🔧 v570: image_url ممكن تكون ناقصة لو القايمة اتحمّلت قبل v511 — هات من الكتالوج
+const _imgBySku = {};
+async function _fillReorderImages(){
+  const need = _reorderProducts.filter(p => !p.image_url && p.sku && !_imgBySku[p.sku]);
+  if(!need.length) return;
+  try{
+    const r = await apiFetch('/api/inventory/images-by-sku','POST',{ skus: [...new Set(need.map(p=>String(p.sku).split(',')[0].trim()))] });
+    for(const [k,v] of Object.entries(r?.images||{})) _imgBySku[k]=v;
+    for(const p of _reorderProducts) if(!p.image_url && p.sku) p.image_url = _imgBySku[String(p.sku).split(',')[0].trim()] || null;
+  }catch(e){}
+}
+async function exportReorderPDF(){
+  await _fillReorderImages();
   const requested = _reorderProducts.filter(p => p.requested_qty > 0);
   if(!requested.length){ toast('❌ مفيش كميات مطلوبة'); return; }
   
@@ -33959,6 +33984,7 @@ function exportReorderPDF(){
         <thead>
           <tr>
             <th style="width:36px">#</th>
+            <th style="width:60px">صورة</th>
             <th>المنتج</th>
             <th style="width:70px">الكمية</th>
             <th style="width:90px">السعر</th>
