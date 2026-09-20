@@ -1,6 +1,25 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v568 — 🖨️ أرقام الطلبات في تنبيه فرق الطباعة (2026-09-20)
+  ───────────────────────────────────────────────────────────
+  🔧 v568: تنبيه "فرق بين الذاكرة والـ DB" بقى يعرض أرقام الطلبات
+    الناقصة نفسها تحت كل مندوب (مش العدد بس)، والطلبات اللي اتشالت
+    من المندوب بعد فتح الصفحة.
+
+  OrderPro v567 — 🏷️ ترحيل الأكواد المتعددة لـ Shopify (2026-09-19)
+  ───────────────────────────────────────────────────────────
+  🆕 v567: كارت في فحص SKU/باركود — معاينة (قراءة بس: محتاج ترحيل/
+    مترحّل/محجوز بمشاكل + عيّنة) → تنفيذ دفعة بعدد منتجات تحدده →
+    إعادة معاينة. backend v510.
+
+  OrderPro v566 — 📊 الفواتير المفتوحة في Zoho بالقناة (2026-09-19)
+  ───────────────────────────────────────────────────────────
+  🆕 v566: صفحة جديدة — كل فاتورة عليها رصيد في Zoho مصنّفة بالقناة
+    اللي المفروض تقفلها (بوسطة/Paymob/أمازون/طلبات/مندوب/كاشير/بيك أب/
+    ملغي)، مع العدد والرصيد وأقدم فاتورة لكل قناة، وتلميح بأنهي كشف
+    يقفلها. فلتر بالقناة + Excel. backend v509.
+
   OrderPro v565 — 💰 تكلفة تقديرية بالجملة (2026-09-19)
   ───────────────────────────────────────────────────────────
   🆕 v565: في كارت "أصناف من غير تكلفة": نسبة (افتراضي 80%) + زرار
@@ -1755,6 +1774,7 @@ tr:hover td{background:#fafbff}
       </div>
       <div class="nav-group-body">
         <div class="ni" data-p="suppliers" onclick="goPage(this,'suppliers')"><span class="ni-icon">🏭</span><span class="ni-label">الموردين</span></div>
+        <div class="ni" data-p="open-invoices" onclick="goPage(this,'open-invoices')"><span class="ni-icon">📊</span><span class="ni-label">الفواتير المفتوحة</span></div>
         <div class="ni" data-p="payouts" onclick="goPage(this,'payouts')"><span class="ni-icon">🏦</span><span class="ni-label">كشوف التحويلات → Zoho</span></div>
         <div class="ni" data-p="cashier-settlements-zoho" onclick="goPage(this,'cashier-settlements-zoho')"><span class="ni-icon">🏪</span><span class="ni-label">تصفيات الكاشيرز → Zoho</span></div>
         <div class="ni" data-p="courier-settlements-zoho" onclick="goPage(this,'courier-settlements-zoho')"><span class="ni-icon">🚚</span><span class="ni-label">تصفيات المناديب → Zoho</span></div>
@@ -4732,6 +4752,25 @@ tr:hover td{background:#fafbff}
         <button class="btn btn-sm" id="bc-rebuild-btn" onclick="bcRebuild()" style="background:#1d4ed8;color:#fff">🔄 ابني الجدول من Shopify</button>
         <span id="bc-msg" style="font-size:12px"></span>
       </div>
+
+<!-- 🆕 v567: ترحيل الأكواد المتعددة لحقل Shopify الجديد -->
+<div class="card" style="margin-bottom:14px;border:1px solid #7c3aed">
+  <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+    <div style="font-weight:800">🏷️ ترحيل الأكواد المتعددة → حقل Shopify الجديد (barcodes)</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:3px">الأصناف اللي أكوادها مكتوبة "A,B,C" في الحقل القديم هتتحوّل لقايمة حقيقية في Shopify. معاينة الأول (قراءة بس)، وبعدين تنفيذ على دفعات صغيرة، مع نسخة احتياطية وتحقق.</div>
+  </div>
+  <div style="padding:12px 14px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-ghost btn-sm" onclick="bcmPreview()">🔍 معاينة (قراءة بس)</button>
+      <span style="font-size:11px;color:var(--muted)">دفعة:</span>
+      <input type="number" id="bcm-limit" value="10" min="1" max="500" style="width:70px;padding:6px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif;text-align:center">
+      <span style="font-size:11px;color:var(--muted)">منتج</span>
+      <button class="btn btn-sm" id="bcm-run" onclick="bcmRun()" style="background:#7c3aed;color:#fff" disabled>🚀 نفّذ الدفعة</button>
+      <span id="bcm-log" style="font-size:11px;color:var(--muted);margin-inline-start:auto"></span>
+    </div>
+    <div id="bcm-box" style="font-size:13px"></div>
+  </div>
+</div>
     </div>
   </div>
   <div class="card" style="margin-bottom:14px;border:1px solid #a7f3d0">
@@ -6159,6 +6198,16 @@ tr:hover td{background:#fafbff}
       </div>
     </div>
 
+</div>
+
+<div class="page" id="page-open-invoices">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">📊 الفواتير المفتوحة في Zoho</h2>
+    <div style="display:flex;gap:8px"><button class="btn btn-ghost btn-sm" onclick="oiExcel()">⬇️ Excel</button><button class="btn btn-primary btn-sm" onclick="oiLoad()">🔄 اسحب من Zoho</button></div>
+  </div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:12px">كل فاتورة عليها رصيد، مصنّفة بالقناة اللي المفروض تقفلها. لو قناة فيها فواتير قديمة كتير → كشفها ماترفعش أو الأكواد مش مطابقة.</div>
+  <div id="oi-groups" style="margin-bottom:14px"></div>
+  <div id="oi-list"></div>
 </div>
 
 <div class="page" id="page-payouts">
@@ -9247,7 +9296,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'talabat':'🛵 طلبات (Talabat)','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'talabat':'🛵 طلبات (Talabat)','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -21507,6 +21556,53 @@ async function svcCheck(sku){
   }catch(e){}
 }
 async function svcSave(){ const sku=($('svc-sku')?.value||'').trim(); await svcCheck(sku); toast('✅ اتحفظ'); }
+// 🆕 v566: الفواتير المفتوحة في Zoho بالقناة
+let _oi=null, _oiFilter='all';
+async function oiLoad(){
+  const g=$('oi-groups'), l=$('oi-list'); if(!g) return;
+  g.innerHTML='<div class="card"><div style="padding:20px;color:var(--muted)">⏳ بيسحب من Zoho... (ممكن ياخد دقيقة)</div></div>'; l.innerHTML='';
+  try{
+    const r=await apiFetch('/api/zoho/open-invoices','GET');
+    if(!r||r.error) throw new Error(r?.error||'فشل');
+    _oi=r; _oiFilter='all'; oiRender();
+  }catch(e){ g.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`; }
+}
+function oiRender(){
+  const r=_oi; if(!r) return; const f=n=>Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
+  $('oi-groups').innerHTML=`
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+      <div class="sc" style="flex:1;min-width:180px;${r.count?'background:var(--danger-light)':'background:#f0fdf4'}"><div class="sc-label">فواتير مفتوحة</div><div class="sc-val" style="color:${r.count?'var(--danger)':'#16a34a'}">${f(r.count)}</div><div style="font-size:11px;color:var(--muted)">رصيد ${f(r.balance)} ج · ${new Date(r.fetched_at).toLocaleTimeString('ar-EG')}</div></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm ${_oiFilter==='all'?'btn-primary':'btn-ghost'}" onclick="_oiFilter='all';oiRender()">الكل (${r.count})</button>
+      ${r.groups.map(x=>`<button class="btn btn-sm ${_oiFilter===x.key?'btn-primary':'btn-ghost'}" onclick="_oiFilter='${x.key}';oiRender()" title="${escapeHtml(x.hint||'')}" style="font-size:11px">${escapeHtml(x.label)} <b>${x.count}</b> · ${f(x.balance)} ج${x.oldest>14?` <span style="color:#dc2626">· ${x.oldest} يوم</span>`:''}</button>`).join('')}
+    </div>
+    ${(()=>{ const g=r.groups.find(x=>x.key===_oiFilter); return g&&g.hint?`<div style="margin-top:8px;padding:8px 12px;background:#fffbeb;border:1px solid #f59e0b;border-radius:8px;font-size:12px">💡 <b>${escapeHtml(g.label)}</b> بتتقفل من: ${escapeHtml(g.hint)}</div>`:''; })()}`;
+  const rows=_oiFilter==='all'?r.rows:r.rows.filter(x=>x.channel===_oiFilter);
+  if(!rows.length){ $('oi-list').innerHTML='<div class="card"><div style="padding:24px;text-align:center;color:#16a34a;font-weight:700">✅ مفيش فواتير مفتوحة هنا</div></div>'; return; }
+  $('oi-list').innerHTML=`<div class="card"><div style="padding:6px 14px;overflow:auto;max-height:70vh"><table style="width:100%;font-size:12px">
+    <thead style="position:sticky;top:0;background:var(--card);z-index:2"><tr style="color:var(--muted)"><th style="text-align:right;padding:6px">الفاتورة</th><th>التاريخ</th><th>العمر</th><th>العميل</th><th>الأوردر</th><th>الحالة</th><th>الكود</th><th>القناة</th><th>الرصيد</th></tr></thead>
+    <tbody>${rows.map(x=>`<tr style="border-top:1px solid var(--border)">
+      <td style="padding:5px 6px;font-family:Roboto,sans-serif;font-weight:700">${escapeHtml(x.invoice)}</td>
+      <td style="text-align:center;font-size:11px;color:var(--muted)">${escapeHtml(x.date)}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700;color:${x.age_days>30?'#dc2626':x.age_days>14?'#b45309':'inherit'}">${x.age_days} يوم</td>
+      <td style="font-size:11px">${escapeHtml(x.customer||'')}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif">${x.order_id?escapeHtml(String(x.order_id).replace(/^SH-/,'')):'<span style="color:#dc2626">—</span>'}</td>
+      <td style="text-align:center;font-size:11px">${escapeHtml(x.order_status||'')}${x.has_cn?' <span title="عليه إشعار دائن">🧾</span>':''}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif;font-size:10px;color:var(--muted)">${escapeHtml(x.code||'')}</td>
+      <td style="text-align:center;font-size:11px">${escapeHtml(x.channel_label)}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800">${f(x.balance)}</td>
+    </tr>`).join('')}</tbody></table></div></div>`;
+}
+function oiExcel(){
+  if(!_oi) return;
+  const rows=_oiFilter==='all'?_oi.rows:_oi.rows.filter(x=>x.channel===_oiFilter);
+  const ws=XLSX.utils.json_to_sheet(rows.map(x=>({'الفاتورة':x.invoice,'التاريخ':x.date,'العمر (يوم)':x.age_days,'العميل':x.customer,'الأوردر':x.order_id?String(x.order_id).replace(/^SH-/,''):'','حالة الأوردر':x.order_status,'الكود':x.code||'','القناة':x.channel_label,'تتقفل من':x.hint,'الإجمالي':x.total,'الرصيد':x.balance})));
+  ws['!cols']=[{wch:12},{wch:11},{wch:9},{wch:24},{wch:10},{wch:12},{wch:20},{wch:16},{wch:30},{wch:10},{wch:10}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'مفتوحة');
+  XLSX.writeFile(wb,`فواتير_مفتوحة_${_oiFilter}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
 function chkSetFilter(f,btn){
   chkStatusFilter=f;
   document.querySelectorAll('#chk-status-chips .chip').forEach(c=>c.classList.remove('on'));
@@ -25026,26 +25122,36 @@ async function _verifyBatchesBeforePrint(selectedBatchCodes, currentOrderIds, op
       ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px';
       
       // breakdown للـ couriers اللي فيهم طلبات missing
+      // 🔧 v568: أرقام الطلبات نفسها مش العدد بس — عشان تعرف مين الناقص
       const missingByCourier = {};
       allDbResults.forEach(r => {
         (r.couriers || []).forEach(c => {
           const ms = c.order_ids.filter(id => missingFromMemory.includes(id));
           if(ms.length){
             const key = c.name;
-            missingByCourier[key] = (missingByCourier[key] || 0) + ms.length;
+            (missingByCourier[key] = missingByCourier[key] || []).push(...ms);
           }
         });
       });
-      
+      const _bare = id => String(id).replace(/^SH-/,'');
       const missingHtml = Object.entries(missingByCourier)
-        .sort((a,b)=>b[1]-a[1])
+        .sort((a,b)=>b[1].length-a[1].length)
         .slice(0, 10)
-        .map(([name, count]) => `
-          <div style="display:flex;justify-content:space-between;padding:6px 10px;background:#fef2f2;border-radius:6px;margin-bottom:4px;font-size:12px">
-            <span style="font-weight:700;color:#991b1b">${escapeHtml(name)}</span>
-            <span style="color:#dc2626;font-weight:800">+${count} طلب</span>
+        .map(([name, ids]) => `
+          <div style="padding:6px 10px;background:#fef2f2;border-radius:6px;margin-bottom:4px;font-size:12px">
+            <div style="display:flex;justify-content:space-between">
+              <span style="font-weight:700;color:#991b1b">${escapeHtml(name)}</span>
+              <span style="color:#dc2626;font-weight:800">+${ids.length} طلب</span>
+            </div>
+            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${ids.slice(0,30).map(id=>`<span style="font-family:Roboto,sans-serif;font-size:11px;font-weight:700;background:#fff;border:1px solid #fca5a5;border-radius:6px;padding:1px 7px;color:#991b1b">${escapeHtml(_bare(id))}</span>`).join('')}${ids.length>30?`<span style="font-size:10px;color:#666">… و${ids.length-30} كمان</span>`:''}</div>
           </div>
         `).join('');
+      // 🆕 v568: الطلبات اللي في الذاكرة ومش في الـ DB (اتشالت من المندوب بعد ما فتحت الصفحة)
+      const extraHtml = extraInMemory.length ? `
+          <div style="padding:6px 10px;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;margin-top:8px;font-size:12px">
+            <div style="font-weight:700;color:#92400e">↩️ ${extraInMemory.length} طلب في الشاشة بس <u>مش</u> في الـ DB — اتشالوا من المندوب بعد ما فتحت الصفحة (لو طبعت الذاكرة هيتطبعوا بالغلط):</div>
+            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${extraInMemory.slice(0,30).map(id=>`<span style="font-family:Roboto,sans-serif;font-size:11px;font-weight:700;background:#fff;border:1px solid #fcd34d;border-radius:6px;padding:1px 7px;color:#92400e">${escapeHtml(_bare(id))}</span>`).join('')}</div>
+          </div>` : '';
       
       ov.innerHTML = `
         <div style="background:#fff;border-radius:14px;width:min(560px,95vw);max-height:85vh;overflow-y:auto;font-family:Cairo,sans-serif;box-shadow:0 20px 60px rgba(0,0,0,.4)">
@@ -25067,6 +25173,7 @@ async function _verifyBatchesBeforePrint(selectedBatchCodes, currentOrderIds, op
                 <div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#991b1b">📋 الطلبات الناقصة (هتفوت لو طبعت دلوقتي):</div>
                 ${missingHtml}
                 ${Object.keys(missingByCourier).length > 10 ? `<div style="text-align:center;color:#666;font-size:11px;margin-top:6px">... و ${Object.keys(missingByCourier).length - 10} مندوب آخر</div>` : ''}
+                ${extraHtml}
               </div>
             ` : ''}
             
@@ -44681,6 +44788,7 @@ function goPage(el,page){
   if(page==='expiry') loadBatchesPage();
   // 🆕 v240: Inventory pages
   if(page==='inventory'){ loadInventoryPage(); bulkActivateCheckActive(); syncCheckActive(); }
+  if(page==='open-invoices' && !_oi) oiLoad();
   if(page==='payouts'){ bpLoadBanks(); pmLoad(); amLoad(); payoutLog(); if(!window._poShown) payoutShow('log'); }
   if(page==='pos-team') svcLoad();
   if(page==='cashier-settlements-zoho') cstLoad();
@@ -47359,6 +47467,45 @@ async function ghArchive(){
 
 // 🆕 v491: بناء جدول باركودات الطباعة
 let _bcPoll = null;
+// 🆕 v567: ترحيل الأكواد
+let _bcm=null;
+async function bcmPreview(force){
+  const box=$('bcm-box'); box.innerHTML='<span style="color:var(--muted)">⏳ بيقرا كل الـ variants من Shopify (2026-10)... دقيقة تقريباً</span>';
+  try{
+    const r=await apiFetch('/api/barcodes/migrate-preview'+(force?'?force=1':''),'GET');
+    if(!r||r.error) throw new Error(r?.error||'فشل'); _bcm=r;
+    const lg=await apiFetch('/api/barcodes/migrate-log','GET').catch(()=>null);
+    if(lg&&$('bcm-log')) $('bcm-log').textContent=`اترحّل قبل كده: ${lg.n||0} (✅ ${lg.ok||0}${lg.bad?` · ❌ ${lg.bad}`:''})`;
+    box.innerHTML=`
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+        <div class="sc" style="flex:1;min-width:130px"><div class="sc-label">اتفحص</div><div class="sc-val">${r.scanned.toLocaleString()}</div><div style="font-size:10px;color:var(--muted)">variant</div></div>
+        <div class="sc green" style="flex:1;min-width:130px"><div class="sc-label">مترحّل خلاص</div><div class="sc-val">${r.already_native}</div></div>
+        <div class="sc orange" style="flex:1;min-width:150px"><div class="sc-label">محتاج ترحيل</div><div class="sc-val">${r.candidates}</div><div style="font-size:10px;color:var(--muted)">${r.codes_total} كود · ${r.products} منتج</div></div>
+        <div class="sc" style="flex:1;min-width:130px;${r.blocked?'background:var(--danger-light)':''}"><div class="sc-label">محجوز — فيه مشكلة</div><div class="sc-val" style="${r.blocked?'color:var(--danger)':''}">${r.blocked}</div></div>
+      </div>
+      ${r.issues.length?`<details style="margin-bottom:10px"><summary style="cursor:pointer;color:#dc2626;font-weight:700;font-size:12px">⚠️ المشاكل (${r.issues.length}) — دول مش هيتلمسوا لحد ما تتصلح في Shopify</summary>
+        <div style="max-height:180px;overflow:auto;margin-top:6px"><table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted)"><th style="text-align:right">SKU</th><th style="text-align:right">المنتج</th><th style="text-align:right">المشكلة</th></tr></thead>
+        <tbody>${r.issues.map(x=>`<tr><td style="font-family:Roboto,sans-serif">${escapeHtml(x.sku)}</td><td>${escapeHtml(String(x.title).slice(0,50))}</td><td style="color:#dc2626">${escapeHtml(x.issue)}</td></tr>`).join('')}</tbody></table></div></details>`:''}
+      ${r.sample.length?`<details open><summary style="cursor:pointer;font-weight:700;font-size:12px">عيّنة من اللي هيتنفّذ (أول ${r.sample.length})</summary>
+        <div style="margin-top:6px"><table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted)"><th style="text-align:right">SKU</th><th style="text-align:right">المنتج</th><th style="text-align:right">الأكواد اللي هتتحط</th></tr></thead>
+        <tbody>${r.sample.map(x=>`<tr><td style="font-family:Roboto,sans-serif">${escapeHtml(x.sku)}</td><td>${escapeHtml(String(x.title).slice(0,50))}</td><td style="font-family:Roboto,sans-serif;font-size:10px">${x.codes.map(escapeHtml).join(' · ')}</td></tr>`).join('')}</tbody></table></div></details>`:'<div style="color:#16a34a;font-weight:700">✅ مفيش حاجة محتاجة ترحيل</div>'}`;
+    const btn=$('bcm-run'); if(btn) btn.disabled=!r.candidates;
+  }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+async function bcmRun(){
+  if(!_bcm||!_bcm.candidates) return;
+  const limit=parseInt($('bcm-limit')?.value)||10;
+  if(!confirm(`هيتنفّذ على ${Math.min(limit,_bcm.products)} منتج (من ${_bcm.products}).\n\n⚠️ ده بيكتب على Shopify: الحقل القديم barcode هيبقى الكود الأول بس، والباقي في القايمة الجديدة. أي app بتقرا الحقل القديم هتشوف كود واحد.\n\nنسخة احتياطية بتتحفظ قبل الكتابة. تكمّل؟`)) return;
+  const btn=$('bcm-run'); btn.disabled=true; btn.textContent='⏳ بينفّذ...';
+  try{
+    const r=await apiFetch('/api/barcodes/migrate','POST',{ limit });
+    if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); return; }
+    toast(`✅ اترحّل ${r.products} منتج (${r.variants} variant)${r.failed?` · ❌ فشل ${r.failed}`:''} · باقي ${r.remaining_products} منتج`);
+    if(r.errors.length) alert('أخطاء:\n'+r.errors.map(e=>e.product+': '+e.error).join('\n'));
+    await bcmPreview(true);
+  }catch(e){ toast('❌ '+e.message); }
+  finally{ btn.textContent='🚀 نفّذ الدفعة'; btn.disabled=!(_bcm&&_bcm.candidates); }
+}
 async function bcRebuild(){
   const m = $('bc-msg');
   try{
