@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v578 — 🆕 جرد كلي بسحب ستوك مؤجّل (2026-10-01)
+  🆕 v578: اختيار "ابدأ من غير سحب ستوك" في الجرد الكلي + زرار 📥 اسحب الستوك
+  جوه الجلسة. الاعتماد متقفل لحد ما الستوك يتسحب.
   OrderPro v577 — 🚑 تبويب منتجات جديدة كان جوه تبويب مخفي (2026-09-21)
   ───────────────────────────────────────────────────────────
   🚑 v577: panel "منتجات جديدة" اتحط جوه panel "محتاج تحويل" (المخفي) في
@@ -7916,6 +7919,22 @@ tr:hover td{background:#fafbff}
             <div>👁️ إظهار الكمية الفعلية بالنظام (on_hand) للموظف</div>
             <div style="font-size:11px;color:#92400e;font-weight:400;margin-top:4px">
               ⚠️ <strong>ينصح بإلغاء التحديد</strong> عشان الجرد يكون <strong>أعمى (blind)</strong> - الموظف ما يشوفش الكمية الموجودة في النظام، فيعدّ بدقة بدون تأثر.
+            </div>
+          </div>
+        </label>
+      </div>
+      
+      <!-- 🆕 v578: سحب الستوك المؤجّل — الجرد الكلي بس -->
+      <div class="form-group" id="new-stk-defer-group" style="background:#f0fdf4;border:1px solid #22c55e;border-radius:8px;padding:12px">
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:700">
+          <input type="checkbox" id="new-stk-defer" style="margin-top:3px;width:18px;height:18px">
+          <div>
+            <div>📥 ابدأ من غير سحب ستوك</div>
+            <div style="font-size:11px;color:#166534;font-weight:400;margin-top:4px">
+              الجلسة هتفتح بكل المنتجات لكن <strong>كمية النظام فاضية</strong>. اعدّ وسجّل عادي،
+              وفي أي لحظة اضغط <strong>📥 اسحب الستوك</strong> فيتملّي من Shopify وتظهر الفروقات.
+              <strong>الاعتماد متقفل</strong> قبل السحب.
+              <br>⏱️ الأفضل تسحب <strong>أول ما تخلّص العد</strong> — أي بيع بين العد والسحب هيبان كعجز وهمي.
             </div>
           </div>
         </label>
@@ -39565,6 +39584,9 @@ async function openNewStocktake(){
   // 🆕 v258: reset show system qty
   const showSysCb = document.getElementById('new-stk-show-system');
   if(showSysCb) showSysCb.checked = false;
+  // 🆕 v578: reset defer snapshot
+  const deferCb = document.getElementById('new-stk-defer');
+  if(deferCb) deferCb.checked = false;
   
   // 🆕 v254: reset mode للـ default
   const fullRadio = document.querySelector('input[name="stk-mode"][value="full"]');
@@ -39580,6 +39602,16 @@ let _stkSelectedVariants = new Set();
 
 function onStkModeChange(){
   const mode = document.querySelector('input[name="stk-mode"]:checked')?.value || 'full';
+  
+  // 🆕 v578: خيار سحب الستوك المؤجّل يظهر في الجرد الكلي بس
+  const deferGroup = document.getElementById('new-stk-defer-group');
+  if(deferGroup){
+    deferGroup.style.display = (mode === 'full') ? '' : 'none';
+    if(mode !== 'full'){
+      const cb = document.getElementById('new-stk-defer');
+      if(cb) cb.checked = false;
+    }
+  }
   
   // 🆕 v362: 5 modes الآن (full/partial/random/template/scan)
   ['full','talabat','partial','random','template','scan'].forEach(m => {
@@ -40172,7 +40204,9 @@ async function startStocktake(){
   }
   
   // المسارات القديمة (full/partial/scan)
-  let payload = {warehouseId, title, notes, mode, showSystemQty};
+  // 🆕 v578: سحب الستوك المؤجّل (الجرد الكلي بس)
+  const deferSnapshot = (mode === 'full') && document.getElementById('new-stk-defer')?.checked === true;
+  let payload = {warehouseId, title, notes, mode, showSystemQty, deferSnapshot};
   
   if(mode === 'partial'){
     if(_stkSelectedVariants.size === 0){
@@ -40201,6 +40235,7 @@ async function startStocktake(){
 }
 
 let _stkCurrentSession = null;
+let _stkSnapshotPending = 0;   // 🆕 v578: أصناف لسه من غير سحب ستوك
 let _stkCurrentItems = [];
 let _stkCurrentTab = 'grid'; // 'scan' | 'grid'
 
@@ -40210,6 +40245,7 @@ async function openStocktakeSession(sessionId){
     if(!r || !r.session){ toast('❌ مفيش بيانات'); return; }
     
     _stkCurrentSession = r.session;
+    _stkSnapshotPending = parseInt(r.session?.snapshot_pending) || 0;   // 🆕 v578
     _stkCurrentItems = r.items || [];
     
     // 🆕 v254: لو الجلسة scan-only في البداية، افتح على tab Scan
@@ -40254,7 +40290,8 @@ function renderStocktakeDetail(){
   const counted = items.filter(i => i.counted_qty != null).length;
   const total = items.length;
   const progress = total ? Math.round(counted * 100 / total) : 0;
-  const differences = items.filter(i => i.counted_qty != null && i.counted_qty !== i.system_qty).length;
+  // 🆕 v578: لو الستوك لسه ماتسحبش (system_qty = null) مفيش فروقات تتحسب
+  const differences = items.filter(i => i.counted_qty != null && i.system_qty != null && i.counted_qty !== i.system_qty).length;
   
   // Header / stats
   const headerHtml = `
@@ -40275,8 +40312,17 @@ function renderStocktakeDetail(){
   let actionsHtml = '';
   if(isActive){
     actionsHtml = `
+      ${_stkSnapshotPending > 0 ? `
+        <div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:10px;padding:12px;margin-bottom:12px">
+          <div style="font-weight:800;color:#92400e;margin-bottom:4px">📥 لسه ماسحبتش الستوك</div>
+          <div style="font-size:12px;color:#92400e">
+            ${_stkSnapshotPending} صنف من غير كمية نظام — الفروقات مش هتظهر والاعتماد متقفل.
+            اعدّ براحتك، ولما تخلّص اضغط <strong>📥 اسحب الستوك</strong>.
+          </div>
+          <button class="btn btn-primary" style="margin-top:10px" onclick="pullStkSnapshot()">📥 اسحب الستوك دلوقتي</button>
+        </div>` : ''}
       <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-        <button class="btn btn-success" onclick="approveStocktake()">✅ اعتماد + تحديث Shopify</button>
+        <button class="btn btn-success" onclick="approveStocktake()" ${_stkSnapshotPending > 0 ? 'disabled title="اسحب الستوك الأول"' : ''}>✅ اعتماد + تحديث Shopify</button>
         <button class="btn btn-ghost" onclick="cancelStocktake()" style="color:var(--danger)">❌ إلغاء الجرد</button>
         <button class="btn btn-ghost" onclick="printStkReport()" style="color:var(--accent)">📄 تقرير PDF</button>
         <!-- 🆕 v364: زرار refresh الـ snapshot -->
@@ -40334,7 +40380,7 @@ function renderStkScanTab(){
     .slice(0, 5);
   
   const recentHtml = recentScans.length ? recentScans.map(i => {
-    const diff = i.counted_qty - i.system_qty;
+    const diff = (i.system_qty == null) ? null : (i.counted_qty - i.system_qty);
     const diffColor = diff > 0 ? 'var(--success)' : diff < 0 ? 'var(--danger)' : 'var(--muted)';
     return `<div style="display:flex;gap:10px;align-items:center;padding:10px;background:var(--bg);border-radius:8px;margin-bottom:6px">
       <div style="flex:1">
@@ -40342,7 +40388,7 @@ function renderStkScanTab(){
         <div style="font-size:11px;color:var(--muted)">${escapeHtml(i.sku || '—')}</div>
       </div>
       <div style="text-align:center;font-size:11px">
-        <div>النظام: <strong>${i.system_qty}</strong></div>
+        <div>النظام: <strong>${i.system_qty == null ? '— (لسه ماتسحبش)' : i.system_qty}</strong></div>
         <div style="color:var(--accent)">عُدّ: <strong>${i.counted_qty}</strong></div>
         <div style="color:${diffColor}">${diff > 0 ? '+' : ''}${diff}</div>
       </div>
@@ -40402,7 +40448,7 @@ function renderStkGridTab(isActive){
         <div style="font-size:10px;color:var(--muted)">${escapeHtml(item.sku || '—')}</div>
         ${entriesHtml}
       </td>
-      <td style="text-align:center;font-weight:700">${item.system_qty}</td>
+      <td style="text-align:center;font-weight:700">${item.system_qty == null ? '<span style="color:#f59e0b" title="لسه ماتسحبش">—</span>' : item.system_qty}</td>
       <td style="text-align:center">
         ${isActive 
           ? `<input type="number" class="form-input" style="width:80px;text-align:center;font-weight:700" value="${item.counted_qty != null ? item.counted_qty : ''}" onchange="updateStocktakeItem(${item.id}, this.value)" min="0" title="${entries.length ? 'مجموع كل المواقع' : ''}">` 
@@ -40481,6 +40527,7 @@ async function reloadStkSession(){
   const r = await apiFetch('/api/stocktake/sessions/' + _stkCurrentSession.id);
   if(r){
     _stkCurrentSession = r.session;
+    _stkSnapshotPending = parseInt(r.session?.snapshot_pending) || 0;   // 🆕 v578
     _stkCurrentItems = r.items || [];
     renderStocktakeDetail();
   }
@@ -40543,7 +40590,7 @@ async function printStkReport(){
     
     // 🆕 v358: helpers لـ rendering الصفوف بكل نوع
     const _row = (i, opts) => {
-      const diff = (i.counted_qty != null) ? (i.counted_qty - i.system_qty) : null;
+      const diff = (i.counted_qty != null && i.system_qty != null) ? (i.counted_qty - i.system_qty) : null;
       const sign = diff > 0 ? '+' : '';
       const diffColor = diff > 0 ? '#16a34a' : diff < 0 ? '#dc2626' : '#6b7280';
       const value = (parseFloat(i.price) || 0) * Math.abs(diff || 0);
@@ -40552,7 +40599,7 @@ async function printStkReport(){
       return `<tr ${opts?.rowBg ? `style="background:${opts.rowBg}"` : ''}>
         <td>${productCell}</td>
         <td style="font-family:monospace;font-size:9px">${escapeHtml(i.sku || '—')}</td>
-        <td style="text-align:center">${i.system_qty}</td>
+        <td style="text-align:center">${i.system_qty == null ? '—' : i.system_qty}</td>
         <td style="text-align:center;font-weight:700">${i.counted_qty != null ? i.counted_qty : '—'}</td>
         <td style="text-align:center;font-weight:700;color:${diffColor}">${diff != null ? (sign + diff) : '—'}</td>
         <td style="text-align:left;font-size:10px">${value > 0 ? value.toLocaleString('en-US', {maximumFractionDigits: 0}) + ' ج' : '—'}</td>
@@ -40578,7 +40625,7 @@ async function printStkReport(){
       <tr style="background:#fffbeb">
         <td>${escapeHtml(i.product_title || '')}${i.variant_title ? ' - '+escapeHtml(i.variant_title) : ''}</td>
         <td style="font-family:monospace;font-size:9px">${escapeHtml(i.sku || '—')}</td>
-        <td style="text-align:center">${i.system_qty}</td>
+        <td style="text-align:center">${i.system_qty == null ? '—' : i.system_qty}</td>
       </tr>
     `).join('');
     
@@ -40786,6 +40833,7 @@ async function markAllSystemQty(){
   let done = 0;
   for(const item of uncounted){
     try {
+      if(item.system_qty == null) continue;   // 🆕 v578: لسه ماتسحبش ستوك
       await apiFetch('/api/stocktake/items/' + item.id, 'PUT', {countedQty: item.system_qty});
       item.counted_qty = item.system_qty;
       done++;
@@ -40843,6 +40891,29 @@ async function mergeAllStkProducts(){
   } catch(e){
     toast('❌ ' + e.message);
   }
+}
+
+// 🆕 v578: سحب الستوك لجلسة بدأت من غير snapshot
+async function pullStkSnapshot(){
+  if(!_stkCurrentSession) return;
+  if(!confirm(
+    '📥 سحب الستوك من Shopify\n\n' +
+    'هيجيب on_hand الحالي لكل صنف لسه من غير كمية نظام، والفروقات هتظهر فوراً.\n\n' +
+    '✓ العد اللي سجّلته مش هيتغير\n' +
+    '⏱️ لو فيه بيع حصل بعد ما عدّيت، هيبان كعجز — الأفضل تسحب أول ما تخلّص العد.\n\n' +
+    'تكمل؟'
+  )) return;
+  toast('📥 جاري سحب الستوك من Shopify...');
+  try{
+    const r = await apiFetch(`/api/stocktake/sessions/${_stkCurrentSession.id}/pull-snapshot`, 'POST', {});
+    if(!r?.success){ toast('❌ ' + (r?.error || 'فشل')); return; }
+    if(r.still_pending > 0){
+      toast(`⚠️ اتسحب ${r.pulled} — لسه ${r.still_pending} صنف. جرّب تاني.`);
+    } else {
+      toast(`✅ الستوك اتسحب — ${r.pulled} صنف`);
+    }
+    await openStocktakeSession(_stkCurrentSession.id);
+  }catch(e){ toast('❌ ' + e.message); }
 }
 
 async function refreshStkSnapshot(){
@@ -40974,8 +41045,13 @@ function _showSnapshotRefreshResult(data){
 }
 
 async function approveStocktake(){
+  // 🆕 v578: ممنوع الاعتماد قبل سحب الستوك
+  if(_stkSnapshotPending > 0){
+    toast(`❌ لسه ماسحبتش الستوك — ${_stkSnapshotPending} صنف من غير كمية نظام`);
+    return;
+  }
   const counted = _stkCurrentItems.filter(i => i.counted_qty != null);
-  const differences = _stkCurrentItems.filter(i => i.counted_qty != null && i.counted_qty !== i.system_qty).length;
+  const differences = _stkCurrentItems.filter(i => i.counted_qty != null && i.system_qty != null && i.counted_qty !== i.system_qty).length;
   
   if(!counted.length){ toast('❌ لازم تعد منتج واحد على الأقل'); return; }
   
