@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v579 — 🙈 تبويب الكميات المخفية في صفحة المخزون (2026-10-01)
+  🙈 v579: تبويبين في صفحة المخزون: المخزون / الكميات المخفية. التقرير بيوري
+  on_hand مقابل available وتفصيل الحالات، مع تصدير CSV وزرار رجّع/خبّي.
   OrderPro v578 — 🆕 جرد كلي بسحب ستوك مؤجّل (2026-10-01)
   🆕 v578: اختيار "ابدأ من غير سحب ستوك" في الجرد الكلي + زرار 📥 اسحب الستوك
   جوه الجلسة. الاعتماد متقفل لحد ما الستوك يتسحب.
@@ -4999,6 +5002,36 @@ tr:hover td{background:#fafbff}
     </div>
   </div>
 
+  <!-- 🙈 v579: تبويبات صفحة المخزون -->
+  <div style="display:flex;gap:8px;margin-bottom:14px;border-bottom:2px solid var(--border)">
+    <button id="inv-tabbtn-levels" class="btn btn-ghost btn-sm" onclick="invSwitchTab('levels')"
+      style="border:none;border-bottom:3px solid var(--accent);border-radius:0;font-weight:800">📦 المخزون</button>
+    <button id="inv-tabbtn-hidden" class="btn btn-ghost btn-sm" onclick="invSwitchTab('hidden')"
+      style="border:none;border-bottom:3px solid transparent;border-radius:0;font-weight:800">🙈 الكميات المخفية</button>
+  </div>
+
+  <div id="inv-tab-hidden" style="display:none">
+    <div class="card" style="padding:12px 14px;margin-bottom:14px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <select id="hidden-wh" class="form-input" style="max-width:220px"></select>
+        <button class="btn btn-primary btn-sm" onclick="loadHiddenQtyReport()">🔎 اعرض التقرير</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportHiddenQtyCSV()">⬇️ تصدير CSV</button>
+        <span style="font-size:11px;color:var(--muted);margin-right:auto" id="hidden-summary"></span>
+      </div>
+      <div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:10px;margin-top:10px;font-size:11px;color:#92400e">
+        💡 الكمية المخفية = damaged / quality control / safety stock / reserved. مش معروضة للبيع لكنها محسوبة في
+        <code>on_hand</code>، وده الرقم اللي الجرد بيقارن بيه. <strong>اللي بيعدّ لازم يعدّ الظاهر + المخفي.</strong>
+      </div>
+    </div>
+    <div class="card">
+      <div id="hidden-table-container" style="overflow-x:auto">
+        <div style="text-align:center;padding:40px;color:var(--muted)">اختار مخزن واضغط "اعرض التقرير"</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="inv-tab-levels">
+
   <!-- 🆕 v397: Bulk Activate Progress -->
   <div id="bulk-activate-card" style="display:none;background:linear-gradient(135deg,#f5f3ff,#fff);border:1px solid #ddd6fe;border-radius:10px;padding:14px;margin-bottom:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -5069,6 +5102,7 @@ tr:hover td{background:#fafbff}
       <div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div>
     </div>
   </div>
+  </div><!-- /inv-tab-levels -->
 </div>
 
 <!-- ===== STOCKTAKE PAGE (v240) ===== -->
@@ -28561,6 +28595,128 @@ function showSupplierDetails(supplierName){
 // ============================================================
 let _invItems = [];
 let _invWarehouses = [];
+
+// ===== 🙈 v579: تبويب الكميات المخفية =====
+let _hiddenRows = [];
+
+function invSwitchTab(tab){
+  const isHidden = tab === 'hidden';
+  document.getElementById('inv-tab-levels').style.display = isHidden ? 'none' : '';
+  document.getElementById('inv-tab-hidden').style.display = isHidden ? '' : 'none';
+  const bl = document.getElementById('inv-tabbtn-levels');
+  const bh = document.getElementById('inv-tabbtn-hidden');
+  if(bl) bl.style.borderBottomColor = isHidden ? 'transparent' : 'var(--accent)';
+  if(bh) bh.style.borderBottomColor = isHidden ? 'var(--accent)' : 'transparent';
+  if(isHidden){
+    const sel = document.getElementById('hidden-wh');
+    if(sel && !sel.options.length && Array.isArray(_invWarehouses)){
+      sel.innerHTML = _invWarehouses.map(w => `<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
+    }
+  }
+}
+
+async function loadHiddenQtyReport(){
+  const warehouseId = document.getElementById('hidden-wh')?.value;
+  if(!warehouseId){ toast('❌ اختار مخزن'); return; }
+  const box = document.getElementById('hidden-table-container');
+  box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري القراءة من Shopify...</div>';
+  try{
+    const r = await apiFetch(`/api/inventory/unavailable-report?warehouseId=${warehouseId}`);
+    _hiddenRows = r.rows || [];
+    document.getElementById('hidden-summary').textContent =
+      `${r.count} منتج · ${r.total_hidden_units} قطعة مخفية · اتفحص ${r.checked} صنف${r.failed_batches ? ` · ${r.failed_batches} دفعة فشلت` : ''}`;
+    renderHiddenQtyTable(warehouseId);
+  }catch(e){
+    box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderHiddenQtyTable(warehouseId){
+  const box = document.getElementById('hidden-table-container');
+  if(!_hiddenRows.length){
+    box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--success)">✅ مفيش أي كميات مخفية في المخزن ده</div>';
+    return;
+  }
+  const label = { damaged: 'تالف', quality_control: 'فحص جودة', safety_stock: 'احتياطي', reserved: 'محجوز' };
+  box.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:var(--bg)">
+        <th style="padding:8px;text-align:right">المنتج</th>
+        <th style="padding:8px">SKU</th>
+        <th style="padding:8px">on_hand</th>
+        <th style="padding:8px">معروض للبيع</th>
+        <th style="padding:8px">محجوز لأوردرات</th>
+        <th style="padding:8px">مخفي</th>
+        <th style="padding:8px">التفصيل</th>
+        <th style="padding:8px"></th>
+      </tr></thead>
+      <tbody>
+        ${_hiddenRows.map((x, i) => `
+          <tr style="border-top:1px solid var(--border)${x.db_stale ? ';background:#fef2f2' : ''}">
+            <td style="padding:8px">${escapeHtml((x.product_title || '').slice(0, 45))}${x.variant_title && x.variant_title !== 'Default Title' ? ` <span style="color:var(--muted)">· ${escapeHtml(x.variant_title)}</span>` : ''}
+              ${x.db_stale ? `<div style="font-size:10px;color:var(--danger)">⚠️ رقمنا ${x.db_on_hand} مش مطابق لـ Shopify ${x.on_hand}</div>` : ''}</td>
+            <td style="padding:8px;text-align:center;font-family:monospace">${escapeHtml(x.sku || '')}</td>
+            <td style="padding:8px;text-align:center;font-weight:800">${x.on_hand}</td>
+            <td style="padding:8px;text-align:center;color:var(--success);font-weight:700">${x.available}</td>
+            <td style="padding:8px;text-align:center;color:var(--muted)">${x.committed}</td>
+            <td style="padding:8px;text-align:center;color:#f59e0b;font-weight:800">${x.hidden_total}</td>
+            <td style="padding:8px;text-align:center;font-size:11px;color:var(--muted)">
+              ${Object.entries(x.hidden).filter(([, v]) => v > 0).map(([k, v]) => `${label[k]}: ${v}`).join(' · ')}
+            </td>
+            <td style="padding:8px;text-align:center;white-space:nowrap">
+              <button class="btn btn-ghost btn-xs" style="color:var(--success)" onclick="moveHiddenQty(${i}, ${warehouseId}, false)">⬆️ رجّع للبيع</button>
+              <button class="btn btn-ghost btn-xs" style="color:#f59e0b" onclick="moveHiddenQty(${i}, ${warehouseId}, true)">🙈 خبّي زيادة</button>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function moveHiddenQty(idx, warehouseId, reverse){
+  const row = _hiddenRows[idx];
+  if(!row) return;
+  const label = { damaged: 'تالف', quality_control: 'فحص جودة', safety_stock: 'احتياطي', reserved: 'محجوز' };
+  const states = Object.entries(row.hidden).filter(([, v]) => v > 0);
+  let from;
+  if(reverse){
+    from = prompt(`تخبّي الكمية في أنهي حالة؟\n\ndamaged / quality_control / safety_stock / reserved`, states[0]?.[0] || 'safety_stock');
+  } else if(states.length === 1){
+    from = states[0][0];
+  } else {
+    from = prompt(`الكمية المخفية موزّعة على أكتر من حالة:\n${states.map(([k, v]) => `${k} = ${v}`).join('\n')}\n\nترجّع من أنهي حالة؟`, states[0][0]);
+  }
+  if(!from) return;
+  const max = reverse ? row.available : (row.hidden[from] || 0);
+  const qtyStr = prompt(`الكمية؟ (المتاح: ${max})`, String(max));
+  const qty = parseInt(qtyStr);
+  if(!qty || qty <= 0) return;
+  if(qty > max && !confirm(`الكمية أكبر من المتاح (${max}) — Shopify غالباً هيرفض. تكمل؟`)) return;
+  if(!confirm(`${reverse ? '🙈 تخبّي' : '⬆️ ترجّع للبيع'} ${qty} قطعة\n${escapeHtml(row.product_title || '')}\n${reverse ? `available → ${label[from] || from}` : `${label[from] || from} → available`}\n\nإجمالي on_hand مش هيتغير.`)) return;
+  toast('🔄 جاري النقل...');
+  try{
+    const r = await apiFetch('/api/inventory/release-hidden', 'POST', {
+      inventoryItemId: row.inventory_item_id, warehouseId: parseInt(warehouseId), qty, from, reverse
+    });
+    if(!r?.success){ toast('❌ ' + (r?.error || 'فشل')); return; }
+    toast(`✅ اتنقل ${r.moved} — ${r.direction}`);
+    await loadHiddenQtyReport();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+function exportHiddenQtyCSV(){
+  if(!_hiddenRows.length){ toast('❌ مفيش بيانات'); return; }
+  const head = ['SKU', 'المنتج', 'on_hand', 'معروض', 'محجوز', 'مخفي', 'damaged', 'quality_control', 'safety_stock', 'reserved'];
+  const lines = [head.join(',')].concat(_hiddenRows.map(x => [
+    x.sku || '', `"${(x.product_title || '').replace(/"/g, '""')}"`, x.on_hand, x.available, x.committed,
+    x.hidden_total, x.hidden.damaged, x.hidden.quality_control, x.hidden.safety_stock, x.hidden.reserved
+  ].join(',')));
+  const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `hidden-qty-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 async function loadInventoryPage(){
   // جيب المخازن
