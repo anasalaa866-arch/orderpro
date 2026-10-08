@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v581 — 🎯 جرد المتابعة: شامل الجرود اللي لسه مش معتمدة (2026-10-08)
+  🎯 v581: قائمة المصدر بقت توري الجلسات الشغالة والملغية كمان بحالتها،
+  + خيار "ضم غير المعتمدة" في وضع آخر فترة، + تحذير التداخل.
   OrderPro v580 — 🎯 جرد المتابعة: الأصناف اللي كان فيها فروقات (2026-10-08)
   🎯 v580: نوع جرد جديد "متابعة فروقات" — بيبدأ جلسة بالأصناف اللي ظهر
   فيها فرق في جرد سابق (جلسة محددة أو آخر N يوم)، مع عرض الفرق السابق.
@@ -8001,6 +8004,11 @@ tr:hover td{background:#fafbff}
             <option value="90">90 يوم</option>
             <option value="365">سنة</option>
           </select>
+          <!-- 🎯 v581 -->
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px;font-size:12px;font-weight:700;color:#9a3412">
+            <input type="checkbox" id="stk-diffs-unapproved" style="width:16px;height:16px" onchange="stkDiffsPreview()">
+            ضمّ الجرود اللي لسه مش معتمدة (شغالة / ملغية)
+          </label>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <div class="form-group" style="flex:1;min-width:130px;margin-bottom:8px">
@@ -39794,6 +39802,8 @@ async function openNewStocktake(){
   _stkDiffsSourcesLoaded = null;
   const dpv = document.getElementById('stk-diffs-preview');
   if(dpv) dpv.innerHTML = '';
+  const dun = document.getElementById('stk-diffs-unapproved');
+  if(dun) dun.checked = false;
   
   // 🆕 v254: reset mode للـ default
   const fullRadio = document.querySelector('input[name="stk-mode"][value="full"]');
@@ -39895,6 +39905,7 @@ function stkDiffsOpts(){
   };
   if(src === 'recent'){
     o.days = parseInt(document.getElementById('stk-diffs-days')?.value) || 30;
+    o.includeUnapproved = document.getElementById('stk-diffs-unapproved')?.checked === true;   // 🎯 v581
   } else {
     o.sessionIds = [parseInt(src)];
   }
@@ -39917,10 +39928,13 @@ async function stkDiffsInit(){
     try{
       const r = await apiFetch(`/api/stocktake/diff-sources?warehouseId=${warehouseId}`);
       const rows = r?.sessions || [];
-      sel.innerHTML = '<option value="recent">كل الجرود المعتمدة في آخر فترة</option>' +
+      // 🎯 v581: الحالة جنب كل جلسة — الشغالة والملغية بقت تظهر كمان
+      const stLabel = { approved: '✅ معتمد', in_progress: '⏳ شغال دلوقتي', cancelled: '🚫 ملغي' };
+      sel.innerHTML = '<option value="recent">كل الجرود في آخر فترة</option>' +
         rows.map(s => {
           const d = new Date(s.approved_at || s.started_at).toLocaleDateString('ar-EG');
-          return `<option value="${s.id}">${escapeHtml((s.title || 'جرد').slice(0, 40))} · ${d} · ${s.diff_count} فرق</option>`;
+          const st = stLabel[s.status] || s.status;
+          return `<option value="${s.id}">${st} · ${escapeHtml((s.title || 'جرد').slice(0, 36))} · ${d} · ${s.diff_count} فرق</option>`;
         }).join('');
       _stkDiffsSourcesLoaded = warehouseId;
     }catch(e){ /* نكمل بالـ recent */ }
@@ -39948,6 +39962,13 @@ async function stkDiffsPreview(){
           ${r.count} صنف · عجز ${r.shortage} · زيادة ${r.surplus}
           ${r.repeated ? ` · <span style="color:#dc2626">${r.repeated} متكرر في أكتر من جرد</span>` : ''}
         </div>
+        ${r.from_unapproved ? `<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:6px 8px;margin-bottom:6px;font-size:11px;color:#92400e">
+          ⏳ <strong>${r.from_unapproved}</strong> صنف منهم فرقه جاي من جرد <strong>لسه مش معتمد</strong> — يعني الفرق ده لسه ماترفعش على Shopify.
+        </div>` : ''}
+        ${r.overlap_count ? `<div style="background:#7f1d1d;border-radius:6px;padding:8px;margin-bottom:6px;font-size:11px;color:#fff;line-height:1.6">
+          ⚠️ <strong>${r.overlap_count}</strong> صنف منهم موجود كمان في جلسة شغالة (#${(r.overlap_sessions||[]).join(', #')}).
+          لو اعتمدت الجلستين، الفرق هيتطبّق على Shopify <strong>مرتين</strong>. اعتمد واحدة بس، أو شيل الأصناف دي من واحدة منهم.
+        </div>` : ''}
         <div style="max-height:170px;overflow-y:auto">
           ${top.map(x => `
             <div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-top:1px solid #fed7aa;font-size:11px">
