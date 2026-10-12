@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v585 — 💰 حفظ كل الأسعار مرة واحدة + استلام من Transfer شوبيفاي (2026-10-12)
+  💰 v585: الأسعار بقت تتعدّل كلها وتتحفظ بضغطة واحدة. زرار الصلاحية بيختفي
+  للبند اللي داخل بصلاحية من أمر الشراء. زرار "استلام بضاعة" اتشال —
+  الاستلام بقى من Transfer شوبيفاي.
+  OrderPro v584 — 🔎 بحث في قائمة الموردين (2026-10-12)
   OrderPro v583 — 📅 صلاحية لكل بند + الموردين من Zoho (2026-10-12)
   📅 v583: عمود تاريخ صلاحية (اختياري) في أمر الشراء — الـ batch بيتعمل
   أوتوماتيك وقت الاستلام. 🏷️ قائمة الموردين بقت من Zoho بس + زرار تحديث.
@@ -6635,7 +6640,11 @@ tr:hover td{background:#fafbff}
                 <span>المورد * <span style="font-weight:400;color:#6d7175;font-size:11px">(من Zoho)</span></span>
                 <button type="button" onclick="syncZohoSuppliers()" style="background:transparent;border:1px solid #0ea5e9;color:#0ea5e9;border-radius:6px;font-size:11px;font-weight:700;padding:3px 8px;cursor:pointer">🔄 حدّث من Zoho</button>
               </label>
-              <select id="po-supplier" class="form-input" onchange="onPOSupplierChange()" style="width:100%">
+              <!-- 🔎 v584: بحث في الموردين -->
+              <input id="po-supplier-search" class="form-input" type="text" placeholder="🔎 اكتب جزء من اسم المورد..."
+                     oninput="filterPOSuppliers()" autocomplete="off"
+                     style="width:100%;margin-bottom:6px;font-size:13px">
+              <select id="po-supplier" class="form-input" onchange="onPOSupplierChange()" style="width:100%" size="1">
                 <option value="">— اختار من القائمة —</option>
               </select>
               <div id="po-supplier-hint" style="font-size:11px;color:#6d7175;margin-top:4px"></div>
@@ -32129,17 +32138,10 @@ async function openNewPO(){
   document.getElementById('po-id').value = '';
   document.getElementById('po-modal-title').textContent = '📋 أمر شراء جديد';
   
-  const supSel = document.getElementById('po-supplier');
-  // 🏷️ v583: قائمة Zoho بس — "مورد حر" بيظهر لو الشرط مقفول
-  supSel.innerHTML = '<option value="">-- اختار من القائمة --</option>' +
-    _suppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('') +
-    (_poRequireZohoVendor ? '' : '<option value="custom">📝 مورد جديد (حر)</option>');
-  const supHint = document.getElementById('po-supplier-hint');
-  if(supHint){
-    supHint.innerHTML = _suppliers.length
-      ? `${_suppliers.length} مورد من Zoho`
-      : '<span style="color:#d72c0d">مفيش موردين متزامنين — اضغط "🔄 حدّث من Zoho"</span>';
-  }
+  // 🔎 v584: فضّي البحث واملأ القائمة
+  const supSearch = document.getElementById('po-supplier-search');
+  if(supSearch) supSearch.value = '';
+  _poFillSupplierOptions('');
   
   const whSel = document.getElementById('po-warehouse');
   whSel.innerHTML = '<option value="">-- اختار --</option>' +
@@ -32210,6 +32212,34 @@ async function openNewPO(){
   }, 150);
 }
 
+// 🔎 v584: املأ قائمة الموردين (مع فلترة بالبحث)
+function _poFillSupplierOptions(filter){
+  const sel = document.getElementById('po-supplier');
+  if(!sel) return;
+  const q = String(filter || '').trim().toLowerCase();
+  const keep = sel.value;
+  const list = q
+    ? _suppliers.filter(s => String(s.name || '').toLowerCase().includes(q))
+    : _suppliers;
+  sel.innerHTML = '<option value="">-- اختار من القائمة --</option>' +
+    list.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('') +
+    (_poRequireZohoVendor ? '' : '<option value="custom">📝 مورد جديد (حر)</option>');
+  // لو المختار لسه في اللستة سيبه، ولو البحث طلّع واحد بس اختاره
+  if(keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+  else if(q && list.length === 1) sel.value = String(list[0].id);
+  const hint = document.getElementById('po-supplier-hint');
+  if(hint){
+    hint.innerHTML = !_suppliers.length
+      ? '<span style="color:#d72c0d">مفيش موردين متزامنين — اضغط "🔄 حدّث من Zoho"</span>'
+      : (q ? `${list.length} من ${_suppliers.length} مورد` : `${_suppliers.length} مورد من Zoho`);
+  }
+  if(typeof onPOSupplierChange === 'function') onPOSupplierChange();
+}
+
+function filterPOSuppliers(){
+  _poFillSupplierOptions(document.getElementById('po-supplier-search')?.value);
+}
+
 // 🏷️ v583: اسحب الموردين من Zoho
 async function syncZohoSuppliers(){
   toast('🔄 جاري سحب الموردين من Zoho...');
@@ -32220,16 +32250,7 @@ async function syncZohoSuppliers(){
     const sr = await apiFetch('/api/suppliers?zohoOnly=1');
     _suppliers = sr?.suppliers || [];
     _poRequireZohoVendor = sr?.requireZohoVendor !== false;
-    const supSel = document.getElementById('po-supplier');
-    if(supSel){
-      const keep = supSel.value;
-      supSel.innerHTML = '<option value="">-- اختار من القائمة --</option>' +
-        _suppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('') +
-        (_poRequireZohoVendor ? '' : '<option value="custom">📝 مورد جديد (حر)</option>');
-      supSel.value = keep;
-    }
-    const supHint = document.getElementById('po-supplier-hint');
-    if(supHint) supHint.textContent = `${_suppliers.length} مورد من Zoho`;
+    _poFillSupplierOptions(document.getElementById('po-supplier-search')?.value);
   }catch(e){ toast('❌ ' + e.message); }
 }
 
@@ -32738,7 +32759,8 @@ async function viewPO(id){
       actionButtons += `<button class="btn btn-primary btn-sm" onclick="sendPO(${po.id})">📤 إرسال للمورد</button>`;
       actionButtons += `<button class="btn btn-danger btn-sm" onclick="cancelPO(${po.id})">❌ إلغاء</button>`;
     } else if(po.status === 'sent' || po.status === 'partial_received'){
-      actionButtons += `<button class="btn btn-primary btn-sm" onclick="openReceiveModal(${po.id})">📥 استلام بضاعة</button>`;
+      // 📦 v585: الاستلام بقى من Transfer شوبيفاي — زرار الاستلام اتشال
+      actionButtons += `<button class="btn btn-secondary btn-sm" onclick="closePO(${po.id})">🔒 إقفال الأمر</button>`;
       actionButtons += `<button class="btn btn-danger btn-sm" onclick="cancelPO(${po.id})">❌ إلغاء</button>`;
     } else if(po.status === 'received'){
       actionButtons += `<button class="btn btn-secondary btn-sm" onclick="closePO(${po.id})">🔒 إغلاق</button>`;
@@ -32880,9 +32902,21 @@ async function _loadPOPricingSection(poId){
       <div style="background:var(--elev);border-radius:10px;padding:14px;border:1px solid var(--border)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap">
           <div style="font-weight:800;color:var(--gold);font-size:14px">💰 الأسعار والصلاحية</div>
-          <div style="font-size:10px;color:var(--muted)">سعر البيع بـ يتعدّل في Shopify مباشرة · الصلاحيات بـ تنحفظ في صفحة "تواريخ الصلاحية"</div>
+          <div style="font-size:10px;color:var(--muted)">💡 عدّل اللي تحبه وبعدين اضغط حفظ — كل أسعار البيع بتروح Shopify مرة واحدة</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">${itemsHtml}</div>
+        <!-- 💰 v585: شريط الحفظ -->
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer">
+            <input type="checkbox" id="po-prices-synccost" style="width:15px;height:15px">
+            ابعت سعر الشراء كـ تكلفة على Shopify كمان
+          </label>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span id="po-prices-dirty" style="font-size:11px;color:#ca8a04;font-weight:700"></span>
+            <button id="po-prices-save" class="btn btn-primary btn-sm" onclick="savePOPricesBulk(${poId})" disabled
+              style="background:#16a34a;border-color:#16a34a;font-weight:800">💾 حفظ كل الأسعار</button>
+          </div>
+        </div>
       </div>
     `;
   } catch(e){
@@ -32920,7 +32954,8 @@ function _renderPOPricingRow(poId, item){
           <input type="number" step="0.01" min="0" 
             value="${item.purchase_price.toFixed(2)}" 
             data-original="${item.purchase_price}"
-            onblur="_savePOItemPrice(${poId}, ${item.id}, 'purchase', this)"
+            data-price-item="${item.id}" data-price-kind="purchase"
+            oninput="_markPOPriceDirty(this)"
             style="width:100%;padding:6px;font-family:Roboto,sans-serif;font-size:12px;background:var(--elev);border:1px solid var(--border);border-radius:6px;color:var(--text);text-align:center">
         </div>
         <div>
@@ -32928,20 +32963,87 @@ function _renderPOPricingRow(poId, item){
           <input type="number" step="0.01" min="0" 
             value="${item.sale_price.toFixed(2)}" 
             data-original="${item.sale_price}"
-            onblur="_savePOItemPrice(${poId}, ${item.id}, 'sale', this)"
+            data-price-item="${item.id}" data-price-kind="sale"
+            oninput="_markPOPriceDirty(this)"
             style="width:100%;padding:6px;font-family:Roboto,sans-serif;font-size:12px;background:var(--elev);border:1px solid var(--border);border-radius:6px;color:var(--text);text-align:center">
         </div>
         <div style="display:flex;gap:4px">
-          <button onclick="_openBatchDateModal(${poId}, ${item.id}, ${item.ordered_qty}, ${JSON.stringify(item.product_title || '').replace(/"/g, '&quot;')})" 
-            style="padding:6px 10px;background:#7c3aed22;color:#7c3aed;border:1px solid #7c3aed55;border-radius:6px;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap"
-            title="إضافة تاريخ صلاحية">
-            📅 صلاحية
-          </button>
+          ${item.exp_date ? `
+            <span style="padding:6px 10px;background:#16a34a22;color:#16a34a;border:1px solid #16a34a55;border-radius:6px;font-weight:700;font-size:11px;white-space:nowrap" title="الصلاحية داخلة من أمر الشراء">
+              📅 ${String(item.exp_date).slice(0,10)}
+            </span>` : `
+            <button onclick="_openBatchDateModal(${poId}, ${item.id}, ${item.ordered_qty}, ${JSON.stringify(item.product_title || '').replace(/"/g, '&quot;')})" 
+              style="padding:6px 10px;background:#7c3aed22;color:#7c3aed;border:1px solid #7c3aed55;border-radius:6px;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap"
+              title="إضافة تاريخ صلاحية">
+              📅 صلاحية
+            </button>`}
           ${item.active_batches > 0 ? `<span style="padding:6px 8px;background:#16a34a22;color:#16a34a;border-radius:6px;font-size:10px;font-weight:700;align-self:center" title="عدد الـ batches الـ active">✓ ${item.active_batches}</span>` : ''}
         </div>
       </div>
     </div>
   `;
+}
+
+// 💰 v585: علّم إن فيه تعديل مش محفوظ
+function _markPOPriceDirty(el){
+  const orig = parseFloat(el.dataset.original);
+  const val = parseFloat(el.value);
+  const changed = !isNaN(val) && Math.abs(val - orig) > 0.001;
+  el.style.borderColor = changed ? '#ca8a04' : 'var(--border)';
+  el.style.background = changed ? '#fbbf2411' : 'var(--elev)';
+  _refreshPOPricesBar();
+}
+
+function _collectPOPriceChanges(){
+  const map = {};
+  document.querySelectorAll('[data-price-item]').forEach(el => {
+    const id = el.dataset.priceItem;
+    const kind = el.dataset.priceKind;
+    const orig = parseFloat(el.dataset.original);
+    const val = parseFloat(el.value);
+    if(isNaN(val) || val < 0) return;
+    if(Math.abs(val - orig) < 0.001) return;
+    map[id] = map[id] || { itemId: parseInt(id) };
+    map[id][kind === 'sale' ? 'sale_price' : 'purchase_price'] = val;
+  });
+  return Object.values(map);
+}
+
+function _refreshPOPricesBar(){
+  const changes = _collectPOPriceChanges();
+  const btn = document.getElementById('po-prices-save');
+  const lbl = document.getElementById('po-prices-dirty');
+  if(btn) btn.disabled = changes.length === 0;
+  if(lbl) lbl.textContent = changes.length ? `${changes.length} صنف فيه تعديل مش محفوظ` : '';
+}
+
+async function savePOPricesBulk(poId){
+  const changes = _collectPOPriceChanges();
+  if(!changes.length){ toast('مفيش تعديلات'); return; }
+  const syncCost = document.getElementById('po-prices-synccost')?.checked === true;
+  const nSale = changes.filter(c => c.sale_price != null).length;
+  if(!confirm(`💾 حفظ أسعار ${changes.length} صنف؟\n\n${nSale ? `${nSale} سعر بيع هيتحدّث على Shopify.\n` : ''}${syncCost ? 'وسعر الشراء هيتبعت كـ تكلفة على Shopify كمان.\n' : ''}\nتكمّل؟`)) return;
+
+  const btn = document.getElementById('po-prices-save');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ جاري الحفظ...'; }
+  try{
+    const r = await apiFetch(`/api/purchase-orders/${poId}/prices-bulk`, 'PUT', {
+      items: changes, sync_unit_cost: syncCost
+    });
+    if(r?.error){ toast('❌ ' + r.error); return; }
+    let msg = `✅ اتحفظ — شراء ${r.purchase_updated} · بيع ${r.sale_updated} على Shopify`;
+    if(r.skipped?.length) msg += ` · اتعدّى ${r.skipped.length}`;
+    toast(msg, 'success');
+    if(r.errors?.length){
+      alert('⚠️ أخطاء:\n\n' + r.errors.slice(0, 10).map(e => `• ${e.sku || e.product || ''}: ${e.error}`).join('\n'));
+    }
+    // viewPO بيعيد رسم التفاصيل كلها (الإجماليات) وبينادي قسم الأسعار بنفسه
+    if(r.po_total != null) viewPO(poId); else await _loadPOPricingSection(poId);
+  }catch(e){
+    toast('❌ ' + e.message);
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '💾 حفظ كل الأسعار'; }
+  }
 }
 
 // 🆕 v300: حفظ تعديل سعر (purchase أو sale)
