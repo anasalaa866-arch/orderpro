@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v588 — 🔘 الضريبة بقت زرار (مطفي افتراضياً) (2026-10-12)
   OrderPro v587 — 🧮 خصم + ضريبة 14% وصافي سعر القطعة (2026-10-12)
   🧮 v587: كل بند: سعر معلن + خصم % + ضريبة %، وبيوضّح صافي القطعة
   والإجمالي. فيه أزرار "طبّق على الكل" للخصم والضريبة.
@@ -6739,7 +6740,7 @@ tr:hover td{background:#fafbff}
               <div style="text-align:center">الكمية</div>
               <div style="text-align:center">السعر المعلن</div>
               <div style="text-align:center">خصم %</div>
-              <div style="text-align:center">ضريبة %</div>
+              <div style="text-align:center">ضريبة</div>
               <div style="text-align:center;color:#16a34a">صافي القطعة</div>
               <div style="text-align:center">الإجمالي</div>
               <div></div>
@@ -32297,6 +32298,19 @@ function _poNet(it){
   return { list, disc, tax, afterDisc, net, detail: bits.join('  ') };
 }
 
+// 🔘 v588: شغّل/اطفي الضريبة على بند — النسبة من خانة "طبّق على الكل" (14 افتراضي)
+function _poDefaultTaxPct(){
+  const v = parseFloat(document.getElementById('po-bulk-tax')?.value);
+  return (isNaN(v) || v <= 0) ? 14 : v;
+}
+
+function togglePOItemTax(idx){
+  if(!_poItems[idx]) return;
+  _poItems[idx].taxPct = (parseFloat(_poItems[idx].taxPct) || 0) > 0 ? 0 : _poDefaultTaxPct();
+  renderPOItems();
+  updatePOTotals();
+}
+
 // 🧮 v587: طبّق خصم/ضريبة على كل البنود
 function applyPOBulk(kind){
   if(!_poItems.length){ toast('مفيش منتجات'); return; }
@@ -32388,13 +32402,15 @@ function renderPOItems(){
           style="width:100%;text-align:center;padding:6px 2px;font-size:12px;font-family:monospace${(it.discountPct||0) > 0 ? ';border-color:#ca8a04;background:#fffbeb' : ''}">
       </div>
       
-      <!-- 🧮 v587: ضريبة % -->
+      <!-- 🔘 v588: الضريبة زرار — مطفي افتراضياً -->
       <div>
-        <input type="number" min="0" max="100" step="0.5" value="${it.taxPct || 0}"
-          onchange="updatePOItemField(${i}, 'taxPct', parseFloat(this.value)||0)"
-          class="form-input"
-          style="width:100%;text-align:center;padding:6px 2px;font-size:12px;font-family:monospace${(it.taxPct||0) > 0 ? ';border-color:#16a34a;background:#f0fdf4' : ''}"
-          title="14% = ضريبة القيمة المضافة">
+        <button type="button" onclick="togglePOItemTax(${i})"
+          style="width:100%;padding:6px 2px;font-size:12px;font-weight:800;font-family:monospace;border-radius:6px;cursor:pointer;transition:.15s;${(it.taxPct||0) > 0
+            ? 'background:#16a34a;color:#fff;border:1px solid #16a34a'
+            : 'background:#fff;color:#8c9196;border:1px dashed #c9cccf'}"
+          title="${(it.taxPct||0) > 0 ? 'الضريبة مضافة — دوس عشان تشيلها' : 'دوس عشان تضيف الضريبة'}">
+          ${(it.taxPct||0) > 0 ? `${it.taxPct}%` : '+ ضريبة'}
+        </button>
       </div>
       
       <!-- 🧮 v587: صافي القطعة -->
@@ -32618,7 +32634,7 @@ async function handleBarcodeQuickAdd(){
         orderedQty: 1,
         unitCost: 0,
         discountPct: 0,                                   // 🧮 v587
-        taxPct: parseFloat(document.getElementById('po-bulk-tax')?.value) || 0,
+        taxPct: 0,                                        // 🔘 v588: مطفي افتراضياً
         notes: ''
       });
       _poJustAddedIdx = _poItems.length - 1;
@@ -32745,7 +32761,7 @@ function addPOItem(){
     orderedQty: qty,
     unitCost: cost,
     discountPct: 0,                                        // 🧮 v587
-    taxPct: parseFloat(document.getElementById('po-bulk-tax')?.value) || 0,
+    taxPct: 0,                                             // 🔘 v588: مطفي افتراضياً
     notes
   });
   
