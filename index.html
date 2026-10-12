@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v587 — 🧮 خصم + ضريبة 14% وصافي سعر القطعة (2026-10-12)
+  🧮 v587: كل بند: سعر معلن + خصم % + ضريبة %، وبيوضّح صافي القطعة
+  والإجمالي. فيه أزرار "طبّق على الكل" للخصم والضريبة.
+  OrderPro v586 — 🔄 مزامنة حالة الـ Transfer من شوبيفاي (2026-10-12)
+  🔄 v586: زرار مزامنة في تفاصيل الأمر + زرار دفعة في صفحة أوامر الشراء.
+  بيقرا المستلم من شوبيفاي ويحدّث الكميات والحالة — من غير ما يلمس المخزون.
   OrderPro v585 — 💰 حفظ كل الأسعار مرة واحدة + استلام من Transfer شوبيفاي (2026-10-12)
   💰 v585: الأسعار بقت تتعدّل كلها وتتحفظ بضغطة واحدة. زرار الصلاحية بيختفي
   للبند اللي داخل بصلاحية من أمر الشراء. زرار "استلام بضاعة" اتشال —
@@ -6569,6 +6575,8 @@ tr:hover td{background:#fafbff}
       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('po-imp-file').click()">📥 استيراد من Zoho</button>
       <input type="file" id="po-imp-file" accept=".csv" style="display:none" onchange="poImpPick(this.files[0])">
       <button class="btn btn-primary btn-sm" onclick="openNewPO()">➕ أمر شراء جديد</button>
+      <!-- 🔄 v586 -->
+      <button class="btn btn-sm" onclick="syncAllPOTransfers()" style="background:#6366f1;color:#fff;font-weight:700" title="اقرا المستلم من Transfers شوبيفاي لكل الأوامر المفتوحة">🔄 زامن الاستلام من Shopify</button>
     </div>
   </div>
   <div id="po-imp-box" style="margin-bottom:14px"></div>
@@ -6726,13 +6734,26 @@ tr:hover td{background:#fafbff}
           
           <!-- Products table header -->
           <div id="po-items-header" style="display:none;background:#fafbfb;border-bottom:1px solid #e1e3e5;padding:10px 20px;font-size:11px;font-weight:700;color:#6d7175;text-transform:uppercase;letter-spacing:0.4px">
-            <div style="display:grid;grid-template-columns:1fr 80px 100px 100px 140px 30px;gap:12px;align-items:center">
+            <div style="display:grid;grid-template-columns:1fr 64px 92px 62px 58px 100px 96px 26px;gap:8px;align-items:center">
               <div>المنتج</div>
               <div style="text-align:center">الكمية</div>
-              <div style="text-align:left">سعر الوحدة</div>
-              <div style="text-align:left">الإجمالي</div>
-              <div style="text-align:center">📅 الصلاحية (اختياري)</div>
+              <div style="text-align:center">السعر المعلن</div>
+              <div style="text-align:center">خصم %</div>
+              <div style="text-align:center">ضريبة %</div>
+              <div style="text-align:center;color:#16a34a">صافي القطعة</div>
+              <div style="text-align:center">الإجمالي</div>
               <div></div>
+            </div>
+            <!-- 🧮 v587: تطبيق على الكل -->
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px dashed #e1e3e5;text-transform:none;letter-spacing:0;font-weight:500">
+              <span style="font-size:11px;color:#6d7175">طبّق على الكل:</span>
+              <input type="number" id="po-bulk-disc" min="0" max="100" step="0.5" placeholder="خصم %"
+                     style="width:80px;padding:4px 6px;border:1px solid #c9cccf;border-radius:6px;font-size:12px;font-family:monospace;text-align:center">
+              <button type="button" onclick="applyPOBulk('disc')" style="padding:4px 10px;border:1px solid #c9cccf;background:#fff;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">طبّق الخصم</button>
+              <input type="number" id="po-bulk-tax" min="0" max="100" step="0.5" value="14"
+                     style="width:80px;padding:4px 6px;border:1px solid #c9cccf;border-radius:6px;font-size:12px;font-family:monospace;text-align:center">
+              <button type="button" onclick="applyPOBulk('tax')" style="padding:4px 10px;border:1px solid #16a34a;background:#f0fdf4;color:#166534;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">طبّق الضريبة</button>
+              <button type="button" onclick="applyPOBulk('notax')" style="padding:4px 10px;border:1px solid #c9cccf;background:#fff;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">شيل الضريبة</button>
             </div>
           </div>
           
@@ -6760,9 +6781,10 @@ tr:hover td{background:#fafbff}
         <div style="background:#fff;border:1px solid #e1e3e5;border-radius:10px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,0.04)">
           <div style="font-weight:700;color:#1a1c1d;font-size:15px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #e1e3e5">💰 ملخص التكاليف</div>
           
+          <div id="po-breakdown"></div>
           <div style="display:flex;flex-direction:column;gap:10px;font-size:13px">
             <div style="display:flex;justify-content:space-between;color:#5c5f62">
-              <span>المجموع الفرعي:</span>
+              <span>المجموع الفرعي <span style="font-size:10px">(بعد الخصم والضريبة)</span>:</span>
               <span style="font-weight:700;color:#1a1c1d;font-family:monospace" id="po-subtotal-display">0.00 ج</span>
             </div>
             
@@ -32158,6 +32180,9 @@ async function openNewPO(){
   
   _poItems = [];
   _poJustAddedIdx = -1;
+  // 🧮 v587: reset شريط التطبيق على الكل
+  const bd = document.getElementById('po-bulk-disc'); if(bd) bd.value = '';
+  const bt = document.getElementById('po-bulk-tax');  if(bt) bt.value = '14';
   
   // 🆕 v252: pre-fill من ذكاء الشراء لو في draft محفوظ
   try {
@@ -32259,6 +32284,37 @@ function onPOSupplierChange(){
   document.getElementById('po-custom-supplier').style.display = val === 'custom' ? 'block' : 'none';
 }
 
+// 🧮 v587: صافي سعر القطعة = المعلن × (1 − خصم%) × (1 + ضريبة%)
+function _poNet(it){
+  const list = parseFloat(it.unitCost) || 0;
+  const disc = Math.min(Math.max(parseFloat(it.discountPct) || 0, 0), 100);
+  const tax  = Math.min(Math.max(parseFloat(it.taxPct) || 0, 0), 100);
+  const afterDisc = list * (1 - disc / 100);
+  const net = Math.round(afterDisc * (1 + tax / 100) * 100) / 100;
+  const bits = [`${list.toFixed(2)}`];
+  if(disc) bits.push(`− ${disc}% = ${afterDisc.toFixed(2)}`);
+  if(tax)  bits.push(`+ ${tax}% ضريبة = ${net.toFixed(2)}`);
+  return { list, disc, tax, afterDisc, net, detail: bits.join('  ') };
+}
+
+// 🧮 v587: طبّق خصم/ضريبة على كل البنود
+function applyPOBulk(kind){
+  if(!_poItems.length){ toast('مفيش منتجات'); return; }
+  if(kind === 'disc'){
+    const v = parseFloat(document.getElementById('po-bulk-disc')?.value);
+    if(isNaN(v) || v < 0 || v > 100){ toast('❌ نسبة خصم غير صالحة'); return; }
+    _poItems.forEach(it => it.discountPct = v);
+  } else if(kind === 'tax'){
+    const v = parseFloat(document.getElementById('po-bulk-tax')?.value);
+    if(isNaN(v) || v < 0 || v > 100){ toast('❌ نسبة ضريبة غير صالحة'); return; }
+    _poItems.forEach(it => it.taxPct = v);
+  } else if(kind === 'notax'){
+    _poItems.forEach(it => it.taxPct = 0);
+  }
+  renderPOItems();
+  updatePOTotals();
+}
+
 function renderPOItems(){
   const list = document.getElementById('po-items-list');
   const header = document.getElementById('po-items-header');
@@ -32286,7 +32342,7 @@ function renderPOItems(){
     const borderColor = isJustAdded ? '#facc15' : '#e1e3e5';
     
     return `
-    <div data-poitem-row="${i}" style="padding:14px 20px;border-bottom:1px solid ${borderColor};display:grid;grid-template-columns:1fr 80px 100px 100px 140px 30px;gap:12px;align-items:center;font-size:13px;background:${bgColor};transition:background 0.6s" onmouseover="this.style.background='#fafbfb'" onmouseout="this.style.background='${bgColor}'">
+    <div data-poitem-row="${i}" style="padding:14px 20px;border-bottom:1px solid ${borderColor};display:grid;grid-template-columns:1fr 64px 92px 62px 58px 100px 96px 26px;gap:8px;align-items:center;font-size:13px;background:${bgColor};transition:background 0.6s" onmouseover="this.style.background='#fafbfb'" onmouseout="this.style.background='${bgColor}'">
       <!-- Product info -->
       <div style="min-width:0">
         <div style="font-weight:600;color:#1a1c1d;font-size:13px;line-height:1.4;word-break:break-word">${escapeHtml(it.productTitle)}${it.variantTitle ? ' - '+escapeHtml(it.variantTitle) : ''}</div>
@@ -32295,6 +32351,15 @@ function renderPOItems(){
             ${it.sku ? 'SKU: ' + escapeHtml(it.sku) : ''}${it.sku && it.barcode ? ' · ' : ''}${it.barcode ? escapeHtml(it.barcode) : ''}
           </div>
         ` : ''}
+        <!-- 📅 v583: الصلاحية (اختياري) -->
+        <label style="display:inline-flex;align-items:center;gap:5px;margin-top:5px;font-size:10px;color:#6d7175">
+          📅 صلاحية:
+          <input type="date" value="${it.expDate || ''}"
+            data-poitem-exp="${i}"
+            onchange="updatePOItemField(${i}, 'expDate', this.value || null)"
+            style="padding:3px 5px;font-size:11px;font-family:monospace;border:1px solid ${it.expDate ? '#16a34a' : '#c9cccf'};border-radius:5px;background:${it.expDate ? '#f0fdf4' : '#fff'}"
+            title="سيبه فاضي لو المنتج مالوش صلاحية — لو اتملى، هيتعمل batch وقت إرسال الأمر">
+        </label>
       </div>
       
       <!-- Quantity (editable inline) -->
@@ -32306,28 +32371,40 @@ function renderPOItems(){
           style="width:100%;text-align:center;padding:6px 4px;font-size:13px;font-family:monospace">
       </div>
       
-      <!-- Unit cost (editable inline) -->
+      <!-- السعر المعلن -->
       <div>
         <input type="number" min="0" step="0.01" value="${parseFloat(it.unitCost).toFixed(2)}" 
           data-poitem-cost="${i}"
           onchange="updatePOItemField(${i}, 'unitCost', parseFloat(this.value)||0)" 
           class="form-input" 
-          style="width:100%;text-align:left;padding:6px 4px;font-size:13px;font-family:monospace${isJustAdded ? ';border-color:#f59e0b;border-width:2px' : ''}">
+          style="width:100%;text-align:center;padding:6px 4px;font-size:13px;font-family:monospace${isJustAdded ? ';border-color:#f59e0b;border-width:2px' : ''}">
       </div>
       
-      <!-- Line total -->
-      <div style="text-align:left;font-weight:700;font-family:monospace;color:#1a1c1d">
-        ${(it.orderedQty * it.unitCost).toFixed(2)} ج
-      </div>
-      
-      <!-- 📅 v583: تاريخ الصلاحية (اختياري) -->
+      <!-- 🧮 v587: خصم % -->
       <div>
-        <input type="date" value="${it.expDate || ''}"
-          data-poitem-exp="${i}"
-          onchange="updatePOItemField(${i}, 'expDate', this.value || null)"
+        <input type="number" min="0" max="100" step="0.5" value="${it.discountPct || 0}"
+          onchange="updatePOItemField(${i}, 'discountPct', parseFloat(this.value)||0)"
           class="form-input"
-          style="width:100%;padding:6px 4px;font-size:12px;font-family:monospace${it.expDate ? ';border-color:#16a34a' : ''}"
-          title="سيبه فاضي لو المنتج مالوش صلاحية — لو اتملى، هيتعمل batch وقت الاستلام">
+          style="width:100%;text-align:center;padding:6px 2px;font-size:12px;font-family:monospace${(it.discountPct||0) > 0 ? ';border-color:#ca8a04;background:#fffbeb' : ''}">
+      </div>
+      
+      <!-- 🧮 v587: ضريبة % -->
+      <div>
+        <input type="number" min="0" max="100" step="0.5" value="${it.taxPct || 0}"
+          onchange="updatePOItemField(${i}, 'taxPct', parseFloat(this.value)||0)"
+          class="form-input"
+          style="width:100%;text-align:center;padding:6px 2px;font-size:12px;font-family:monospace${(it.taxPct||0) > 0 ? ';border-color:#16a34a;background:#f0fdf4' : ''}"
+          title="14% = ضريبة القيمة المضافة">
+      </div>
+      
+      <!-- 🧮 v587: صافي القطعة -->
+      <div style="text-align:center;font-weight:800;font-family:monospace;color:#16a34a;font-size:13px" title="${_poNet(it).detail}">
+        ${_poNet(it).net.toFixed(2)}
+      </div>
+      
+      <!-- الإجمالي -->
+      <div style="text-align:center;font-weight:700;font-family:monospace;color:#1a1c1d">
+        ${(it.orderedQty * _poNet(it).net).toFixed(2)} ج
       </div>
       
       <!-- Remove -->
@@ -32373,10 +32450,31 @@ function removePOItem(idx){
 }
 
 function updatePOTotals(){
-  const subtotal = _poItems.reduce((s, it) => s + (it.orderedQty * it.unitCost), 0);
+  // 🧮 v587: الإجماليات من صافي القطعة
+  let gross = 0, discAmt = 0, taxAmt = 0, subtotal = 0;
+  _poItems.forEach(it => {
+    const q = parseInt(it.orderedQty) || 0;
+    const n = _poNet(it);
+    gross   += q * n.list;
+    discAmt += q * (n.list - n.afterDisc);
+    taxAmt  += q * (n.net - n.afterDisc);
+    subtotal += q * n.net;
+  });
   const shipping = parseFloat(document.getElementById('po-shipping').value) || 0;
   const tax = parseFloat(document.getElementById('po-tax').value) || 0;
   const total = subtotal + shipping + tax;
+  
+  // سطر التفصيل فوق المجموع
+  const brk = document.getElementById('po-breakdown');
+  if(brk){
+    brk.innerHTML = (discAmt > 0.004 || taxAmt > 0.004)
+      ? `<div style="font-size:11px;color:#6d7175;line-height:1.8;padding-bottom:6px;border-bottom:1px dashed #e1e3e5;margin-bottom:6px">
+           قبل الخصم: <b style="font-family:monospace">${gross.toFixed(2)}</b> ج<br>
+           ${discAmt > 0.004 ? `الخصم: <b style="font-family:monospace;color:#ca8a04">− ${discAmt.toFixed(2)}</b> ج<br>` : ''}
+           ${taxAmt > 0.004 ? `ضريبة البنود: <b style="font-family:monospace;color:#16a34a">+ ${taxAmt.toFixed(2)}</b> ج` : ''}
+         </div>`
+      : '';
+  }
   
   document.getElementById('po-subtotal-display').textContent = subtotal.toFixed(2) + ' ج';
   document.getElementById('po-shipping-display').textContent = shipping.toFixed(2) + ' ج';
@@ -32519,6 +32617,8 @@ async function handleBarcodeQuickAdd(){
         barcode: match.barcode || '',
         orderedQty: 1,
         unitCost: 0,
+        discountPct: 0,                                   // 🧮 v587
+        taxPct: parseFloat(document.getElementById('po-bulk-tax')?.value) || 0,
         notes: ''
       });
       _poJustAddedIdx = _poItems.length - 1;
@@ -32644,6 +32744,8 @@ function addPOItem(){
     ..._poSelectedItem,
     orderedQty: qty,
     unitCost: cost,
+    discountPct: 0,                                        // 🧮 v587
+    taxPct: parseFloat(document.getElementById('po-bulk-tax')?.value) || 0,
     notes
   });
   
@@ -32743,6 +32845,8 @@ async function viewPO(id){
       // اتـ بعت بالفعل
       const shopifyUrl = `https://cafelax.myshopify.com/admin/inventory/transfers/${po.shopify_transfer_id}`;
       actionButtons += `<a href="${shopifyUrl}" target="_blank" class="btn btn-success btn-sm" style="text-decoration:none">🔗 افتح في Shopify (Transfer #${po.shopify_transfer_id})</a>`;
+      // 🔄 v586: زامن المستلم من شوبيفاي
+      actionButtons += `<button class="btn btn-sm" onclick="syncPOTransfer(${po.id})" style="background:#6366f1;border-color:#6366f1;color:#fff;font-weight:700">🔄 زامن الاستلام من Shopify</button>`;
     } else if(po.status === 'draft' || po.status === 'sent' || po.status === 'ordered'){
       // متاح للإرسال
       actionButtons += `<button class="btn btn-success btn-sm" onclick="sendPOToShopify(${po.id})" style="background:#16a34a;border-color:#16a34a">📤 ارسال لـ Shopify كـ Transfer</button>`;
@@ -32770,6 +32874,12 @@ async function viewPO(id){
       <div style="background:${st.color}15;border:1px solid ${st.color};border-radius:10px;padding:12px;margin-bottom:14px">
         <div style="font-weight:800;color:${st.color};font-size:14px">${st.ico} ${st.name}</div>
       </div>
+      ${po.shopify_transfer_id ? `
+      <div style="background:#eef2ff;border:1px solid #6366f1;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#3730a3">
+        📦 <strong>Transfer شوبيفاي:</strong> ${escapeHtml(po.shopify_transfer_status || 'مش متزامن')}
+        ${po.shopify_transfer_received_qty != null ? ` · مستلم ${po.shopify_transfer_received_qty} من ${po.total_qty}` : ''}
+        ${po.shopify_transfer_synced_at ? `<span style="color:#6366f1"> · آخر مزامنة ${new Date(po.shopify_transfer_synced_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'})}</span>` : '<span style="color:#b45309"> · اضغط "🔄 زامن الاستلام" عشان تعرف وصل كام</span>'}
+      </div>` : ''}
       ${(!po.zoho_po_id && po.zoho_po_error) ? `
       <div style="background:#fef2f2;border:1px solid #ef4444;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#991b1b">
         🧾 <strong>الإرسال لـ Zoho فشل:</strong> ${escapeHtml(po.zoho_po_error)}
@@ -32820,7 +32930,13 @@ async function viewPO(id){
                     </td>
                     <td style="padding:6px;text-align:center;font-weight:700">${it.ordered_qty}</td>
                     <td style="padding:6px;text-align:center;font-weight:700;color:${overReceived ? '#7c3aed' : fullReceived ? '#16a34a' : it.received_qty > 0 ? '#fbbf24' : 'var(--muted)'}">${it.received_qty}${overReceived ? '⚡' : ''}</td>
-                    <td style="padding:6px;text-align:center">${parseFloat(it.unit_cost).toFixed(2)}</td>
+                    <td style="padding:6px;text-align:center">
+                      ${parseFloat(it.unit_cost).toFixed(2)}
+                      ${(parseFloat(it.discount_pct) > 0 || parseFloat(it.tax_pct) > 0) ? `
+                        <div style="font-size:9px;color:var(--muted);white-space:nowrap">
+                          ${parseFloat(it.list_price || it.unit_cost).toFixed(2)}${parseFloat(it.discount_pct) > 0 ? ` −${parseFloat(it.discount_pct)}%` : ''}${parseFloat(it.tax_pct) > 0 ? ` +${parseFloat(it.tax_pct)}%ض` : ''}
+                        </div>` : ''}
+                    </td>
                     <td style="padding:6px;text-align:center;font-weight:700">${parseFloat(it.line_total).toFixed(0)}</td>
                   </tr>
                 `;
@@ -33212,7 +33328,7 @@ async function printPO(id){
           ${it.barcode ? `<div style="font-size:11px;color:#666">Barcode: ${escapeHtml(it.barcode)}</div>` : ''}
         </td>
         <td style="padding:8px;text-align:center;border:1px solid #ddd;font-weight:800;font-size:16px">${it.ordered_qty}</td>
-        <td style="padding:8px;text-align:center;border:1px solid #ddd">${parseFloat(it.unit_cost || 0).toFixed(2)} ج</td>
+        <td style="padding:8px;text-align:center;border:1px solid #ddd">${parseFloat(it.unit_cost || 0).toFixed(2)} ج${(parseFloat(it.discount_pct) > 0 || parseFloat(it.tax_pct) > 0) ? `<div style="font-size:9px;color:#666">${parseFloat(it.list_price || it.unit_cost || 0).toFixed(2)}${parseFloat(it.discount_pct) > 0 ? ` −${parseFloat(it.discount_pct)}%` : ''}${parseFloat(it.tax_pct) > 0 ? ` +${parseFloat(it.tax_pct)}% ضريبة` : ''}</div>` : ''}</td>
         <td style="padding:8px;text-align:center;border:1px solid #ddd;font-weight:700">${parseFloat(it.line_total || 0).toFixed(2)} ج</td>
       </tr>
     `).join('');
@@ -33364,6 +33480,65 @@ async function sendPO(id){
     closeM('m-po-detail');
     loadPurchaseOrdersPage();
   } catch(e) { toast('❌ ' + e.message); }
+}
+
+// 🔄 v586: زامن استلام أمر شراء من الـ Transfer في شوبيفاي
+async function syncPOTransfer(id){
+  toast('🔄 جاري القراءة من شوبيفاي...');
+  try{
+    const r = await apiFetch('/api/purchase-orders/' + id + '/sync-transfer', 'POST', {});
+    if(r?.error){ toast('❌ ' + r.error); return; }
+
+    if(r.degraded){
+      toast('⚠️ قريت الحالة بس مش تفاصيل الاستلام', 'error');
+      if(r.degraded_reason) alert('⚠️ مقدرناش نقرا الـ shipments:\n\n' + r.degraded_reason);
+    } else {
+      toast(`✅ ${r.total_received} من ${r.total_ordered} مستلم · ${r.changes.length} بند اتغيّر`, 'success');
+    }
+
+    const parts = [];
+    parts.push(`📦 Transfer: ${r.transfer.name || ''} · ${r.transfer.status}`);
+    parts.push(`المستلم: ${r.total_received} من ${r.total_ordered}`);
+    if(r.status_before !== r.status_after) parts.push(`حالة الأمر: ${r.status_before} ← ${r.status_after}`);
+    if(r.changes.length){
+      parts.push('\nالبنود اللي اتغيّرت:');
+      r.changes.slice(0, 15).forEach(c => {
+        parts.push(`• ${(c.product_title || c.sku || '').slice(0,40)}: ${c.was} ← ${c.now} من ${c.ordered}${c.rejected ? ` (مرفوض ${c.rejected})` : ''}`);
+      });
+      if(r.changes.length > 15) parts.push(`... و${r.changes.length - 15} بند تاني`);
+    }
+    if(r.unmatched?.length){
+      parts.push(`\n⚠️ ${r.unmatched.length} بند مش متطابق مع الـ transfer:`);
+      r.unmatched.slice(0, 8).forEach(u => parts.push(`• ${(u.product_title || u.sku || '')} — ${u.reason}`));
+    }
+    if(r.batch_mismatch?.length){
+      parts.push(`\n📅 ${r.batch_mismatch.length} batch صلاحية كميته مختلفة عن المستلم:`);
+      r.batch_mismatch.slice(0, 8).forEach(b => parts.push(`• ${(b.product_title || b.sku || '')}: batch ${b.batch_qty} · مستلم ${b.received}`));
+      parts.push('(عدّلها من صفحة "تواريخ الصلاحية" لو حابب)');
+    }
+    alert(parts.join('\n'));
+
+    viewPO(id);
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// 🔄 v586: زامن كل الأوامر المفتوحة اللي ليها transfer
+async function syncAllPOTransfers(){
+  if(!confirm('🔄 هيقرا كل أوامر الشراء المفتوحة اللي ليها Transfer في شوبيفاي ويحدّث المستلم والحالة.\n\nالمخزون مش هيتلمس — شوبيفاي عمل ده وقت الاستلام.\n\nتكمّل؟')) return;
+  toast('🔄 جاري المزامنة...');
+  try{
+    const r = await apiFetch('/api/purchase-orders/sync-transfers', 'POST', { limit: 25 });
+    if(r?.error){ toast('❌ ' + r.error); return; }
+    toast(`✅ اتزامن ${r.synced}${r.failed ? ` · فشل ${r.failed}` : ''}`, 'success');
+    if(r.updated?.length){
+      alert('📦 اللي اتغيّر:\n\n' + r.updated.map(u =>
+        `• ${u.po_number}: ${u.received} من ${u.ordered} · ${u.status}`).join('\n'));
+    }
+    if(r.errors?.length){
+      alert('⚠️ أخطاء:\n\n' + r.errors.map(e => `• ${e.po}: ${e.error}`).join('\n'));
+    }
+    loadPurchaseOrdersPage();
+  }catch(e){ toast('❌ ' + e.message); }
 }
 
 // 🧾 v582: إرسال/إعادة إرسال أمر شراء لـ Zoho يدوياً
