@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v583 — 📅 صلاحية لكل بند + الموردين من Zoho (2026-10-12)
+  📅 v583: عمود تاريخ صلاحية (اختياري) في أمر الشراء — الـ batch بيتعمل
+  أوتوماتيك وقت الاستلام. 🏷️ قائمة الموردين بقت من Zoho بس + زرار تحديث.
+  OrderPro v582 — 🧾 أوامر الشراء بتروح Zoho (2026-10-12)
+  🧾 v582: زرار "ابعت لـ Zoho" + حالة الربط في تفاصيل أمر الشراء، والإرسال
+  للمورد بقى بيبعته لـ Zoho تلقائي كمان.
   OrderPro v581 — 🎯 جرد المتابعة: شامل الجرود اللي لسه مش معتمدة (2026-10-08)
   🎯 v581: قائمة المصدر بقت توري الجلسات الشغالة والملغية كمان بحالتها،
   + خيار "ضم غير المعتمدة" في وضع آخر فترة، + تحذير التداخل.
@@ -6569,6 +6575,8 @@ tr:hover td{background:#fafbff}
       <span style="font-size:12px;font-weight:700;margin-inline-start:auto">المورد في Zoho:</span>
       <input id="po-zh-vendor" class="form-input" style="width:170px" value="مورد نقدي" placeholder="سيبها فاضية = الاسم الحقيقي">
       <button class="btn btn-sm" onclick="poZhPush()" style="background:#0d9488;color:#fff">📤 ابعت دفعة (20)</button>
+      <!-- 🧾 v582: الأوامر اللي اتعملت في OrderPro ومارحتش Zoho -->
+      <button class="btn btn-sm" onclick="poZhPush('all')" style="background:#0ea5e9;color:#fff" title="شامل أوامر OrderPro مش المستوردة بس — بأسماء الموردين الحقيقية">📤 ابعت دفعة شاملة أوامر OrderPro</button>
       <button class="btn btn-ghost btn-sm" onclick="poZhStatus()">🔄 تحديث</button>
     </div>
     <div id="po-zh-box" style="padding:0 14px 12px;font-size:13px"></div>
@@ -6623,11 +6631,14 @@ tr:hover td{background:#fafbff}
         <div style="background:#fff;border:1px solid #e1e3e5;border-radius:10px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,0.04)">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px" class="po-supdest-grid">
             <div>
-              <label style="display:block;font-weight:600;font-size:13px;color:#1a1c1d;margin-bottom:6px">المورد *</label>
+              <label style="display:flex;align-items:center;justify-content:space-between;font-weight:600;font-size:13px;color:#1a1c1d;margin-bottom:6px">
+                <span>المورد * <span style="font-weight:400;color:#6d7175;font-size:11px">(من Zoho)</span></span>
+                <button type="button" onclick="syncZohoSuppliers()" style="background:transparent;border:1px solid #0ea5e9;color:#0ea5e9;border-radius:6px;font-size:11px;font-weight:700;padding:3px 8px;cursor:pointer">🔄 حدّث من Zoho</button>
+              </label>
               <select id="po-supplier" class="form-input" onchange="onPOSupplierChange()" style="width:100%">
                 <option value="">— اختار من القائمة —</option>
-                <option value="custom">📝 مورد جديد (حر)</option>
               </select>
+              <div id="po-supplier-hint" style="font-size:11px;color:#6d7175;margin-top:4px"></div>
             </div>
             <div>
               <label style="display:block;font-weight:600;font-size:13px;color:#1a1c1d;margin-bottom:6px">المخزن (Destination) *</label>
@@ -6706,12 +6717,12 @@ tr:hover td{background:#fafbff}
           
           <!-- Products table header -->
           <div id="po-items-header" style="display:none;background:#fafbfb;border-bottom:1px solid #e1e3e5;padding:10px 20px;font-size:11px;font-weight:700;color:#6d7175;text-transform:uppercase;letter-spacing:0.4px">
-            <div style="display:grid;grid-template-columns:1fr 80px 100px 100px 90px 30px;gap:12px;align-items:center">
+            <div style="display:grid;grid-template-columns:1fr 80px 100px 100px 140px 30px;gap:12px;align-items:center">
               <div>المنتج</div>
               <div style="text-align:center">الكمية</div>
               <div style="text-align:left">سعر الوحدة</div>
               <div style="text-align:left">الإجمالي</div>
-              <div></div>
+              <div style="text-align:center">📅 الصلاحية (اختياري)</div>
               <div></div>
             </div>
           </div>
@@ -20765,16 +20776,18 @@ async function poZhStatus(){
       : '';
   }catch(e){ /* الصفحة تشتغل عادي */ }
 }
-async function poZhPush(){
+async function poZhPush(scope){
   const box=$('po-zh-box');
-  const fv = $('po-zh-vendor')?.value.trim() || '';
-  if(!confirm(fv
+  // 🧾 v582: الدفعة الشاملة بتروح بأسماء الموردين الحقيقية دايماً
+  const fv = (scope === 'all') ? '' : ($('po-zh-vendor')?.value.trim() || '');
+  if(scope === 'all' && !confirm('هتبعت كمان أوامر الشراء اللي اتعملت في OrderPro ولسه مارحتش Zoho.\n\nكل أمر بيروح باسم مورده الحقيقي، كـ draft، بنفس رقم الأمر.\n\nتكمّل؟')) return;
+  if(scope !== 'all' && !confirm(fv
       ? `كل الأوامر هتروح Zoho على المورد "${fv}".\n\nاسم المورد الحقيقي هيتكتب في مرجع الأمر وملاحظاته عشان تعدّله في Zoho بعدين.\n\nتكمّل؟`
       : 'الأوامر هتروح بأسماء الموردين الحقيقية — Zoho هيعمل الموردين دول لو مش موجودين.\n\nتكمّل؟')) return;
   if(box) box.innerHTML='<span style="color:var(--muted)">⏳ بيبعت... (كل أمر بيستنى شوية عشان حد نداءات Zoho)</span>';
   try{
     const r = await apiFetch('/api/purchase-orders/zoho-push-batch','POST',{
-      limit:20, forceVendor: $('po-zh-vendor')?.value || '' });
+      limit:20, scope: scope || 'imported', forceVendor: fv });
     if(!r || r.error){ toast('❌ '+(r?.error||'فشل')); poZhStatus(); return; }
     toast(`✅ اتبعت ${r.pushed}${r.failed?` · فشل ${r.failed}`:''}${r.remaining?` · باقي ${r.remaining}`:''}`);
     if(r.stopped) toast('⏸️ '+r.stopped);
@@ -31892,6 +31905,7 @@ async function viewStatement(id){
 // 🆕 v266: SUPPLIERS
 // ============================================================
 let _suppliers = [];
+let _poRequireZohoVendor = true;   // 🏷️ v583
 
 async function loadSuppliersPage(){
   const list = document.getElementById('suppliers-list');
@@ -32099,7 +32113,12 @@ function setPOFilter(btn, status){
 async function openNewPO(){
   // املأ الموردين
   if(!_suppliers.length){
-    try { const r = await apiFetch('/api/suppliers'); _suppliers = r?.suppliers || []; } catch(e){}
+    // 🏷️ v583: الموردين من Zoho بس
+    try {
+      const r = await apiFetch('/api/suppliers?zohoOnly=1');
+      _suppliers = r?.suppliers || [];
+      _poRequireZohoVendor = r?.requireZohoVendor !== false;
+    } catch(e){}
   }
   
   // املأ المخازن
@@ -32111,9 +32130,16 @@ async function openNewPO(){
   document.getElementById('po-modal-title').textContent = '📋 أمر شراء جديد';
   
   const supSel = document.getElementById('po-supplier');
+  // 🏷️ v583: قائمة Zoho بس — "مورد حر" بيظهر لو الشرط مقفول
   supSel.innerHTML = '<option value="">-- اختار من القائمة --</option>' +
     _suppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('') +
-    '<option value="custom">📝 مورد جديد (حر)</option>';
+    (_poRequireZohoVendor ? '' : '<option value="custom">📝 مورد جديد (حر)</option>');
+  const supHint = document.getElementById('po-supplier-hint');
+  if(supHint){
+    supHint.innerHTML = _suppliers.length
+      ? `${_suppliers.length} مورد من Zoho`
+      : '<span style="color:#d72c0d">مفيش موردين متزامنين — اضغط "🔄 حدّث من Zoho"</span>';
+  }
   
   const whSel = document.getElementById('po-warehouse');
   whSel.innerHTML = '<option value="">-- اختار --</option>' +
@@ -32184,6 +32210,29 @@ async function openNewPO(){
   }, 150);
 }
 
+// 🏷️ v583: اسحب الموردين من Zoho
+async function syncZohoSuppliers(){
+  toast('🔄 جاري سحب الموردين من Zoho...');
+  try{
+    const r = await apiFetch('/api/suppliers/sync-zoho', 'POST', {});
+    if(r?.error){ toast('❌ ' + r.error); return; }
+    toast(`✅ ${r.linked_total} مورد من Zoho (جديد ${r.added} · محدّث ${r.updated})`, 'success');
+    const sr = await apiFetch('/api/suppliers?zohoOnly=1');
+    _suppliers = sr?.suppliers || [];
+    _poRequireZohoVendor = sr?.requireZohoVendor !== false;
+    const supSel = document.getElementById('po-supplier');
+    if(supSel){
+      const keep = supSel.value;
+      supSel.innerHTML = '<option value="">-- اختار من القائمة --</option>' +
+        _suppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('') +
+        (_poRequireZohoVendor ? '' : '<option value="custom">📝 مورد جديد (حر)</option>');
+      supSel.value = keep;
+    }
+    const supHint = document.getElementById('po-supplier-hint');
+    if(supHint) supHint.textContent = `${_suppliers.length} مورد من Zoho`;
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
 function onPOSupplierChange(){
   const val = document.getElementById('po-supplier').value;
   document.getElementById('po-custom-supplier').style.display = val === 'custom' ? 'block' : 'none';
@@ -32216,7 +32265,7 @@ function renderPOItems(){
     const borderColor = isJustAdded ? '#facc15' : '#e1e3e5';
     
     return `
-    <div data-poitem-row="${i}" style="padding:14px 20px;border-bottom:1px solid ${borderColor};display:grid;grid-template-columns:1fr 80px 100px 100px 90px 30px;gap:12px;align-items:center;font-size:13px;background:${bgColor};transition:background 0.6s" onmouseover="this.style.background='#fafbfb'" onmouseout="this.style.background='${bgColor}'">
+    <div data-poitem-row="${i}" style="padding:14px 20px;border-bottom:1px solid ${borderColor};display:grid;grid-template-columns:1fr 80px 100px 100px 140px 30px;gap:12px;align-items:center;font-size:13px;background:${bgColor};transition:background 0.6s" onmouseover="this.style.background='#fafbfb'" onmouseout="this.style.background='${bgColor}'">
       <!-- Product info -->
       <div style="min-width:0">
         <div style="font-weight:600;color:#1a1c1d;font-size:13px;line-height:1.4;word-break:break-word">${escapeHtml(it.productTitle)}${it.variantTitle ? ' - '+escapeHtml(it.variantTitle) : ''}</div>
@@ -32250,8 +32299,15 @@ function renderPOItems(){
         ${(it.orderedQty * it.unitCost).toFixed(2)} ج
       </div>
       
-      <!-- Reserved column (for tax/extras future) -->
-      <div></div>
+      <!-- 📅 v583: تاريخ الصلاحية (اختياري) -->
+      <div>
+        <input type="date" value="${it.expDate || ''}"
+          data-poitem-exp="${i}"
+          onchange="updatePOItemField(${i}, 'expDate', this.value || null)"
+          class="form-input"
+          style="width:100%;padding:6px 4px;font-size:12px;font-family:monospace${it.expDate ? ';border-color:#16a34a' : ''}"
+          title="سيبه فاضي لو المنتج مالوش صلاحية — لو اتملى، هيتعمل batch وقت الاستلام">
+      </div>
       
       <!-- Remove -->
       <div>
@@ -32671,6 +32727,13 @@ async function viewPO(id){
       actionButtons += `<button class="btn btn-success btn-sm" onclick="sendPOToShopify(${po.id})" style="background:#16a34a;border-color:#16a34a">📤 ارسال لـ Shopify كـ Transfer</button>`;
     }
     
+    // 🧾 v582: حالة Zoho
+    if(po.zoho_po_id){
+      actionButtons += `<span class="btn btn-sm" style="background:#dcfce7;border:1px solid #16a34a;color:#166534;font-weight:700;cursor:default">🧾 في Zoho: ${escapeHtml(po.zoho_po_number || po.zoho_po_id)}</span>`;
+    } else if(po.status !== 'cancelled'){
+      actionButtons += `<button class="btn btn-sm" onclick="pushPOToZoho(${po.id})" style="background:#0ea5e9;border-color:#0ea5e9;color:#fff;font-weight:700">🧾 ${po.zoho_po_error ? 'إعادة المحاولة على Zoho' : 'ابعت لـ Zoho'}</button>`;
+    }
+    
     if(po.status === 'draft'){
       actionButtons += `<button class="btn btn-primary btn-sm" onclick="sendPO(${po.id})">📤 إرسال للمورد</button>`;
       actionButtons += `<button class="btn btn-danger btn-sm" onclick="cancelPO(${po.id})">❌ إلغاء</button>`;
@@ -32685,6 +32748,10 @@ async function viewPO(id){
       <div style="background:${st.color}15;border:1px solid ${st.color};border-radius:10px;padding:12px;margin-bottom:14px">
         <div style="font-weight:800;color:${st.color};font-size:14px">${st.ico} ${st.name}</div>
       </div>
+      ${(!po.zoho_po_id && po.zoho_po_error) ? `
+      <div style="background:#fef2f2;border:1px solid #ef4444;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#991b1b">
+        🧾 <strong>الإرسال لـ Zoho فشل:</strong> ${escapeHtml(po.zoho_po_error)}
+      </div>` : ''}
       
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;font-size:13px">
         <div>
@@ -33180,13 +33247,41 @@ async function printPO(id){
 }
 
 async function sendPO(id){
-  if(!confirm('إرسال أمر الشراء ده للمورد؟ بعد الإرسال مش هيكون فيه تعديل.')) return;
+  if(!confirm('إرسال أمر الشراء ده للمورد؟\n\nبعد الإرسال مش هيكون فيه تعديل، وهيتبعت لـ Zoho كـ draft كمان.')) return;
   try {
-    await apiFetch('/api/purchase-orders/' + id + '/send', 'POST');
-    toast('✅ تم الإرسال');
+    const r = await apiFetch('/api/purchase-orders/' + id + '/send', 'POST');
+    // 🧾 v582: نتيجة Zoho
+    const z = r?.zoho;
+    if(z?.zoho_po_number || z?.zoho_po_id){
+      toast(`✅ تم الإرسال · Zoho ${z.zoho_po_number || z.zoho_po_id}`, 'success');
+    } else if(z?.error){
+      toast('✅ اتبعت للمورد — بس Zoho فشل، افتح الأمر وجرّب تاني', 'error');
+    } else {
+      toast('✅ تم الإرسال');
+    }
     closeM('m-po-detail');
     loadPurchaseOrdersPage();
   } catch(e) { toast('❌ ' + e.message); }
+}
+
+// 🧾 v582: إرسال/إعادة إرسال أمر شراء لـ Zoho يدوياً
+async function pushPOToZoho(id){
+  if(!confirm('🧾 ابعت أمر الشراء ده لـ Zoho؟\n\nبيتبعت كـ draft — مفيش أثر محاسبي لحد ما تعتمده في Zoho.\nبنفس رقم الأمر، بالبنود والشحن والضريبة.')) return;
+  toast('🔄 جاري الإرسال لـ Zoho...');
+  try{
+    const r = await apiFetch('/api/purchase-orders/' + id + '/zoho-push', 'POST', {});
+    if(r?.already){
+      toast(`ℹ️ الأمر ده متبعت قبل كده — Zoho ${r.zoho_po_number || r.zoho_po_id}`);
+    } else if(r?.ok){
+      let msg = `✅ اتبعت لـ Zoho — ${r.zoho_po_number || r.zoho_po_id}`;
+      if(r.adhoc) msg += ` (${r.adhoc} بند من غير صنف مربوط)`;
+      toast(msg, 'success');
+    } else {
+      toast('❌ ' + (r?.error || 'فشل'));
+      return;
+    }
+    viewPO(id);
+  }catch(e){ toast('❌ ' + e.message); }
 }
 
 async function cancelPO(id){
@@ -33322,6 +33417,11 @@ function openReceiveModal(id){
           <input type="number" id="receive-qty-${it.id}" min="0" value="${remaining > 0 ? remaining : 0}" 
                  data-ordered="${it.ordered_qty}" data-prev-received="${it.received_qty}"
                  style="padding:8px;background:var(--elev);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:14px;text-align:center;font-weight:700">
+          <!-- 📅 v583: الصلاحية — لو اتملت بيتعمل batch بالكمية المستلمة -->
+          <label style="font-size:12px;font-weight:700">📅 الصلاحية:</label>
+          <input type="date" id="receive-exp-${it.id}" value="${it.exp_date ? String(it.exp_date).slice(0,10) : ''}"
+                 style="padding:8px;background:var(--elev);color:var(--text);border:1px solid ${it.exp_date ? '#16a34a' : 'var(--border)'};border-radius:6px;font-family:monospace;font-size:13px;text-align:center"
+                 title="اختياري — لو اتملت هيتعمل batch بالكمية المستلمة">
         </div>
       </div>
     `;
@@ -33352,9 +33452,11 @@ async function confirmReceive(){
       hasOverReceive = true;
     }
     
+    const expEl = document.getElementById('receive-exp-' + it.id);
     items.push({
       poItemId: it.id,
-      qtyReceived: qty
+      qtyReceived: qty,
+      expDate: (expEl?.value || null)   // 📅 v583
     });
   });
   
@@ -33378,7 +33480,8 @@ async function confirmReceive(){
       // 🆕 v336: عرض تفاصيل sync Shopify
       const sync = r.shopifySync;
       if(sync?.status === 'success'){
-        toast(`✅ تم الاستلام + تحديث Shopify (${sync.itemsPushed} منتج)`, 'success');
+        const nb = (r.batches || []).length;
+        toast(`✅ تم الاستلام + تحديث Shopify (${sync.itemsPushed} منتج)${nb ? ` · ${nb} batch صلاحية` : ''}`, 'success');
         
         // alert نظيف بدل التذكير القديم
         const skippedMsg = (sync.skipped && sync.skipped.length)
