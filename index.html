@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v597 — 🔎 بحث وفلتر في صفحة الموردين (2026-10-14)
+  🔎 v597: بحث بالاسم/الشخص/التليفون/الإيميل + فلتر «اللي ليهم منتجات
+  بس»، وكل مورد بيوضّح عدد منتجاته المربوطة. محتاج سيرفر v546.
   OrderPro v596 — ⏱️ عرض قرب الانتهاء: الحصّة بس هي اللي بتقفله (2026-10-13)
   ⏱️ v596: اتشال تاريخ انتهاء العرض من الشاشة ومن الحفظ. العرض بيفضل
   شغّال لحد ما الكمية تخلص أو تنهيه بإيدك. العروض القديمة اللي ليها
@@ -5721,7 +5724,19 @@ tr:hover td{background:#fafbff}
   </div>
   
   <div class="card">
-    <div class="card-header"><h3 style="margin:0">📋 قائمة الموردين</h3></div>
+    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <h3 style="margin:0">📋 قائمة الموردين</h3>
+      <span id="sup-count" style="font-size:12px;color:var(--muted);font-weight:700"></span>
+    </div>
+    <!-- 🔎 v597: بحث + فلتر "اللي ليهم منتجات بس" -->
+    <div style="padding:12px 14px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="sup-search" class="form-input" placeholder="🔎 اسم المورد أو الشخص أو التليفون أو الإيميل..." oninput="renderSuppliersList()" autocomplete="off" style="flex:1;min-width:230px">
+      <label id="sup-only-products-lbl" style="display:flex;align-items:center;gap:7px;border:2px solid var(--border);border-radius:10px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;user-select:none">
+        <input type="checkbox" id="sup-only-products" onchange="renderSuppliersList()" style="margin:0;width:15px;height:15px;cursor:pointer">
+        📦 اللي ليهم منتجات بس
+      </label>
+      <button class="btn btn-ghost btn-sm" onclick="supClearFilters()">مسح</button>
+    </div>
     <div id="suppliers-list" style="padding:14px"></div>
   </div>
 </div>
@@ -32050,23 +32065,80 @@ let _poRequireZohoVendor = true;   // 🏷️ v583
 async function loadSuppliersPage(){
   const list = document.getElementById('suppliers-list');
   if(!list) return;
-  
+
   list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">⏳ جاري التحميل...</div>';
-  
+
   try {
     const r = await apiFetch('/api/suppliers');
     _suppliers = r?.suppliers || [];
-    
-    if(!_suppliers.length){
-      list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:48px;opacity:.3">🏭</div><div>مفيش موردين بعد</div><div style="font-size:11px;margin-top:6px">اضغط ➕ مورد جديد</div></div>';
-      return;
-    }
-    
-    list.innerHTML = _suppliers.map(s => `
+    renderSuppliersList();                       // 🔎 v597
+  } catch(e) {
+    list.innerHTML = `<div style="color:var(--danger);padding:14px;text-align:center">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// 🔎 v597: مسح البحث والفلتر
+function supClearFilters(){
+  const q = document.getElementById('sup-search');        if(q) q.value = '';
+  const c = document.getElementById('sup-only-products'); if(c) c.checked = false;
+  renderSuppliersList();
+}
+
+// 🔎 v597: الفلترة والرسم — الفلترة كلها في المتصفح، القائمة محمّلة أصلاً
+function renderSuppliersList(){
+  const list = document.getElementById('suppliers-list');
+  if(!list) return;
+
+  const q = (document.getElementById('sup-search')?.value || '').trim().toLowerCase();
+  const onlyProducts = !!document.getElementById('sup-only-products')?.checked;
+
+  // الزرار يبان مداس
+  const lbl = document.getElementById('sup-only-products-lbl');
+  if(lbl){
+    lbl.style.borderColor = onlyProducts ? '#16a34a' : 'var(--border)';
+    lbl.style.background  = onlyProducts ? '#f0fdf4' : 'transparent';
+    lbl.style.color       = onlyProducts ? '#166534' : '';
+  }
+
+  if(!_suppliers.length){
+    const cnt0 = document.getElementById('sup-count'); if(cnt0) cnt0.textContent = '';
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:48px;opacity:.3">🏭</div><div>مفيش موردين بعد</div><div style="font-size:11px;margin-top:6px">اضغط ➕ مورد جديد</div></div>';
+    return;
+  }
+
+  const rows = _suppliers.filter(s => {
+    if(onlyProducts && !(parseInt(s.products_count) || 0)) return false;
+    if(!q) return true;
+    return [s.name, s.contact_person, s.phone, s.email, s.notes]
+      .some(v => String(v || '').toLowerCase().includes(q));
+  });
+
+  const withProducts = _suppliers.filter(s => (parseInt(s.products_count) || 0) > 0).length;
+  const cnt = document.getElementById('sup-count');
+  if(cnt) cnt.textContent = (rows.length === _suppliers.length)
+    ? `${_suppliers.length} مورد · ${withProducts} ليهم منتجات`
+    : `${rows.length} من ${_suppliers.length}`;
+
+  if(!rows.length){
+    list.innerHTML = `<div style="text-align:center;padding:36px;color:var(--muted)">
+      <div style="font-size:40px;opacity:.3">🔎</div>
+      <div style="margin-top:6px">مفيش مورد مطابق</div>
+      <div style="font-size:11px;margin-top:4px">${onlyProducts ? 'جرّب تشيل فلتر «اللي ليهم منتجات بس»' : 'جرّب كلمة تانية'}</div>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = rows.map(s => {
+    const pc = parseInt(s.products_count) || 0;
+    return `
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
           <div style="flex:1;min-width:200px">
-            <div style="font-weight:800;font-size:14px;margin-bottom:4px">🏭 ${escapeHtml(s.name)}</div>
+            <div style="font-weight:800;font-size:14px;margin-bottom:4px">
+              🏭 ${escapeHtml(s.name)}
+              ${pc ? `<span style="background:#dcfce7;color:#166534;border-radius:99px;padding:1px 9px;font-size:11px;font-weight:800;margin-right:6px">📦 ${pc}</span>`
+                   : `<span style="background:var(--border);color:var(--muted);border-radius:99px;padding:1px 9px;font-size:11px;font-weight:700;margin-right:6px">مفيش منتجات</span>`}
+            </div>
             ${s.contact_person ? `<div style="font-size:12px;color:var(--muted)">👤 ${escapeHtml(s.contact_person)}</div>` : ''}
             ${s.phone ? `<div style="font-size:12px;color:var(--muted)">📱 ${escapeHtml(s.phone)}</div>` : ''}
             ${s.email ? `<div style="font-size:12px;color:var(--muted)">✉️ ${escapeHtml(s.email)}</div>` : ''}
@@ -32081,11 +32153,8 @@ async function loadSuppliersPage(){
           </div>
         </div>
         ${s.notes ? `<div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">📝 ${escapeHtml(s.notes)}</div>` : ''}
-      </div>
-    `).join('');
-  } catch(e) {
-    list.innerHTML = `<div style="color:var(--danger);padding:14px;text-align:center">❌ ${escapeHtml(e.message)}</div>`;
-  }
+      </div>`;
+  }).join('');
 }
 
 function openNewSupplier(){
