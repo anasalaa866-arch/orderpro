@@ -1,6 +1,10 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v596 — ⏱️ عرض قرب الانتهاء: الحصّة بس هي اللي بتقفله (2026-10-13)
+  ⏱️ v596: اتشال تاريخ انتهاء العرض من الشاشة ومن الحفظ. العرض بيفضل
+  شغّال لحد ما الكمية تخلص أو تنهيه بإيدك. العروض القديمة اللي ليها
+  تاريخ لسه بتحترمه.
   OrderPro v590 — 📍 تغييرات العنوان من Shopify (2026-10-13)
   📍 v590: صفحة "تغييرات العناوين" — الطلب اللي العميل/إنت عدّلت عنوانه
   على Shopify بعد التوزيع بيظهر هنا بالقديم والجديد مع زرار اعتماد.
@@ -44661,7 +44665,6 @@ function renderNeoList(){
     const limit = parseInt(o.qty_limit) || 0;
     const pct = limit ? Math.min(100, Math.round(sold * 100 / limit)) : 0;
     const off = o.original_price > 0 ? Math.round((1 - o.offer_price / o.original_price) * 100) : 0;
-    const daysLeft = o.ends_at ? Math.ceil((new Date(o.ends_at) - new Date()) / 86400000) : null;
     return `
     <div class="card" style="padding:14px;margin-bottom:10px;border-right:4px solid ${st.c}">
       <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
@@ -44678,7 +44681,6 @@ function renderNeoList(){
           <div style="font-weight:800;color:${st.c};font-size:13px">${st.t}</div>
           <div style="font-size:10px;color:var(--muted);margin-top:3px">${o.kind === 'best_before' ? '📅 Best Before' : '⏳ قرب انتهاء'}${o.marks_applied ? ' · 🏷️ متعلّم' : ''}</div>
           ${o.exp_date ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">صلاحية البضاعة: ${String(o.exp_date).slice(0,10)}</div>` : ''}
-          ${o.status === 'active' && daysLeft != null ? `<div style="font-size:11px;color:${daysLeft <= 2 ? '#dc2626' : 'var(--muted)'};margin-top:2px">${daysLeft >= 0 ? `ينتهي خلال ${daysLeft} يوم` : 'التاريخ عدّى'}</div>` : ''}
           ${o.stock_now != null ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">الرصيد دلوقتي: ${o.stock_now}</div>` : ''}
         </div>
       </div>
@@ -44715,7 +44717,6 @@ function openNeoNew(){
   const ov = document.createElement('div');
   ov.id = 'neo-modal';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
-  const d = new Date(); d.setDate(d.getDate() + 14);
   ov.innerHTML = `
     <div style="background:var(--card,#fff);border-radius:14px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;padding:20px">
       <h3 style="margin:0 0 4px;font-size:17px">🏷️ عرض قرب انتهاء جديد</h3>
@@ -44753,14 +44754,14 @@ function openNeoNew(){
           <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">السعر المخفض</label>
           <input id="neo-price" type="number" min="0" step="0.01" class="form-input" oninput="neoPreview()" style="width:100%">
         </div>
-        <div>
-          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">ينتهي العرض في</label>
-          <input id="neo-ends" type="date" class="form-input" value="${d.toISOString().slice(0,10)}" style="width:100%">
-        </div>
-        <div>
+        <div style="grid-column:1/-1">
           <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">صلاحية البضاعة <span style="color:#dc2626">*</span></label>
           <input id="neo-exp" type="date" class="form-input" oninput="neoKindChange()" style="width:100%">
         </div>
+      </div>
+      <!-- ⏱️ v596: مفيش تاريخ انتهاء للعرض — الحصّة هي اللي بتقفله -->
+      <div style="font-size:11px;color:var(--muted);background:var(--bg,#f8fafc);border:1px solid var(--border);border-radius:8px;padding:7px 10px;margin-top:8px">
+        ⏱️ العرض بيقفل لوحده أول ما الحصّة تخلص — مفيش تاريخ انتهاء. وتقدر تنهيه بإيدك في أي وقت.
       </div>
 
       <div id="neo-preview" style="margin-top:12px;font-size:12px"></div>
@@ -44867,7 +44868,6 @@ async function saveNeo(){
   if(!_neoPicked){ toast('❌ اختار منتج'); return; }
   const qty = parseInt(document.getElementById('neo-qty')?.value);
   const price = parseFloat(document.getElementById('neo-price')?.value);
-  const endsAt = document.getElementById('neo-ends')?.value || null;
   const expDate = document.getElementById('neo-exp')?.value || null;
   const kind = _neoKind();                                   // 🏷️ v595
   if(!expDate){ toast('❌ ادخل صلاحية البضاعة — بتتكتب في اسم المنتج والـ metafield'); return; }
@@ -44882,7 +44882,7 @@ async function saveNeo(){
   try{
     const r = await apiFetch('/api/near-expiry-offers', 'POST', {
       variantId: _neoPicked.variant_id || _neoPicked.shopify_variant_id,
-      qtyLimit: qty, offerPrice: price, endsAt, expDate, kind     // 🏷️ v595
+      qtyLimit: qty, offerPrice: price, expDate, kind     // ⏱️ v596: مفيش endsAt
     });
     if(r?.error){ toast('❌ ' + r.error); return; }
     toast('✅ العرض بدأ' + (r.marks ? ' · المنتج اتعلّم على Shopify' : ''), 'success');
