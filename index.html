@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v590 — 📍 تغييرات العنوان من Shopify (2026-10-13)
+  📍 v590: صفحة "تغييرات العناوين" — الطلب اللي العميل/إنت عدّلت عنوانه
+  على Shopify بعد التوزيع بيظهر هنا بالقديم والجديد مع زرار اعتماد.
+  OrderPro v589 — 🏷️ صفحة عروض قرب الانتهاء (أونلاين بحصّة) (2026-10-13)
+  🏷️ v589: صفحة مستقلة — عرض بسعر مخفّض وكمية محدودة على الأونلاين،
+  من غير ما أي رصيد يتحرّك، وبيرجع لوحده أول ما الحصّة تخلص.
   OrderPro v588 — 🔘 الضريبة بقت زرار (مطفي افتراضياً) (2026-10-12)
   OrderPro v587 — 🧮 خصم + ضريبة 14% وصافي سعر القطعة (2026-10-12)
   🧮 v587: كل بند: سعر معلن + خصم % + ضريبة %، وبيوضّح صافي القطعة
@@ -1506,6 +1512,9 @@ tr:hover td{background:#fafbff}
   .ds-table thead{display:table-header-group}
   .ds-zone-hdr{page-break-after:avoid;break-after:avoid}
   .ds-note-row{page-break-before:avoid!important;break-before:avoid!important}
+  /* 📝 v591: صفحة الملاحظات المجمّعة */
+  .ds-notes-page{page-break-after:always!important;break-after:page!important}
+  .ds-notes-page .dsn-item{page-break-inside:avoid;break-inside:avoid}
   .ds-foot{page-break-inside:avoid}
   .ds-sec{page-break-after:avoid}
   body{background:#fff!important;overflow:visible!important}
@@ -1784,6 +1793,8 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="delivery-sheet" onclick="goPage(this,'delivery-sheet')"><span class="ni-icon">🖨️</span><span class="ni-label">ورقة التوصيل</span></div>
         <div class="ni" data-p="import-excel" onclick="goPage(this,'import-excel')"><span class="ni-icon">📥</span><span class="ni-label">استيراد Excel</span></div>
         <div class="ni" data-p="problems" onclick="goPage(this,'problems')"><span class="ni-icon">⚠️</span><span class="ni-label">طلبات مشكلة</span><span class="nbadge" id="nb-problems" style="background:var(--danger)"></span></div>
+        <div class="ni" data-p="addr-changes" onclick="goPage(this,'addr-changes')"><span class="ni-icon">📍</span><span class="ni-label">تغييرات العناوين</span><span class="nbadge" id="nb-addr" style="background:#ea580c"></span></div>
+        <div class="ni" data-p="db-size" onclick="goPage(this,'db-size')"><span class="ni-icon">🧹</span><span class="ni-label">حجم الداتابيز</span></div>
       </div>
     </div>
 
@@ -1843,6 +1854,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="snapshots" onclick="goPage(this,'snapshots')"><span class="ni-icon">📸</span><span class="ni-label">حفظ المخزون اليومي</span></div>
         <div class="ni" data-p="zero-stocks" onclick="goPage(this,'zero-stocks')"><span class="ni-icon">⛔</span><span class="ni-label">المنتجات اللي خلصت</span></div>
         <div class="ni" data-p="expiry" onclick="goPage(this,'expiry')"><span class="ni-icon">⏳</span><span class="ni-label">تواريخ الصلاحية</span><span class="nbadge" id="nb-expiry" style="background:var(--danger)"></span></div>
+        <div class="ni" data-p="near-expiry-offers" onclick="goPage(this,'near-expiry-offers')"><span class="ni-icon">🏷️</span><span class="ni-label">عروض قرب الانتهاء</span><span class="nbadge" id="nb-neo" style="background:#ea580c"></span></div>
       </div>
     </div>
 
@@ -6447,9 +6459,16 @@ tr:hover td{background:#fafbff}
 <div class="page" id="page-sales-orphans">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">🧾 بيعات من غير تصفية</h2>
-    <button class="btn btn-primary btn-sm" onclick="orphLoad()">🔄 تحديث</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="orphBackfill(true)" style="background:#0ea5e9;color:#fff;font-weight:700" title="يربط البيعات القديمة بشيفتاتها — معاينة الأول">🔗 اربط البيعات بشيفتاتها</button>
+      <button class="btn btn-primary btn-sm" onclick="orphLoad()">🔄 تحديث</button>
+    </div>
   </div>
-  <div style="font-size:12px;color:var(--muted);margin-bottom:12px">بيعات كاشير مكتملة من أكتر من 6 ساعات ومالهاش تصفية. من v513 التصفية الجاية بتلمّها تلقائي — دي للي وقعوا قبل كده، تقدر تلحقهم بتصفية موجودة.</div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:6px">بيعات كاشير مكتملة من أكتر من 6 ساعات، مالهاش تصفية، و<strong>مش متربطة بأي شيفت</strong>. دي اليتيمة الحقيقية.</div>
+  <div style="background:#eff6ff;border:1px solid #6366f1;border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:11px;color:#3730a3;line-height:1.7">
+    🔗 من v543 كل بيعة جديدة بتتربط بشيفتها وقت ما تتعمل. اضغط <strong>"اربط البيعات بشيفتاتها"</strong> مرة واحدة عشان البيعات القديمة تتربط بأثر رجعي — اللي هيفضل بعدها هو اليتيم الحقيقي.
+  </div>
+  <div id="orph-backfill-box"></div>
   <div id="orph-box"></div>
 </div>
 
@@ -8504,6 +8523,61 @@ tr:hover td{background:#fafbff}
 </div>
 
 <!-- ===== EXPIRY PAGE ===== -->
+<!-- ===== 🧹 v592: حجم الداتابيز ===== -->
+<div class="page" id="page-db-size">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">🧹 حجم الداتابيز والتنظيف</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="loadDbSize()">🔄 تحديث</button>
+      <button class="btn btn-sm" onclick="dbCleanupPreview()" style="background:#0ea5e9;color:#fff;font-weight:700">🔍 شوف هيتمسح إيه</button>
+    </div>
+  </div>
+  <div id="db-total" style="margin-bottom:14px"></div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-hd"><h3>أكبر الجداول</h3></div>
+    <div class="card-body" style="overflow-x:auto"><div id="db-tables">⏳ جاري القياس...</div></div>
+  </div>
+  <div id="db-cleanup-box"></div>
+</div>
+
+<!-- ===== 📍 v590: تغييرات العناوين ===== -->
+<div class="page" id="page-addr-changes">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">📍 تغييرات العناوين من Shopify</h2>
+    <button class="btn btn-ghost btn-sm" onclick="loadAddrChanges()">🔄 تحديث</button>
+  </div>
+  <div style="background:#fff7ed;border:1px solid #fb923c;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#9a3412;line-height:1.8">
+    الطلبات دي عنوانها أو تليفونها اتغيّر على Shopify <strong>بعد</strong> ما اتوزّعت أو اترفعت على بوسطة، فالسيستم مالمسهاش لوحده.
+    راجعها واعتمد الجديد. الطلب اللي لسه ماتوزّعش بيتحدّث تلقائي ومابيظهرش هنا.
+  </div>
+  <div id="addr-list"><div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div></div>
+</div>
+
+<!-- ===== 🏷️ v589: عروض قرب الانتهاء ===== -->
+<div class="page" id="page-near-expiry-offers">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">🏷️ عروض قرب الانتهاء</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="openNeoNew()">➕ عرض جديد</button>
+      <button class="btn btn-ghost btn-sm" onclick="neoCheckNow()" title="شوف دلوقتي لو في عرض خلصت حصّته">🔄 فحص دلوقتي</button>
+      <select id="neo-filter" class="form-input" style="max-width:150px" onchange="loadNeoPage()">
+        <option value="active">الشغّالة</option>
+        <option value="all">الكل</option>
+        <option value="completed">خلصت الحصّة</option>
+        <option value="expired">التاريخ عدّى</option>
+        <option value="cancelled">أُنهيت يدوي</option>
+      </select>
+    </div>
+  </div>
+
+  <div style="background:#eff6ff;border:1px solid #6366f1;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#3730a3;line-height:1.8">
+    💡 العرض بينزّل السعر على <strong>الأونلاين بس</strong> — الكاشير بيفضل على السعر الأصلي.
+    <strong>مفيش أي رصيد بيتحرّك</strong>، والسعر بيرجع لوحده أول ما الكمية تخلص أو التاريخ يعدّي.
+  </div>
+
+  <div id="neo-list"><div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div></div>
+</div>
+
 <div class="page" id="page-expiry">
 
   <!-- 🆕 v249: Tabs (Active vs Pending Confirmation) -->
@@ -9537,7 +9611,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -21895,6 +21969,36 @@ function oiExcel(){
 
 // 🆕 v573: بيعات من غير تصفية
 let _orph=[];
+// 🔗 v594: ربط البيعات القديمة بشيفتاتها
+async function orphBackfill(dryRun){
+  const box = document.getElementById('orph-backfill-box');
+  if(dryRun) box.innerHTML = '<div style="padding:14px;color:var(--muted)">⏳ بيفحص...</div>';
+  try{
+    const r = await apiFetch('/api/pos/sales/backfill-sessions', 'POST', { dryRun: !!dryRun, limit: 20000 });
+    if(r?.error){ toast('❌ ' + r.error); box.innerHTML = ''; return; }
+    if(dryRun){
+      box.innerHTML = `
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-body">
+            <div style="font-weight:800;margin-bottom:8px">🔍 معاينة — مفيش حاجة اتغيرت</div>
+            <div style="font-size:13px;line-height:2">
+              اتفحص: <b>${r.scanned.toLocaleString()}</b> بيعة من غير شيفت<br>
+              هتتربط: <b style="color:#16a34a">${r.matched.toLocaleString()}</b><br>
+              مالهاش شيفت خالص: <b style="color:#dc2626">${r.no_session_found.toLocaleString()}</b> ${r.no_session_found ? '(دي اليتيمة الحقيقية)' : ''}
+            </div>
+            <button class="btn btn-primary" style="margin-top:12px;background:#16a34a;border-color:#16a34a;font-weight:800"
+              onclick="orphBackfill(false)" ${r.matched ? '' : 'disabled'}>🔗 نفّذ الربط</button>
+          </div>
+        </div>`;
+    } else {
+      toast(`✅ اتربط ${r.applied.toLocaleString()} بيعة بشيفتاتها`, 'success');
+      alert(`🔗 خلص\n\nاتربط: ${r.applied.toLocaleString()} بيعة\nلسه من غير شيفت: ${r.still_null.toLocaleString()}\n\n${r.note}`);
+      box.innerHTML = '';
+      orphLoad();
+    }
+  }catch(e){ toast('❌ ' + e.message); box.innerHTML = ''; }
+}
+
 async function orphLoad(){
   const box=$('orph-box'); box.innerHTML='<div class="card"><div style="padding:20px;color:var(--muted)">⏳</div></div>';
   try{
@@ -41896,7 +42000,10 @@ async function _doApproveStocktake(confirmZeroUncounted){
             total_count: data.total_count,
             total_impact_qty: data.total_impact_qty,
             total_impact_value: data.total_impact_value,
-            uncounted_with_stock: data.uncounted_with_stock
+            uncounted_with_stock: data.uncounted_with_stock,
+            negative_count: data.negative_count,          // 🧮 v593
+            negative_add_qty: data.negative_add_qty,
+            negative_items: data.negative_items
           });
           return;
         }
@@ -42641,15 +42748,30 @@ function _showZeroUncountedConfirmModal(info){
       <!-- Banner تنبيهي -->
       <div style="padding:14px 20px;background:#fef3c7;border-bottom:1px solid #fbbf24;font-size:12px;color:#78350f;line-height:1.7">
         <strong>📦 إنت في وضع "جرد كلي"</strong> — يعني المراقب لازم يكون لف على كل منتجات المخزن.<br>
-        المنتجات اللي ما اتعدتش وعندها stock في النظام يعني الأرجح <strong>إنها مش موجودة فعلياً</strong> (المراقب مش هياخدها).<br>
+        المنتجات اللي ما اتعدتش وعندها رصيد في النظام يعني الأرجح <strong>إنها مش موجودة فعلياً</strong>.<br>
         لو اعتمدت، هـ يتم تصفير كميات الـ ${info.total_count} منتج دول في Shopify.
       </div>
+
+      ${(info.negative_count || 0) > 0 ? `
+      <!-- 🧮 v593: الأرصدة السالبة — التصفير هنا بيزوّد مخزون -->
+      <div style="padding:14px 20px;background:#7f1d1d;color:#fff;border-bottom:1px solid #991b1b;font-size:12px;line-height:1.8">
+        <div style="font-weight:900;font-size:14px;margin-bottom:6px">⚠️ ${info.negative_count} منتج رصيده <u>سالب</u> في النظام</div>
+        تصفيرهم مش بيقلّل مخزون — <strong>بيزوّد ${(info.negative_add_qty || 0).toLocaleString()} قطعة على Shopify</strong>.
+        دي كانت بتحصل قبل كده من غير ما تظهرلك خالص.
+        <div style="max-height:130px;overflow-y:auto;margin-top:8px;background:rgba(255,255,255,.1);border-radius:6px;padding:6px 10px">
+          ${(info.negative_items || []).map(x => `
+            <div style="display:flex;justify-content:space-between;gap:8px;padding:2px 0;font-size:11px">
+              <span>${escapeHtml((x.product_title || x.sku || '').slice(0, 45))}</span>
+              <span style="white-space:nowrap;font-family:monospace;font-weight:800">${x.system_qty} ← 0 <span style="color:#fca5a5">(+${x.will_add})</span></span>
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
       
       <!-- Stats -->
       <div style="padding:14px 20px;background:var(--bg);border-bottom:1px solid var(--border)">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
           <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
-            <div style="font-size:10px;color:var(--muted);font-weight:700">المنتجات</div>
+            <div style="font-size:10px;color:var(--muted);font-weight:700">المنتجات (موجب + سالب)</div>
             <div style="font-size:18px;font-weight:900;color:var(--danger)">${info.total_count}</div>
           </div>
           <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
@@ -44286,6 +44408,517 @@ async function loadMonthlyReport(){
 let _batchesData = { products: [] };
 let _batchesPendingData = [];
 let _expCurrentTab = 'active';
+
+// ═══════════ 🧹 v592: حجم الداتابيز والتنظيف ═══════════
+function _mb(b){
+  if(!b) return '0';
+  if(b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
+  if(b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+  return (b / 1024).toFixed(0) + ' KB';
+}
+
+async function loadDbSize(){
+  const box = document.getElementById('db-tables');
+  if(!box) return;
+  box.innerHTML = '⏳ جاري القياس...';
+  try{
+    const r = await apiFetch('/api/admin/db-size');
+    document.getElementById('db-total').innerHTML = `
+      <div style="background:linear-gradient(135deg,#eef2ff,#fff);border:1px solid #6366f1;border-radius:12px;padding:16px;text-align:center">
+        <div style="font-size:12px;color:#4338ca;font-weight:700">الحجم الكلي للداتابيز</div>
+        <div style="font-size:30px;font-weight:900;color:#3730a3;font-family:monospace;margin-top:4px">${_mb(r.db_bytes)}</div>
+      </div>`;
+    const top = (r.tables || []).filter(x => x.total_bytes > 0).slice(0, 25);
+    const max = top[0]?.total_bytes || 1;
+    box.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:var(--bg)">
+          <th style="padding:8px;text-align:right">الجدول</th>
+          <th style="padding:8px;text-align:center">الإجمالي</th>
+          <th style="padding:8px;text-align:center" title="الـ TEXT/JSONB الكبير بيتخزن هنا">محتوى كبير</th>
+          <th style="padding:8px;text-align:center">الفهارس</th>
+          <th style="padding:8px;text-align:center">صفوف (تقريبي)</th>
+          <th style="padding:8px;width:130px"></th>
+        </tr></thead>
+        <tbody>
+          ${top.map(x => `
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:7px;font-family:monospace;font-weight:700">${escapeHtml(x.table_name)}</td>
+              <td style="padding:7px;text-align:center;font-weight:800;font-family:monospace">${_mb(x.total_bytes)}</td>
+              <td style="padding:7px;text-align:center;font-family:monospace;color:${x.toast_bytes > 10485760 ? '#dc2626;font-weight:800' : 'var(--muted)'}">${x.toast_bytes ? _mb(x.toast_bytes) : '—'}</td>
+              <td style="padding:7px;text-align:center;font-family:monospace;color:var(--muted)">${_mb(x.index_bytes)}</td>
+              <td style="padding:7px;text-align:center;font-family:monospace;color:var(--muted)">${x.approx_rows.toLocaleString()}</td>
+              <td style="padding:7px">
+                <div style="background:#e5e7eb;border-radius:99px;height:7px"><div style="background:#6366f1;height:100%;border-radius:99px;width:${Math.round(x.total_bytes * 100 / max)}%"></div></div>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }catch(e){
+    box.innerHTML = `<div style="color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function dbCleanupPreview(){
+  const box = document.getElementById('db-cleanup-box');
+  box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">⏳ بيحسب...</div>';
+  try{
+    const r = await apiFetch('/api/admin/db-cleanup', 'POST', { dryRun: true });
+    if(r?.error){ box.innerHTML = `<div style="color:var(--danger)">❌ ${escapeHtml(r.error)}</div>`; return; }
+    const rows = (r.results || []);
+    const totalRows = rows.reduce((s, x) => s + (x.matched || 0), 0);
+    box.innerHTML = `
+      <div class="card">
+        <div class="card-hd"><h3>🔍 معاينة التنظيف — مفيش حاجة اتمسحت</h3></div>
+        <div class="card-body">
+          <div style="background:#f0fdf4;border:1px solid #16a34a;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:#166534;line-height:1.8">
+            ✅ <strong>مفيش حاجة مالية بتتمسح</strong> — الطلبات والبيعات والتصفيات والفواتير مستثناة تماماً.
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:var(--bg)">
+              <th style="padding:8px;text-align:right">اللي هيتمسح</th>
+              <th style="padding:8px;text-align:center;width:90px">أقدم من</th>
+              <th style="padding:8px;text-align:center;width:110px">عدد الصفوف</th>
+            </tr></thead>
+            <tbody>
+              ${rows.map(x => `
+                <tr style="border-top:1px solid var(--border)">
+                  <td style="padding:7px">${escapeHtml(x.label)}${x.error ? `<div style="color:var(--danger);font-size:10px">${escapeHtml(x.error)}</div>` : ''}</td>
+                  <td style="padding:7px;text-align:center;font-family:monospace">${x.days} يوم</td>
+                  <td style="padding:7px;text-align:center;font-weight:800;font-family:monospace;color:${x.matched ? '#dc2626' : 'var(--muted)'}">${(x.matched || 0).toLocaleString()}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+          <div style="margin-top:12px;background:#fffbeb;border:1px solid #f59e0b;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;line-height:1.8">
+            ⚠️ Postgres مابيرجّعش المساحة للقرص بعد المسح على طول — بترجع للاستخدام الداخلي.
+            عشان الفاتورة تنزل فعلاً محتاج <b>VACUUM FULL</b> (بيقفل الجداول شوية) — اعمله من Railway في وقت هادي.
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:10px;flex-wrap:wrap">
+            <div style="font-weight:800">الإجمالي: <span style="font-family:monospace;color:#dc2626">${totalRows.toLocaleString()}</span> صف</div>
+            <button class="btn btn-primary" onclick="dbCleanupRun()" ${totalRows ? '' : 'disabled'} style="background:#dc2626;border-color:#dc2626;font-weight:800">🧹 نفّذ التنظيف</button>
+          </div>
+        </div>
+      </div>`;
+  }catch(e){
+    box.innerHTML = `<div style="color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function dbCleanupRun(){
+  if(!confirm('🧹 تنفّذ التنظيف؟\n\nمفيش حاجة مالية بتتمسح — سجلات ولوجات وكاش بس.\nوهيشتغل VACUUM بعدها عشان المساحة ترجع للاستخدام.')) return;
+  toast('🧹 جاري التنظيف...');
+  try{
+    const r = await apiFetch('/api/admin/db-cleanup', 'POST', { dryRun: false, vacuum: true });
+    if(r?.error){ toast('❌ ' + r.error); return; }
+    const applied = (r.results || []).reduce((s, x) => s + (x.applied || 0), 0);
+    const freed = (r.db_bytes_before || 0) - (r.db_bytes_after || 0);
+    alert(`✅ اتمسح ${applied.toLocaleString()} صف\n\n` +
+          (r.results || []).filter(x => x.applied).map(x => `• ${x.label}: ${x.applied.toLocaleString()}`).join('\n') +
+          `\n\nالحجم: ${_mb(r.db_bytes_before)} ← ${_mb(r.db_bytes_after)}` +
+          (freed > 0 ? `  (اتفضى ${_mb(freed)})` : '\n\nℹ️ الحجم مانزلش على القرص — ده طبيعي، محتاج VACUUM FULL من Railway.'));
+    document.getElementById('db-cleanup-box').innerHTML = '';
+    loadDbSize();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// ═══════════ 📍 v590: تغييرات العناوين من Shopify ═══════════
+let _addrChanges = [];
+
+async function loadAddrChanges(){
+  const box = document.getElementById('addr-list');
+  if(!box) return;
+  box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div>';
+  try{
+    const r = await apiFetch('/api/orders/address-changes');
+    _addrChanges = r?.orders || [];
+    renderAddrChanges();
+    const b = document.getElementById('nb-addr');
+    if(b){ b.textContent = _addrChanges.length || ''; b.style.display = _addrChanges.length ? '' : 'none'; }
+  }catch(e){
+    box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderAddrChanges(){
+  const box = document.getElementById('addr-list');
+  if(!_addrChanges.length){
+    box.innerHTML = `<div style="text-align:center;padding:50px;color:var(--success)">
+      <div style="font-size:42px;margin-bottom:8px">✅</div><div>مفيش تغييرات محتاجة مراجعة</div></div>`;
+    return;
+  }
+  const LBL = { name:'الاسم', phone:'التليفون', area:'المنطقة', addr:'العنوان', addr2:'تفاصيل العنوان' };
+  box.innerHTML = _addrChanges.map(o => {
+    const oldV = o.address_change_old || {};
+    const newV = o.address_change_new || {};
+    const keys = [...new Set([...Object.keys(oldV), ...Object.keys(newV)])];
+    const shipped = !!(o.bosta_id || o.bosta_exported);
+    return `
+    <div class="card" style="padding:14px;margin-bottom:10px;border-right:4px solid #ea580c">
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+        <div>
+          <div style="font-weight:800;font-size:14px">${escapeHtml(o.id)} · ${escapeHtml(o.name || '')}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">
+            ${escapeHtml(o.status || '')}${o.courier_name ? ` · مندوب: ${escapeHtml(o.courier_name)}` : ''}${shipped ? ' · 📦 على بوسطة' : ''}
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted)">
+          ${o.address_change_at ? new Date(o.address_change_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'}) : ''}
+        </div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:var(--bg)">
+          <th style="padding:6px;text-align:right;width:110px">الحقل</th>
+          <th style="padding:6px;text-align:right">القديم (اللي في السيستم)</th>
+          <th style="padding:6px;text-align:right">الجديد (من Shopify)</th>
+        </tr></thead>
+        <tbody>
+          ${keys.map(k => `
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:6px;font-weight:700">${LBL[k] || k}</td>
+              <td style="padding:6px;color:#dc2626;text-decoration:line-through">${escapeHtml(String(oldV[k] ?? '—'))}</td>
+              <td style="padding:6px;color:#16a34a;font-weight:700">${escapeHtml(String(newV[k] ?? '—'))}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+
+      ${shipped ? `<div style="margin-top:8px;background:#7f1d1d;border-radius:6px;padding:8px 10px;font-size:11px;color:#fff">
+        ⚠️ الطلب اترفع على بوسطة بالعنوان القديم — الاعتماد هنا بيصلّح السيستم بس، <strong>لازم تعدّله على بوسطة كمان</strong>.
+      </div>` : ''}
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="dismissAddrChange('${escapeHtml(o.id)}')">تجاهل</button>
+        <button class="btn btn-primary btn-sm" onclick="applyAddrChange('${escapeHtml(o.id)}')" style="background:#16a34a;border-color:#16a34a;font-weight:700">✅ اعتمد الجديد</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function applyAddrChange(id){
+  if(!confirm('✅ تعتمد العنوان الجديد على الطلب ده؟')) return;
+  try{
+    const r = await apiFetch(`/api/orders/${encodeURIComponent(id)}/apply-address-change`, 'POST', {});
+    if(r?.error){ toast('❌ ' + r.error); return; }
+    toast('✅ العنوان اتحدّث' + (r.zoneReset ? ' · المنطقة اتغيّرت فالتوزيع محتاج مراجعة' : ''), 'success');
+    if(r.warn_bosta) alert('⚠️ ' + r.warn_bosta);
+    loadAddrChanges();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function dismissAddrChange(id){
+  if(!confirm('تتجاهل التغيير ده؟ الطلب هيفضل بالعنوان القديم.')) return;
+  try{
+    await apiFetch(`/api/orders/${encodeURIComponent(id)}/dismiss-address-change`, 'POST', {});
+    toast('تم التجاهل');
+    loadAddrChanges();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// ═══════════ 🏷️ v589: عروض قرب الانتهاء ═══════════
+let _neoOffers = [];
+let _neoPicked = null;
+let _neoSearchTimer = null;
+
+async function loadNeoPage(){
+  const box = document.getElementById('neo-list');
+  if(!box) return;
+  const status = document.getElementById('neo-filter')?.value || 'active';
+  box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div>';
+  try{
+    const r = await apiFetch('/api/near-expiry-offers?status=' + encodeURIComponent(status));
+    _neoOffers = r?.offers || [];
+    renderNeoList();
+    const badge = document.getElementById('nb-neo');
+    if(badge){
+      const n = _neoOffers.filter(o => o.status === 'active').length;
+      badge.textContent = n || '';
+      badge.style.display = n ? '' : 'none';
+    }
+  }catch(e){
+    box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderNeoList(){
+  const box = document.getElementById('neo-list');
+  if(!_neoOffers.length){
+    box.innerHTML = `<div style="text-align:center;padding:50px;color:var(--muted)">
+      <div style="font-size:42px;margin-bottom:8px">🏷️</div>
+      <div>مفيش عروض</div>
+      <div style="font-size:12px;margin-top:6px">اضغط "➕ عرض جديد" لما يكون عندك بضاعة قربت تنتهي</div>
+    </div>`;
+    return;
+  }
+  const stLabel = {
+    active:    { t: '⏳ شغّال',        c: '#16a34a' },
+    completed: { t: '✅ خلصت الحصّة',  c: '#6366f1' },
+    expired:   { t: '📅 التاريخ عدّى', c: '#ca8a04' },
+    cancelled: { t: '🚫 أُنهي يدوي',   c: '#6d7175' }
+  };
+  box.innerHTML = _neoOffers.map(o => {
+    const st = stLabel[o.status] || { t: o.status, c: '#6d7175' };
+    const sold = parseInt(o.sold_qty) || 0;
+    const limit = parseInt(o.qty_limit) || 0;
+    const pct = limit ? Math.min(100, Math.round(sold * 100 / limit)) : 0;
+    const off = o.original_price > 0 ? Math.round((1 - o.offer_price / o.original_price) * 100) : 0;
+    const daysLeft = o.ends_at ? Math.ceil((new Date(o.ends_at) - new Date()) / 86400000) : null;
+    return `
+    <div class="card" style="padding:14px;margin-bottom:10px;border-right:4px solid ${st.c}">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
+        <div style="flex:1;min-width:220px">
+          <div style="font-weight:800;font-size:14px">${escapeHtml(o.product_title || '')}${o.variant_title && o.variant_title !== 'Default Title' ? ` · ${escapeHtml(o.variant_title)}` : ''}</div>
+          <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:2px">${escapeHtml(o.sku || '')}</div>
+          <div style="margin-top:8px;font-size:14px">
+            <b style="color:#dc2626;font-family:monospace">${parseFloat(o.offer_price).toFixed(2)} ج</b>
+            <span style="color:var(--muted);text-decoration:line-through;font-family:monospace;font-size:12px;margin-right:6px">${parseFloat(o.original_price).toFixed(2)}</span>
+            <span style="background:#fee2e2;color:#991b1b;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:800;margin-right:6px">−${off}%</span>
+          </div>
+        </div>
+        <div style="text-align:left">
+          <div style="font-weight:800;color:${st.c};font-size:13px">${st.t}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">${o.kind === 'best_before' ? '📅 Best Before' : '⏳ قرب انتهاء'}${o.marks_applied ? ' · 🏷️ متعلّم' : ''}</div>
+          ${o.exp_date ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">صلاحية البضاعة: ${String(o.exp_date).slice(0,10)}</div>` : ''}
+          ${o.status === 'active' && daysLeft != null ? `<div style="font-size:11px;color:${daysLeft <= 2 ? '#dc2626' : 'var(--muted)'};margin-top:2px">${daysLeft >= 0 ? `ينتهي خلال ${daysLeft} يوم` : 'التاريخ عدّى'}</div>` : ''}
+          ${o.stock_now != null ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">الرصيد دلوقتي: ${o.stock_now}</div>` : ''}
+        </div>
+      </div>
+
+      <div style="margin-top:10px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:4px">
+          <span>اتباع ${sold} من ${limit}</span>
+          <span style="color:${pct >= 100 ? '#16a34a' : 'var(--muted)'}">${pct}%${limit > sold ? ` · باقي ${limit - sold}` : ''}</span>
+        </div>
+        <div style="background:#e5e7eb;border-radius:99px;height:8px;overflow:hidden">
+          <div style="background:${pct >= 100 ? '#16a34a' : '#f59e0b'};height:100%;width:${pct}%;transition:width .4s"></div>
+        </div>
+      </div>
+
+      ${o.last_error ? `<div style="margin-top:8px;background:#fef2f2;border:1px solid #ef4444;border-radius:6px;padding:6px 10px;font-size:11px;color:#991b1b">⚠️ ${escapeHtml(o.last_error)}</div>` : ''}
+      ${o.marks_error ? `<div style="margin-top:8px;background:#7f1d1d;border-radius:6px;padding:6px 10px;font-size:11px;color:#fff">🏷️ ${escapeHtml(o.marks_error)}</div>` : ''}
+
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap">
+        <div style="font-size:10px;color:var(--muted)">
+          بدأ ${new Date(o.started_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'})}${o.created_by ? ` · ${escapeHtml(o.created_by)}` : ''}
+          ${o.ended_at ? ` · قفل ${new Date(o.ended_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'})}` : ''}
+        </div>
+        ${o.status === 'active'
+          ? `<button class="btn btn-sm" onclick="endNeo(${o.id})" style="background:#dc2626;border-color:#dc2626;color:#fff;font-weight:700">⏹️ إنهاء ورجّع السعر</button>`
+          : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openNeoNew(){
+  _neoPicked = null;
+  document.getElementById('neo-modal')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'neo-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+  const d = new Date(); d.setDate(d.getDate() + 14);
+  ov.innerHTML = `
+    <div style="background:var(--card,#fff);border-radius:14px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;padding:20px">
+      <h3 style="margin:0 0 4px;font-size:17px">🏷️ عرض قرب انتهاء جديد</h3>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px">السعر هينزل على الأونلاين بس — الكاشير مش هيتأثر، ومفيش رصيد هيتحرّك.</div>
+
+      <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">المنتج</label>
+      <input id="neo-search" class="form-input" placeholder="🔎 اسم أو SKU أو باركود..." oninput="neoSearch()" autocomplete="off" style="width:100%">
+      <div id="neo-results" style="display:none;max-height:190px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-top:6px"></div>
+      <div id="neo-picked" style="display:none;background:#f0fdf4;border:1px solid #16a34a;border-radius:8px;padding:10px;margin-top:8px;font-size:12px"></div>
+
+      <!-- 🏷️ v595: نوع العلامة -->
+      <div style="margin-top:14px">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:5px">نوع العلامة على Shopify</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <label id="neo-kind-ne-lbl" style="border:2px solid #ea580c;background:#fff7ed;border-radius:10px;padding:9px;cursor:pointer;text-align:center">
+            <input type="radio" name="neo-kind" value="near_expire" checked onchange="neoKindChange()" style="display:none">
+            <div style="font-weight:800;font-size:13px">⏳ قرب انتهاء</div>
+            <div style="font-size:10px;color:#9a3412;margin-top:2px">near-expire</div>
+          </label>
+          <label id="neo-kind-bb-lbl" style="border:2px solid var(--border);border-radius:10px;padding:9px;cursor:pointer;text-align:center">
+            <input type="radio" name="neo-kind" value="best_before" onchange="neoKindChange()" style="display:none">
+            <div style="font-weight:800;font-size:13px">📅 Best Before</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">best-before</div>
+          </label>
+        </div>
+        <div id="neo-marks-hint" style="font-size:11px;color:#9a3412;background:#fff7ed;border:1px solid #fb923c;border-radius:8px;padding:8px 10px;margin-top:8px;line-height:1.7"></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">الكمية (الحصّة)</label>
+          <input id="neo-qty" type="number" min="1" step="1" class="form-input" placeholder="60" style="width:100%">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">السعر المخفض</label>
+          <input id="neo-price" type="number" min="0" step="0.01" class="form-input" oninput="neoPreview()" style="width:100%">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">ينتهي العرض في</label>
+          <input id="neo-ends" type="date" class="form-input" value="${d.toISOString().slice(0,10)}" style="width:100%">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">صلاحية البضاعة <span style="color:#dc2626">*</span></label>
+          <input id="neo-exp" type="date" class="form-input" oninput="neoKindChange()" style="width:100%">
+        </div>
+      </div>
+
+      <div id="neo-preview" style="margin-top:12px;font-size:12px"></div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn btn-ghost" onclick="document.getElementById('neo-modal').remove()">إلغاء</button>
+        <button class="btn btn-primary" onclick="saveNeo()" style="background:#ea580c;border-color:#ea580c">🏷️ ابدأ العرض</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  neoKindChange();
+  setTimeout(() => document.getElementById('neo-search')?.focus(), 100);
+}
+
+function neoSearch(){
+  const q = document.getElementById('neo-search')?.value.trim() || '';
+  const box = document.getElementById('neo-results');
+  if(!box) return;
+  if(q.length < 2){ box.style.display = 'none'; return; }
+  if(_neoSearchTimer) clearTimeout(_neoSearchTimer);
+  _neoSearchTimer = setTimeout(async () => {
+    try{
+      const r = await apiFetch('/api/inventory/search?q=' + encodeURIComponent(q) + '&limit=20');
+      const list = r?.results || [];
+      box.innerHTML = list.length
+        ? list.map((v, i) => `
+            <div onclick='neoPick(${JSON.stringify(JSON.stringify(v))})' style="padding:9px 10px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px">
+              <div style="font-weight:700">${escapeHtml(v.product_title || v.title || '')}${v.variant_title && v.variant_title !== 'Default Title' ? ' · ' + escapeHtml(v.variant_title) : ''}</div>
+              <div style="color:var(--muted);font-size:11px;font-family:monospace">${escapeHtml(v.sku || '')}${v.price ? ` · ${parseFloat(v.price).toFixed(2)} ج` : ''}</div>
+            </div>`).join('')
+        : '<div style="padding:10px;text-align:center;color:var(--muted);font-size:12px">مفيش نتائج</div>';
+      box.style.display = 'block';
+    }catch(e){ box.style.display = 'none'; }
+  }, 300);
+}
+
+function neoPick(json){
+  try{ _neoPicked = JSON.parse(json); }catch(e){ return; }
+  document.getElementById('neo-results').style.display = 'none';
+  document.getElementById('neo-search').value = '';
+  const el = document.getElementById('neo-picked');
+  const price = parseFloat(_neoPicked.price) || 0;
+  el.style.display = 'block';
+  neoKindChange();
+  el.innerHTML = `<b>${escapeHtml(_neoPicked.product_title || _neoPicked.title || '')}</b>
+    ${_neoPicked.variant_title && _neoPicked.variant_title !== 'Default Title' ? ` · ${escapeHtml(_neoPicked.variant_title)}` : ''}
+    <div style="font-family:monospace;color:var(--muted);margin-top:3px">${escapeHtml(_neoPicked.sku || '')} · السعر الحالي ${price.toFixed(2)} ج</div>`;
+  neoPreview();
+}
+
+// 🏷️ v595: نوع العلامة + معاينة اللي هيتغيّر على Shopify
+function _neoKind(){
+  return document.querySelector('input[name="neo-kind"]:checked')?.value || 'near_expire';
+}
+
+function neoKindChange(){
+  const k = _neoKind();
+  const ne = document.getElementById('neo-kind-ne-lbl');
+  const bb = document.getElementById('neo-kind-bb-lbl');
+  if(ne) { ne.style.borderColor = k === 'near_expire' ? '#ea580c' : 'var(--border)'; ne.style.background = k === 'near_expire' ? '#fff7ed' : 'transparent'; }
+  if(bb) { bb.style.borderColor = k === 'best_before' ? '#ea580c' : 'var(--border)'; bb.style.background = k === 'best_before' ? '#fff7ed' : 'transparent'; }
+
+  const hint = document.getElementById('neo-marks-hint');
+  if(!hint) return;
+  const exp = document.getElementById('neo-exp')?.value;
+  const name = _neoPicked ? (_neoPicked.product_title || _neoPicked.title || '') : 'اسم المنتج';
+  if(!exp){
+    hint.innerHTML = '📅 ادخل <b>صلاحية البضاعة</b> عشان نوريك الاسم الجديد — التاريخ بيتكتب في الاسم والـ metafield.';
+    return;
+  }
+  const d = new Date(exp);
+  const dd = String(d.getDate()).padStart(2,'0'), mm = String(d.getMonth()+1).padStart(2,'0'), y = d.getFullYear();
+  const title = k === 'best_before'
+    ? `BB:"${d.getDate()}-${d.getMonth()+1}-${y}"${name}`
+    : `"EX: ${dd}-${mm}-${y}" ${name}`;
+  hint.innerHTML = `
+    <div style="font-weight:800;margin-bottom:4px">اللي هيتعمل على Shopify أوتوماتيك:</div>
+    📝 الاسم: <b style="font-family:monospace">${escapeHtml(title)}</b><br>
+    🏷️ تاج: <b>clearance</b><br>
+    🎨 التمبلت: <b>${k === 'best_before' ? 'best-before' : 'near-expire'}</b><br>
+    🗂️ metafield: <b>${k === 'best_before' ? 'Best Before' : 'Near Expiry'}</b> = ${exp}<br>
+    <span style="color:#166534">↩️ كل ده بيترجع زي ما كان أول ما العرض يقفل.</span>`;
+}
+
+function neoPreview(){
+  const el = document.getElementById('neo-preview');
+  if(!el) return;
+  const orig = parseFloat(_neoPicked?.price) || 0;
+  const np = parseFloat(document.getElementById('neo-price')?.value) || 0;
+  if(!orig || !np){ el.innerHTML = ''; return; }
+  if(np >= orig){
+    el.innerHTML = `<div style="color:#dc2626;font-weight:700">⚠️ السعر المخفض لازم يكون أقل من ${orig.toFixed(2)}</div>`;
+    return;
+  }
+  const off = Math.round((1 - np / orig) * 100);
+  el.innerHTML = `<div style="background:#fff7ed;border:1px solid #fb923c;border-radius:8px;padding:10px;color:#9a3412;line-height:1.9">
+    🌐 <b>أونلاين:</b> <span style="font-family:monospace">${np.toFixed(2)}</span> ج <span style="background:#fee2e2;color:#991b1b;border-radius:99px;padding:1px 7px;font-size:11px;font-weight:800">−${off}%</span><br>
+    🏪 <b>الكاشير:</b> <span style="font-family:monospace">${orig.toFixed(2)}</span> ج (زي ما هو)<br>
+    📦 <b>الرصيد:</b> مش هيتحرّك خالص
+  </div>`;
+}
+
+async function saveNeo(){
+  if(!_neoPicked){ toast('❌ اختار منتج'); return; }
+  const qty = parseInt(document.getElementById('neo-qty')?.value);
+  const price = parseFloat(document.getElementById('neo-price')?.value);
+  const endsAt = document.getElementById('neo-ends')?.value || null;
+  const expDate = document.getElementById('neo-exp')?.value || null;
+  const kind = _neoKind();                                   // 🏷️ v595
+  if(!expDate){ toast('❌ ادخل صلاحية البضاعة — بتتكتب في اسم المنتج والـ metafield'); return; }
+  if(!qty || qty <= 0){ toast('❌ ادخل الكمية'); return; }
+  if(!price || price <= 0){ toast('❌ ادخل السعر المخفض'); return; }
+  const orig = parseFloat(_neoPicked.price) || 0;
+  if(price >= orig){ toast(`❌ السعر لازم أقل من ${orig.toFixed(2)}`); return; }
+
+  if(!confirm(`🏷️ تبدأ العرض؟\n\n${_neoPicked.product_title || ''}\nأونلاين: ${price.toFixed(2)} بدل ${orig.toFixed(2)}\nالحصّة: ${qty} قطعة\nالنوع: ${kind === 'best_before' ? 'Best Before' : 'قرب انتهاء'}\n\nهيتعمل على Shopify: الاسم + تاج clearance + التمبلت + الـ metafield.\nوكله هيترجع زي ما كان أول ما الحصّة تخلص.`)) return;
+
+  toast('🔄 جاري تنزيل السعر على Shopify...');
+  try{
+    const r = await apiFetch('/api/near-expiry-offers', 'POST', {
+      variantId: _neoPicked.variant_id || _neoPicked.shopify_variant_id,
+      qtyLimit: qty, offerPrice: price, endsAt, expDate, kind     // 🏷️ v595
+    });
+    if(r?.error){ toast('❌ ' + r.error); return; }
+    toast('✅ العرض بدأ' + (r.marks ? ' · المنتج اتعلّم على Shopify' : ''), 'success');
+    document.getElementById('neo-modal')?.remove();
+    loadNeoPage();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function endNeo(id){
+  const o = _neoOffers.find(x => x.id === id);
+  if(!o) return;
+  if(!confirm(`⏹️ تنهي العرض وترجّع السعر لـ ${parseFloat(o.original_price).toFixed(2)} ج؟`)) return;
+  toast('🔄 جاري إرجاع السعر...');
+  try{
+    const r = await apiFetch(`/api/near-expiry-offers/${id}/end`, 'POST', {});
+    if(r?.error){ toast('❌ ' + r.error); return; }
+    toast(`✅ السعر رجع ${parseFloat(r.back_to).toFixed(2)} · اتباع ${r.sold}`, 'success');
+    loadNeoPage();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function neoCheckNow(){
+  toast('🔄 جاري الفحص...');
+  try{
+    const r = await apiFetch('/api/near-expiry-offers/check', 'POST', {});
+    if(r?.error){ toast('❌ ' + r.error); return; }
+    if(r.closed?.length){
+      alert('🏷️ العروض اللي قفلت:\n\n' + r.closed.map(c =>
+        `• ${c.product_title || c.sku}: ${c.reason} (${c.sold}/${c.qty_limit}) → رجع ${parseFloat(c.back_to).toFixed(2)} ج`).join('\n'));
+    } else {
+      toast(`✅ اتفحص ${r.checked} عرض — مفيش حاجة خلصت`);
+    }
+    if(r.errors?.length) alert('⚠️ أخطاء:\n\n' + r.errors.map(e => `• ${e.sku}: ${e.error}`).join('\n'));
+    loadNeoPage();
+  }catch(e){ toast('❌ ' + e.message); }
+}
 
 async function loadBatchesPage(){
   // حمل الـ stats
@@ -50789,6 +51422,9 @@ function refreshAll(){
     case 'shop-accounting': renderShopAccounting(); break;
     case 'checks': (typeof chkRenderActive==='function' ? chkRenderActive : renderChecksPage)(); break;
     case 'expiry': loadBatchesPage(); break;
+    case 'near-expiry-offers': loadNeoPage(); break;
+    case 'addr-changes': loadAddrChanges(); break;
+    case 'db-size': loadDbSize(); break;
     case 'courier-orders': renderCourierOrdersPage(); break;
     case 'accounting': renderAcc();renderAccDet(); break;
     case 'reports': renderReports(); break;
@@ -50819,6 +51455,98 @@ try{ dsLastPrintTimes = JSON.parse(localStorage.getItem('ds_last_print')||'{}');
 let dsRowNum = 0;
 
 
+
+// 📝 v591: ملاحظة الطلب (نفس أولوية صف الملاحظة في الجدول)
+function dsNoteOf(o){
+  return String(o.orderNote || o.note || o.customerNote || '').trim();
+}
+
+function today0(){
+  return new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+}
+
+// 📝 v591: صفحة الملاحظات المجمّعة — أول صفحة في الطباعة
+function dsNotesPageHtml(noted, c, today){
+  if(!noted || !noted.length) return '';
+  return `
+  <div class="ds-notes-page" style="border:3px solid #d97706;border-radius:10px;padding:16px;margin-bottom:14px;background:#fffbeb">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;border-bottom:2px solid #d97706;padding-bottom:10px;margin-bottom:12px">
+      <div>
+        <div style="font-size:20px;font-weight:900;color:#92400e">📝 ملاحظات مهمة — اقرأها قبل التوصيل</div>
+        <div style="font-size:12px;color:#b45309;margin-top:3px">${noted.length} طلب عليه ملاحظة من إجمالي طلبات الورقة</div>
+      </div>
+      <div style="text-align:left">
+        <div style="font-weight:800;font-size:14px">${escapeHtml(c.name || '')}</div>
+        <div style="font-size:11px;color:#b45309">${today}</div>
+      </div>
+    </div>
+
+    ${noted.map((o, i) => {
+      const note = dsNoteOf(o).replace(/[<>]/g, '');
+      const addr = [o.addr || o.area || '', o.province].filter(Boolean).filter((v,j,a)=>a.indexOf(v)===j).join(' — ');
+      return `
+      <div class="dsn-item" style="display:flex;gap:10px;align-items:flex-start;background:#fff;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+        <div style="min-width:26px;height:26px;border-radius:50%;background:#d97706;color:#fff;font-weight:900;font-size:12px;display:flex;align-items:center;justify-content:center">${i + 1}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:800;font-size:13px">${escapeHtml(o.id)} · ${escapeHtml(o.name || '')}
+            <span style="font-weight:600;color:#6b7280;font-size:11px;direction:ltr;display:inline-block">${escapeHtml(o.phone || '')}</span>
+          </div>
+          <div style="font-size:11px;color:#6b7280;margin-top:2px">${escapeHtml(addr)}</div>
+          <div style="margin-top:6px;font-size:13px;font-weight:700;color:#7c2d12;line-height:1.7;background:#fef3c7;border-right:3px solid #d97706;padding:6px 10px;border-radius:6px">${escapeHtml(note)}</div>
+        </div>
+        <div style="min-width:70px;text-align:center">
+          <div style="font-weight:900;color:#b91c1c;font-size:13px">${o.paid ? 'مدفوع' : (o.total || 0).toLocaleString() + ' ج'}</div>
+          <div style="width:20px;height:20px;border:2px solid #92400e;border-radius:4px;margin:6px auto 0"></div>
+          <div style="font-size:9px;color:#92400e">تم</div>
+        </div>
+      </div>`;
+    }).join('')}
+
+    <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:flex-end;gap:20px">
+      <div style="font-size:11px;color:#92400e;font-weight:700">⚠️ المندوب مسؤول عن تنفيذ الملاحظات دي — راجعها قبل ما تخرج</div>
+      <div style="text-align:center">
+        <div style="width:150px;border-bottom:1px solid #000;height:26px"></div>
+        <div style="font-size:10px;color:#92400e">توقيع المندوب — قرأت الملاحظات</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// 📝 v591: تنبيه لازم يتقرا قبل الطباعة
+function dsShowNotesAlert(noted, onConfirm){
+  document.getElementById('ds-notes-modal')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'ds-notes-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10001;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML = `
+    <div style="background:#fff;border-radius:14px;max-width:620px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden">
+      <div style="background:#d97706;color:#fff;padding:14px 18px">
+        <div style="font-size:17px;font-weight:900">📝 فيه ${noted.length} طلب عليه ملاحظة</div>
+        <div style="font-size:12px;opacity:.95;margin-top:2px">اقراها قبل ما تطبع — هتتطبع كمان في أول صفحة</div>
+      </div>
+      <div style="padding:14px 18px;overflow-y:auto;flex:1">
+        ${noted.map((o, i) => `
+          <div style="border:1px solid #fcd34d;background:#fffbeb;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+            <div style="font-weight:800;font-size:13px;color:#92400e">${i + 1}. ${escapeHtml(o.id)} · ${escapeHtml(o.name || '')}
+              <span style="font-weight:600;color:#6b7280;font-size:11px;direction:ltr;display:inline-block">${escapeHtml(o.phone || '')}</span>
+            </div>
+            <div style="margin-top:5px;font-size:13px;font-weight:700;color:#7c2d12;line-height:1.7">${escapeHtml(dsNoteOf(o))}</div>
+          </div>`).join('')}
+      </div>
+      <div style="padding:12px 18px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;cursor:pointer;color:#92400e">
+          <input type="checkbox" id="ds-notes-ack" style="width:18px;height:18px" onchange="document.getElementById('ds-notes-go').disabled = !this.checked">
+          قريت الملاحظات
+        </label>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="document.getElementById('ds-notes-modal').remove()">إلغاء</button>
+          <button id="ds-notes-go" class="btn btn-primary" disabled style="background:#d97706;border-color:#d97706;font-weight:800">🖨️ اطبع</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  document.getElementById('ds-notes-go').onclick = () => { ov.remove(); onConfirm(); };
+}
 
 function dsOrderRow(o, cls){
   dsRowNum++;
@@ -50941,6 +51669,15 @@ function dsSelZone(z,el){
 }
 
 function doPrint(){
+  // 📝 v591: لو فيه ملاحظات، اعرضها الأول ولازم يأكد إنه قراها
+  const noted = window._dsNoted || [];
+  if(noted.length && !window._dsNotesAcked){
+    dsShowNotesAlert(noted, () => {
+      window._dsNotesAcked = true;
+      try{ doPrint(); } finally { window._dsNotesAcked = false; }
+    });
+    return;
+  }
   const cId = $('ds-courier-sel')?.value;
   if(cId){
     dsLastPrintTimes[cId] = Date.now();
@@ -51009,7 +51746,11 @@ function dsRender(){
   }
 
   const all=[...showExp,...showNorm];
+  window._dsNoted = [];   // 📝 v591: صفّرها قبل أي return
   if(!all.length){$('ds-sheet').innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">لا توجد طلبات في هذا الاختيار</div>';return;}
+
+  // 📝 v591: الطلبات اللي عليها ملاحظات — للتنبيه وللصفحة المجمّعة
+  window._dsNoted = all.filter(o => dsNoteOf(o));
 
   const totalCod=all.filter(o=>!o.paid).reduce((s,o)=>s+o.total,0);
   const shipFee=all.reduce((s,o)=>s+getShipCost(o,c),0); // 🔧 v238: getShipCost
@@ -51063,7 +51804,10 @@ function dsRender(){
   const today=new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const nowt=new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
 
+  const notesPageHtml = dsNotesPageHtml(window._dsNoted, c, today0());
+
   $('ds-sheet').innerHTML=`
+    ${notesPageHtml}
     <div class="ds-hd">
       <div>
         <div class="ds-title">${modeTitle}</div>
