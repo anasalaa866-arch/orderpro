@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v599 — 🧮 الربح لايف في تسعير أمر الشراء (2026-10-15)
+  🧮 v599: نسبة الربح وربح القطعة بيتحدّثوا وإنت بتكتب سعر البيع. وخانة
+  الشراء بقت "السعر المعلن" (اللي السيرفر بيحفظه فعلاً) والصافي بعد الخصم
+  والضريبة بيبان تحتها — قبل كده كانت بتعرض الصافي والحفظ يعتبره معلن
+  فالرقم يزحف. وشريط الحفظ بيوضّح كام شراء وكام بيع. محتاج سيرفر v550.
+  OrderPro v598 — 📊 أرقام كل مورد في القائمة (2026-10-14)
+  📊 v598: جنب كل مورد: قيمة بضاعته بسعر البيع، وتكفي كام يوم على معدل
+  بيع آخر 30 يوم، وبعنا منه بكام في الـ 30 يوم. محتاج سيرفر v547.
   OrderPro v597 — 🔎 بحث وفلتر في صفحة الموردين (2026-10-14)
   🔎 v597: بحث بالاسم/الشخص/التليفون/الإيميل + فلتر «اللي ليهم منتجات
   بس»، وكل مورد بيوضّح عدد منتجاته المربوطة. محتاج سيرفر v546.
@@ -32084,6 +32092,48 @@ function supClearFilters(){
   renderSuppliersList();
 }
 
+// 📊 v598: أرقام المورد — بضاعة بسعر البيع · تكفي كام يوم · بعنا بكام في 30 يوم
+function _supMoney(v){
+  const n = parseFloat(v) || 0;
+  if(n >= 1000000) return (n/1000000).toFixed(n >= 10000000 ? 0 : 1) + 'M';
+  if(n >= 1000)    return (n/1000).toFixed(n >= 100000 ? 0 : 1) + 'K';
+  return n.toFixed(0);
+}
+
+// لون أيام التغطية: قرب يخلص أحمر، راكد أصفر، المظبوط أخضر
+function _supCoverStyle(d){
+  if(d == null)  return { bg:'#f3f4f6', fg:'#6b7280', note:'مفيش بيع' };
+  if(d <= 14)    return { bg:'#fef2f2', fg:'#991b1b', note:'قرب يخلص' };
+  if(d >= 90)    return { bg:'#fffbeb', fg:'#92400e', note:'راكد' };
+  return { bg:'#f0fdf4', fg:'#166534', note:'' };
+}
+
+function supStatsRow(s){
+  const d  = (s.days_cover == null) ? null : parseInt(s.days_cover);
+  const cv = _supCoverStyle(d);
+  const soldVal = parseFloat(s.sold_30d_value) || 0;
+  const units   = parseInt(s.stock_units) || 0;
+  const sold30  = parseInt(s.sold_30d_units) || 0;
+  return `
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px">
+      <div title="رصيد منتجاته كلها مضروب في سعر البيع" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:9px;padding:6px 10px;min-width:104px">
+        <div style="font-size:9px;color:#1e40af;font-weight:700">💰 بضاعة بسعر البيع</div>
+        <div style="font-size:14px;font-weight:800;color:#1e3a8a;font-family:monospace">${_supMoney(s.stock_retail)} <span style="font-size:10px">ج</span></div>
+        <div style="font-size:9px;color:#60a5fa">${units} قطعة</div>
+      </div>
+      <div title="الرصيد ÷ معدل البيع اليومي آخر 30 يوم" style="background:${cv.bg};border:1px solid ${cv.fg}33;border-radius:9px;padding:6px 10px;min-width:96px">
+        <div style="font-size:9px;color:${cv.fg};font-weight:700">⏳ تكفي</div>
+        <div style="font-size:14px;font-weight:800;color:${cv.fg};font-family:monospace">${d == null ? '—' : (d > 999 ? '+999' : d) + ' <span style=\'font-size:10px\'>يوم</span>'}</div>
+        <div style="font-size:9px;color:${cv.fg};opacity:.75">${cv.note || 'معدل 30 يوم'}</div>
+      </div>
+      <div title="مبيعات منتجاته آخر 30 يوم — أونلاين وكاشير" style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:9px;padding:6px 10px;min-width:104px">
+        <div style="font-size:9px;color:#6d28d9;font-weight:700">📈 بعنا منه (30 يوم)</div>
+        <div style="font-size:14px;font-weight:800;color:#5b21b6;font-family:monospace">${_supMoney(soldVal)} <span style="font-size:10px">ج</span></div>
+        <div style="font-size:9px;color:#a78bfa">${sold30} قطعة</div>
+      </div>
+    </div>`;
+}
+
 // 🔎 v597: الفلترة والرسم — الفلترة كلها في المتصفح، القائمة محمّلة أصلاً
 function renderSuppliersList(){
   const list = document.getElementById('suppliers-list');
@@ -32143,7 +32193,8 @@ function renderSuppliersList(){
             ${s.phone ? `<div style="font-size:12px;color:var(--muted)">📱 ${escapeHtml(s.phone)}</div>` : ''}
             ${s.email ? `<div style="font-size:12px;color:var(--muted)">✉️ ${escapeHtml(s.email)}</div>` : ''}
             ${s.payment_terms ? `<div style="font-size:11px;color:#7c3aed;margin-top:3px">💳 ${escapeHtml(s.payment_terms)}</div>` : ''}
-            <div style="font-size:11px;color:#16a34a;margin-top:3px;font-weight:700">📋 ${s.orders_count || 0} أمر شراء · إجمالي: ${parseFloat(s.total_amount || 0).toFixed(0)} ج</div>
+            <div style="font-size:11px;color:#16a34a;margin-top:3px;font-weight:700">📋 ${s.orders_count || 0} أمر شراء · إجمالي: ${_supMoney(s.total_amount)} ج</div>
+            ${pc ? supStatsRow(s) : ''}
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button class="btn btn-primary btn-xs" onclick="openSupplierReorder(${s.id})" style="font-weight:700">📋 إنشاء طلب</button>
@@ -33233,45 +33284,107 @@ async function _loadPOPricingSection(poId){
   }
 }
 
-// 🆕 v300: render row لكل item بـ الأسعار + الصلاحية
+// 🧮 v599: سطر التسعير — الربح بيتحدّث وإنت بتكتب
+//   الخانة بقت "السعر المعلن" (ده اللي السيرفر بيحفظه فعلاً)، والصافي
+//   بعد الخصم والضريبة بيتعرض جنبه، والربح بيتحسب على الصافي.
+function _poNet(list, discPct, taxPct){
+  const l = parseFloat(list) || 0;
+  let d = parseFloat(discPct) || 0; if(d < 0) d = 0; if(d > 100) d = 100;
+  let t = parseFloat(taxPct)  || 0; if(t < 0) t = 0; if(t > 100) t = 100;
+  return Math.round(l * (1 - d/100) * (1 + t/100) * 100) / 100;
+}
+
+function _poMarginColor(m){
+  if(m > 30) return '#16a34a';
+  if(m >= 15) return '#ca8a04';
+  if(m > 0)  return '#dc2626';
+  return '#94a3b8';
+}
+
+// بيتنادى من أي input في السطر — بيعيد حساب الصافي والربح فوراً
+function _poRecalcRow(itemId){
+  const row = document.querySelector(`[data-item-id="${itemId}"]`);
+  if(!row) return;
+  const listEl = row.querySelector('[data-price-kind="purchase"]');
+  const saleEl = row.querySelector('[data-price-kind="sale"]');
+  if(!listEl || !saleEl) return;
+
+  const disc = parseFloat(row.dataset.disc) || 0;
+  const tax  = parseFloat(row.dataset.tax)  || 0;
+  const net  = _poNet(listEl.value, disc, tax);
+  const sale = parseFloat(saleEl.value) || 0;
+
+  const profit = sale - net;
+  const margin = sale > 0 ? (profit / sale) * 100 : 0;
+  const color  = _poMarginColor(margin);
+
+  const badge = row.querySelector('[data-margin-badge]');
+  if(badge){
+    badge.textContent = `ربح ${margin.toFixed(1)}%`;
+    badge.style.color = color;
+    badge.style.background = color + '22';
+    badge.style.borderColor = color + '55';
+  }
+  const netEl = row.querySelector('[data-net-label]');
+  if(netEl){
+    netEl.innerHTML = (disc || tax)
+      ? `صافي <b style="font-family:Roboto,sans-serif">${net.toFixed(2)}</b>${disc ? ` · خصم ${disc}%` : ''}${tax ? ` · ضريبة ${tax}%` : ''}`
+      : '';
+  }
+  const pEl = row.querySelector('[data-profit-label]');
+  if(pEl){
+    pEl.innerHTML = sale > 0
+      ? `ربح القطعة <b style="font-family:Roboto,sans-serif;color:${color}">${profit.toFixed(2)}</b> ج`
+      : '';
+  }
+}
+
 function _renderPOPricingRow(poId, item){
-  const margin = item.profit_margin || 0;
-  let marginColor = '#94a3b8';  // gray
-  if(margin > 30) marginColor = '#16a34a';      // green
-  else if(margin >= 15) marginColor = '#ca8a04'; // yellow
-  else if(margin > 0) marginColor = '#dc2626';   // red
-  
+  const list = parseFloat(item.list_price != null ? item.list_price : item.purchase_price) || 0;
+  const disc = parseFloat(item.discount_pct) || 0;
+  const tax  = parseFloat(item.tax_pct) || 0;
+  const net  = _poNet(list, disc, tax);
+  const sale = parseFloat(item.sale_price) || 0;
+  const profit = sale - net;
+  const margin = sale > 0 ? (profit / sale) * 100 : 0;
+  const marginColor = _poMarginColor(margin);
+
   return `
-    <div data-item-id="${item.id}" style="background:var(--bg);border-radius:8px;padding:10px;border:1px solid var(--border)">
+    <div data-item-id="${item.id}" data-disc="${disc}" data-tax="${tax}"
+         style="background:var(--bg);border-radius:8px;padding:10px;border:1px solid var(--border)">
       <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;flex-wrap:wrap">
         <div style="flex:1;min-width:180px">
           <div style="font-weight:700;font-size:12px">${escapeHtml((item.product_title || '').slice(0, 60))}</div>
           ${item.variant_title && item.variant_title !== 'Default Title' ? `<div style="font-size:10px;color:var(--muted)">${escapeHtml(item.variant_title)}</div>` : ''}
           ${item.sku ? `<div style="font-size:9px;color:var(--muted);font-family:Roboto,sans-serif">SKU: ${escapeHtml(item.sku)}</div>` : ''}
         </div>
-        
-        <!-- Profit margin badge -->
-        <div style="background:${marginColor}22;color:${marginColor};padding:4px 8px;border-radius:6px;font-weight:800;font-size:11px;font-family:Roboto,sans-serif;border:1px solid ${marginColor}55">
-          ربح ${margin.toFixed(1)}%
+
+        <!-- 🧮 v599: الربح بيتحدّث لايف -->
+        <div style="text-align:left">
+          <div data-margin-badge style="background:${marginColor}22;color:${marginColor};padding:4px 8px;border-radius:6px;font-weight:800;font-size:11px;font-family:Roboto,sans-serif;border:1px solid ${marginColor}55;display:inline-block">
+            ربح ${margin.toFixed(1)}%
+          </div>
+          <div data-profit-label style="font-size:10px;color:var(--muted);margin-top:3px">${sale > 0 ? `ربح القطعة <b style="font-family:Roboto,sans-serif;color:${marginColor}">${profit.toFixed(2)}</b> ج` : ''}</div>
         </div>
       </div>
-      
+
       <!-- Pricing row -->
       <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-top:8px;align-items:end">
         <div>
-          <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px">💰 شراء (محلي)</label>
-          <input type="number" step="0.01" min="0" 
-            value="${item.purchase_price.toFixed(2)}" 
-            data-original="${item.purchase_price}"
+          <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px">💰 شراء ${disc || tax ? '(معلن)' : '(محلي)'}</label>
+          <input type="number" step="0.01" min="0"
+            value="${list.toFixed(2)}"
+            data-original="${list.toFixed(2)}"
             data-price-item="${item.id}" data-price-kind="purchase"
             oninput="_markPOPriceDirty(this)"
             style="width:100%;padding:6px;font-family:Roboto,sans-serif;font-size:12px;background:var(--elev);border:1px solid var(--border);border-radius:6px;color:var(--text);text-align:center">
+          <div data-net-label style="font-size:9px;color:var(--muted);margin-top:2px;text-align:center">${(disc || tax) ? `صافي <b style="font-family:Roboto,sans-serif">${net.toFixed(2)}</b>${disc ? ` · خصم ${disc}%` : ''}${tax ? ` · ضريبة ${tax}%` : ''}` : ''}</div>
         </div>
         <div>
           <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px">🏷️ بيع (Shopify)</label>
-          <input type="number" step="0.01" min="0" 
-            value="${item.sale_price.toFixed(2)}" 
-            data-original="${item.sale_price}"
+          <input type="number" step="0.01" min="0"
+            value="${sale.toFixed(2)}"
+            data-original="${sale.toFixed(2)}"
             data-price-item="${item.id}" data-price-kind="sale"
             oninput="_markPOPriceDirty(this)"
             style="width:100%;padding:6px;font-family:Roboto,sans-serif;font-size:12px;background:var(--elev);border:1px solid var(--border);border-radius:6px;color:var(--text);text-align:center">
@@ -33281,7 +33394,7 @@ function _renderPOPricingRow(poId, item){
             <span style="padding:6px 10px;background:#16a34a22;color:#16a34a;border:1px solid #16a34a55;border-radius:6px;font-weight:700;font-size:11px;white-space:nowrap" title="الصلاحية داخلة من أمر الشراء">
               📅 ${String(item.exp_date).slice(0,10)}
             </span>` : `
-            <button onclick="_openBatchDateModal(${poId}, ${item.id}, ${item.ordered_qty}, ${JSON.stringify(item.product_title || '').replace(/"/g, '&quot;')})" 
+            <button onclick="_openBatchDateModal(${poId}, ${item.id}, ${item.ordered_qty}, ${JSON.stringify(item.product_title || '').replace(/"/g, '&quot;')})"
               style="padding:6px 10px;background:#7c3aed22;color:#7c3aed;border:1px solid #7c3aed55;border-radius:6px;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap"
               title="إضافة تاريخ صلاحية">
               📅 صلاحية
@@ -33293,25 +33406,28 @@ function _renderPOPricingRow(poId, item){
   `;
 }
 
-// 💰 v585: علّم إن فيه تعديل مش محفوظ
+// 💰 v585: علّم إن فيه تعديل مش محفوظ · 🧮 v599: + إعادة حساب الربح لايف
 function _markPOPriceDirty(el){
-  const orig = parseFloat(el.dataset.original);
-  const val = parseFloat(el.value);
-  const changed = !isNaN(val) && Math.abs(val - orig) > 0.001;
+  const orig = Math.round((parseFloat(el.dataset.original) || 0) * 100) / 100;
+  const val  = Math.round((parseFloat(el.value) || 0) * 100) / 100;
+  const changed = el.value !== '' && !isNaN(val) && Math.abs(val - orig) >= 0.01;
   el.style.borderColor = changed ? '#ca8a04' : 'var(--border)';
   el.style.background = changed ? '#fbbf2411' : 'var(--elev)';
+  _poRecalcRow(el.dataset.priceItem);   // 🧮 v599
   _refreshPOPricesBar();
 }
 
 function _collectPOPriceChanges(){
   const map = {};
-  document.querySelectorAll('[data-price-item]').forEach(el => {
+  // 🧮 v599: مقصور على قسم الأسعار المفتوح، والمقارنة بالقرش مش بجزء منه
+  const scope = document.getElementById('po-pricing-section') || document;
+  scope.querySelectorAll('[data-price-item]').forEach(el => {
     const id = el.dataset.priceItem;
     const kind = el.dataset.priceKind;
-    const orig = parseFloat(el.dataset.original);
-    const val = parseFloat(el.value);
-    if(isNaN(val) || val < 0) return;
-    if(Math.abs(val - orig) < 0.001) return;
+    const orig = Math.round((parseFloat(el.dataset.original) || 0) * 100) / 100;
+    const val  = Math.round((parseFloat(el.value) || 0) * 100) / 100;
+    if(el.value === '' || isNaN(val) || val < 0) return;
+    if(Math.abs(val - orig) < 0.01) return;
     map[id] = map[id] || { itemId: parseInt(id) };
     map[id][kind === 'sale' ? 'sale_price' : 'purchase_price'] = val;
   });
@@ -33323,7 +33439,15 @@ function _refreshPOPricesBar(){
   const btn = document.getElementById('po-prices-save');
   const lbl = document.getElementById('po-prices-dirty');
   if(btn) btn.disabled = changes.length === 0;
-  if(lbl) lbl.textContent = changes.length ? `${changes.length} صنف فيه تعديل مش محفوظ` : '';
+  if(lbl){
+    // 🧮 v599: وضّح الشراء والبيع كل واحد لوحده — الزرار بيشتغل بأي واحد فيهم
+    const nBuy  = changes.filter(c => c.purchase_price != null).length;
+    const nSale = changes.filter(c => c.sale_price != null).length;
+    const parts = [];
+    if(nBuy)  parts.push(`${nBuy} شراء`);
+    if(nSale) parts.push(`${nSale} بيع`);
+    lbl.textContent = parts.length ? `${parts.join(' · ')} — مش محفوظين` : '';
+  }
 }
 
 async function savePOPricesBulk(poId){
@@ -33331,7 +33455,8 @@ async function savePOPricesBulk(poId){
   if(!changes.length){ toast('مفيش تعديلات'); return; }
   const syncCost = document.getElementById('po-prices-synccost')?.checked === true;
   const nSale = changes.filter(c => c.sale_price != null).length;
-  if(!confirm(`💾 حفظ أسعار ${changes.length} صنف؟\n\n${nSale ? `${nSale} سعر بيع هيتحدّث على Shopify.\n` : ''}${syncCost ? 'وسعر الشراء هيتبعت كـ تكلفة على Shopify كمان.\n' : ''}\nتكمّل؟`)) return;
+  const nBuy = changes.filter(c => c.purchase_price != null).length;
+  if(!confirm(`💾 حفظ أسعار ${changes.length} صنف؟\n\n${nBuy ? `${nBuy} سعر شراء هيتحدّث في أمر الشراء.\n` : ''}${nSale ? `${nSale} سعر بيع هيتحدّث على Shopify.\n` : ''}${syncCost ? 'وسعر الشراء هيتبعت كـ تكلفة على Shopify كمان.\n' : ''}\nتكمّل؟`)) return;
 
   const btn = document.getElementById('po-prices-save');
   if(btn){ btn.disabled = true; btn.textContent = '⏳ جاري الحفظ...'; }
