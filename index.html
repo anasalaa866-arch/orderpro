@@ -1,6 +1,10 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v609 — 💾 الأسعار اللي بتكتبها مابتضيعش مع الريفريش (2026-10-15)
+  💾 v609: كل قيمة تكتبها في التسعير بتتحفظ في المتصفح أول بأول. لو
+  الصفحة اتقفلت أو اتعمل ريفريش قبل الحفظ، بترجع تلاقيها مكانها مع
+  شريط بيقولك اترجع كام قيمة وزرار تجاهل. بتتمسح أول ما الحفظ ينجح.
   OrderPro v608 — 🚑 حفظ الأسعار على دفعات (2026-10-15)
   🚑 v608: كان بيبعت كل البنود في طلب واحد؛ أمر فيه 70 سعر بيع كان
   بيقطع الاتصال والشاشة تطلّع "Cannot read properties of null".
@@ -33439,6 +33443,7 @@ async function _loadPOPricingSection(poId){
           <div style="font-weight:800;color:var(--gold);font-size:14px">💰 الأسعار والصلاحية</div>
           <div style="font-size:10px;color:var(--muted)">💡 عدّل اللي تحبه وبعدين اضغط حفظ — كل أسعار البيع بتروح Shopify مرة واحدة</div>
         </div>
+        <div id="po-draft-slot"></div>
         <div style="display:flex;flex-direction:column;gap:8px">${itemsHtml}</div>
         <!-- 💰 v585: شريط الحفظ -->
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);flex-wrap:wrap">
@@ -33458,6 +33463,21 @@ async function _loadPOPricingSection(poId){
         </div>
       </div>
     `;
+
+    // 💾 v609: استرجع اللي كان مكتوب قبل الريفريش
+    window._poPricingId = poId;
+    const restored = _poDraftRestore(poId);
+    if(restored){
+      const slot = document.getElementById('po-draft-slot');
+      if(slot) slot.innerHTML = `
+        <div id="po-draft-bar" style="background:#fffbeb;border:1px solid #f59e0b;border-radius:9px;padding:9px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="font-size:12px;color:#92400e;font-weight:700">
+            ⏮️ اترجعت <b>${restored}</b> قيمة كنت كاتبها ولسه مش محفوظة — راجعها واضغط حفظ
+          </div>
+          <button class="btn btn-sm" onclick="_poDraftDiscard(${poId})"
+            style="background:transparent;border:1px solid #92400e;color:#92400e;font-weight:700">تجاهل وارجع للمحفوظ</button>
+        </div>`;
+    }
   } catch(e){
     container.innerHTML = `<div style="color:#dc2626;font-size:12px">❌ ${escapeHtml(e.message)}</div>`;
   }
@@ -33902,6 +33922,72 @@ function _renderPOPricingRow(poId, item){
   `;
 }
 
+// 💾 v609: مسوّدة أسعار محلية — اللي بتكتبه بيتحفظ في المتصفح أول بأول،
+//   فلو الصفحة اتقفلت أو عملت ريفريش قبل ما تحفظ، بترجع تلاقيه مكانه.
+//   بتتمسح لوحدها أول ما الحفظ ينجح، وبتنتهي بعد 7 أيام.
+const _PO_DRAFT_TTL = 7 * 24 * 60 * 60 * 1000;
+let _poDraftTimer = null;
+
+function _poDraftKey(poId){ return 'po_prices_draft_' + poId; }
+
+function _poDraftSave(){
+  const poId = window._poPricingId;
+  if(!poId) return;
+  const scope = document.getElementById('po-pricing-section');
+  if(!scope) return;
+  const v = {};
+  scope.querySelectorAll('[data-price-item]').forEach(el => {
+    const orig = Math.round((parseFloat(el.dataset.original) || 0) * 100) / 100;
+    const cur  = Math.round((parseFloat(el.value) || 0) * 100) / 100;
+    const kind = el.dataset.priceKind;
+    const changed = (kind === 'compare')
+      ? Math.abs(cur - orig) >= 0.01
+      : (el.value !== '' && Math.abs(cur - orig) >= 0.01);
+    if(!changed) return;
+    const id = el.dataset.priceItem;
+    (v[id] = v[id] || {})[kind] = el.value;
+  });
+  try{
+    if(Object.keys(v).length) localStorage.setItem(_poDraftKey(poId), JSON.stringify({ t: Date.now(), v }));
+    else localStorage.removeItem(_poDraftKey(poId));
+  }catch(e){}
+}
+
+function _poDraftClear(poId){
+  try{ localStorage.removeItem(_poDraftKey(poId)); }catch(e){}
+  const bar = document.getElementById('po-draft-bar');
+  if(bar) bar.remove();
+}
+
+// بيترجّع عدد القيم اللي اترجعت
+function _poDraftRestore(poId){
+  let d = null;
+  try{ d = JSON.parse(localStorage.getItem(_poDraftKey(poId)) || 'null'); }catch(e){}
+  if(!d || !d.v) return 0;
+  if(Date.now() - (d.t || 0) > _PO_DRAFT_TTL){ _poDraftClear(poId); return 0; }
+
+  const scope = document.getElementById('po-pricing-section');
+  if(!scope) return 0;
+  let n = 0;
+  for(const [id, kinds] of Object.entries(d.v)){
+    for(const [kind, val] of Object.entries(kinds)){
+      const el = scope.querySelector(`[data-price-item="${id}"][data-price-kind="${kind}"]`);
+      if(!el) continue;
+      if(String(el.value) === String(val)) continue;   // اتحفظ خلاص
+      el.value = val;
+      _markPOPriceDirty(el);
+      n++;
+    }
+  }
+  return n;
+}
+
+function _poDraftDiscard(poId){
+  _poDraftClear(poId);
+  _loadPOPricingSection(poId);
+  toast('اترجعت للأسعار المحفوظة');
+}
+
 // 💰 v585: علّم إن فيه تعديل مش محفوظ · 🧮 v599: + إعادة حساب الربح لايف
 function _markPOPriceDirty(el){
   const orig = Math.round((parseFloat(el.dataset.original) || 0) * 100) / 100;
@@ -33911,6 +33997,9 @@ function _markPOPriceDirty(el){
   el.style.background = changed ? '#fbbf2411' : 'var(--elev)';
   _poRecalcRow(el.dataset.priceItem);   // 🧮 v599
   _refreshPOPricesBar();
+  // 💾 v609: احفظ المسوّدة (مؤجّلة شوية عشان مانكتبش مع كل حرف)
+  if(_poDraftTimer) clearTimeout(_poDraftTimer);
+  _poDraftTimer = setTimeout(_poDraftSave, 400);
 }
 
 function _collectPOPriceChanges(){
@@ -34037,6 +34126,7 @@ async function savePOPricesBulk(poId, forceAll){
       if(agg.cost_pushed)     msg += ` · تكلفة ${agg.cost_pushed}`;
       if(agg.skipped.length)  msg += ` · اتعدّى ${agg.skipped.length}`;
       toast(msg, 'success');
+      _poDraftClear(poId);      // 💾 v609: اتحفظ كله — المسوّدة مابقاش ليها لزمة
     }
 
     if(agg.errors.length){
