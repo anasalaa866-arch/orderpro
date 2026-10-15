@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v602 — 🚑 إصلاح: شاشة أمر الشراء الجديد كانت بتقع مع الباركود
+  🚑 v602: دالة _poNet اللي ضفتها في v599 كان ليها نفس اسم دالة موجودة
+  أصلاً في شاشة أمر الشراء الجديد، فطمستها وكسرت إضافة المنتج بالباركود.
+  اتسمّت _poNetParts. (2026-10-15)
+  OrderPro v601 — 🔖 سعر المقارنة في تسعير أمر الشراء (2026-10-15)
+  🔖 v601: خانة تالتة لسعر المقارنة (السعر المشطوب على الموقع) بتروح
+  Shopify مع سعر البيع. تحتها نسبة الخصم اللي هتبان للعميل، وبتحذّر لو
+  كان أقل من سعر البيع. سيبها فاضية = امسح السعر المشطوب. محتاج سيرفر v552.
+  OrderPro v600 — 📤 زرار "أكّد وابعت الكل" في تسعير أمر الشراء (2026-10-15)
+  📤 v600: زرار تاني جنب الحفظ بيبعت كل الأسعار زي ما هي حتى اللي
+  ماتغيّرتش — للحالة اللي سعر الشراء فيها صح بس مختلف عن التكلفة
+  المسجّلة على Shopify من أمر قديم. محتاج سيرفر v551.
   OrderPro v599 — 🧮 الربح لايف في تسعير أمر الشراء (2026-10-15)
   🧮 v599: نسبة الربح وربح القطعة بيتحدّثوا وإنت بتكتب سعر البيع. وخانة
   الشراء بقت "السعر المعلن" (اللي السيرفر بيحفظه فعلاً) والصافي بعد الخصم
@@ -33273,8 +33285,12 @@ async function _loadPOPricingSection(poId){
           </label>
           <div style="display:flex;align-items:center;gap:10px">
             <span id="po-prices-dirty" style="font-size:11px;color:#ca8a04;font-weight:700"></span>
+            <!-- 📤 v600: يبعت كل الأسعار حتى اللي ماتغيّرتش — للتأكيد على Shopify -->
+            <button id="po-prices-force" class="btn btn-sm" onclick="savePOPricesBulk(${poId}, true)"
+              title="يبعت كل أسعار الشراء والبيع زي ما هي قدامك دلوقتي، حتى اللي ماتغيّرش — عشان تأكّدها على Shopify"
+              style="background:transparent;border:1px solid #3b82f6;color:#3b82f6;font-weight:700">📤 أكّد وابعت الكل</button>
             <button id="po-prices-save" class="btn btn-primary btn-sm" onclick="savePOPricesBulk(${poId})" disabled
-              style="background:#16a34a;border-color:#16a34a;font-weight:800">💾 حفظ كل الأسعار</button>
+              style="background:#16a34a;border-color:#16a34a;font-weight:800">💾 حفظ المتغيّر</button>
           </div>
         </div>
       </div>
@@ -33287,7 +33303,11 @@ async function _loadPOPricingSection(poId){
 // 🧮 v599: سطر التسعير — الربح بيتحدّث وإنت بتكتب
 //   الخانة بقت "السعر المعلن" (ده اللي السيرفر بيحفظه فعلاً)، والصافي
 //   بعد الخصم والضريبة بيتعرض جنبه، والربح بيتحسب على الصافي.
-function _poNet(list, discPct, taxPct){
+// 🚑 v602: الاسم كان _poNet وده طمس دالة _poNet(it) الموجودة من قبل في
+//   شاشة أمر الشراء الجديد (الاتنين function declaration في نفس الـ
+//   scope فالأخيرة بتكسب) → شاشة الباركود كانت بتقع بـ
+//   "Cannot read properties of undefined (reading 'toFixed')".
+function _poNetParts(list, discPct, taxPct){
   const l = parseFloat(list) || 0;
   let d = parseFloat(discPct) || 0; if(d < 0) d = 0; if(d > 100) d = 100;
   let t = parseFloat(taxPct)  || 0; if(t < 0) t = 0; if(t > 100) t = 100;
@@ -33301,6 +33321,16 @@ function _poMarginColor(m){
   return '#94a3b8';
 }
 
+// 🏷️ v601: نسبة الخصم مقابل سعر المقارنة
+function _poCompareHtml(sale, cmp){
+  const c = parseFloat(cmp) || 0;
+  const p = parseFloat(sale) || 0;
+  if(c <= 0) return '';
+  if(c <= p) return '<span style="color:#dc2626">⚠️ لازم يكون أعلى من سعر البيع</span>';
+  const off = Math.round(((c - p) / c) * 100);
+  return `<span style="color:#dc2626">خصم <b style="font-family:Roboto,sans-serif">${off}%</b> على الموقع</span>`;
+}
+
 // بيتنادى من أي input في السطر — بيعيد حساب الصافي والربح فوراً
 function _poRecalcRow(itemId){
   const row = document.querySelector(`[data-item-id="${itemId}"]`);
@@ -33311,7 +33341,7 @@ function _poRecalcRow(itemId){
 
   const disc = parseFloat(row.dataset.disc) || 0;
   const tax  = parseFloat(row.dataset.tax)  || 0;
-  const net  = _poNet(listEl.value, disc, tax);
+  const net  = _poNetParts(listEl.value, disc, tax);
   const sale = parseFloat(saleEl.value) || 0;
 
   const profit = sale - net;
@@ -33337,14 +33367,19 @@ function _poRecalcRow(itemId){
       ? `ربح القطعة <b style="font-family:Roboto,sans-serif;color:${color}">${profit.toFixed(2)}</b> ج`
       : '';
   }
+  // 🏷️ v601: نسبة الخصم مقابل سعر المقارنة
+  const cmpEl = row.querySelector('[data-price-kind="compare"]');
+  const cmpLbl = row.querySelector('[data-compare-label]');
+  if(cmpLbl) cmpLbl.innerHTML = _poCompareHtml(sale, cmpEl ? cmpEl.value : 0);
 }
 
 function _renderPOPricingRow(poId, item){
   const list = parseFloat(item.list_price != null ? item.list_price : item.purchase_price) || 0;
   const disc = parseFloat(item.discount_pct) || 0;
   const tax  = parseFloat(item.tax_pct) || 0;
-  const net  = _poNet(list, disc, tax);
+  const net  = _poNetParts(list, disc, tax);
   const sale = parseFloat(item.sale_price) || 0;
+  const cmp  = parseFloat(item.compare_at_price) || 0;   // 🏷️ v601
   const profit = sale - net;
   const margin = sale > 0 ? (profit / sale) * 100 : 0;
   const marginColor = _poMarginColor(margin);
@@ -33368,8 +33403,8 @@ function _renderPOPricingRow(poId, item){
         </div>
       </div>
 
-      <!-- Pricing row -->
-      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-top:8px;align-items:end">
+      <!-- Pricing row · 🏷️ v601: + سعر المقارنة -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;margin-top:8px;align-items:start">
         <div>
           <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px">💰 شراء ${disc || tax ? '(معلن)' : '(محلي)'}</label>
           <input type="number" step="0.01" min="0"
@@ -33388,6 +33423,17 @@ function _renderPOPricingRow(poId, item){
             data-price-item="${item.id}" data-price-kind="sale"
             oninput="_markPOPriceDirty(this)"
             style="width:100%;padding:6px;font-family:Roboto,sans-serif;font-size:12px;background:var(--elev);border:1px solid var(--border);border-radius:6px;color:var(--text);text-align:center">
+        </div>
+        <div>
+          <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px" title="السعر المشطوب على الموقع — صفر يعني مفيش">🔖 مقارنة</label>
+          <input type="number" step="0.01" min="0"
+            value="${cmp > 0 ? cmp.toFixed(2) : ''}"
+            placeholder="مفيش"
+            data-original="${cmp > 0 ? cmp.toFixed(2) : '0.00'}"
+            data-price-item="${item.id}" data-price-kind="compare"
+            oninput="_markPOPriceDirty(this)"
+            style="width:100%;padding:6px;font-family:Roboto,sans-serif;font-size:12px;background:var(--elev);border:1px solid var(--border);border-radius:6px;color:var(--text);text-align:center">
+          <div data-compare-label style="font-size:9px;margin-top:2px;text-align:center">${_poCompareHtml(sale, cmp)}</div>
         </div>
         <div style="display:flex;gap:4px">
           ${item.exp_date ? `
@@ -33426,10 +33472,28 @@ function _collectPOPriceChanges(){
     const kind = el.dataset.priceKind;
     const orig = Math.round((parseFloat(el.dataset.original) || 0) * 100) / 100;
     const val  = Math.round((parseFloat(el.value) || 0) * 100) / 100;
-    if(el.value === '' || isNaN(val) || val < 0) return;
+    // 🏷️ v601: خانة المقارنة الفاضية = صفر (امسح السعر المشطوب)
+    if(kind !== 'compare' && el.value === '') return;
+    if(isNaN(val) || val < 0) return;
     if(Math.abs(val - orig) < 0.01) return;
     map[id] = map[id] || { itemId: parseInt(id) };
-    map[id][kind === 'sale' ? 'sale_price' : 'purchase_price'] = val;
+    map[id][kind === 'sale' ? 'sale_price' : (kind === 'compare' ? 'compare_at_price' : 'purchase_price')] = val;
+  });
+  return Object.values(map);
+}
+
+// 📤 v600: كل الصفوف زي ما هي — للتأكيد، مش للتعديل
+function _collectAllPOPrices(){
+  const map = {};
+  const scope = document.getElementById('po-pricing-section') || document;
+  scope.querySelectorAll('[data-price-item]').forEach(el => {
+    const id = el.dataset.priceItem;
+    const kind = el.dataset.priceKind;
+    const val = Math.round((parseFloat(el.value) || 0) * 100) / 100;
+    if(kind !== 'compare' && el.value === '') return;
+    if(isNaN(val) || val < 0) return;
+    map[id] = map[id] || { itemId: parseInt(id) };
+    map[id][kind === 'sale' ? 'sale_price' : (kind === 'compare' ? 'compare_at_price' : 'purchase_price')] = val;
   });
   return Object.values(map);
 }
@@ -33438,34 +33502,53 @@ function _refreshPOPricesBar(){
   const changes = _collectPOPriceChanges();
   const btn = document.getElementById('po-prices-save');
   const lbl = document.getElementById('po-prices-dirty');
-  if(btn) btn.disabled = changes.length === 0;
+  if(btn) btn.disabled = changes.length === 0;   // زرار "أكّد وابعت الكل" بيفضل شغّال دايماً
   if(lbl){
     // 🧮 v599: وضّح الشراء والبيع كل واحد لوحده — الزرار بيشتغل بأي واحد فيهم
     const nBuy  = changes.filter(c => c.purchase_price != null).length;
     const nSale = changes.filter(c => c.sale_price != null).length;
+    const nCmp  = changes.filter(c => c.compare_at_price != null).length;
     const parts = [];
     if(nBuy)  parts.push(`${nBuy} شراء`);
     if(nSale) parts.push(`${nSale} بيع`);
+    if(nCmp)  parts.push(`${nCmp} مقارنة`);
     lbl.textContent = parts.length ? `${parts.join(' · ')} — مش محفوظين` : '';
   }
 }
 
-async function savePOPricesBulk(poId){
-  const changes = _collectPOPriceChanges();
-  if(!changes.length){ toast('مفيش تعديلات'); return; }
-  const syncCost = document.getElementById('po-prices-synccost')?.checked === true;
+// 📤 v600: forceAll = ابعت كل الأسعار حتى اللي ماتغيّرتش (تأكيد على Shopify)
+async function savePOPricesBulk(poId, forceAll){
+  const changes = forceAll ? _collectAllPOPrices() : _collectPOPriceChanges();
+  if(!changes.length){ toast(forceAll ? 'مفيش أصناف' : 'مفيش تعديلات'); return; }
+  // التأكيد الهدف منه أصلاً التكلفة على Shopify، فبيتبعت دايماً معاه
+  const syncCost = forceAll || document.getElementById('po-prices-synccost')?.checked === true;
   const nSale = changes.filter(c => c.sale_price != null).length;
   const nBuy = changes.filter(c => c.purchase_price != null).length;
-  if(!confirm(`💾 حفظ أسعار ${changes.length} صنف؟\n\n${nBuy ? `${nBuy} سعر شراء هيتحدّث في أمر الشراء.\n` : ''}${nSale ? `${nSale} سعر بيع هيتحدّث على Shopify.\n` : ''}${syncCost ? 'وسعر الشراء هيتبعت كـ تكلفة على Shopify كمان.\n' : ''}\nتكمّل؟`)) return;
+  const nCmp = changes.filter(c => c.compare_at_price != null).length;
 
-  const btn = document.getElementById('po-prices-save');
-  if(btn){ btn.disabled = true; btn.textContent = '⏳ جاري الحفظ...'; }
+  const msgTxt = forceAll
+    ? `📤 تأكيد كل الأسعار — ${changes.length} صنف\n\n`
+      + `${nBuy} سعر شراء هيتبعت كـ تكلفة على Shopify (حتى اللي ماتغيّرش).\n`
+      + `${nSale} سعر بيع هيتبعت على Shopify.\n`
+      + `${nCmp} سعر مقارنة هيتبعت (الفاضي = هيتمسح).\n\n`
+      + `اللي ماتغيّرش مش هيتكتب تاني في أمر الشراء — هيتبعت لـ Shopify بس.\n\nتكمّل؟`
+    : `💾 حفظ أسعار ${changes.length} صنف؟\n\n${nBuy ? `${nBuy} سعر شراء هيتحدّث في أمر الشراء.\n` : ''}${nSale ? `${nSale} سعر بيع هيتحدّث على Shopify.\n` : ''}${nCmp ? `${nCmp} سعر مقارنة هيتحدّث على Shopify.\n` : ''}${syncCost ? 'وسعر الشراء هيتبعت كـ تكلفة على Shopify كمان.\n' : ''}\nتكمّل؟`;
+  if(!confirm(msgTxt)) return;
+
+  const btn = document.getElementById(forceAll ? 'po-prices-force' : 'po-prices-save');
+  const btnTxt = forceAll ? '📤 أكّد وابعت الكل' : '💾 حفظ المتغيّر';
+  const other = document.getElementById(forceAll ? 'po-prices-save' : 'po-prices-force');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ جاري الإرسال...'; }
+  if(other) other.disabled = true;
   try{
     const r = await apiFetch(`/api/purchase-orders/${poId}/prices-bulk`, 'PUT', {
-      items: changes, sync_unit_cost: syncCost
+      items: changes, sync_unit_cost: syncCost, force: forceAll === true
     });
     if(r?.error){ toast('❌ ' + r.error); return; }
-    let msg = `✅ اتحفظ — شراء ${r.purchase_updated} · بيع ${r.sale_updated} على Shopify`;
+    let msg = `✅ اتبعت — شراء ${r.purchase_updated} · بيع ${r.sale_updated} على Shopify`;
+    if(r.compare_updated) msg += ` · مقارنة ${r.compare_updated}`;
+    if(r.cost_confirmed) msg += ` · اتأكّد ${r.cost_confirmed} من غير تغيير`;
+    if(r.cost_pushed) msg += ` · تكلفة ${r.cost_pushed}`;
     if(r.skipped?.length) msg += ` · اتعدّى ${r.skipped.length}`;
     toast(msg, 'success');
     if(r.errors?.length){
@@ -33476,7 +33559,8 @@ async function savePOPricesBulk(poId){
   }catch(e){
     toast('❌ ' + e.message);
   }finally{
-    if(btn){ btn.disabled = false; btn.textContent = '💾 حفظ كل الأسعار'; }
+    if(btn){ btn.textContent = btnTxt; btn.disabled = forceAll ? false : (_collectPOPriceChanges().length === 0); }
+    if(other) other.disabled = forceAll ? (_collectPOPriceChanges().length === 0) : false;
   }
 }
 
