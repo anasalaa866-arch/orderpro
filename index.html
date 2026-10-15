@@ -1,6 +1,25 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v608 — 🚑 حفظ الأسعار على دفعات (2026-10-15)
+  🚑 v608: كان بيبعت كل البنود في طلب واحد؛ أمر فيه 70 سعر بيع كان
+  بيقطع الاتصال والشاشة تطلّع "Cannot read properties of null".
+  دلوقتي 8 بنود في المرة مع عدّاد، ولو وقف بيقولك اتبعت كام وتكمّل.
+  OrderPro v607 — 📦 كمية الطلب في سطر التسعير (2026-10-15)
+  📦 v607: شارة "في الطلب: X" (ومعاها المستلم لو فيه)، وشارة "بعد
+  الاستلام: X يوم" اللي بتقول الرصيد هيكفي كام يوم لما الكمية دي توصل.
+  واجهة بس — نفس سيرفر v557.
+  OrderPro v606 — 📅 صلاحيات الصنف في تسعير أمر الشراء (2026-10-15)
+  📅 v606: سطر تاني تحت كل بند بتواريخ الباتشات الشغّالة وكمية كل واحدة،
+  ملوّنة بالأيام الباقية (أحمر ≤30 · أصفر ≤90 · أخضر أبعد · أسود منتهي).
+  محتاج سيرفر v557.
+  OrderPro v605 — 📊 مبيعات 30 يوم ورصيد المخازن في تسعير أمر الشراء (2026-10-15)
+  📊 v605: تحت كل بند في "الأسعار والصلاحية": باع كام في آخر 30 يوم،
+  وتكفي كام يوم، ورصيد كل مخزن على حدة. محتاج سيرفر v556.
+  OrderPro v604 — ↩️ صفحة مرتجعات المشتريات (2026-10-15)
+  ↩️ v604: صفحة جديدة — ترجّع بضاعة لمورد من غير ما تكون مربوطة بأمر
+  شراء. تختار المورد والمخزن وتدوّر على الأصناف، والرصيد بيتخصم من
+  Shopify فوراً وبيتعمل Vendor Credit في Zoho. محتاج سيرفر v555.
   OrderPro v603 — ✏️ تعديل مسودة أمر الشراء (2026-10-15)
   🚑 v603: كمان — دالة pmSave كانت متكررة مرتين (تغيير طريقة الدفع +
   إعدادات Paymob)، فزرار حفظ طريقة الدفع كان بيحفظ إعدادات Paymob.
@@ -1910,6 +1929,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="app-promo" onclick="goPage(this,'app-promo')"><span class="ni-icon">📱</span><span class="ni-label">تحويل للتطبيق</span></div>
         <div class="ni" data-p="dead-stock" onclick="goPage(this,'dead-stock')"><span class="ni-icon">🧊</span><span class="ni-label">الأصناف الراكدة</span></div>
         <div class="ni" data-p="purchase-orders" onclick="goPage(this,'purchase-orders')"><span class="ni-icon">📋</span><span class="ni-label">أوامر الشراء</span></div>
+        <div class="ni" data-p="purchase-returns" onclick="goPage(this,'purchase-returns')"><span class="ni-icon">↩️</span><span class="ni-label">مرتجعات المشتريات</span></div>
         <div class="ni" data-p="vendors" onclick="goPage(this,'vendors')"><span class="ni-icon">🏢</span><span class="ni-label">شركات الشحن</span></div>
       </div>
     </div>
@@ -5738,6 +5758,70 @@ tr:hover td{background:#fafbff}
       <button class="modal-close" onclick="closeM('m-stmt-result')">×</button>
     </div>
     <div class="modal-body" id="stmt-result-content"></div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- ↩️ v604: PURCHASE RETURNS PAGE — مرتجعات المشتريات -->
+<!-- ============================================================ -->
+<div class="page" id="page-purchase-returns">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">↩️ مرتجعات المشتريات</h2>
+    <button class="btn btn-primary btn-sm" onclick="openNewPR()" style="background:#dc2626;border-color:#dc2626">➕ مرتجع جديد</button>
+  </div>
+
+  <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:11px 13px;margin-bottom:14px;font-size:12px;color:#1e3a8a;line-height:1.8">
+    💡 المرتجع بيخصم الرصيد من <b>المخزن اللي تختاره على Shopify</b> فوراً، وبيعمل <b>Vendor Credit في Zoho</b> يفضل رصيد عند المورد تخصمه من فاتورة جاية.
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h3 style="margin:0">📋 المرتجعات</h3></div>
+    <div id="pr-list" style="padding:14px"></div>
+  </div>
+</div>
+
+<!-- مرتجع جديد -->
+<div id="m-pr" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:880px">
+    <div class="modal-header">
+      <h3 style="margin:0">↩️ مرتجع مشتريات جديد</h3>
+      <button class="modal-close" onclick="closeM('m-pr')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">المورد *</label>
+          <input id="pr-sup-search" class="form-input" placeholder="🔎 ابحث..." oninput="prFillSuppliers(this.value)" autocomplete="off" style="width:100%;margin-bottom:6px">
+          <select id="pr-supplier" class="form-input" style="width:100%"></select>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">المخزن اللي هيتخصم منه *</label>
+          <select id="pr-warehouse" class="form-input" style="width:100%"></select>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">الخصم هيتم على Shopify في المخزن ده</div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;background:var(--elev);border:1px solid var(--border);border-radius:10px;padding:12px">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:5px">🔎 ضيف صنف (اسم / SKU / باركود)</label>
+        <input id="pr-prod-search" class="form-input" placeholder="اكتب حرفين على الأقل..." oninput="prSearchProducts()" autocomplete="off" style="width:100%">
+        <div id="pr-prod-results" style="display:none;max-height:210px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-top:6px"></div>
+      </div>
+
+      <div id="pr-items" style="margin-top:12px"></div>
+
+      <div style="margin-top:12px">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">ملاحظات</label>
+        <input id="pr-notes" class="form-input" placeholder="سبب الإرجاع، رقم إذن الخروج..." style="width:100%">
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:16px;padding-top:12px;border-top:1px solid var(--border);flex-wrap:wrap">
+        <div id="pr-total" style="font-weight:800;font-size:15px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="closeM('m-pr')">إلغاء</button>
+          <button id="pr-save" class="btn btn-primary btn-sm" onclick="savePR()" style="background:#dc2626;border-color:#dc2626;font-weight:800">↩️ نفّذ المرتجع</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -9657,7 +9741,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -33379,6 +33463,221 @@ async function _loadPOPricingSection(poId){
   }
 }
 
+
+// ═══════════════════════════════════════════════════════════
+// ↩️ v604: مرتجعات المشتريات
+// ═══════════════════════════════════════════════════════════
+let _prItems = [], _prSearchTimer = null, _prWarehouses = [];
+
+async function loadPurchaseReturnsPage(){
+  const box = document.getElementById('pr-list');
+  if(!box) return;
+  box.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">⏳ جاري التحميل...</div>';
+  try{
+    const r = await apiFetch('/api/purchase-returns');
+    const list = r?.returns || [];
+    if(!list.length){
+      box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:46px;opacity:.3">↩️</div><div>مفيش مرتجعات</div></div>';
+      return;
+    }
+    box.innerHTML = list.map(x => {
+      const shOk = x.shopify_adjusted, zhOk = !!x.zoho_vendor_credit_id;
+      const chip = (ok, err, okTxt, badTxt, id) => ok
+        ? `<span style="background:#dcfce7;color:#166534;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:800">${okTxt}</span>`
+        : `<span title="${escapeHtml(err||'')}" style="background:#fee2e2;color:#991b1b;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:800">${badTxt}</span>`;
+      return `
+      <div class="card" style="padding:13px;margin-bottom:10px;border-right:4px solid ${shOk && zhOk ? '#16a34a' : '#dc2626'}">
+        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:210px">
+            <div style="font-weight:800;font-size:14px;font-family:Roboto,sans-serif">${escapeHtml(x.return_number)}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">🏭 ${escapeHtml(x.supplier_name || '')} · 🏬 ${escapeHtml(x.warehouse_name || '')}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">${new Date(x.created_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'})} · ${x.items_count} صنف · ${x.total_qty} قطعة</div>
+            ${x.notes ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">📝 ${escapeHtml(x.notes)}</div>` : ''}
+          </div>
+          <div style="text-align:left">
+            <div style="font-size:17px;font-weight:900;color:#dc2626;font-family:Roboto,sans-serif">${parseFloat(x.subtotal||0).toFixed(2)} ج</div>
+            <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;justify-content:flex-end">
+              ${chip(shOk, x.shopify_error, '📦 اتخصم', '📦 فشل الخصم')}
+              ${chip(zhOk, x.zoho_error, '🧾 ' + escapeHtml(x.zoho_vendor_credit_number || 'في Zoho'), '🧾 فشل Zoho')}
+            </div>
+          </div>
+        </div>
+        ${(!shOk || !zhOk) ? `
+          <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
+            ${!shOk ? `<button class="btn btn-sm" onclick="prRetry(${x.id},'shopify')" style="background:#3b82f6;border-color:#3b82f6;color:#fff;font-weight:700">🔄 أعد الخصم على Shopify</button>` : ''}
+            ${!zhOk ? `<button class="btn btn-sm" onclick="prRetry(${x.id},'zoho')" style="background:#0ea5e9;border-color:#0ea5e9;color:#fff;font-weight:700">🔄 أعد الإرسال لـ Zoho</button>` : ''}
+          </div>
+          ${x.shopify_error && !shOk ? `<div style="margin-top:7px;background:#fef2f2;border:1px solid #ef4444;border-radius:6px;padding:6px 9px;font-size:11px;color:#991b1b">📦 ${escapeHtml(x.shopify_error)}</div>` : ''}
+          ${x.zoho_error && !zhOk ? `<div style="margin-top:7px;background:#fef2f2;border:1px solid #ef4444;border-radius:6px;padding:6px 9px;font-size:11px;color:#991b1b">🧾 ${escapeHtml(x.zoho_error)}</div>` : ''}
+        ` : ''}
+      </div>`;
+    }).join('');
+  }catch(e){ box.innerHTML = `<div style="color:var(--danger);padding:14px;text-align:center">❌ ${escapeHtml(e.message)}</div>`; }
+}
+
+async function prRetry(id, what){
+  try{
+    const r = await apiFetch(`/api/purchase-returns/${id}/retry-${what}`, 'POST', {});
+    if(r?.error){ toast('❌ ' + r.error); return; }
+    toast('✅ تمت', 'success');
+    loadPurchaseReturnsPage();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function openNewPR(){
+  _prItems = [];
+  if(!_suppliers.length){
+    try{
+      const r = await apiFetch('/api/suppliers');
+      _suppliers = r?.suppliers || [];
+    }catch(e){}
+  }
+  if(!_prWarehouses.length){
+    try{ _prWarehouses = await apiFetch('/api/inventory/warehouses') || []; }catch(e){}
+  }
+  prFillSuppliers('');
+  const w = document.getElementById('pr-warehouse');
+  if(w) w.innerHTML = '<option value="">-- اختار --</option>' +
+    _prWarehouses.map(x => `<option value="${x.id}">${escapeHtml(x.name)}</option>`).join('');
+  ['pr-sup-search','pr-prod-search','pr-notes'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  const rs = document.getElementById('pr-prod-results'); if(rs) rs.style.display = 'none';
+  prRenderItems();
+  openM('m-pr');
+  setTimeout(() => document.getElementById('pr-sup-search')?.focus(), 120);
+}
+
+function prFillSuppliers(filter){
+  const sel = document.getElementById('pr-supplier');
+  if(!sel) return;
+  const q = String(filter || '').trim().toLowerCase();
+  const keep = sel.value;
+  const list = q ? _suppliers.filter(s => String(s.name||'').toLowerCase().includes(q)) : _suppliers;
+  sel.innerHTML = '<option value="">-- اختار المورد --</option>' +
+    list.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  if(keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+  else if(q && list.length === 1) sel.value = String(list[0].id);
+}
+
+function prSearchProducts(){
+  const q = document.getElementById('pr-prod-search')?.value.trim() || '';
+  const box = document.getElementById('pr-prod-results');
+  if(!box) return;
+  if(q.length < 2){ box.style.display = 'none'; return; }
+  if(_prSearchTimer) clearTimeout(_prSearchTimer);
+  _prSearchTimer = setTimeout(async () => {
+    try{
+      const r = await apiFetch('/api/inventory/search?q=' + encodeURIComponent(q) + '&limit=20');
+      const list = r?.results || [];
+      box.innerHTML = list.length
+        ? list.map(v => `
+            <div onclick='prPick(${JSON.stringify(JSON.stringify(v))})' style="padding:9px 10px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px">
+              <div style="font-weight:700">${escapeHtml(v.product_title || '')}${v.variant_title && v.variant_title !== 'Default Title' ? ' · ' + escapeHtml(v.variant_title) : ''}</div>
+              <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(v.sku || '')}${v.barcode ? ' · ' + escapeHtml(v.barcode) : ''}</div>
+            </div>`).join('')
+        : '<div style="padding:12px;text-align:center;color:var(--muted);font-size:12px">مفيش نتائج</div>';
+      box.style.display = 'block';
+    }catch(e){ box.style.display = 'none'; }
+  }, 280);
+}
+
+function prPick(json){
+  let v; try{ v = JSON.parse(json); }catch(e){ return; }
+  const vid = String(v.variant_id || '');
+  if(_prItems.some(x => String(x.variantId) === vid)){ toast('الصنف مضاف بالفعل'); return; }
+  _prItems.push({
+    variantId: vid,
+    productTitle: v.product_title || '',
+    variantTitle: v.variant_title && v.variant_title !== 'Default Title' ? v.variant_title : '',
+    sku: v.sku || '', barcode: v.barcode || '',
+    qty: 1, unitCost: 0
+  });
+  const si = document.getElementById('pr-prod-search'); if(si) si.value = '';
+  const rs = document.getElementById('pr-prod-results'); if(rs) rs.style.display = 'none';
+  prRenderItems();
+  setTimeout(() => si?.focus(), 60);
+}
+
+function prSetField(i, field, val){
+  if(!_prItems[i]) return;
+  _prItems[i][field] = field === 'qty' ? (parseInt(val) || 0) : (parseFloat(val) || 0);
+  prTotals();
+}
+
+function prRemove(i){ _prItems.splice(i, 1); prRenderItems(); }
+
+function prTotals(){
+  const t = _prItems.reduce((a, b) => a + (parseInt(b.qty)||0) * (parseFloat(b.unitCost)||0), 0);
+  const q = _prItems.reduce((a, b) => a + (parseInt(b.qty)||0), 0);
+  const el = document.getElementById('pr-total');
+  if(el) el.innerHTML = _prItems.length
+    ? `${_prItems.length} صنف · ${q} قطعة · <span style="color:#dc2626;font-family:Roboto,sans-serif">${t.toFixed(2)} ج</span>`
+    : '';
+}
+
+function prRenderItems(){
+  const box = document.getElementById('pr-items');
+  if(!box) return;
+  if(!_prItems.length){
+    box.innerHTML = '<div style="text-align:center;padding:26px;color:var(--muted);font-size:12px;border:1px dashed var(--border);border-radius:10px">مفيش أصناف — دوّر فوق وضيف</div>';
+    prTotals(); return;
+  }
+  box.innerHTML = `
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      ${_prItems.map((it, i) => `
+        <div style="display:grid;grid-template-columns:1fr 78px 104px 96px 30px;gap:8px;align-items:center;padding:9px 11px;border-bottom:1px solid var(--border);font-size:12px">
+          <div style="min-width:0">
+            <div style="font-weight:700">${escapeHtml(it.productTitle)}${it.variantTitle ? ' · ' + escapeHtml(it.variantTitle) : ''}</div>
+            <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(it.sku || '')}</div>
+          </div>
+          <input type="number" min="1" value="${it.qty}" oninput="prSetField(${i},'qty',this.value)" class="form-input" style="padding:5px;text-align:center;font-family:Roboto,sans-serif" title="الكمية">
+          <input type="number" min="0" step="0.01" value="${it.unitCost}" oninput="prSetField(${i},'unitCost',this.value)" class="form-input" style="padding:5px;text-align:center;font-family:Roboto,sans-serif" title="سعر الشراء للقطعة">
+          <div style="text-align:center;font-weight:800;font-family:Roboto,sans-serif;color:#dc2626">${((parseInt(it.qty)||0)*(parseFloat(it.unitCost)||0)).toFixed(2)}</div>
+          <button onclick="prRemove(${i})" style="background:transparent;border:none;color:#dc2626;cursor:pointer;font-size:16px" title="شيل">×</button>
+        </div>`).join('')}
+      <div style="display:grid;grid-template-columns:1fr 78px 104px 96px 30px;gap:8px;padding:6px 11px;background:var(--bg);font-size:10px;color:var(--muted);font-weight:700">
+        <div>الصنف</div><div style="text-align:center">كمية</div><div style="text-align:center">سعر الشراء</div><div style="text-align:center">الإجمالي</div><div></div>
+      </div>
+    </div>`;
+  prTotals();
+}
+
+async function savePR(){
+  const supplierId = document.getElementById('pr-supplier')?.value;
+  const warehouseId = document.getElementById('pr-warehouse')?.value;
+  if(!supplierId){ toast('❌ اختار المورد'); return; }
+  if(!warehouseId){ toast('❌ اختار المخزن'); return; }
+  const items = _prItems.filter(x => (parseInt(x.qty)||0) > 0);
+  if(!items.length){ toast('❌ ضيف أصناف بكميات'); return; }
+
+  const total = items.reduce((a,b) => a + b.qty * (parseFloat(b.unitCost)||0), 0);
+  const whName = document.getElementById('pr-warehouse')?.selectedOptions[0]?.textContent || '';
+  if(!confirm(`↩️ تنفيذ المرتجع؟\n\n${items.length} صنف · ${items.reduce((a,b)=>a+b.qty,0)} قطعة · ${total.toFixed(2)} ج\n\nهيتخصم من رصيد "${whName}" على Shopify فوراً،\nوهيتعمل Vendor Credit في Zoho كرصيد عند المورد.\n\nتكمّل؟`)) return;
+
+  const btn = document.getElementById('pr-save');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ جاري التنفيذ...'; }
+  try{
+    const r = await apiFetch('/api/purchase-returns', 'POST', {
+      supplierId: parseInt(supplierId),
+      warehouseId: parseInt(warehouseId),
+      items, notes: document.getElementById('pr-notes')?.value.trim() || ''
+    });
+    if(r?.error){ toast('❌ ' + r.error); return; }
+    const parts = [];
+    parts.push(r.shopify?.error ? '📦 الخصم فشل' : '📦 اتخصم من Shopify');
+    parts.push(r.zoho?.error ? '🧾 Zoho فشل' : '🧾 Vendor Credit اتعمل');
+    toast(`${r.return?.return_number} · ${parts.join(' · ')}`, (r.shopify?.error || r.zoho?.error) ? 'warning' : 'success');
+    if(r.shopify?.error || r.zoho?.error){
+      alert('⚠️ المرتجع اتسجّل بس في خطوة فشلت:\n\n'
+        + (r.shopify?.error ? '📦 Shopify: ' + r.shopify.error + '\n' : '')
+        + (r.zoho?.error ? '🧾 Zoho: ' + r.zoho.error + '\n' : '')
+        + '\nتقدر تعيد المحاولة من زراير القائمة.');
+    }
+    closeM('m-pr');
+    loadPurchaseReturnsPage();
+  }catch(e){ toast('❌ ' + e.message); }
+  finally{ if(btn){ btn.disabled = false; btn.textContent = '↩️ نفّذ المرتجع'; } }
+}
+
 // 🧮 v599: سطر التسعير — الربح بيتحدّث وإنت بتكتب
 //   الخانة بقت "السعر المعلن" (ده اللي السيرفر بيحفظه فعلاً)، والصافي
 //   بعد الخصم والضريبة بيتعرض جنبه، والربح بيتحسب على الصافي.
@@ -33450,6 +33749,76 @@ function _poRecalcRow(itemId){
   const cmpEl = row.querySelector('[data-price-kind="compare"]');
   const cmpLbl = row.querySelector('[data-compare-label]');
   if(cmpLbl) cmpLbl.innerHTML = _poCompareHtml(sale, cmpEl ? cmpEl.value : 0);
+}
+
+// 📅 v606: شارة صلاحية — لون حسب الأيام الباقية
+function _poExpChip(dateStr, qty){
+  if(!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  if(isNaN(d.getTime())) return '';
+  const days = Math.ceil((d - new Date(new Date().toDateString())) / 86400000);
+  let bg = '#f0fdf4', fg = '#166534', bd = '#bbf7d0', note = '';
+  if(days < 0){      bg = '#7f1d1d'; fg = '#fff';    bd = '#7f1d1d'; note = ' · منتهي'; }
+  else if(days <= 30){ bg = '#fef2f2'; fg = '#991b1b'; bd = '#fecaca'; note = ` · ${days} يوم`; }
+  else if(days <= 90){ bg = '#fffbeb'; fg = '#92400e'; bd = '#fde68a'; note = ` · ${days} يوم`; }
+  const dd = dateStr.slice(8,10), mm = dateStr.slice(5,7), yy = dateStr.slice(0,4);
+  return `<span title="صلاحية ${dateStr}${qty != null ? ` · ${qty} قطعة` : ''}"
+    style="background:${bg};color:${fg};border:1px solid ${bd};border-radius:7px;padding:3px 8px;font-weight:800;font-family:Roboto,sans-serif">
+    📅 ${dd}-${mm}-${yy}${qty != null ? ` <span style="opacity:.8">(${qty})</span>` : ''}${note}
+  </span>`;
+}
+
+// 📊 v605: مبيعات 30 يوم + رصيد كل مخزن · 📅 v606: + الصلاحيات
+function _poStockHtml(item){
+  const sold = parseInt(item.sold_30d) || 0;
+  const whs  = Array.isArray(item.stock_by_warehouse) ? item.stock_by_warehouse : [];
+  const tot  = parseInt(item.stock_total) || 0;
+  const bats = Array.isArray(item.batches) ? item.batches : [];
+  const ord  = parseInt(item.ordered_qty) || 0;      // 📦 v607: كمية الطلب ده
+  const rcv  = parseInt(item.received_qty) || 0;
+  if(!sold && !whs.length && !bats.length && !ord) return '';
+
+  // تكفي كام يوم على معدل آخر 30 يوم
+  const perDay = sold / 30;
+  const days = perDay > 0 ? Math.round(tot / perDay) : null;
+  let dc = '#6d7175', dtxt = 'مفيش بيع';
+  if(days != null){
+    dtxt = (days > 999 ? '+999' : days) + ' يوم';
+    dc = days <= 14 ? '#dc2626' : (days >= 90 ? '#ca8a04' : '#16a34a');
+  }
+
+  return `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:7px;padding-top:7px;border-top:1px dashed var(--border);font-size:11px">
+      ${ord ? `<span title="الكمية المطلوبة في أمر الشراء ده${rcv ? ` · اتستلم منها ${rcv}` : ''}" style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;border-radius:7px;padding:3px 8px;font-weight:800">
+        📦 في الطلب: <b style="font-family:Roboto,sans-serif">${ord}</b>${rcv ? ` <span style="opacity:.75">(اتستلم ${rcv})</span>` : ''}
+      </span>` : ''}
+      <span title="مبيعات آخر 30 يوم — أونلاين وكاشير" style="background:#f5f3ff;color:#5b21b6;border:1px solid #ddd6fe;border-radius:7px;padding:3px 8px;font-weight:800">
+        📈 باع <b style="font-family:Roboto,sans-serif">${sold}</b> / 30 يوم
+      </span>
+      <span title="الرصيد الحالي ÷ معدل البيع اليومي" style="background:${dc}14;color:${dc};border:1px solid ${dc}44;border-radius:7px;padding:3px 8px;font-weight:800">
+        ⏳ ${dtxt}
+      </span>
+      ${(ord && perDay > 0) ? (() => {
+        // 📦 v607: بعد ما الكمية دي توصل، الرصيد يكفي كام يوم
+        const after = Math.round((tot + ord) / perDay);
+        return `<span title="(الرصيد + كمية الطلب) ÷ معدل البيع اليومي" style="background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:7px;padding:3px 8px;font-weight:800">
+          ↗️ بعد الاستلام: <b style="font-family:Roboto,sans-serif">${after > 999 ? '+999' : after}</b> يوم
+        </span>`;
+      })() : ''}
+      <span style="color:var(--muted)">·</span>
+      ${whs.length
+        ? whs.map(w => `<span title="${escapeHtml(w.name)}" style="background:${w.qty > 0 ? '#eff6ff' : '#fef2f2'};color:${w.qty > 0 ? '#1e40af' : '#991b1b'};border:1px solid ${w.qty > 0 ? '#bfdbfe' : '#fecaca'};border-radius:7px;padding:3px 8px;font-weight:700">
+             ${escapeHtml(String(w.name).slice(0,16))}: <b style="font-family:Roboto,sans-serif">${w.qty}</b>
+           </span>`).join('')
+        : '<span style="color:var(--muted)">مفيش رصيد مسجّل</span>'}
+      ${whs.length > 1 ? `<span style="background:var(--border);border-radius:7px;padding:3px 8px;font-weight:800">الكل: <b style="font-family:Roboto,sans-serif">${tot}</b></span>` : ''}
+    </div>
+    ${bats.length ? `
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:11px">
+        <span style="color:var(--muted);font-weight:700">الصلاحيات:</span>
+        ${bats.slice(0,6).map(b => _poExpChip(b.exp_date, b.qty)).join('')}
+        ${bats.length > 6 ? `<span style="color:var(--muted)">+${bats.length - 6}</span>` : ''}
+      </div>` : ''}`;
 }
 
 function _renderPOPricingRow(poId, item){
@@ -33527,6 +33896,8 @@ function _renderPOPricingRow(poId, item){
           ${item.active_batches > 0 ? `<span style="padding:6px 8px;background:#16a34a22;color:#16a34a;border-radius:6px;font-size:10px;font-weight:700;align-self:center" title="عدد الـ batches الـ active">✓ ${item.active_batches}</span>` : ''}
         </div>
       </div>
+
+      ${_poStockHtml(item)}
     </div>
   `;
 }
@@ -33596,14 +33967,19 @@ function _refreshPOPricesBar(){
 }
 
 // 📤 v600: forceAll = ابعت كل الأسعار حتى اللي ماتغيّرتش (تأكيد على Shopify)
+// 🚑 v608: الإرسال بقى على دفعات. كان بيبعت كل البنود في طلب واحد — أمر
+//   فيه 70 سعر بيع = 70 نداء Shopify بانتظار بينهم، فالاتصال بيقطع قبل
+//   ما السيرفر يرد، والرد بيرجع null والشاشة كانت بتوقع بـ
+//   "Cannot read properties of null". دلوقتي 8 بنود في المرة مع عدّاد.
+const _PO_PRICE_CHUNK = 8;
+
 async function savePOPricesBulk(poId, forceAll){
   const changes = forceAll ? _collectAllPOPrices() : _collectPOPriceChanges();
   if(!changes.length){ toast(forceAll ? 'مفيش أصناف' : 'مفيش تعديلات'); return; }
-  // التأكيد الهدف منه أصلاً التكلفة على Shopify، فبيتبعت دايماً معاه
   const syncCost = forceAll || document.getElementById('po-prices-synccost')?.checked === true;
   const nSale = changes.filter(c => c.sale_price != null).length;
-  const nBuy = changes.filter(c => c.purchase_price != null).length;
-  const nCmp = changes.filter(c => c.compare_at_price != null).length;
+  const nBuy  = changes.filter(c => c.purchase_price != null).length;
+  const nCmp  = changes.filter(c => c.compare_at_price != null).length;
 
   const msgTxt = forceAll
     ? `📤 تأكيد كل الأسعار — ${changes.length} صنف\n\n`
@@ -33617,24 +33993,56 @@ async function savePOPricesBulk(poId, forceAll){
   const btn = document.getElementById(forceAll ? 'po-prices-force' : 'po-prices-save');
   const btnTxt = forceAll ? '📤 أكّد وابعت الكل' : '💾 حفظ المتغيّر';
   const other = document.getElementById(forceAll ? 'po-prices-save' : 'po-prices-force');
-  if(btn){ btn.disabled = true; btn.textContent = '⏳ جاري الإرسال...'; }
+  if(btn) btn.disabled = true;
   if(other) other.disabled = true;
+
+  const chunks = [];
+  for(let k = 0; k < changes.length; k += _PO_PRICE_CHUNK) chunks.push(changes.slice(k, k + _PO_PRICE_CHUNK));
+
+  const agg = { purchase_updated: 0, sale_updated: 0, compare_updated: 0,
+                cost_confirmed: 0, cost_pushed: 0, errors: [], skipped: [] };
+  let doneItems = 0, failedAt = null, lastPoTotal = null;
+
   try{
-    const r = await apiFetch(`/api/purchase-orders/${poId}/prices-bulk`, 'PUT', {
-      items: changes, sync_unit_cost: syncCost, force: forceAll === true
-    });
-    if(r?.error){ toast('❌ ' + r.error); return; }
-    let msg = `✅ اتبعت — شراء ${r.purchase_updated} · بيع ${r.sale_updated} على Shopify`;
-    if(r.compare_updated) msg += ` · مقارنة ${r.compare_updated}`;
-    if(r.cost_confirmed) msg += ` · اتأكّد ${r.cost_confirmed} من غير تغيير`;
-    if(r.cost_pushed) msg += ` · تكلفة ${r.cost_pushed}`;
-    if(r.skipped?.length) msg += ` · اتعدّى ${r.skipped.length}`;
-    toast(msg, 'success');
-    if(r.errors?.length){
-      alert('⚠️ أخطاء:\n\n' + r.errors.slice(0, 10).map(e => `• ${e.sku || e.product || ''}: ${e.error}`).join('\n'));
+    for(let c = 0; c < chunks.length; c++){
+      if(btn) btn.textContent = `⏳ ${doneItems}/${changes.length}...`;
+      let r = null;
+      try{
+        r = await apiFetch(`/api/purchase-orders/${poId}/prices-bulk`, 'PUT', {
+          items: chunks[c], sync_unit_cost: syncCost, force: forceAll === true
+        });
+      }catch(err){ failedAt = { chunk: c + 1, error: err.message }; break; }
+      if(!r){ failedAt = { chunk: c + 1, error: 'السيرفر ماردّش — الاتصال اتقطع' }; break; }
+      if(r.error){ failedAt = { chunk: c + 1, error: r.error }; break; }
+
+      agg.purchase_updated += r.purchase_updated || 0;
+      agg.sale_updated     += r.sale_updated || 0;
+      agg.compare_updated  += r.compare_updated || 0;
+      agg.cost_confirmed   += r.cost_confirmed || 0;
+      agg.cost_pushed      += r.cost_pushed || 0;
+      if(Array.isArray(r.errors))  agg.errors.push(...r.errors);
+      if(Array.isArray(r.skipped)) agg.skipped.push(...r.skipped);
+      if(r.po_total != null) lastPoTotal = r.po_total;
+      doneItems += chunks[c].length;
     }
-    // viewPO بيعيد رسم التفاصيل كلها (الإجماليات) وبينادي قسم الأسعار بنفسه
-    if(r.po_total != null) viewPO(poId); else await _loadPOPricingSection(poId);
+
+    if(failedAt){
+      toast(`⚠️ وقف عند الدفعة ${failedAt.chunk} — اتبعت ${doneItems} من ${changes.length}`, 'warning');
+      alert(`⚠️ الإرسال وقف في النص\n\nاتبعت ${doneItems} صنف من ${changes.length}.\nالسبب: ${failedAt.error}\n\n`
+          + `اللي اتبعت اتحفظ فعلاً — اضغط الزرار تاني عشان يكمّل الباقي.`);
+    } else {
+      let msg = `✅ اتبعت — شراء ${agg.purchase_updated} · بيع ${agg.sale_updated} على Shopify`;
+      if(agg.compare_updated) msg += ` · مقارنة ${agg.compare_updated}`;
+      if(agg.cost_confirmed)  msg += ` · اتأكّد ${agg.cost_confirmed} من غير تغيير`;
+      if(agg.cost_pushed)     msg += ` · تكلفة ${agg.cost_pushed}`;
+      if(agg.skipped.length)  msg += ` · اتعدّى ${agg.skipped.length}`;
+      toast(msg, 'success');
+    }
+
+    if(agg.errors.length){
+      alert('⚠️ أخطاء:\n\n' + agg.errors.slice(0, 10).map(e => `• ${e.sku || e.product || ''}: ${e.error}`).join('\n'));
+    }
+    if(lastPoTotal != null) viewPO(poId); else await _loadPOPricingSection(poId);
   }catch(e){
     toast('❌ ' + e.message);
   }finally{
@@ -33643,7 +34051,6 @@ async function savePOPricesBulk(poId, forceAll){
   }
 }
 
-// 🆕 v300: حفظ تعديل سعر (purchase أو sale)
 async function _savePOItemPrice(poId, itemId, type, inputEl){
   const newVal = parseFloat(inputEl.value);
   const original = parseFloat(inputEl.dataset.original);
@@ -46914,6 +47321,7 @@ function goPage(el,page){
   if(page==='whatsapp') loadWhatsappPage();
   if(page==='audit-log') loadAuditLogPage();
   if(page==='statements') loadStatementsPage();
+  if(page==='purchase-returns') loadPurchaseReturnsPage();   // ↩️ v604
   if(page==='purchase-orders'){poZhStatus();
     loadPurchaseOrdersPage();
     // 🆕 v252: لو الـ user جاي من "ذكاء الشراء"، افتح الـ modal تلقائي
