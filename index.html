@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v603 — ✏️ تعديل مسودة أمر الشراء (2026-10-15)
+  🚑 v603: كمان — دالة pmSave كانت متكررة مرتين (تغيير طريقة الدفع +
+  إعدادات Paymob)، فزرار حفظ طريقة الدفع كان بيحفظ إعدادات Paymob.
+  اتسمّت pmSavePaymentMethod.
+  ✏️ v603: زرار "تعديل المسودة" في تفاصيل الأمر — بيفتح الشاشة بكل
+  بياناتها (المورد، المخزن، البنود بأسعارها وخصوماتها وصلاحياتها) وتقدر
+  تضيف وتشيل وتعدّل وتحفظ تاني. التعديل للمسودات بس.
   OrderPro v602 — 🚑 إصلاح: شاشة أمر الشراء الجديد كانت بتقع مع الباركود
   🚑 v602: دالة _poNet اللي ضفتها في v599 كان ليها نفس اسم دالة موجودة
   أصلاً في شاشة أمر الشراء الجديد، فطمستها وكسرت إضافة المنتج بالباركود.
@@ -16815,7 +16822,7 @@ function pmOpen(saleId, total, saleNo, sessionId){
       <div id="pm-sum" style="margin:10px 0;font-size:12px;font-weight:700"></div>
       <input id="pm-reason" class="form-input" placeholder="السبب (اختياري) — مثال: العميل دفع كاش" style="width:100%;margin-bottom:10px">
       <div style="display:flex;gap:8px">
-        <button class="btn btn-primary btn-sm" onclick="pmSave()" style="flex:1">💾 احفظ</button>
+        <button class="btn btn-primary btn-sm" onclick="pmSavePaymentMethod()" style="flex:1">💾 احفظ</button>
         <button class="btn btn-ghost btn-sm" onclick="pmClose()">إلغاء</button>
       </div>
     </div>`;
@@ -16849,7 +16856,7 @@ function pmSum(){
   el.innerHTML = `المجموع: <span style="font-family:Roboto,sans-serif;color:${ok?'#16a34a':'#dc2626'}">${sum.toLocaleString()}</span> / ${_pmSale.total.toLocaleString()} ج`
     + (ok?' ✅':` — لازم يساوي الإجمالي (فرق ${(sum-_pmSale.total).toFixed(2)})`);
 }
-async function pmSave(){
+async function pmSavePaymentMethod(){   // 🚑 v603: كان اسمها pmSave وكانت متطمسة
   if(!_pmSale) return;
   const payments = pmRead().filter(p=>p.amount>0);
   if(!payments.length){ toast('❌ حط مبلغ'); return; }
@@ -32382,7 +32389,7 @@ function setPOFilter(btn, status){
   loadPurchaseOrdersPage();
 }
 
-async function openNewPO(){
+async function openNewPO(skipSuggestionsDraft){
   // املأ الموردين
   if(!_suppliers.length){
     // 🏷️ v583: الموردين من Zoho بس
@@ -32427,7 +32434,7 @@ async function openNewPO(){
   
   // 🆕 v252: pre-fill من ذكاء الشراء لو في draft محفوظ
   try {
-    const draft = sessionStorage.getItem('po_suggestions_draft');
+    const draft = skipSuggestionsDraft ? null : sessionStorage.getItem('po_suggestions_draft');
     if(draft){
       const parsed = JSON.parse(draft);
       if(parsed?.items?.length && parsed.source === 'purchase-suggestions'){
@@ -33064,10 +33071,80 @@ async function savePO(status){
     } else {
       await apiFetch('/api/purchase-orders', 'POST', data);
     }
-    toast(status === 'sent' ? '✅ تم الإنشاء والإرسال' : '✅ تم الحفظ كمسودة');
+    toast(status === 'sent'
+      ? '✅ تم الإرسال'
+      : (id ? '✅ المسودة اتحدّثت' : '✅ تم الحفظ كمسودة'));   // ✏️ v603
     closeM('m-po');
     loadPurchaseOrdersPage();
   } catch(e) { toast('❌ ' + e.message); }
+}
+
+// ✏️ v603: افتح مسودة أمر شراء في شاشة التعديل بكل بياناتها.
+//   السيرفر أصلاً بيقبل PUT على المسودة بس (بعد الإرسال ممنوع التعديل)،
+//   واللي كان ناقص هو إن الواجهة تملا الشاشة وتحط po-id عشان savePO
+//   تعمل PUT بدل POST.
+async function editPODraft(id){
+  try{
+    const r = await apiFetch('/api/purchase-orders/' + id);
+    const po = r?.order;
+    if(!po){ toast('❌ الأمر مش موجود'); return; }
+    if(po.status !== 'draft'){
+      toast('❌ التعديل للمسودات بس — ده ' + (po.status === 'cancelled' ? 'ملغي' : 'اتبعت خلاص'));
+      return;
+    }
+
+    closeM('m-po-detail');
+    await openNewPO(true);          // true = ماتحمّلش draft ذكاء الشراء
+
+    document.getElementById('po-id').value = po.id;
+    document.getElementById('po-modal-title').textContent = '✏️ تعديل ' + (po.po_number || 'المسودة');
+
+    // المخزن
+    const whSel = document.getElementById('po-warehouse');
+    if(whSel && po.warehouse_id) whSel.value = String(po.warehouse_id);
+
+    // المورد
+    const supSel = document.getElementById('po-supplier');
+    if(supSel){
+      if(po.supplier_id && [...supSel.options].some(o => o.value === String(po.supplier_id))){
+        supSel.value = String(po.supplier_id);
+      } else if(po.supplier_name && [...supSel.options].some(o => o.value === 'custom')){
+        supSel.value = 'custom';
+        const cu = document.getElementById('po-custom-supplier');
+        if(cu) cu.style.display = '';
+        const nm = document.getElementById('po-supplier-name');  if(nm) nm.value = po.supplier_name || '';
+        const ph = document.getElementById('po-supplier-phone'); if(ph) ph.value = po.supplier_phone || '';
+      }
+      if(typeof onPOSupplierChange === 'function') onPOSupplierChange();
+    }
+
+    const setv = (id2, v) => { const el = document.getElementById(id2); if(el) el.value = v; };
+    setv('po-expected-date', po.expected_date ? String(po.expected_date).slice(0,10) : '');
+    setv('po-tax', parseFloat(po.tax_amount) || 0);
+    setv('po-shipping', parseFloat(po.shipping_cost) || 0);
+    setv('po-payment-method', po.payment_method || '');
+    setv('po-notes', po.notes || '');
+
+    // البنود — من شكل الداتابيز لشكل الشاشة
+    _poItems = (r.items || []).map(it => ({
+      variantId:   it.variant_id || null,
+      productTitle: it.product_title || '',
+      variantTitle: it.variant_title || '',
+      sku:         it.sku || '',
+      barcode:     it.barcode || '',
+      orderedQty:  parseInt(it.ordered_qty) || 1,
+      // السعر المعلن هو اللي بيتعدّل؛ الصافي بيتحسب منه بالخصم والضريبة
+      unitCost:    parseFloat(it.list_price != null ? it.list_price : it.unit_cost) || 0,
+      discountPct: parseFloat(it.discount_pct) || 0,
+      taxPct:      parseFloat(it.tax_pct) || 0,
+      expDate:     it.exp_date ? String(it.exp_date).slice(0,10) : null,
+      notes:       it.notes || ''
+    }));
+    _poJustAddedIdx = -1;
+    renderPOItems();
+    updatePOTotals();
+    toast(`✏️ ${_poItems.length} صنف جاهزين للتعديل`, 'success');
+  }catch(e){ toast('❌ ' + e.message); }
 }
 
 async function viewPO(id){
@@ -33116,6 +33193,8 @@ async function viewPO(id){
     }
     
     if(po.status === 'draft'){
+      // ✏️ v603: ارجع افتح المسودة للتعديل
+      actionButtons += `<button class="btn btn-sm" onclick="editPODraft(${po.id})" style="background:#7c3aed;border-color:#7c3aed;color:#fff;font-weight:800">✏️ تعديل المسودة</button>`;
       actionButtons += `<button class="btn btn-primary btn-sm" onclick="sendPO(${po.id})">📤 إرسال للمورد</button>`;
       actionButtons += `<button class="btn btn-danger btn-sm" onclick="cancelPO(${po.id})">❌ إلغاء</button>`;
     } else if(po.status === 'sent' || po.status === 'partial_received'){
