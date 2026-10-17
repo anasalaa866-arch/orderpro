@@ -34060,7 +34060,36 @@ function _refreshPOPricesBar(){
 //   فيه 70 سعر بيع = 70 نداء Shopify بانتظار بينهم، فالاتصال بيقطع قبل
 //   ما السيرفر يرد، والرد بيرجع null والشاشة كانت بتوقع بـ
 //   "Cannot read properties of null". دلوقتي 8 بنود في المرة مع عدّاد.
-const _PO_PRICE_CHUNK = 8;
+// 🔁 v610: مابقاش يقف ويستنّاك تضغط. كل دفعة بتتعاد لوحدها لحد 4 مرات
+//   بفواصل متزايدة، والدفعة اللي تفشل خالص مابتوقّفش اللي بعدها، وفي
+//   الآخر بيعمل لفّة أخيرة على اللي فشل. إعادة الإرسال آمنة — نفس
+//   السعر بيتكتب نفس الكتابة.
+const _PO_PRICE_CHUNK  = 5;      // كان 8 — أصغر = أسرع في الرد = قطع أقل
+const _PO_PRICE_TRIES  = 4;      // محاولات الدفعة الواحدة
+const _PO_PRICE_WAIT   = [1200, 3000, 6000];   // الانتظار بين المحاولات
+const _PO_PRICE_GIVEUP = 3;      // 3 دفعات ورا بعض فشلت خالص = السيرفر واقع، بطّل
+
+const _poSleep = ms => new Promise(r => setTimeout(r, ms));
+
+// غلطة اتصال/تايم-أوت = تستاهل إعادة. غلطة بيانات من السيرفر = لأ.
+function _poRetryable(msg){
+  if(!msg) return true;
+  return /ماردّش|اتقطع|timeout|timed out|gateway|network|fetch|failed to|abort|50[234]|busy|ECONN|socket/i.test(String(msg));
+}
+
+// شيل من المسوّدة الأصناف اللي اتبعتت فعلاً، عشان الشريط الأصفر
+// يعدّ اللي لسه ناقص بس
+function _poDraftDrop(poId, itemIds){
+  if(!itemIds || !itemIds.length) return;
+  let d = null;
+  try{ d = JSON.parse(localStorage.getItem(_poDraftKey(poId)) || 'null'); }catch(e){}
+  if(!d || !d.v) return;
+  itemIds.forEach(id => { delete d.v[String(id)]; });
+  try{
+    if(Object.keys(d.v).length) localStorage.setItem(_poDraftKey(poId), JSON.stringify(d));
+    else _poDraftClear(poId);
+  }catch(e){}
+}
 
 async function savePOPricesBulk(poId, forceAll){
   const changes = forceAll ? _collectAllPOPrices() : _collectPOPriceChanges();
@@ -34088,42 +34117,90 @@ async function savePOPricesBulk(poId, forceAll){
   const chunks = [];
   for(let k = 0; k < changes.length; k += _PO_PRICE_CHUNK) chunks.push(changes.slice(k, k + _PO_PRICE_CHUNK));
 
-  const agg = { purchase_updated: 0, sale_updated: 0, compare_updated: 0,
-                cost_confirmed: 0, cost_pushed: 0, errors: [], skipped: [] };
-  let doneItems = 0, failedAt = null, lastPoTotal = null;
+  // 🔁 v611: معرّف واحد للضغطة دي كلها. السيرفر بيستخدمه عشان يعرف إن
+  //   الدفعة دي إعادة لنفس المحاولة، فيعدّي اللي اتبعت خلاص بدل ما
+  //   يبعته لـ Shopify تاني. ضغطة جديدة = معرّف جديد = إرسال كامل.
+  const runId = `po${poId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
-  try{
-    for(let c = 0; c < chunks.length; c++){
-      if(btn) btn.textContent = `⏳ ${doneItems}/${changes.length}...`;
-      let r = null;
+  const agg = { purchase_updated: 0, sale_updated: 0, compare_updated: 0,
+                cost_confirmed: 0, cost_pushed: 0, resumed: 0, errors: [], skipped: [] };
+  let doneItems = 0, lastPoTotal = null;
+  const sentIds = [];           // اللي اتبعت بنجاح — يتشال من المسوّدة
+  let   pending = chunks.map((items, i) => ({ items, no: i + 1 }));
+  let   lastErr = null, stopped = false;
+
+  // بيبعت دفعة واحدة مع إعادة تلقائية. بيرجّع true لو نجحت.
+  const sendChunk = async (ch, pass) => {
+    for(let a = 1; a <= _PO_PRICE_TRIES; a++){
+      if(btn) btn.textContent = `⏳ ${doneItems}/${changes.length}`
+        + (a > 1 ? ` · إعادة ${a - 1}` : '') + (pass > 1 ? ' · لفّة أخيرة' : '');
+      let r = null, err = null;
       try{
         r = await apiFetch(`/api/purchase-orders/${poId}/prices-bulk`, 'PUT', {
-          items: chunks[c], sync_unit_cost: syncCost, force: forceAll === true
+          items: ch.items, sync_unit_cost: syncCost, force: forceAll === true, run_id: runId
         });
-      }catch(err){ failedAt = { chunk: c + 1, error: err.message }; break; }
-      if(!r){ failedAt = { chunk: c + 1, error: 'السيرفر ماردّش — الاتصال اتقطع' }; break; }
-      if(r.error){ failedAt = { chunk: c + 1, error: r.error }; break; }
+      }catch(e){ err = e.message; }
+      if(!err && !r)      err = 'السيرفر ماردّش — الاتصال اتقطع';
+      if(!err && r.error) err = r.error;
 
-      agg.purchase_updated += r.purchase_updated || 0;
-      agg.sale_updated     += r.sale_updated || 0;
-      agg.compare_updated  += r.compare_updated || 0;
-      agg.cost_confirmed   += r.cost_confirmed || 0;
-      agg.cost_pushed      += r.cost_pushed || 0;
-      if(Array.isArray(r.errors))  agg.errors.push(...r.errors);
-      if(Array.isArray(r.skipped)) agg.skipped.push(...r.skipped);
-      if(r.po_total != null) lastPoTotal = r.po_total;
-      doneItems += chunks[c].length;
+      if(!err){
+        agg.purchase_updated += r.purchase_updated || 0;
+        agg.sale_updated     += r.sale_updated || 0;
+        agg.compare_updated  += r.compare_updated || 0;
+        agg.cost_confirmed   += r.cost_confirmed || 0;
+        agg.cost_pushed      += r.cost_pushed || 0;
+        agg.resumed          += (r.resumed_sale || 0) + (r.resumed_cost || 0);   // 🔁 v611
+        if(Array.isArray(r.errors))  agg.errors.push(...r.errors);
+        if(Array.isArray(r.skipped)) agg.skipped.push(...r.skipped);
+        if(r.po_total != null) lastPoTotal = r.po_total;
+        doneItems += ch.items.length;
+        ch.items.forEach(it => sentIds.push(it.itemId));
+        if(btn) btn.textContent = `⏳ ${doneItems}/${changes.length}`;
+        return true;
+      }
+
+      lastErr = err;
+      if(!_poRetryable(err)) return false;            // غلطة بيانات — مفيش فايدة من الإعادة
+      if(a < _PO_PRICE_TRIES) await _poSleep(_PO_PRICE_WAIT[a - 1] || 6000);
+    }
+    return false;
+  };
+
+  try{
+    for(let pass = 1; pass <= 2 && pending.length; pass++){
+      const stillFailed = [];
+      let dead = 0;
+      for(const ch of pending){
+        const ok = await sendChunk(ch, pass);
+        if(ok){ dead = 0; continue; }
+        stillFailed.push(ch);
+        if(++dead >= _PO_PRICE_GIVEUP){               // السيرفر واقع — مافيش لزوم نكمّل
+          stopped = true;
+          pending.slice(pending.indexOf(ch) + 1).forEach(x => stillFailed.push(x));
+          break;
+        }
+      }
+      pending = stillFailed;
+      if(stopped) break;
+      if(pending.length && pass === 1) await _poSleep(2500);
     }
 
-    if(failedAt){
-      toast(`⚠️ وقف عند الدفعة ${failedAt.chunk} — اتبعت ${doneItems} من ${changes.length}`, 'warning');
-      alert(`⚠️ الإرسال وقف في النص\n\nاتبعت ${doneItems} صنف من ${changes.length}.\nالسبب: ${failedAt.error}\n\n`
-          + `اللي اتبعت اتحفظ فعلاً — اضغط الزرار تاني عشان يكمّل الباقي.`);
+    _poDraftDrop(poId, sentIds);
+
+    if(pending.length){
+      const left = pending.reduce((s, c) => s + c.items.length, 0);
+      toast(`⚠️ اتبعت ${doneItems} من ${changes.length} — فاضل ${left}`, 'warning');
+      alert(`⚠️ ${doneItems} صنف اتبعت واتحفظت، و${left} لأ\n\n`
+          + `جرّبت أبعتهم ${_PO_PRICE_TRIES} مرات لكل دفعة`
+          + (stopped ? ' ووقفت لأن السيرفر مش بيرد خالص.' : ' ولفّة أخيرة في الآخر.') + '\n'
+          + `آخر سبب: ${lastErr}\n\n`
+          + `الـ${left} لسه محفوظين في الشاشة — اضغط حفظ تاني بعد شوية وهيتبعتوا هما بس.`);
     } else {
       let msg = `✅ اتبعت — شراء ${agg.purchase_updated} · بيع ${agg.sale_updated} على Shopify`;
       if(agg.compare_updated) msg += ` · مقارنة ${agg.compare_updated}`;
       if(agg.cost_confirmed)  msg += ` · اتأكّد ${agg.cost_confirmed} من غير تغيير`;
       if(agg.cost_pushed)     msg += ` · تكلفة ${agg.cost_pushed}`;
+      if(agg.resumed)         msg += ` · ${agg.resumed} كانوا خلصوا قبل القطع`;   // 🔁 v611
       if(agg.skipped.length)  msg += ` · اتعدّى ${agg.skipped.length}`;
       toast(msg, 'success');
       _poDraftClear(poId);      // 💾 v609: اتحفظ كله — المسوّدة مابقاش ليها لزمة
@@ -34132,7 +34209,9 @@ async function savePOPricesBulk(poId, forceAll){
     if(agg.errors.length){
       alert('⚠️ أخطاء:\n\n' + agg.errors.slice(0, 10).map(e => `• ${e.sku || e.product || ''}: ${e.error}`).join('\n'));
     }
-    if(lastPoTotal != null) viewPO(poId); else await _loadPOPricingSection(poId);
+    // 🔁 v610: لو فيه باقي، فضل في شاشة الأسعار عشان الباقي يفضل قدامك
+    if(!pending.length && lastPoTotal != null) viewPO(poId);
+    else await _loadPOPricingSection(poId);
   }catch(e){
     toast('❌ ' + e.message);
   }finally{
