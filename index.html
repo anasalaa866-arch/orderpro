@@ -10174,6 +10174,28 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// 🧷 v617: بدل حقن JSON جوّه onclick — ده بيتكسر مع أي اسم فيه apostrophe
+// (Reese's / Hershey's / L'or). الـ ' بينهي الـ attribute والـ handler بيبوظ،
+// فالضغط على الصنف مكانش بيعمل حاجة خالص. دلوقتي بنعدّي مفتاح نضيف بس.
+window._argBox = window._argBox || new Map();
+let _argN = 0;
+function _argPut(v){
+  const k = 'A' + (++_argN);
+  window._argBox.set(k, v);
+  if(window._argBox.size > 400){            // امسح الأقدم — القوايم القديمة اتشالت من الـ DOM أصلاً
+    const it = window._argBox.keys();
+    for(let i = 0; i < 200; i++){ const nx = it.next(); if(nx.done) break; window._argBox.delete(nx.value); }
+  }
+  return k;
+}
+function _argTake(k){
+  if(typeof k === 'string'){
+    if(window._argBox.has(k)) return window._argBox.get(k);
+    try{ return JSON.parse(k); }catch(e){ return null; }   // توافق مع أي نداء قديم
+  }
+  return k;
+}
+
 // 🆕 v216: escape for HTML attributes (for onclick, value, etc.)
 function escapeAttr(s){
   if(s == null) return '';
@@ -30908,7 +30930,7 @@ async function loadTransfersSuggestions(){
             <div style="font-weight:700;font-size:13px;margin-bottom:3px">${escapeHtml(s.productTitle)}${s.variantTitle ? ' - '+escapeHtml(s.variantTitle) : ''}</div>
             <div style="font-size:11px;color:var(--muted)">${escapeHtml(s.sku || '—')}</div>
           </div>
-          <button class="btn btn-success btn-sm" onclick='quickCreateTransferFromSuggestion(${JSON.stringify(s).replace(/'/g, "\\'")})'>➕ إنشاء التحويل</button>
+          <button class="btn btn-success btn-sm" onclick="quickCreateTransferFromSuggestion('${_argPut(s)}')">➕ إنشاء التحويل</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 50px 1fr;gap:8px;align-items:center;font-size:11px;background:var(--bg);padding:8px;border-radius:6px">
           <div style="text-align:center">
@@ -30930,6 +30952,8 @@ async function loadTransfersSuggestions(){
 }
 
 async function quickCreateTransferFromSuggestion(s){
+  s = _argTake(s);                       // 🧷 v617
+  if(!s) return;
   if(!confirm(`إنشاء تحويل ${s.suggestedQty} من ${s.from.warehouseName} → ${s.to.warehouseName}؟`)) return;
   
   try {
@@ -33619,7 +33643,7 @@ function prSearchProducts(){
       const list = r?.results || [];
       box.innerHTML = list.length
         ? list.map(v => `
-            <div onclick='prPick(${JSON.stringify(JSON.stringify(v))})' style="padding:9px 10px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px">
+            <div onclick="prPick('${_argPut(v)}')" style="padding:9px 10px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px">
               <div style="font-weight:700">${escapeHtml(v.product_title || '')}${v.variant_title && v.variant_title !== 'Default Title' ? ' · ' + escapeHtml(v.variant_title) : ''}</div>
               <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(v.sku || '')}${v.barcode ? ' · ' + escapeHtml(v.barcode) : ''}</div>
             </div>`).join('')
@@ -33629,8 +33653,9 @@ function prSearchProducts(){
   }, 280);
 }
 
-function prPick(json){
-  let v; try{ v = JSON.parse(json); }catch(e){ return; }
+function prPick(key){
+  const v = _argTake(key);               // 🧷 v617
+  if(!v) return;
   const vid = String(v.variant_id || '');
   if(_prItems.some(x => String(x.variantId) === vid)){ toast('الصنف مضاف بالفعل'); return; }
   _prItems.push({
@@ -36911,7 +36936,7 @@ function wlShowImportPreview(identifiers){
           ${identifiers.length > 10 ? `<div style="padding:6px;text-align:center;color:var(--muted)">... و ${identifiers.length - 10} أكتر</div>` : ''}
         </div>
       </details>
-      <button id="wl-import-confirm" class="btn btn-primary" onclick='wlConfirmImport(${JSON.stringify(identifiers).replace(/"/g, "&quot;")})' style="width:100%;font-weight:700">
+      <button id="wl-import-confirm" class="btn btn-primary" onclick="wlConfirmImport('${_argPut(identifiers)}')" style="width:100%;font-weight:700">
         🚀 ابدأ الاستيراد (${identifiers.length} منتج)
       </button>
     </div>
@@ -36919,6 +36944,8 @@ function wlShowImportPreview(identifiers){
 }
 
 async function wlConfirmImport(identifiers){
+  identifiers = _argTake(identifiers);   // 🧷 v617
+  if(!Array.isArray(identifiers) || !identifiers.length){ toast('❌ مفيش أصناف للاستيراد'); return; }
   const btn = document.getElementById('wl-import-confirm');
   if(btn){ btn.disabled = true; btn.textContent = '⏳ جاري الاستيراد...'; }
   
@@ -45891,7 +45918,7 @@ function neoSearch(){
       const list = r?.results || [];
       box.innerHTML = list.length
         ? list.map((v, i) => `
-            <div onclick='neoPick(${JSON.stringify(JSON.stringify(v))})' style="padding:9px 10px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px">
+            <div onclick="neoPick('${_argPut(v)}')" style="padding:9px 10px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px">
               <div style="font-weight:700">${escapeHtml(v.product_title || v.title || '')}${v.variant_title && v.variant_title !== 'Default Title' ? ' · ' + escapeHtml(v.variant_title) : ''}</div>
               <div style="color:var(--muted);font-size:11px;font-family:monospace">${escapeHtml(v.sku || '')}${v.price ? ` · ${parseFloat(v.price).toFixed(2)} ج` : ''}</div>
             </div>`).join('')
@@ -45901,8 +45928,9 @@ function neoSearch(){
   }, 300);
 }
 
-function neoPick(json){
-  try{ _neoPicked = JSON.parse(json); }catch(e){ return; }
+function neoPick(key){
+  _neoPicked = _argTake(key);            // 🧷 v617
+  if(!_neoPicked) return;
   document.getElementById('neo-results').style.display = 'none';
   document.getElementById('neo-search').value = '';
   const el = document.getElementById('neo-picked');
