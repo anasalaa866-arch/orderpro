@@ -6535,7 +6535,28 @@ tr:hover td{background:#fafbff}
     <div style="font-size:12px;color:var(--muted)">بوسطة · Paymob · أمازون — ارفع أي كشف والنظام يعرفه</div>
   </div>
 
-  <div class="card" style="margin-bottom:14px"><div style="padding:14px">
+  <!-- 🆕 v623: مراجعة رسوم بوسطة ضد العقد -->
+<div class="card" style="margin-bottom:14px;border:1px solid #b45309">
+  <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+    <div style="font-weight:800">🔍 مراجعة رسوم بوسطة ضد العقد</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:3px">
+      بنحسب الرسم المتوقع لكل شحنة من المنطقة والحالة (ملحق 2 · كل الشحنات صغيرة · +14% ضريبة)
+      ونقارنه باللي بوسطة حاسباه. <b>المنطقة بتتحدد من عنوان الأوردر عندنا</b> — عشان لو صنّفوها غلط نمسكها.
+    </div>
+  </div>
+  <div style="padding:12px 14px">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px">
+      <button class="btn" onclick="document.getElementById('bfa-file').click()" style="background:#b45309;color:#fff">📤 ارفع كشف بوسطة</button>
+      <input type="file" id="bfa-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="bfaPick(this.files[0])">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="bfa-flexship" onchange="bfaRerun()"> FlexShip على كل شحنة (20 ج)</label>
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="bfa-nextday" onchange="bfaRerun()"> تحويل COD يومي (1% / 10 ج)</label>
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="bfa-ins" onchange="bfaRerun()"> تأمين</label>
+      <button class="btn btn-ghost btn-sm" onclick="bfaReuse()" id="bfa-reuse" style="display:none">↻ أعد الحساب</button>
+    </div>
+    <div id="bfa-box" style="font-size:13px"></div>
+  </div>
+</div>
+<div class="card" style="margin-bottom:14px"><div style="padding:14px">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="document.getElementById('po-file').click()" style="font-size:14px;padding:10px 18px">📤 ارفع كشف (بوسطة / Paymob / أمازون)</button>
       <input type="file" id="po-file" accept=".csv,.xlsx,.xls" style="display:none" onchange="payoutPick(this.files[0]);this.value=''">
@@ -53368,6 +53389,103 @@ async function pbcAdd(){
   }finally{
     btn.disabled = false; btn.textContent = '🏷️ ضيف الباركود';
   }
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// 🆕 v623: مراجعة رسوم بوسطة ضد العقد (backend v571)
+// ═══════════════════════════════════════════════════════════════
+let _bfaRows = null;
+const _bfaMoney = n => (Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+function bfaOpts(){
+  return { flexship: $('bfa-flexship')?.checked === true,
+           next_day_cod: $('bfa-nextday')?.checked === true,
+           insured: $('bfa-ins')?.checked === true };
+}
+function bfaRerun(){ if(_bfaRows) bfaRun(); }
+function bfaReuse(){ if(_bfaRows) bfaRun(); }
+
+async function bfaPick(file){
+  if(!file) return;
+  const box = $('bfa-box'); box.innerHTML = '<span style="color:var(--muted)">⏳ بيقرا الشيت...</span>';
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type:'array' });
+    _bfaRows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval:'', raw:true });
+    if(!_bfaRows.length || !('Order Reference' in _bfaRows[0])){
+      box.innerHTML = '<span style="color:var(--danger)">❌ مش لاقي عمود Order Reference — اتأكد إنه شيت Cash Cycles</span>';
+      _bfaRows = null; return;
+    }
+    $('bfa-reuse').style.display = 'inline-flex';
+    bfaRun();
+  }catch(e){ box.innerHTML = `<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+
+async function bfaRun(){
+  const box = $('bfa-box'); box.innerHTML = '<span style="color:var(--muted)">⏳ بيحسب...</span>';
+  try{
+    const r = await apiFetch('/api/bosta/fee-audit', 'POST', { rows: _bfaRows, options: bfaOpts() });
+    if(!r || r.error){ box.innerHTML = `<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
+    const vc = r.variance > 0.5 ? '#dc2626' : (r.variance < -0.5 ? '#2563eb' : '#16a34a');
+    const verdict = Math.abs(r.variance) <= Math.max(5, r.expected_total*0.001)
+      ? '✅ مطابق للعقد'
+      : (r.variance > 0 ? `⚠️ بوسطة حاسبة زيادة ${_bfaMoney(r.variance)} ج` : `ℹ️ بوسطة حاسبة أقل ${_bfaMoney(-r.variance)} ج`);
+
+    const flagRows = Object.entries(r.flags || {}).sort((a,b)=>b[1]-a[1]);
+    box.innerHTML = `
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+        <div class="sc" style="flex:1;min-width:160px"><div class="sc-label">شحنات اتراجعت</div><div class="sc-val">${r.priced}</div>
+          ${r.unpriced?`<div style="font-size:11px;color:#b45309">${r.unpriced} مش متسعّرة</div>`:''}</div>
+        <div class="sc" style="flex:1;min-width:160px"><div class="sc-label">المتوقع من العقد</div><div class="sc-val" style="font-size:18px">${_bfaMoney(r.expected_total)}</div></div>
+        <div class="sc" style="flex:1;min-width:160px"><div class="sc-label">اللي بوسطة حاسباه</div><div class="sc-val" style="font-size:18px">${_bfaMoney(r.actual_total)}</div></div>
+        <div class="sc" style="flex:1;min-width:190px;border:1px solid ${vc}55"><div class="sc-label">الفرق</div>
+          <div class="sc-val" style="font-size:18px;color:${vc}">${r.variance>0?'+':''}${_bfaMoney(r.variance)}</div>
+          <div style="font-size:11px;color:${vc};font-weight:700">${verdict}${r.variance_pct!=null?` · ${r.variance_pct>0?'+':''}${r.variance_pct}%`:''}</div></div>
+      </div>
+
+      ${flagRows.length?`<div style="margin-bottom:12px;padding:10px 12px;background:var(--elev);border:1px solid var(--border);border-radius:8px">
+        <div style="font-weight:800;font-size:12px;margin-bottom:6px">الملاحظات</div>
+        ${flagRows.map(([k,n])=>`<div style="font-size:12px;padding:2px 0">• ${escapeHtml(k)} — <b>${n}</b> شحنة</div>`).join('')}
+      </div>`:''}
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:12px">
+        <div style="border:1px solid var(--border);border-radius:8px;overflow:auto">
+          <table style="width:100%;font-size:11.5px"><thead><tr style="color:var(--muted)">
+            <th style="text-align:right;padding:5px 8px">المنطقة</th><th>شحنات</th><th>متوقع</th><th>فعلي</th><th>فرق</th></tr></thead>
+          <tbody>${(r.by_zone||[]).map(z=>`<tr>
+            <td style="padding:4px 8px">منطقة ${z.zone}</td><td style="text-align:center">${z.n}</td>
+            <td style="text-align:center;font-family:Roboto,monospace">${_bfaMoney(z.expected)}</td>
+            <td style="text-align:center;font-family:Roboto,monospace">${_bfaMoney(z.actual)}</td>
+            <td style="text-align:center;font-family:Roboto,monospace;font-weight:800;color:${Math.abs(z.diff)<=0.5?'var(--muted)':(z.diff>0?'#dc2626':'#2563eb')}">${z.diff>0?'+':''}${_bfaMoney(z.diff)}</td>
+          </tr>`).join('')}</tbody></table>
+        </div>
+      </div>
+
+      ${(r.worst||[]).length?`
+      <div style="font-weight:800;font-size:12px;margin-bottom:6px">أكبر الفروق (${r.worst.length})</div>
+      <div style="border:1px solid var(--border);border-radius:8px;overflow:auto;max-height:420px">
+        <table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted);position:sticky;top:0;background:var(--card)">
+          <th style="text-align:right;padding:5px 8px">الأوردر</th><th>المدينة</th><th>منطقة</th><th>الحالة</th>
+          <th>COD</th><th>متوقع</th><th>فعلي</th><th>فرق</th><th style="text-align:right">الملاحظة</th></tr></thead>
+        <tbody>${r.worst.map(i=>`<tr>
+          <td style="padding:4px 8px;font-family:Roboto,monospace">${escapeHtml(i.ref)}</td>
+          <td style="font-size:10.5px">${escapeHtml(i.city||'—')}</td>
+          <td style="text-align:center">${i.zone??'؟'}</td>
+          <td style="text-align:center;font-size:10px">${escapeHtml(i.kind)}</td>
+          <td style="text-align:center;font-family:Roboto,monospace">${_bfaMoney(i.cod)}</td>
+          <td style="text-align:center;font-family:Roboto,monospace">${_bfaMoney(i.expected)}</td>
+          <td style="text-align:center;font-family:Roboto,monospace">${_bfaMoney(i.actual)}</td>
+          <td style="text-align:center;font-family:Roboto,monospace;font-weight:800;color:${i.diff>0?'#dc2626':'#2563eb'}">${i.diff>0?'+':''}${_bfaMoney(i.diff)}</td>
+          <td style="font-size:10px;color:#b45309">${escapeHtml((i.issues||[]).join(' · '))}</td>
+        </tr>`).join('')}</tbody></table>
+      </div>`:'<div style="padding:14px;text-align:center;color:#16a34a;font-weight:700">✅ مفيش أي شحنة خارجة عن العقد</div>'}
+
+      <div style="margin-top:10px;font-size:11px;color:var(--muted)">
+        أسعار العقد قبل الضريبة — منطقة 1: تسليم 69 / مرتجع 57 · منطقة 3: 83 / 71 · منطقة 5: 115 / 103.
+        عمولة التحصيل 1% من اللي <b>فوق</b> 3000 بس.
+      </div>`;
+  }catch(e){ box.innerHTML = `<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
 }
 
 </script>
