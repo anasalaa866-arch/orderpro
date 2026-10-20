@@ -21230,6 +21230,7 @@ async function talSetPick(file){
     _talSetRows = r.rows;
     const bad = r.rows.filter(x=>x.flag);
     box.innerHTML = `
+      ${talAuditHtml(r.contract_audit)}
       <div style="display:flex;gap:16px;flex-wrap:wrap;font-weight:700;margin-bottom:10px">
         <span>صفوف: ${r.count}</span>
         <span style="color:#16a34a">اتطابق: ${r.matched}</span>
@@ -21590,6 +21591,7 @@ async function bpPick(file, reuse){
     if(!r||r.error){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
     _bpPreview=r;
     box.innerHTML=`
+      ${bpSizeHtml(r.size_review)}
       <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px">
         <div class="sc green" style="flex:1;min-width:170px"><div class="sc-label">هيتسجّل دفعة</div><div class="sc-val">${r.ok}</div><div style="font-size:11px;color:var(--muted)">COD ${r.ok_cod.toLocaleString()} ج · عمولة ${r.ok_fees.toLocaleString()} ج · <b>البنك ${r.ok_net.toLocaleString()} ج</b></div></div>
         <div class="sc orange" style="flex:1;min-width:150px"><div class="sc-label">مرتجعات (مصروف شحن)</div><div class="sc-val">${r.returned}</div><div style="font-size:11px;color:var(--muted)">${r.returned_fees.toLocaleString()} ج خصمتهم بوسطة</div></div>
@@ -21819,6 +21821,7 @@ async function pmPick(file, reuse){
     const K={sure:['#16a34a','✅ أكيد'],maybe:['#b45309','🤔 محتمل'],unmatched:['#dc2626','❌ مش لاقي'],already:['var(--muted)','متسجلة'],paid:['var(--muted)','مدفوعة قبل كده'],no_invoice:['#dc2626','مش متفوتر'],internal:['var(--muted)','داخلي'],skip:['var(--muted)','متخطى']};
     const maybes=r.rows.filter(x=>x.kind==='maybe');
     box.innerHTML=`
+      ${pmAuditHtml(r.rate_audit)}
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
         <div class="sc green" style="flex:1;min-width:150px"><div class="sc-label">أكيد — هيتسجّل</div><div class="sc-val">${r.sure}</div><div style="font-size:11px;color:var(--muted)">${f(r.sure_amount)} ج</div></div>
         <div class="sc orange" style="flex:1;min-width:150px"><div class="sc-label">محتمل — اختار</div><div class="sc-val">${r.maybe}</div></div>
@@ -34064,6 +34067,13 @@ function _renderPOPricingRow(poId, item){
     <div data-item-id="${item.id}" data-disc="${disc}" data-tax="${tax}"
          style="background:var(--bg);border-radius:8px;padding:10px;border:1px solid var(--border)">
       <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;flex-wrap:wrap">
+        <!-- 🖼️ v626: صورة الصنف — من image_url اللي الـ endpoint بيرجّعه (v474) -->
+        ${item.image_url ? `<img src="${escapeHtml(item.image_url)}" alt="" loading="lazy"
+             onerror="this.style.display='none'"
+             onclick="window.open(this.src,'_blank')"
+             title="${escapeHtml((item.product_title || '').slice(0, 80))} — دوس للتكبير"
+             style="width:52px;height:52px;object-fit:contain;border-radius:7px;border:1px solid var(--border);background:#fff;flex:none;cursor:zoom-in">`
+          : `<div style="width:52px;height:52px;border-radius:7px;border:1px dashed var(--border);background:var(--elev);flex:none;display:flex;align-items:center;justify-content:center;font-size:17px;opacity:.35" title="مفيش صورة">📦</div>`}
         <div style="flex:1;min-width:180px">
           <div style="font-weight:700;font-size:12px">${escapeHtml((item.product_title || '').slice(0, 60))}</div>
           ${item.variant_title && item.variant_title !== 'Default Title' ? `<div style="font-size:10px;color:var(--muted)">${escapeHtml(item.variant_title)}</div>` : ''}
@@ -53494,6 +53504,142 @@ async function bfaRun(){
         عمولة التحصيل 1% من اللي <b>فوق</b> 3000 بس.
       </div>`;
   }catch(e){ box.innerHTML = `<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// 🆕 v625: بلوك الملحوظات — بيظهر جوّه رفع الكشف نفسه (مش صفحة لوحدها)
+//   Paymob: مراجعة النسب (backend v574) · بوسطة: مراجعة أحجام الشحنات
+// ═══════════════════════════════════════════════════════════════
+const _auMoney = n => (Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+function _auBox(title, tone, body){
+  const c = { ok:'#16a34a', warn:'#d97706', bad:'#dc2626' }[tone] || 'var(--muted)';
+  return `<div style="margin:10px 0;border:1px solid ${c}55;background:${c}0d;border-radius:9px;overflow:hidden">
+    <div style="padding:9px 12px;background:${c}18;font-weight:800;font-size:12.5px;color:${c}">${title}</div>
+    <div style="padding:10px 12px;font-size:12px">${body}</div></div>`;
+}
+
+// ── Paymob ──────────────────────────────────────────────────────
+function pmAuditHtml(a){
+  if(!a || !a.checked) return '';
+  const rc = a.rate_card || {};
+  const card = `<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.8">
+     التسعيرة المرجعية: POS <b>${rc.pos}%</b> · أونلاين <b>${(rc.online||[]).join('% أو ')}%</b> + ${rc.online_fixed} ج ·
+     محفظة <b>${rc.wallet}%</b> + ${rc.online_fixed} ج — كلها + ضريبة ${((rc.vat||0)*100).toFixed(0)}%</div>`;
+  if(!a.flagged){
+    return _auBox(`✅ النسب سليمة — ${a.checked} عملية اتفحصت`, 'ok',
+      `كل العمليات مطابقة للتسعيرة. مفيش أي ملحوظة.${card}`);
+  }
+  const flags = Object.entries(a.flags).sort((x,y)=>y[1]-x[1]);
+  const tone = a.extra_total > 50 ? 'bad' : 'warn';
+  const rows = (a.items||[]).slice(0,40).map(i=>`<tr>
+      <td style="padding:3px 6px;font-family:Roboto,monospace;font-size:10.5px">${escapeHtml(String(i.txn||''))}</td>
+      <td style="font-size:10.5px">${escapeHtml(String(i.at||'').slice(0,16))}</td>
+      <td style="text-align:center;font-size:10.5px">${escapeHtml(String(i.channel||''))}</td>
+      <td style="text-align:center;font-family:Roboto,monospace">${_auMoney(i.amount)}</td>
+      <td style="text-align:center;font-family:Roboto,monospace">${_auMoney(i.fees)}</td>
+      <td style="text-align:center;font-family:Roboto,monospace">${i.rate!=null?i.rate+'%':'—'}</td>
+      <td style="text-align:center;font-family:Roboto,monospace;font-weight:800;color:${i.info?'var(--muted)':(i.extra>0?'#dc2626':'#2563eb')}">${i.extra?((i.extra>0?'+':'')+_auMoney(i.extra)):'—'}</td>
+      <td style="font-size:10.5px;color:${i.info?'var(--muted)':'#b45309'}">${escapeHtml(String(i.issue||''))}</td></tr>`).join('');
+  return _auBox(`🔍 مراجعة النسب — ${a.flagged} ملحوظة من ${a.checked} عملية`, tone, `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:9px">
+      <div style="flex:1;min-width:130px"><div style="font-size:10.5px;color:var(--muted)">مطابق للتسعيرة</div><div style="font-size:17px;font-weight:800;color:#16a34a">${a.ok}</div></div>
+      <div style="flex:1;min-width:130px"><div style="font-size:10.5px;color:var(--muted)">عليها ملحوظة</div><div style="font-size:17px;font-weight:800;color:#d97706">${a.flagged}</div></div>
+      <div style="flex:1;min-width:160px"><div style="font-size:10.5px;color:var(--muted)">الزيادة عن التسعيرة</div><div style="font-size:17px;font-weight:800;color:${a.extra_total>0?'#dc2626':'var(--muted)'}">${_auMoney(a.extra_total)} ج</div></div>
+    </div>
+    <div style="margin-bottom:8px">${flags.map(([k,n])=>`<div style="padding:2px 0">• ${escapeHtml(k)} — <b>${n}</b></div>`).join('')}</div>
+    <div style="border:1px solid var(--border);border-radius:7px;overflow:auto;max-height:320px;background:var(--card)">
+      <table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted);position:sticky;top:0;background:var(--card)">
+        <th style="text-align:right;padding:4px 6px">العملية</th><th>التاريخ</th><th>القناة</th><th>المبلغ</th><th>الرسوم</th><th>النسبة</th><th>الزيادة</th><th style="text-align:right">الملحوظة</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+    </div>
+    ${(a.items||[]).length>40?`<div style="font-size:10.5px;color:var(--muted);margin-top:5px">معروض 40 من ${a.items.length}</div>`:''}
+    ${card}`);
+}
+
+// ── بوسطة: الشحنات اللي مش محسوبة صغيرة ─────────────────────────
+function bpSizeHtml(sr){
+  if(!sr || !sr.total_shipments) return '';
+  const sizes = (sr.by_size||[]).map(s=>`<span style="display:inline-block;margin:2px 4px 2px 0;padding:3px 9px;border-radius:11px;font-size:11px;border:1px solid ${s.fee?'#d9770655':'var(--border)'};background:${s.fee?'#d977060d':'var(--elev)'}">
+      ${escapeHtml(s.size)} <b>${s.n}</b>${s.fee?` · ${s.fee} ج`:' · مجاني'}</span>`).join('');
+  if(!sr.not_small){
+    return _auBox('✅ كل الشحنات محسوبة بحجم مجاني', 'ok',
+      `${sr.total_shipments} شحنة · مفيش أي رسم حجم.<div style="margin-top:7px">${sizes}</div>`);
+  }
+  const rows = (sr.items||[]).map(i=>`<tr>
+      <td style="padding:3px 6px;font-family:Roboto,monospace">${escapeHtml(String(i.ref||''))}</td>
+      <td style="font-size:10.5px">${escapeHtml(String(i.city||''))}</td>
+      <td style="text-align:center"><b>${escapeHtml(String(i.size||''))}</b></td>
+      <td style="text-align:center;font-family:Roboto,monospace;color:#b45309;font-weight:800">+${i.fee} ج</td>
+      <td style="text-align:center;font-family:Roboto,monospace;font-size:10.5px">${_auMoney(i.fee_vat)}</td>
+      <td style="text-align:center;font-family:Roboto,monospace;font-size:10.5px">${_auMoney(i.cod)}</td>
+      <td style="text-align:center;font-size:10.5px">${escapeHtml(String(i.status||''))}</td></tr>`).join('');
+  return _auBox(`📦 ${sr.not_small} شحنة مش محسوبة «صغيرة» — راجع التصنيف`, 'warn', `
+    <div style="margin-bottom:8px">رسوم الحجم: <b>${_auMoney(sr.fee_total)} ج</b> قبل الضريبة · <b>${_auMoney(sr.fee_total_vat)} ج</b> بالضريبة — من ${sr.total_shipments} شحنة.
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">Small / Medium / Large / X-Large كلهم <b>مجاناً</b> في العقد. الرسم بس على الكيس الأبيض (15 ج) والشحنات الخفيفة (90 ج).</div></div>
+    <div style="margin-bottom:8px">${sizes}</div>
+    <div style="border:1px solid var(--border);border-radius:7px;overflow:auto;max-height:300px;background:var(--card)">
+      <table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted);position:sticky;top:0;background:var(--card)">
+        <th style="text-align:right;padding:4px 6px">الأوردر</th><th>المدينة</th><th>الحجم</th><th>الرسم</th><th>بالضريبة</th><th>COD</th><th>الحالة</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:7px">لو شحنة منهم مكانتش فعلاً كبيرة، دي نقطة تتسأل فيها مدير الحساب. وأي شحنة وصفها ناقص بوسطة بتقدّر حجمها بنفسها.</div>`);
+}
+
+
+// 🆕 v626: فحص عقد طلبات — بيظهر جوّه مطابقة الكشف (backend v575)
+function talAuditHtml(a){
+  if(!a) return '';
+  const C = a.contract || {};
+  const nt = (a.notices||[]).map(n=>{
+    const c = n.kind==='warn' ? '#d97706' : 'var(--muted)';
+    return `<div style="padding:5px 9px;margin:4px 0;border-right:3px solid ${c};background:${n.kind==='warn'?'#d977060d':'var(--elev)'};font-size:11.5px;line-height:1.6">${n.kind==='warn'?'⚠️ ':'ℹ️ '}${escapeHtml(n.text)}</div>`;
+  }).join('');
+
+  const ir = Object.entries(a.implied_rates||{}).map(([name,v])=>
+    `<tr><td style="padding:3px 6px">${escapeHtml(name)}${name===a.base_used?' <b style="color:#2563eb">◄ المستخدم</b>':''}</td>
+         <td style="text-align:center;font-family:Roboto,monospace">${(v.top||[]).map(t=>t.pct+'% ('+t.n+')').join(' · ')||'—'}</td>
+         <td style="text-align:center;font-family:Roboto,monospace">${v.consistency!=null?v.consistency+'%':'—'}</td></tr>`).join('');
+
+  const rows = (a.items||[]).slice(0,60).map(i=>`<tr>
+      <td style="padding:3px 6px;font-family:Roboto,monospace">${escapeHtml(String(i.order_id||''))}</td>
+      <td style="text-align:center;font-size:10.5px">${escapeHtml(String(i.at||''))}</td>
+      <td style="text-align:center;font-size:10.5px">${escapeHtml(String(i.status||''))}</td>
+      <td style="text-align:center;font-family:Roboto,monospace">${(Number(i.subtotal)||0).toLocaleString()}</td>
+      <td style="text-align:center;font-family:Roboto,monospace">${(Number(i.commission)||0).toFixed(2)}</td>
+      <td style="text-align:center;font-family:Roboto,monospace;font-weight:800;color:${i.info?'var(--muted)':(i.extra>0?'#dc2626':'#2563eb')}">${i.extra!=null?((i.extra>0?'+':'')+Number(i.extra).toFixed(2)):'—'}</td>
+      <td style="font-size:10.5px;color:${i.info?'var(--muted)':'#b45309'}">${escapeHtml(String(i.issue||''))}</td></tr>`).join('');
+
+  const tone = a.flagged ? (a.extra_total>50?'bad':'warn') : 'ok';
+  const title = a.flagged
+    ? `📄 فحص العقد — ${a.flagged} ملحوظة من ${a.checked} أوردر`
+    : `✅ الكشف مطابق للعقد — ${a.checked} أوردر`;
+
+  return _auBox(title, tone, `
+    ${nt}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:9px 0">
+      <div style="flex:1;min-width:120px"><div style="font-size:10.5px;color:var(--muted)">مطابق للعقد</div><div style="font-size:17px;font-weight:800;color:#16a34a">${a.ok}</div></div>
+      <div style="flex:1;min-width:120px"><div style="font-size:10.5px;color:var(--muted)">عليها ملحوظة</div><div style="font-size:17px;font-weight:800;color:#d97706">${a.flagged}</div></div>
+      <div style="flex:1;min-width:150px"><div style="font-size:10.5px;color:var(--muted)">الفرق عن العقد</div><div style="font-size:17px;font-weight:800;color:${a.extra_total>0?'#dc2626':'var(--muted)'}">${_auMoney(a.extra_total)} ج</div></div>
+      <div style="flex:1;min-width:150px"><div style="font-size:10.5px;color:var(--muted)">عمولة على ملغي</div><div style="font-size:17px;font-weight:800;color:${a.cancel_commission>0?'#d97706':'var(--muted)'}">${_auMoney(a.cancel_commission)} ج</div></div>
+    </div>
+    <div style="margin-bottom:8px;font-size:11px">
+      <b>النسب المستنتجة من الكشف نفسه</b> — لو مفيش نسبة قريبة من 8% أو 10%، يبقى الأساس اللي بنحسب عليه مختلف:
+      <table style="width:100%;margin-top:4px;border:1px solid var(--border);border-radius:6px;font-size:11px">
+        <thead><tr style="color:var(--muted)"><th style="text-align:right;padding:3px 6px">الأساس</th><th>أكتر النسب تكراراً</th><th>الثبات</th></tr></thead>
+        <tbody>${ir}</tbody></table>
+    </div>
+    ${rows?`<div style="border:1px solid var(--border);border-radius:7px;overflow:auto;max-height:280px;background:var(--card)">
+      <table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted);position:sticky;top:0;background:var(--card)">
+        <th style="text-align:right;padding:4px 6px">الأوردر</th><th>التاريخ</th><th>الحالة</th><th>الإجمالي</th><th>العمولة</th><th>الفرق</th><th style="text-align:right">الملحوظة</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>`:''}
+    <div style="font-size:10.5px;color:var(--muted);margin-top:8px;line-height:1.8">
+      العقد: موقّع ${C.signed} → ${C.ends} · كود ${C.code} ·
+      عمولة ${(C.schedule||[]).map(s=>`<b>${s.pct}%</b> (${s.from} → ${s.to})</b>`).join(' ثم ')} ·
+      رسوم دفع ${C.psp_pct}% · ضريبة ${((C.vat||0)*100).toFixed(0)}% ·
+      اشتراك ${C.monthly_fee} ج/شهر · tPro: توصيل مجاني فوق ${C.tpro_mov} ج على حسابك
+    </div>`);
 }
 
 </script>
