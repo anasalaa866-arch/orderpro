@@ -34884,11 +34884,19 @@ async function sendPOToShopify(id){
       }
       if(r.warnings?.length) msg += `\n${r.warnings.join('\n')}\n`;
       
+      // 🐛 v624: الأسباب بقت مختلفة (بند خدمة / variant ناقص) — وريه السبب الحقيقي
       if(r.transfer.skipped?.length){
-        msg += `\n⚠️ ${r.transfer.skipped.length} منتج اتـ skip (مفيش variant_id):\n`;
-        r.transfer.skipped.slice(0, 5).forEach(s => {
-          msg += `  • ${s.product_title || s.sku}: ${s.reason}\n`;
-        });
+        const svc = r.transfer.skipped.filter(s => /خدمة/.test(s.reason || ''));
+        const oth = r.transfer.skipped.filter(s => !/خدمة/.test(s.reason || ''));
+        if(svc.length){
+          msg += `\nℹ️ ${svc.length} بند خدمة مادخلش الترانسفير (طبيعي — مالهوش مخزون):\n`;
+          svc.slice(0, 5).forEach(s => { msg += `  • ${s.product_title || s.sku}\n`; });
+          msg += `  لسه موجودين في أمر الشراء وفي التكلفة.\n`;
+        }
+        if(oth.length){
+          msg += `\n⚠️ ${oth.length} منتج اتـ skip:\n`;
+          oth.slice(0, 5).forEach(s => { msg += `  • ${s.product_title || s.sku}: ${s.reason}\n`; });
+        }
       }
       
       if(r.shopify_url){
