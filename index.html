@@ -3035,6 +3035,7 @@ tr:hover td{background:#fafbff}
           <option value="all">كل الأحجام</option>
           <option value="lt100">أصغر من 100 KB</option>
           <option value="100-300">100 – 300 KB</option>
+          <option value="gt300">⚠️ أكبر من 300 KB</option>
           <option value="300-500">300 – 500 KB</option>
           <option value="gt500">أكبر من 500 KB</option>
           <option value="gt1mb">أكبر من 1 MB</option>
@@ -19310,6 +19311,15 @@ async function imgfixLoadReviewQueue(){
   } catch(e){}
 }
 
+// 🆕 v622: لو sharp مش متثبتة على السيرفر، التظبيط التلقائي بيعدّي في صمت
+function imgfixSharpWarn(ready){
+  const prog = document.getElementById('imgfix-scan-progress');
+  if(!prog || ready !== false) return;
+  prog.innerHTML = `<div style="padding:9px 11px;border:1px solid #dc262655;background:#dc26260f;border-radius:7px;color:#dc2626;font-weight:700">
+    ⚠️ مكتبة <code>sharp</code> مش متثبتة على السيرفر — التظبيط التلقائي واليدوي الاتنين متعطّلين.
+    <div style="font-weight:400;margin-top:3px">شغّل <code>npm install sharp</code> على Railway وأعد التشغيل.</div></div>`;
+}
+
 async function imgfixScan(){
   if(!API_URL){ toast('❌ الـ backend غير متصل'); return; }
   if(_imgfixScanning) return;
@@ -19326,6 +19336,7 @@ async function imgfixScan(){
       if(cursor) params.set('cursor', cursor);
       const r = await apiFetch('/api/image-fix/scan?' + params.toString());
       if(!r || !r.items) throw new Error(r?.error || 'فشل الفحص');
+      if(r.sharpReady === false){ imgfixSharpWarn(false); _imgfixScanning = false; return; }   // 🆕 v622
       _imgfixItems.push(...r.items.filter(it => it.hasImage));
       cursor = r.hasNextPage ? r.endCursor : null;
       pages++;
@@ -19371,11 +19382,14 @@ function imgfixRender(){
   const sizeFilter = document.getElementById('imgfix-size-filter')?.value || 'all';
   if(sizeFilter !== 'all'){
     list = list.filter(i => {
-      const kb = (i.fileSize || 0) / 1024;
-      if(!i.fileSize) return false; // الصور بدون حجم تُستثنى من الفلترة بالحجم
+      // 🆕 v621: بنقيس أكبر صورة في المنتج، مش الرئيسية بس (backend v569)
+      const bytes = i.maxFileSize || i.fileSize || 0;
+      if(!bytes) return false; // الصور بدون حجم تُستثنى من الفلترة بالحجم
+      const kb = bytes / 1024;
       switch(sizeFilter){
         case 'lt100': return kb < 100;
         case '100-300': return kb >= 100 && kb < 300;
+        case 'gt300': return kb >= 300;
         case '300-500': return kb >= 300 && kb < 500;
         case 'gt500': return kb >= 500;
         case 'gt1mb': return kb >= 1024;
@@ -19386,8 +19400,9 @@ function imgfixRender(){
 
   // 🆕 v396: ترتيب
   const sortBy = document.getElementById('imgfix-sort')?.value || 'none';
-  if(sortBy === 'size-desc') list.sort((a,b) => (b.fileSize||0) - (a.fileSize||0));
-  else if(sortBy === 'size-asc') list.sort((a,b) => (a.fileSize||0) - (b.fileSize||0));
+  const _bytes = x => x.maxFileSize || x.fileSize || 0;   // 🆕 v621
+  if(sortBy === 'size-desc') list.sort((a,b) => _bytes(b) - _bytes(a));
+  else if(sortBy === 'size-asc') list.sort((a,b) => _bytes(a) - _bytes(b));
   else if(sortBy === 'title') list.sort((a,b) => (a.title||'').localeCompare(b.title||'', 'ar'));
 
   if(!list.length){
@@ -19402,7 +19417,12 @@ function imgfixRender(){
 
   const rows = list.map(it => {
     const dim = (it.width && it.height) ? `${it.width}×${it.height}` : '؟';
-    const sizeStr = imgfixFmtSize(it.fileSize);
+    // 🆕 v621: لوّن فوق 300 KB، ووضّح لو أكبر صورة مش الرئيسية
+    const _mx = it.maxFileSize || it.fileSize || 0;
+    const _over = _mx >= 300 * 1024;
+    const _alsoBigger = it.maxFileSize && it.fileSize && it.maxFileSize > it.fileSize * 1.05;
+    const sizeStr = `<span style="${_over ? 'color:#b45309;font-weight:800' : ''}">${imgfixFmtSize(it.fileSize)}</span>`
+      + (_alsoBigger ? `<div style="font-size:9.5px;color:#b45309">أكبر صورة ${imgfixFmtSize(it.maxFileSize)}</div>` : '');
     const badge = it.needsFix
       ? `<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700">⚠️ محتاج تظبيط</span>`
       : `<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700">✅ متظبط</span>`;
@@ -19423,7 +19443,7 @@ function imgfixRender(){
   }).join('');
 
   // إجمالي حجم الصور المعروضة (لو فيها أحجام)
-  const totalBytes = list.reduce((s,i) => s + (i.fileSize||0), 0);
+  const totalBytes = list.reduce((s,i) => s + (i.imagesBytes || i.fileSize || 0), 0);   // 🆕 v621
   const totalStr = totalBytes > 0 ? ` · إجمالي ${imgfixFmtSize(totalBytes)}` : '';
 
   cont.innerHTML = `
