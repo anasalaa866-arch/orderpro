@@ -2122,11 +2122,40 @@ tr:hover td{background:#fafbff}
       </div>
     </div>
 
+    <!-- ⭐ v628: خصم عملاء طلبات برو — اتفاق قابل للقفل في أي وقت -->
+    <div class="card" style="margin-bottom:14px;border:2px solid #7c3aed">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-weight:900;color:#7c3aed">⭐ خصم عملاء طلبات برو</span>
+        <span id="tpro-state" style="font-size:12px;font-weight:800"></span>
+        <span id="tpro-today" style="font-size:12px;color:var(--muted);margin-inline-start:auto"></span>
+      </div>
+      <div style="padding:12px 14px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.9">
+          الكاشير بيدوس <b>⭐ عميل برو</b> في وضع طلبات، فالسلة بتتخصم من <b>سعر طلبات</b> (بعد النسبة).
+          التكلفة عليك — طلبات بتحوّل بعد الخصم، والبيعة بتتسجّل وتروح Zoho بالسعر بعد الخصم.
+          الزرار مابيظهرش للكاشير غير في الأيام المحددة، ولو قفلته هنا بيختفي فوراً.
+        </div>
+        <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:13px">
+            <input type="checkbox" id="tpro-enabled" style="width:18px;height:18px"> شغّال
+          </label>
+          <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:2px">النسبة %</label>
+            <input type="number" id="tpro-pct" min="1" max="99" step="0.5" class="form-input" style="width:90px;text-align:center"></div>
+          <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:2px">أيام الشهر (مفصولة بفاصلة)</label>
+            <input type="text" id="tpro-days" class="form-input" style="width:170px;text-align:center" placeholder="23,24,25"></div>
+          <button class="btn" id="tpro-save" onclick="tproSave()" style="background:#7c3aed;color:#fff">💾 حفظ</button>
+        </div>
+        <div id="tpro-stats" style="margin-top:12px;font-size:12px"></div>
+      </div>
+    </div>
+
     <div class="card" style="margin-bottom:14px">
       <div style="padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
         <span style="font-weight:800">📋 المنتجات المربوطة</span>
         <input type="text" id="tal-search" class="form-input" style="max-width:220px" placeholder="🔍 بحث بالاسم أو الـ sku..." oninput="talabatRender()">
         <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="tal-only-unmatched" onchange="talabatRender()"> غير المتطابق بس</label>
+        <!-- 🆕 v627: فلتر المنتجات اللي ليها سعر مثبّت (مابتتأثرش بالنسبة) -->
+        <label style="font-size:12px;display:flex;align-items:center;gap:4px" title="المنتجات اللي ليها سعر مثبّت يدوي — دي اللي النسبة مابتغيّرهاش"><input type="checkbox" id="tal-only-pinned" onchange="talabatRender()"> 📌 سعر مثبّت بس</label>
         <span id="tal-summary" style="font-size:12px;color:var(--muted);margin-inline-start:auto"></span>
       </div>
       <div id="tal-list" style="padding:6px 14px;overflow-x:auto"></div>
@@ -40931,6 +40960,7 @@ async function loadTalabat(){
   talPubStatus(); talNeedsClose();
   apiFetch('/api/talabat/new-products','GET').then(r=>{ const b=$('tal-new-badge'); if(b&&r&&!r.error){ b.textContent=r.not_linked||''; b.style.display=r.not_linked?'inline-block':'none'; } }).catch(()=>{});
   await talabatLoadMargin();
+  tproLoad().catch(()=>{});               // ⭐ v628
   await talabatLoadLinks();
   // 🆕 v442: حمّل عدّاد "محتاج تحويل" مع فتح الصفحة عشان البادچ ينبّه من غير ما تفتح التاب
   try{
@@ -40991,14 +41021,17 @@ function talabatRender(){
   const box=$('tal-list'); if(!box) return;
   const q=($('tal-search')?.value||'').trim().toLowerCase();
   const onlyU=$('tal-only-unmatched')?.checked;
+  const onlyP=$('tal-only-pinned')?.checked;            // 🆕 v627
   let rows=_talLinks;
   if(onlyU) rows=rows.filter(l=>!l.matched);
+  if(onlyP) rows=rows.filter(l=>l.price_override!=null && l.price_override!=='');
   if(q) rows=rows.filter(l=>matchTokens([l.talabat_name,l.matched_name,l.talabat_sku].join(' '), q));
   if(_talSort==='sales') rows=[...rows].sort((x,y)=>(y.tal_qty_30d||0)-(x.tal_qty_30d||0));
   const matchedCount=_talLinks.filter(l=>l.matched).length;
   const activeCount=_talLinks.filter(l=>l.active===1).length;
   const lockedCount=_talLinks.filter(l=>l.force_inactive).length;
-  if($('tal-summary')) $('tal-summary').textContent=`${_talLinks.length} منتج · مطابق ${matchedCount} · متاح (active) ${activeCount}${lockedCount?` · 🔒 مقفول يدوياً ${lockedCount}`:''}`;
+  const pinnedCount=_talLinks.filter(l=>l.price_override!=null && l.price_override!=='').length;   // 🆕 v627
+  if($('tal-summary')) $('tal-summary').textContent=`${_talLinks.length} منتج · مطابق ${matchedCount} · متاح (active) ${activeCount}${pinnedCount?` · 📌 سعر مثبّت ${pinnedCount}`:''}${lockedCount?` · 🔒 مقفول يدوياً ${lockedCount}`:''}${(onlyU||onlyP||q)?` — معروض ${rows.length}`:''}`;
   if(!rows.length){ box.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted)">مفيش منتجات — ارفع شيت طلبات الأول</div>'; return; }
   box.innerHTML=`<table style="width:100%;font-size:13px"><thead><tr>
     <th style="text-align:right">المنتج على طلبات</th><th style="text-align:right">منتجك على الموقع</th><th>sku طلبات</th><th>مخزون ترفيوم</th><th onclick="talabatToggleSort()" style="cursor:pointer;user-select:none" title="دوس للترتيب بالمبيعات">مبيعات طلبات<div style="font-weight:400;font-size:10px;color:var(--muted)">آخر 30 يوم ${_talSort==='sales'?'▼':'↕'}</div></th><th>سعر الموقع</th><th>÷${(1-_talMarginCur/100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}<div style="font-weight:400;font-size:10px;color:var(--muted)">نسبة ${_talMarginCur}%</div></th><th>سعر مثبّت</th><th>السعر النهائي</th><th>active</th>
@@ -53640,6 +53673,56 @@ function talAuditHtml(a){
       رسوم دفع ${C.psp_pct}% · ضريبة ${((C.vat||0)*100).toFixed(0)}% ·
       اشتراك ${C.monthly_fee} ج/شهر · tPro: توصيل مجاني فوق ${C.tpro_mov} ج على حسابك
     </div>`);
+}
+
+
+
+// ⭐ v628: إعدادات خصم عملاء طلبات برو
+async function tproLoad(){
+  const r = await apiFetch('/api/talabat/tpro');
+  if(!r || r.error) return;
+  if($('tpro-enabled')) $('tpro-enabled').checked = !!r.enabled;
+  if($('tpro-pct'))     $('tpro-pct').value = r.pct;
+  if($('tpro-days'))    $('tpro-days').value = (r.days||[]).join(',');
+  const st = $('tpro-state');
+  if(st){
+    st.textContent = r.enabled ? (r.active_today ? '🟢 شغّال — والنهاردة من أيام الخصم' : '🟡 شغّال — بس النهاردة مش من أيامه')
+                               : '🔴 مقفول';
+    st.style.color = r.enabled ? (r.active_today ? '#16a34a' : '#b45309') : '#dc2626';
+  }
+  if($('tpro-today')) $('tpro-today').textContent = `النهاردة ${r.today} من الشهر`;
+  const box = $('tpro-stats'); if(!box) return;
+  const t = r.stats?.total;
+  if(!t || !Number(t.n)){ box.innerHTML = '<span style="color:var(--muted)">لسه مفيش بيعات اتخصم عليها</span>'; return; }
+  const days = r.stats.by_day || [];
+  box.innerHTML = `
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px">
+      <div><div style="font-size:11px;color:var(--muted)">بيعات بالخصم</div><div style="font-size:18px;font-weight:800">${Number(t.n).toLocaleString()}</div></div>
+      <div><div style="font-size:11px;color:var(--muted)">كلّفك</div><div style="font-size:18px;font-weight:800;color:#dc2626">${Number(t.cost).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} ج</div></div>
+    </div>
+    ${days.length?`<div style="border:1px solid var(--border);border-radius:7px;overflow:auto;max-height:200px">
+      <table style="width:100%;font-size:11.5px"><thead><tr style="color:var(--muted)">
+        <th style="text-align:right;padding:4px 8px">اليوم</th><th>بيعات</th><th>التكلفة</th></tr></thead>
+      <tbody>${days.map(d=>`<tr>
+        <td style="padding:3px 8px;font-family:Roboto,monospace">${escapeHtml(d.d)}</td>
+        <td style="text-align:center">${d.n}</td>
+        <td style="text-align:center;font-family:Roboto,monospace;color:#b45309">${Number(d.cost).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      </tr>`).join('')}</tbody></table></div>`:''}`;
+}
+async function tproSave(){
+  const en = $('tpro-enabled')?.checked;
+  const pct = parseFloat($('tpro-pct')?.value);
+  const days = ($('tpro-days')?.value||'').trim();
+  if(!Number.isFinite(pct) || pct<=0 || pct>=100) return toast('النسبة لازم بين 0 و 100','warning');
+  if(!days) return toast('اكتب أيام الشهر','warning');
+  if(en && !confirm(`تشغيل خصم ${pct}% لعملاء طلبات برو أيام ${days}؟\n\nالتكلفة عليك — طلبات بتحوّل بعد الخصم.`)) return;
+  const b = $('tpro-save'); if(b){ b.disabled = true; b.textContent = '⏳'; }
+  try{
+    const r = await apiFetch('/api/talabat/tpro','POST',{ enabled: en, pct, days });
+    if(r?.error) return toast(r.error,'error');
+    toast(en ? '⭐ الخصم شغّال' : '🔴 الخصم اتقفل', 'success');
+    await tproLoad();
+  } finally { if(b){ b.disabled = false; b.textContent = '💾 حفظ'; } }
 }
 
 </script>
