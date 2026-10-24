@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>CAFELAX — بوابة الموردين</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--border:#e3e6ea;--text:#1a1d21;--muted:#6b7280;--brand:#1F3864;--ok:#16a34a;--warn:#b45309;--bad:#dc2626}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#15181c;--card:#1e2228;--border:#2e343c;--text:#e8eaed;--muted:#9aa3ad}}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Cairo,system-ui,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:14px;overflow:hidden}
+.hd{padding:12px 14px;border-bottom:1px solid var(--border);font-weight:800;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.bd{padding:12px 14px}
+input,button{font-family:Cairo,sans-serif;font-size:14px}
+input{width:100%;padding:11px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);margin-bottom:10px}
+.btn{background:var(--brand);color:#fff;border:0;border-radius:9px;padding:10px 18px;cursor:pointer;font-weight:700}
+.btn.g{background:transparent;color:var(--muted);border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:13px} th{color:var(--muted);font-weight:600;text-align:center;padding:7px 5px;font-size:12px}
+td{padding:7px 5px;border-top:1px solid var(--border);text-align:center} td.r{text-align:right}
+.pill{display:inline-block;padding:2px 9px;border-radius:11px;font-size:11.5px;font-weight:700}
+.num{font-family:Roboto,sans-serif}
+.tabs{display:flex;gap:6px;flex-wrap:wrap} .tab{padding:7px 15px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:13px}
+.tab.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.sc{flex:1;min-width:110px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 12px}
+.sc b{display:block;font-size:21px;font-family:Roboto,sans-serif}
+img.th{width:36px;height:36px;object-fit:contain;border-radius:6px;background:#fff;border:1px solid var(--border)}
+</style></head><body>
+<div class="wrap">
+  <div style="display:flex;align-items:center;gap:10px;margin:6px 0 14px">
+    <div style="font-weight:800;font-size:19px;color:var(--brand)">CAFELAX</div>
+    <div style="color:var(--muted);font-size:13px">بوابة الموردين</div>
+    <div id="who" style="margin-inline-start:auto;font-size:13px"></div>
+  </div>
+
+  <div id="login" class="card" style="max-width:380px;margin:40px auto">
+    <div class="hd">تسجيل الدخول</div>
+    <div class="bd">
+      <input id="u" placeholder="اسم المستخدم" autocomplete="username">
+      <input id="p" type="password" placeholder="كلمة السر" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+      <button class="btn" style="width:100%" onclick="doLogin()">دخول</button>
+      <div id="err" style="color:var(--bad);font-size:12.5px;margin-top:9px;min-height:16px"></div>
+    </div>
+  </div>
+
+  <div id="app" style="display:none">
+    <div class="card"><div class="hd">
+      <div class="tabs">
+        <button class="tab on" data-t="products" onclick="go('products')">📦 منتجاتي</button>
+        <button class="tab" data-t="orders" onclick="go('orders')">📋 أوامر الشراء</button>
+        <button class="tab" data-t="expiry" onclick="go('expiry')">⏳ الصلاحيات</button>
+      </div>
+      <button class="btn g" style="margin-inline-start:auto;padding:6px 12px" onclick="doLogout()">خروج</button>
+    </div><div class="bd" id="view"></div></div>
+  </div>
+</div>
+<script>
+const API='https://orderpro-backend-production.up.railway.app';
+let TK=localStorage.getItem('sup_tk')||'';
+const $=i=>document.getElementById(i);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const n=v=>Number(v||0).toLocaleString('en-US');
+async function api(path,opt={}){
+  const r=await fetch(API+path,{...opt,headers:{'Content-Type':'application/json',...(TK?{Authorization:'Bearer '+TK}:{}),...(opt.headers||{})}});
+  if(r.status===401){ TK=''; localStorage.removeItem('sup_tk'); show(false); throw new Error('الجلسة انتهت — سجّل دخول تاني'); }
+  const j=await r.json().catch(()=>({error:'رد غير مفهوم'}));
+  if(!r.ok||j.error) throw new Error(j.error||'حصل خطأ'); return j;
+}
+// الباسورد بيتبعت sha256 زي باقي النظام
+async function sha256(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));
+  return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}
+function show(on){ $('login').style.display=on?'none':''; $('app').style.display=on?'':'none'; if(!on) $('who').textContent=''; }
+async function doLogin(){
+  $('err').textContent='';
+  const u=$('u').value.trim(), p=$('p').value;
+  if(!u||!p){ $('err').textContent='اكتب اسم المستخدم وكلمة السر'; return; }
+  try{
+    const j=await api('/api/supplier/login',{method:'POST',body:JSON.stringify({username:u,password:await sha256(p)})});
+    TK=j.token; localStorage.setItem('sup_tk',TK); $('p').value=''; await boot();
+  }catch(e){ $('err').textContent=e.message; }
+}
+async function doLogout(){ try{ await api('/api/supplier/logout',{method:'POST'}); }catch(e){}
+  TK=''; localStorage.removeItem('sup_tk'); show(false); }
+async function boot(){
+  try{ const me=await api('/api/supplier/me');
+    $('who').innerHTML=`<b>${esc(me.supplier?.name||'')}</b> <span style="color:var(--muted)">· ${me.products} منتج</span>`;
+    show(true); go('products');
+  }catch(e){ show(false); }
+}
+let TAB='products';
+function go(t){ TAB=t; document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  ({products:vProducts,orders:vOrders,expiry:vExpiry})[t](); }
+const PILL={'خلص':'--bad','قرب يخلص':'--warn','متوفر':'--ok','مؤرشف':'--muted'};
+async function vProducts(){
+  $('view').innerHTML='<div style="color:var(--muted)">⏳</div>';
+  try{ const j=await api('/api/supplier/products');
+    $('view').innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="sc"><span style="color:var(--muted);font-size:12px">خلص</span><b style="color:var(--bad)">${j.summary.out}</b></div>
+      <div class="sc"><span style="color:var(--muted);font-size:12px">قرب يخلص</span><b style="color:var(--warn)">${j.summary.low}</b></div>
+      <div class="sc"><span style="color:var(--muted);font-size:12px">متوفر</span><b style="color:var(--ok)">${j.summary.ok}</b></div>
+    </div>
+    <div style="overflow:auto"><table><thead><tr><th></th><th class="r" style="text-align:right">المنتج</th><th>SKU</th><th>المخزون</th><th>الحالة</th><th style="color:var(--muted)">سعر البيع</th></tr></thead><tbody>
+    ${j.rows.map(r=>`<tr>
+      <td>${r.image?`<img class="th" src="${esc(r.image)}" loading="lazy" onerror="this.style.visibility='hidden'">`:''}</td>
+      <td class="r">${esc(r.title)}</td>
+      <td class="num" style="font-size:11.5px;color:var(--muted)">${esc(r.sku||'')}</td>
+      <td class="num" style="font-weight:800">${n(r.stock)}</td>
+      <td><span class="pill" style="color:var(${PILL[r.state]});background:var(${PILL[r.state]});background-color:transparent;border:1px solid currentColor">${r.state}</span></td>
+      <td class="num" style="color:var(--muted);font-size:12px">${r.price!=null?n(r.price):'—'}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:9px">المخزون إجمالي كل المخازن، بيتحدّث لحظياً.</div>`;
+  }catch(e){ $('view').innerHTML=`<div style="color:var(--bad)">${esc(e.message)}</div>`; }
+}
+async function vOrders(){
+  $('view').innerHTML='<div style="color:var(--muted)">⏳</div>';
+  try{ const j=await api('/api/supplier/orders');
+    if(!j.rows.length){ $('view').innerHTML='<div style="color:var(--muted);padding:14px;text-align:center">مفيش أوامر شراء</div>'; return; }
+    $('view').innerHTML=`<div style="overflow:auto"><table><thead><tr><th class="r" style="text-align:right">رقم الأمر</th><th>التاريخ</th><th>متوقع</th><th>أصناف</th><th>كمية</th><th>مستلم</th><th>القيمة</th><th>الحالة</th></tr></thead><tbody>
+    ${j.rows.map(r=>`<tr><td class="r num" style="font-weight:800">${esc(r.po_number)}</td>
+      <td class="num" style="font-size:12px">${esc(String(r.order_date||'').slice(0,10))}</td>
+      <td class="num" style="font-size:12px">${esc(String(r.expected_date||'—').slice(0,10))}</td>
+      <td class="num">${n(r.items)}</td><td class="num">${n(r.qty)}</td>
+      <td class="num" style="color:${r.received>=r.qty?'var(--ok)':'var(--warn)'};font-weight:700">${n(r.received)}</td>
+      <td class="num">${r.total!=null?n(Math.round(r.total)):'—'}</td>
+      <td style="font-size:12px">${esc(r.status||'')}</td></tr>`).join('')}
+    </tbody></table></div>`;
+  }catch(e){ $('view').innerHTML=`<div style="color:var(--bad)">${esc(e.message)}</div>`; }
+}
+async function vExpiry(){
+  $('view').innerHTML='<div style="color:var(--muted)">⏳</div>';
+  try{ const j=await api('/api/supplier/expiry?days=180');
+    if(!j.rows.length){ $('view').innerHTML='<div style="color:var(--ok);padding:14px;text-align:center;font-weight:700">✅ مفيش أصناف قربت تنتهي خلال 6 شهور</div>'; return; }
+    $('view').innerHTML=`<div style="overflow:auto"><table><thead><tr><th class="r" style="text-align:right">المنتج</th><th>SKU</th><th>تاريخ الانتهاء</th><th>باقي</th><th>الكمية</th></tr></thead><tbody>
+    ${j.rows.map(r=>{const d=Number(r.days_left); const c=d<=30?'--bad':(d<=90?'--warn':'--muted');
+      return `<tr><td class="r">${esc(r.product_title||'')}</td>
+      <td class="num" style="font-size:11.5px;color:var(--muted)">${esc(r.sku||'')}</td>
+      <td class="num">${esc(r.exp_date||'')}</td>
+      <td class="num" style="font-weight:800;color:var(${c})">${d} يوم</td>
+      <td class="num">${n(r.quantity)}</td></tr>`;}).join('')}
+    </tbody></table></div>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:9px">الأصناف اللي صلاحيتها خلال 6 شهور.</div>`;
+  }catch(e){ $('view').innerHTML=`<div style="color:var(--bad)">${esc(e.message)}</div>`; }
+}
+if(TK) boot(); else show(false);
+</script></body></html>
