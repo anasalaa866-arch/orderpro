@@ -1883,6 +1883,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="settle-history" onclick="goPage(this,'settle-history')"><span class="ni-icon">📚</span><span class="ni-label">سجل التسويات</span></div>
         <div class="ni" data-p="shop-transfers" onclick="goPage(this,'shop-transfers')"><span class="ni-icon">🔄</span><span class="ni-label">تحويلات من المحل</span><span class="nbadge" id="nb-shop-transfers" style="background:var(--danger)">0</span></div>
         <div class="ni" data-p="shipping-transfers" onclick="goPage(this,'shipping-transfers')"><span class="ni-icon">🚚</span><span class="ni-label">تحويل الشحن</span><span class="nbadge" id="nb-shipping-transfers" style="background:var(--warn)">0</span></div>
+        <div class="ni" data-p="risk-queue" onclick="goPage(this,'risk-queue')"><span class="ni-icon">📞</span><span class="ni-label">اتصل قبل الشحن</span></div>
         <div class="ni" data-p="customer-risk" onclick="goPage(this,'customer-risk')"><span class="ni-icon">🚨</span><span class="ni-label">تقييم العملاء</span></div>
         <div class="ni" data-p="field-cancels" onclick="goPage(this,'field-cancels')"><span class="ni-icon">🚫</span><span class="ni-label">إلغاءات بانتظار الاستلام</span><span class="nbadge" id="nb-field-cancels" style="background:var(--danger)">0</span></div>
       </div>
@@ -4289,6 +4290,31 @@ tr:hover td{background:#fafbff}
   </div>
 
   <!-- 🆕 v213: CUSTOMER RISK ASSESSMENT PAGE -->
+  <!-- 📞 v630: طابور «اتصل قبل الشحن» — أوردرات مرتّبة باحتمال إنها تتشحن وترجع -->
+  <div class="page" id="page-risk-queue">
+    <div class="card" style="margin-bottom:14px">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-weight:900;font-size:15px">📞 اتصل قبل الشحن</span>
+        <select id="rq-limit" onchange="rqLoad()" style="padding:4px 8px;border:1px solid var(--border);border-radius:7px;font-family:Cairo,sans-serif;font-size:12px">
+          <option value="20">أعلى 20</option><option value="30" selected>أعلى 30</option><option value="50">أعلى 50</option>
+        </select>
+        <select id="rq-days" onchange="rqLoad()" style="padding:4px 8px;border:1px solid var(--border);border-radius:7px;font-family:Cairo,sans-serif;font-size:12px">
+          <option value="2">آخر يومين</option><option value="3" selected>آخر 3 أيام</option><option value="7">آخر أسبوع</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="rqLoad()">🔄 تحديث</button>
+        <button class="btn btn-ghost btn-sm" onclick="rqImpact()">📊 الأثر</button>
+        <span id="rq-sum" style="font-size:12px;color:var(--muted);margin-inline-start:auto"></span>
+      </div>
+      <div style="padding:10px 14px;font-size:11.5px;color:var(--muted);line-height:1.8;border-bottom:1px solid var(--border)">
+        مرتّبين باحتمال إن الأوردر يتشحن ويرجع. النموذج اتقاس على أوردرات مشفهاش:
+        <b>أعلى 30 دقتهم ~22%</b> — يعني 7 من كل 30 كانوا هيرجعوا فعلاً، والباقي سليم.
+        <b>دي أولوية مكالمات مش حكم</b> — ماتلغيش أوردر عشان درجته عالية.
+      </div>
+      <div id="rq-box" style="padding:10px 14px"></div>
+    </div>
+    <div id="rq-impact"></div>
+  </div>
+
   <div class="page" id="page-customer-risk">
     <!-- إعدادات سريعة -->
     <div class="card" style="margin-bottom:14px">
@@ -9898,7 +9924,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -21709,50 +21735,88 @@ async function invValuation(){
   }catch(e){ box.innerHTML=`<div style="background:var(--card);border-radius:14px;padding:18px"><span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span> <button onclick="document.getElementById('inv-val-modal').style.display='none'" class="btn btn-ghost btn-sm">إغلاق</button></div>`; }
 }
 // 🆕 v574: سجل السناب اليومي لرصيد البضاعة
-let _ivh=null;
+// 🆕 v629: عرض يومي / أسبوعي / شهري.
+//   ده رصيد مش حركة — فالتجميع بياخد **آخر سناب في الفترة** (رصيد الإقفال)،
+//   مش المتوسط ولا المجموع. والـ Δ بتقارن إقفال الفترة بإقفال اللي قبلها.
+let _ivh=null, _ivhGran='day';
+const _IVH_G={ day:{label:'يوم',  key:d=>d},
+               week:{label:'أسبوع',key:d=>{ const t=new Date(d+'T00:00:00Z');
+                      t.setUTCDate(t.getUTCDate()-((t.getUTCDay()+1)%7)); return t.toISOString().slice(0,10); }},  // الأسبوع يبدأ سبت
+               month:{label:'شهر', key:d=>d.slice(0,7)} };
+// بيجمّع الصفوف لفترات: آخر سناب في كل فترة + عدد الأيام اللي اتغطّت فعلاً
+function _ivhRoll(rows, gran){
+  if(gran==='day') return rows.map(x=>({ ...x, days:1, partial:false, label:x.date }));
+  const g=_IVH_G[gran], by=new Map();
+  for(const x of rows){ const k=g.key(x.date); if(!by.has(k)) by.set(k,[]); by.get(k).push(x); }
+  const out=[];
+  for(const [k,v] of [...by.entries()].sort((a,b)=>a[0]<b[0]?-1:1)){
+    const last=v[v.length-1];
+    const full = gran==='week' ? 7
+      : new Date(Date.UTC(+k.slice(0,4), +k.slice(5,7), 0)).getUTCDate();   // أيام الشهر
+    out.push({ ...last, days:v.length, partial:v.length<full, label:k, upto:last.date });
+  }
+  return out;
+}
+function invValGran(g){ _ivhGran=g; invValHistory(_ivh?.warehouse_id??0); }
 async function invValHistory(wid){
   const el=document.getElementById('inv-val-detail'); if(!el) return;
   el.innerHTML='<span style="color:var(--muted)">⏳</span>';
   try{
     const r=await apiFetch('/api/inventory/valuation/history?days=365&warehouse_id='+(wid??0),'GET'); _ivh=r;
     const f=n=>Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
+    const G=_IVH_G[_ivhGran]||_IVH_G.day;
+    const rr=_ivhRoll(r.rows||[], _ivhGran);     // 🆕 v629
+    _ivh.rolled=rr; _ivh.gran=_ivhGran;
     if(!r.rows.length){ el.innerHTML=`<div style="color:var(--muted)">مفيش سنابات لسه — أول واحدة بتتاخد تلقائي بعد النشر. <button class="btn btn-sm btn-primary" onclick="invValSnapNow()">📸 خد سناب دلوقتي</button></div>`; return; }
     // رسم SVG بسيط: بيع وتكلفة
-    const W=720,H=180,P=36; const xs=r.rows.map((_,i)=>P+(W-2*P)*(r.rows.length>1?i/(r.rows.length-1):0));
-    const maxV=Math.max(...r.rows.map(x=>x.retail),1); const y=v=>H-P-(H-2*P)*(v/maxV);
-    const path=k=>r.rows.map((x,i)=>`${i?'L':'M'}${xs[i].toFixed(1)},${y(x[k]).toFixed(1)}`).join(' ');
-    const first=r.rows[0], last=r.rows[r.rows.length-1], d=k=>last[k]-first[k];
+    const W=720,H=180,P=36; const xs=rr.map((_,i)=>P+(W-2*P)*(rr.length>1?i/(rr.length-1):0));
+    const maxV=Math.max(...rr.map(x=>x.retail),1); const y=v=>H-P-(H-2*P)*(v/maxV);
+    const path=k=>rr.map((x,i)=>`${i?'L':'M'}${xs[i].toFixed(1)},${y(x[k]).toFixed(1)}`).join(' ');
+    const dots=k=>rr.length<=40?rr.map((x,i)=>`<circle cx="${xs[i].toFixed(1)}" cy="${y(x[k]).toFixed(1)}" r="2.5" fill="${k==='retail'?'#16a34a':'#64748b'}"/>`).join(''):'';
+    const first=rr[0], last=rr[rr.length-1], d=k=>last[k]-first[k];
     const delta=(v)=>`<span style="color:${v>=0?'#16a34a':'#dc2626'};font-family:Roboto,sans-serif">${v>=0?'+':''}${f(v)}</span>`;
     el.innerHTML=`
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
-        <div style="font-weight:800">📈 السجل — ${r.rows.length} يوم</div>
+        <div style="font-weight:800">📈 السجل — ${rr.length} ${G.label}${_ivhGran!=='day'?` <span style="font-weight:400;color:var(--muted);font-size:11px">(من ${r.rows.length} يوم)</span>`:''}</div>
         <div style="display:flex;gap:6px;align-items:center">
+          <div style="display:flex;border:1px solid var(--border);border-radius:7px;overflow:hidden">
+            ${[['day','يومي'],['week','أسبوعي'],['month','شهري']].map(([g,l])=>
+              `<button onclick="invValGran('${g}')" style="border:0;padding:4px 10px;font-family:Cairo,sans-serif;font-size:11px;cursor:pointer;background:${_ivhGran===g?'#2563eb':'transparent'};color:${_ivhGran===g?'#fff':'var(--text)'}">${l}</button>`).join('')}
+          </div>
           <select onchange="invValHistory(this.value)" style="padding:4px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:11px">${(r.warehouses||[]).map(w=>`<option value="${w.warehouse_id}" ${w.warehouse_id===r.warehouse_id?'selected':''}>${escapeHtml(w.warehouse||'')}</option>`).join('')}</select>
           <button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="invValSnapNow()">📸 سناب دلوقتي</button>
           <button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="invValHistExcel()">⬇️ Excel</button>
         </div>
       </div>
       <div style="font-size:12px;margin-bottom:6px">من ${first.date} لـ ${last.date}: بيع ${delta(d('retail'))} · تكلفة ${delta(d('cost'))} · قطع ${delta(d('units'))}</div>
+      ${_ivhGran!=='day' && rr.some(x=>x.partial) ? `<div style="font-size:11px;color:#b45309;margin-bottom:6px">⚠️ الفترات المعلّمة <b>ناقصة</b> — السنابات مابتغطّيهاش كاملة، فالتغيّر فيها مش مقارنة عادلة.</div>`:''}
       <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;background:var(--bg);border-radius:8px">
         <path d="${path('retail')}" fill="none" stroke="#16a34a" stroke-width="2"/>
         <path d="${path('cost')}" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="4 3"/>
+        ${dots('retail')}${dots('cost')}
         <text x="${P}" y="14" font-size="10" fill="#16a34a">— بسعر البيع</text><text x="${P+90}" y="14" font-size="10" fill="#64748b">- - بالتكلفة</text>
-        <text x="${P}" y="${H-6}" font-size="9" fill="#94a3b8">${first.date}</text><text x="${W-P}" y="${H-6}" font-size="9" fill="#94a3b8" text-anchor="end">${last.date}</text>
+        <text x="${P}" y="${H-6}" font-size="9" fill="#94a3b8">${first.label}</text><text x="${W-P}" y="${H-6}" font-size="9" fill="#94a3b8" text-anchor="end">${last.label}</text>
         <text x="${W-2}" y="${y(maxV)+10}" font-size="9" fill="#94a3b8" text-anchor="end">${f(maxV)}</text>
       </svg>
       <div style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-top:8px"><table style="width:100%;font-size:11px">
-        <thead style="position:sticky;top:0;background:var(--card)"><tr style="color:var(--muted)"><th style="text-align:right;padding:4px">اليوم</th><th>أصناف</th><th>قطع</th><th>بسعر البيع</th><th>Δ</th><th>بالتكلفة</th><th>الهامش</th><th>بدون تكلفة</th></tr></thead>
-        <tbody>${[...r.rows].reverse().map((x,i,arr)=>{ const prev=arr[i+1]; const dv=prev?x.retail-prev.retail:0; return `<tr style="border-top:1px solid var(--border)">
-          <td style="padding:3px 6px;font-family:Roboto,sans-serif">${x.date}</td><td style="text-align:center">${f(x.items)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(x.units)}</td>
-          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700;color:#16a34a">${f(x.retail)}</td><td style="text-align:center;font-size:10px">${prev?delta(dv):''}</td>
+        <thead style="position:sticky;top:0;background:var(--card)"><tr style="color:var(--muted)"><th style="text-align:right;padding:4px">${G.label==='يوم'?'اليوم':(G.label==='أسبوع'?'الأسبوع':'الشهر')}</th>${_ivhGran!=='day'?'<th>أيام</th>':''}<th>أصناف</th><th>قطع</th><th>بسعر البيع</th><th>Δ</th><th>%</th><th>بالتكلفة</th><th>الهامش</th><th>بدون تكلفة</th></tr></thead>
+        <tbody>${[...rr].reverse().map((x,i,arr)=>{ const prev=arr[i+1]; const dv=prev?x.retail-prev.retail:0;
+          const pc=prev&&prev.retail?dv/prev.retail*100:null; return `<tr style="border-top:1px solid var(--border)">
+          <td style="padding:3px 6px;font-family:Roboto,sans-serif">${x.label}${x.partial?' <span title="فترة ناقصة" style="color:#b45309">◔</span>':''}</td>${_ivhGran!=='day'?`<td style="text-align:center;color:${x.partial?'#b45309':'var(--muted)'};font-size:10px">${x.days}</td>`:''}<td style="text-align:center">${f(x.items)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${f(x.units)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700;color:#16a34a">${f(x.retail)}</td><td style="text-align:center;font-size:10px">${prev?delta(dv):''}</td><td style="text-align:center;font-size:10px;color:${pc==null?'var(--muted)':(pc>=0?'#16a34a':'#dc2626')}">${pc==null?'':(pc>=0?'+':'')+pc.toFixed(1)+'%'}</td>
           <td style="text-align:center;font-family:Roboto,sans-serif">${f(x.cost)}</td><td style="text-align:center;font-family:Roboto,sans-serif;color:#2563eb">${f(x.margin)}</td><td style="text-align:center;color:${x.units_no_cost?'#b45309':'var(--muted)'}">${f(x.units_no_cost)}</td></tr>`; }).join('')}</tbody></table></div>`;
   }catch(e){ el.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
 }
 async function invValSnapNow(){ try{ const r=await apiFetch('/api/inventory/valuation/snapshot','POST',{}); toast(r?.ok?`📸 اتحفظ سناب ${r.date}`:'❌ فشل'); invValHistory(_ivh?.warehouse_id??0); }catch(e){ toast('❌ '+e.message); } }
 function invValHistExcel(){
   if(!_ivh) return;
-  const ws=XLSX.utils.json_to_sheet(_ivh.rows.map(x=>({'اليوم':x.date,'أصناف':x.items,'قطع':x.units,'بسعر البيع':x.retail,'بالتكلفة':x.cost,'الهامش':x.margin,'قطع بدون تكلفة':x.units_no_cost})));
-  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'سجل الرصيد'); XLSX.writeFile(wb,`سجل_رصيد_البضاعة_${new Date().toISOString().slice(0,10)}.xlsx`);
+  const src=_ivh.rolled||_ivh.rows, g=_ivh.gran||'day';
+  const head=g==='day'?'اليوم':(g==='week'?'الأسبوع':'الشهر');
+  const ws=XLSX.utils.json_to_sheet(src.map(x=>({[head]:x.label||x.date,
+    ...(g!=='day'?{'أيام مغطّاة':x.days,'ناقصة؟':x.partial?'نعم':'لا','آخر سناب':x.upto}:{}),
+    'أصناف':x.items,'قطع':x.units,'بسعر البيع':x.retail,'بالتكلفة':x.cost,'الهامش':x.margin,'قطع بدون تكلفة':x.units_no_cost})));
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'سجل الرصيد');
+  XLSX.writeFile(wb,`سجل_رصيد_البضاعة_${g==='month'?'شهري':(g==='week'?'أسبوعي':'يومي')}_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 async function invValDetail(wid,name){
   const el=document.getElementById('inv-val-detail'); if(!el) return;
@@ -52729,6 +52793,7 @@ function refreshAll(){
     case 'expiry': loadBatchesPage(); break;
     case 'near-expiry-offers': loadNeoPage(); break;
     case 'addr-changes': loadAddrChanges(); break;
+    case 'risk-queue': rqLoad(); break;
     case 'db-size': loadDbSize(); break;
     case 'courier-orders': renderCourierOrdersPage(); break;
     case 'accounting': renderAcc();renderAccDet(); break;
@@ -53723,6 +53788,77 @@ async function tproSave(){
     toast(en ? '⭐ الخصم شغّال' : '🔴 الخصم اتقفل', 'success');
     await tproLoad();
   } finally { if(b){ b.disabled = false; b.textContent = '💾 حفظ'; } }
+}
+
+
+
+// 📞 v630: طابور «اتصل قبل الشحن»
+let _rqRows=[];
+const _RQ_OUT=[['confirmed','✅ أكّد','#16a34a'],['changed','📝 عدّل العنوان','#2563eb'],
+               ['unreachable','📵 مردش','#b45309'],['cancelled','❌ لغى','#dc2626'],['skipped','⏭️ تخطّي','#64748b']];
+function _rqColor(s){ return s>=30?'#dc2626':(s>=18?'#ea580c':(s>=10?'#b45309':'#16a34a')); }
+async function rqLoad(){
+  const box=$('rq-box'); if(!box) return;
+  box.innerHTML='<span style="color:var(--muted)">⏳ بيحسب الدرجات...</span>';
+  try{
+    const lim=$('rq-limit')?.value||30, dys=$('rq-days')?.value||3;
+    const r=await apiFetch(`/api/risk/queue?limit=${lim}&days=${dys}`);
+    if(!r||r.error){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
+    _rqRows=r.rows||[];
+    if($('rq-sum')) $('rq-sum').textContent=`اتفحص ${r.scanned} أوردر · متوسط الدرجة ${r.summary.avg_score}% · متوقع يرجع منهم ~${r.summary.expected_returns}`;
+    if(!_rqRows.length){ box.innerHTML='<div style="padding:18px;text-align:center;color:#16a34a;font-weight:700">✅ مفيش أوردرات مستنية — كلهم اتكلّموا أو مفيش جديد</div>'; return; }
+    box.innerHTML=`<div style="overflow:auto"><table style="width:100%;font-size:12px">
+      <thead><tr style="color:var(--muted)">
+        <th style="text-align:center;padding:5px">الخطورة</th><th style="text-align:right">الأوردر</th>
+        <th style="text-align:right">العميل</th><th>المنطقة</th><th>القيمة</th><th style="text-align:right">ليه؟</th>
+        <th style="text-align:center">نتيجة المكالمة</th></tr></thead>
+      <tbody>${_rqRows.map((x,i)=>`<tr id="rq-r${i}" style="border-top:1px solid var(--border)">
+        <td style="text-align:center;padding:6px 4px">
+          <div style="display:inline-block;min-width:44px;padding:3px 7px;border-radius:7px;font-weight:900;font-family:Roboto,sans-serif;color:#fff;background:${_rqColor(x.score)}">${x.score}%</div></td>
+        <td style="font-family:Roboto,sans-serif;font-weight:800">${escapeHtml(String(x.order_id).replace(/^SH-/,''))}</td>
+        <td>${escapeHtml(x.customer||'—')}<div style="font-size:10.5px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(x.phone||'')}</div></td>
+        <td style="text-align:center;font-size:11px">${escapeHtml(x.area||'—')}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif">${Number(x.total||0).toLocaleString()}${x.paid?' <span title="مدفوع مقدماً" style="color:#16a34a">💳</span>':''}</td>
+        <td style="font-size:11px;color:#b45309">${(x.reasons||[]).map(t=>`<span style="display:inline-block;background:#b4530915;border:1px solid #b4530933;border-radius:9px;padding:1px 7px;margin:1px 2px 1px 0">${escapeHtml(t)}</span>`).join('')}
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(String(x.addr||'').slice(0,70))}</div></td>
+        <td style="text-align:center;white-space:nowrap">${_RQ_OUT.map(([k,l,c])=>
+          `<button onclick="rqCall('${x.order_id}',${i},'${k}')" title="${l}" style="border:1px solid ${c}55;background:${c}12;color:${c};border-radius:6px;padding:2px 6px;margin:1px;cursor:pointer;font-family:Cairo,sans-serif;font-size:10.5px">${l}</button>`).join('')}</td>
+      </tr>`).join('')}</tbody></table></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">💳 = مدفوع مقدماً. سجّل نتيجة كل مكالمة — من غيرها مش هنعرف المكالمات بتفرق قد إيه.</div>`;
+  }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+async function rqCall(id,i,outcome){
+  const note = outcome==='changed' ? (prompt('العنوان الجديد / الملحوظة:')||'') : '';
+  if(outcome==='changed' && !note) return;
+  const tr=document.getElementById('rq-r'+i); if(tr) tr.style.opacity='.4';
+  try{
+    const r=await apiFetch(`/api/risk/call/${encodeURIComponent(id)}`,'POST',{outcome,note});
+    if(r?.error){ if(tr) tr.style.opacity='1'; return toast(r.error,'error'); }
+    const lbl=(_RQ_OUT.find(o=>o[0]===outcome)||[])[1]||outcome;
+    if(tr){ tr.style.background='var(--elev)'; tr.querySelector('td:last-child').innerHTML=`<span style="color:var(--muted);font-size:11px">${lbl} ✓</span>`; }
+    toast('اتسجّلت','success');
+  }catch(e){ if(tr) tr.style.opacity='1'; toast('❌ '+e.message,'error'); }
+}
+async function rqImpact(){
+  const box=$('rq-impact'); if(!box) return;
+  box.innerHTML='<div class="card" style="padding:14px;color:var(--muted)">⏳</div>';
+  try{
+    const r=await apiFetch('/api/risk/impact?days=30');
+    if(!r||r.error){ box.innerHTML=''; return toast(r?.error||'فشل','error'); }
+    const AR={confirmed:'أكّد',changed:'عدّل العنوان',unreachable:'مردش',cancelled:'لغى',skipped:'تخطّي'};
+    box.innerHTML=`<div class="card" style="padding:14px">
+      <div style="font-weight:900;margin-bottom:8px">📊 أثر المكالمات — آخر 30 يوم</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">
+        <div><div style="font-size:11px;color:var(--muted)">اتكلّمنا معاهم</div><div style="font-size:17px;font-weight:800">${r.called.n} <span style="font-size:12px;color:#dc2626">(${r.called.bad_pct??'—'}% راحوا)</span></div></div>
+        <div><div style="font-size:11px;color:var(--muted)">ماتكلمناش</div><div style="font-size:17px;font-weight:800">${r.not_called.n} <span style="font-size:12px;color:#dc2626">(${r.not_called.bad_pct??'—'}% راحوا)</span></div></div>
+      </div>
+      ${r.called.by_outcome?.length?`<table style="width:100%;font-size:12px;border:1px solid var(--border);border-radius:7px">
+        <thead><tr style="color:var(--muted)"><th style="text-align:right;padding:4px 8px">النتيجة</th><th>عدد</th><th>متوسط الدرجة</th><th>راحوا بعدها</th></tr></thead>
+        <tbody>${r.called.by_outcome.map(o=>`<tr><td style="padding:3px 8px">${escapeHtml(AR[o.outcome]||o.outcome)}</td>
+          <td style="text-align:center">${o.n}</td><td style="text-align:center">${o.avg_score}%</td>
+          <td style="text-align:center;color:#dc2626">${o.bad}</td></tr>`).join('')}</tbody></table>`:''}
+      <div style="font-size:11px;color:#b45309;margin-top:8px;line-height:1.7">⚠️ ${escapeHtml(r.note)}</div></div>`;
+  }catch(e){ box.innerHTML=''; toast('❌ '+e.message,'error'); }
 }
 
 </script>
