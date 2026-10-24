@@ -4301,6 +4301,12 @@ tr:hover td{background:#fafbff}
         <select id="rq-days" onchange="rqLoad()" style="padding:4px 8px;border:1px solid var(--border);border-radius:7px;font-family:Cairo,sans-serif;font-size:12px">
           <option value="2">آخر يومين</option><option value="3" selected>آخر 3 أيام</option><option value="7">آخر أسبوع</option>
         </select>
+        <!-- 🔧 v631: أوردر الاستلام مشكلته مختلفة — «تعالى استلم» مش «أكّد العنوان» -->
+        <select id="rq-kind" onchange="rqLoad()" style="padding:4px 8px;border:1px solid var(--border);border-radius:7px;font-family:Cairo,sans-serif;font-size:12px">
+          <option value="ship" selected>🚚 توصيل بس</option>
+          <option value="pickup">📦 استلام بس</option>
+          <option value="all">الكل</option>
+        </select>
         <button class="btn btn-ghost btn-sm" onclick="rqLoad()">🔄 تحديث</button>
         <button class="btn btn-ghost btn-sm" onclick="rqImpact()">📊 الأثر</button>
         <span id="rq-sum" style="font-size:12px;color:var(--muted);margin-inline-start:auto"></span>
@@ -4309,6 +4315,8 @@ tr:hover td{background:#fafbff}
         مرتّبين باحتمال إن الأوردر يتشحن ويرجع. النموذج اتقاس على أوردرات مشفهاش:
         <b>أعلى 30 دقتهم ~22%</b> — يعني 7 من كل 30 كانوا هيرجعوا فعلاً، والباقي سليم.
         <b>دي أولوية مكالمات مش حكم</b> — ماتلغيش أوردر عشان درجته عالية.
+        <div style="margin-top:4px">📦 <b>أوردرات الاستلام</b> (تريفيوم والعبور) مشكلتها مختلفة: 36% منهم محدش بيجي ياخدهم، بس مفيش تكلفة شحن —
+        المكالمة بتاعتهم «تعالى استلم» مش «أكّد العنوان». مفصولين في فلتر لوحدهم.</div>
       </div>
       <div id="rq-box" style="padding:10px 14px"></div>
     </div>
@@ -5918,6 +5926,27 @@ tr:hover td{background:#fafbff}
 <!-- 🆕 v266: SUPPLIERS PAGE -->
 <!-- ============================================================ -->
 <div class="page" id="page-suppliers">
+    <!-- 🔐 v632: حسابات بوابة الموردين — سيستم منفصل، مش أوردر برو -->
+    <div class="card" style="margin-bottom:14px;border:2px solid #1F3864">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-weight:900">🔐 حسابات بوابة الموردين</span>
+        <button class="btn btn-ghost btn-sm" onclick="supUsersLoad()">🔄 تحديث</button>
+        <span style="font-size:11.5px;color:var(--muted);margin-inline-start:auto">البوابة على <b>/supplier/</b> — سيستم منفصل، المورد مابيدخلش أوردر برو</span>
+      </div>
+      <div style="padding:12px 14px">
+        <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:10px">
+          <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:2px">المورد</label>
+            <select id="su-sup" class="form-input" style="min-width:200px"></select></div>
+          <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:2px">اسم المستخدم</label>
+            <input id="su-user" class="form-input" style="width:150px" placeholder="supplier1"></div>
+          <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:2px">كلمة السر (6+)</label>
+            <input id="su-pass" class="form-input" style="width:150px" type="text" placeholder="اكتبها وابعتها له"></div>
+          <button class="btn" style="background:#1F3864;color:#fff" onclick="supUserCreate()">➕ إنشاء / تغيير السر</button>
+        </div>
+        <div id="su-box"></div>
+      </div>
+    </div>
+
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">🏭 الموردين</h2>
     <button class="btn btn-primary btn-sm" onclick="openNewSupplier()">➕ مورد جديد</button>
@@ -52794,6 +52823,7 @@ function refreshAll(){
     case 'near-expiry-offers': loadNeoPage(); break;
     case 'addr-changes': loadAddrChanges(); break;
     case 'risk-queue': rqLoad(); break;
+    case 'suppliers': supUsersLoad(); break;
     case 'db-size': loadDbSize(); break;
     case 'courier-orders': renderCourierOrdersPage(); break;
     case 'accounting': renderAcc();renderAccDet(); break;
@@ -53804,9 +53834,11 @@ async function rqLoad(){
     const lim=$('rq-limit')?.value||30, dys=$('rq-days')?.value||3;
     const r=await apiFetch(`/api/risk/queue?limit=${lim}&days=${dys}`);
     if(!r||r.error){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</span>`; return; }
-    _rqRows=r.rows||[];
+    const kind=$('rq-kind')?.value||'ship';
+    _rqRows=(r.rows||[]).filter(x=> kind==='all' ? true : (kind==='pickup' ? x.pickup : !x.pickup));
     if($('rq-sum')) $('rq-sum').textContent=`اتفحص ${r.scanned} أوردر · متوسط الدرجة ${r.summary.avg_score}% · متوقع يرجع منهم ~${r.summary.expected_returns}`;
-    if(!_rqRows.length){ box.innerHTML='<div style="padding:18px;text-align:center;color:#16a34a;font-weight:700">✅ مفيش أوردرات مستنية — كلهم اتكلّموا أو مفيش جديد</div>'; return; }
+    if($('rq-sum')) $('rq-sum').textContent += ` · معروض ${_rqRows.length}`;
+    if(!_rqRows.length){ box.innerHTML='<div style="padding:18px;text-align:center;color:#16a34a;font-weight:700">✅ مفيش أوردرات مستنية في الفلتر ده</div>'; return; }
     box.innerHTML=`<div style="overflow:auto"><table style="width:100%;font-size:12px">
       <thead><tr style="color:var(--muted)">
         <th style="text-align:center;padding:5px">الخطورة</th><th style="text-align:right">الأوردر</th>
@@ -53815,7 +53847,7 @@ async function rqLoad(){
       <tbody>${_rqRows.map((x,i)=>`<tr id="rq-r${i}" style="border-top:1px solid var(--border)">
         <td style="text-align:center;padding:6px 4px">
           <div style="display:inline-block;min-width:44px;padding:3px 7px;border-radius:7px;font-weight:900;font-family:Roboto,sans-serif;color:#fff;background:${_rqColor(x.score)}">${x.score}%</div></td>
-        <td style="font-family:Roboto,sans-serif;font-weight:800">${escapeHtml(String(x.order_id).replace(/^SH-/,''))}</td>
+        <td style="font-family:Roboto,sans-serif;font-weight:800">${escapeHtml(String(x.order_id).replace(/^SH-/,''))}${x.pickup?'<div style="font-size:10px;color:#7c3aed;font-weight:700">📦 استلام</div>':''}</td>
         <td>${escapeHtml(x.customer||'—')}<div style="font-size:10.5px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(x.phone||'')}</div></td>
         <td style="text-align:center;font-size:11px">${escapeHtml(x.area||'—')}</td>
         <td style="text-align:center;font-family:Roboto,sans-serif">${Number(x.total||0).toLocaleString()}${x.paid?' <span title="مدفوع مقدماً" style="color:#16a34a">💳</span>':''}</td>
@@ -53859,6 +53891,49 @@ async function rqImpact(){
           <td style="text-align:center;color:#dc2626">${o.bad}</td></tr>`).join('')}</tbody></table>`:''}
       <div style="font-size:11px;color:#b45309;margin-top:8px;line-height:1.7">⚠️ ${escapeHtml(r.note)}</div></div>`;
   }catch(e){ box.innerHTML=''; toast('❌ '+e.message,'error'); }
+}
+
+
+
+// 🔐 v632: إدارة حسابات بوابة الموردين
+async function supUsersLoad(){
+  const box=$('su-box'); if(!box) return;
+  try{
+    const [r,sup]=await Promise.all([apiFetch('/api/admin/supplier-users'),apiFetch('/api/suppliers')]);
+    const list=(sup?.suppliers||sup?.rows||sup||[]).filter(x=>x&&x.id);
+    const sel=$('su-sup');
+    if(sel) sel.innerHTML=list.map(x=>`<option value="${x.id}">${escapeHtml(x.name||'')}</option>`).join('');
+    const rows=r?.rows||[];
+    box.innerHTML = rows.length ? `<table style="width:100%;font-size:12px">
+      <thead><tr style="color:var(--muted)"><th style="text-align:right;padding:4px">المورد</th><th>المستخدم</th><th>آخر دخول</th><th>الحالة</th><th></th></tr></thead>
+      <tbody>${rows.map(x=>`<tr style="border-top:1px solid var(--border)">
+        <td style="padding:4px">${escapeHtml(x.supplier||'')}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(x.username||'')}</td>
+        <td style="text-align:center;font-size:11px;color:var(--muted)">${x.last_login_at?escapeHtml(String(x.last_login_at).slice(0,16).replace('T',' ')):'عمره ما دخل'}</td>
+        <td style="text-align:center"><span style="color:${x.is_active?'#16a34a':'#dc2626'};font-weight:700">${x.is_active?'شغّال':'مقفول'}</span></td>
+        <td style="text-align:center"><button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="supUserToggle(${x.id})">${x.is_active?'🔒 اقفل':'🔓 افتح'}</button></td>
+      </tr>`).join('')}</tbody></table>` : '<span style="color:var(--muted);font-size:12px">مفيش حسابات لسه</span>';
+  }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+async function supUserCreate(){
+  const supplier_id=$('su-sup')?.value, username=($('su-user')?.value||'').trim(), password=$('su-pass')?.value||'';
+  if(!supplier_id||!username) return toast('اختار مورد واكتب اسم مستخدم','warning');
+  if(password.length<6) return toast('كلمة السر 6 حروف على الأقل','warning');
+  // نفس نظام الباسورد في باقي المنظومة: الفرونت بيبعت sha256
+  const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(password));
+  const hex=[...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('');
+  try{
+    const r=await apiFetch('/api/admin/supplier-users','POST',{supplier_id,username,password:hex});
+    if(r?.error) return toast(r.error,'error');
+    toast(`✅ ${r.username} لـ ${r.supplier}`,'success');
+    $('su-user').value=''; $('su-pass').value=''; supUsersLoad();
+  }catch(e){ toast('❌ '+e.message,'error'); }
+}
+async function supUserToggle(id){
+  try{ const r=await apiFetch(`/api/admin/supplier-users/${id}/toggle`,'POST',{});
+    if(r?.error) return toast(r.error,'error');
+    toast(r.is_active?'🔓 اتفتح':'🔒 اتقفل وجلساته اتقطعت','success'); supUsersLoad();
+  }catch(e){ toast('❌ '+e.message,'error'); }
 }
 
 </script>
