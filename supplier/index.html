@@ -62,9 +62,15 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const n=v=>Number(v||0).toLocaleString('en-US');
 async function api(path,opt={}){
   const r=await fetch(API+path,{...opt,headers:{'Content-Type':'application/json',...(TK?{Authorization:'Bearer '+TK}:{}),...(opt.headers||{})}});
-  if(r.status===401){ TK=''; localStorage.removeItem('sup_tk'); show(false); throw new Error('الجلسة انتهت — سجّل دخول تاني'); }
-  const j=await r.json().catch(()=>({error:'رد غير مفهوم'}));
-  if(!r.ok||j.error) throw new Error(j.error||'حصل خطأ'); return j;
+  const j=await r.json().catch(()=>({error:'السيرفر مش راد صح'}));
+  // 🐛 v2: كان أي 401 بيتعامل كانتهاء جلسة — حتى 401 اللوجين نفسه،
+  //   فبيانات دخول غلط كانت بتطلع رسالة «الجلسة انتهت» وده مضلّل.
+  if(r.status===401 && !path.includes('/login')){
+    TK=''; localStorage.removeItem('sup_tk'); show(false);
+    throw new Error('الجلسة انتهت — سجّل دخول تاني');
+  }
+  if(!r.ok||j.error) throw new Error(j.error||`خطأ ${r.status}`);
+  return j;
 }
 // الباسورد بيتبعت sha256 زي باقي النظام
 async function sha256(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));
