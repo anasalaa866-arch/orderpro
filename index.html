@@ -21387,6 +21387,81 @@ async function poZhPush(scope){
   }catch(e){ toast('❌ '+e.message); poZhStatus(); }
 }
 
+
+// ══════════════════════════════════════════════════════════════════
+// 🧾 v636: تحذيرات الكشف + مراجعة الخصم
+// ══════════════════════════════════════════════════════════════════
+function _tsMoney(n){
+  const v = Number(n) || 0;
+  return v.toLocaleString('en-EG',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+// أعمدة ناقصة + صفوف لسه ماتحسبتش
+function talSheetWarnHtml(r){
+  let h = '';
+  const mc = r.missing_columns || [];
+  if(mc.length){
+    h += `<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:9px;padding:10px 12px;margin-bottom:10px;font-size:12px;line-height:1.8">
+      <b style="color:#991b1b">⚠️ أعمدة متوقّعة مش موجودة في الشيت:</b>
+      <span style="font-family:Roboto,sans-serif">${mc.map(escapeHtml).join(' · ')}</span><br>
+      <span style="color:#7f1d1d">طلبات بتغيّر أسماء الأعمدة من وقت للتاني. الأرقام اللي بتعتمد عليها هتبان ناقصة.</span>
+    </div>`;
+  }
+  const nb = r.not_billed;
+  if(nb && nb.count){
+    h += `<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:9px;padding:10px 12px;margin-bottom:10px;font-size:12px;line-height:1.8">
+      <b style="color:#1e40af">ℹ️ ${nb.count} صف لسه ماتحسبش</b> — قيمتهم ${_tsMoney(nb.subtotal)} ج، وكل الرسوم والمستحق فيهم صفر.
+      ${nb.days?.length?`<span style="font-family:Roboto,sans-serif"> (${nb.days.map(escapeHtml).join(' · ')})</span>`:''}<br>
+      <span style="color:#1e3a8a">اتشالوا من الإجماليات ومن متوسط نسبة طلبات — غير كده اليوم ده بيبان كأنك خسرت 100%.</span>
+    </div>`;
+  }
+  return h;
+}
+
+// الخصم: المعلن، المستتر، ومقارنته بخصم الكاشير
+function talDiscountHtml(r){
+  const d = r.discount_review;
+  if(!d) return '';
+  const issues = (d.cashier_only||0) + (d.talabat_only||0) + (d.mismatched||0);
+  if(!d.total && !issues) return '';
+
+  const rows = (_talSetRows || []).filter(x => x.discount_flag);
+  const C = { 'الكاشير خصم وطلبات لأ':'#dc2626', 'طلبات خصمت والكاشير لأ':'#b45309', 'الخصمين مختلفين':'#7c3aed' };
+
+  return `<div style="border:2px solid #b45309;border-radius:10px;padding:12px;margin-bottom:12px;background:#fffbeb">
+    <div style="font-weight:900;color:#78350f;margin-bottom:8px">🏷️ مراجعة الخصم</div>
+    <div style="font-size:12px;line-height:2;color:#78350f">
+      إجمالي اللي طلبات خصمته منك: <b>${_tsMoney(d.total)} ج</b> على ${d.orders_with_discount} أوردر
+      ${d.hidden ? `<br>منه <b>${_tsMoney(d.hidden)} ج مستتر</b> — مش مكتوب في عمود «Discount Funded by you» ولا أي عمود خصم،
+        وبنستنتجه من الفرق بين (القيمة − الرسوم) و«Estimated earnings».` : ''}
+      ${d.declared ? `<br>والمعلن منه ${_tsMoney(d.declared)} ج.` : ''}
+    </div>
+    ${issues ? `
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;font-weight:800">
+        ${d.cashier_only?`<span style="color:#dc2626">🔴 الكاشير خصم وطلبات لأ: ${d.cashier_only} (${_tsMoney(d.cashier_only_value)} ج)</span>`:''}
+        ${d.talabat_only?`<span style="color:#b45309">🟠 طلبات خصمت والكاشير لأ: ${d.talabat_only}</span>`:''}
+        ${d.mismatched?`<span style="color:#7c3aed">🟣 الخصمين مختلفين: ${d.mismatched}</span>`:''}
+      </div>
+      <div style="font-size:11.5px;color:#78350f;margin-top:6px;line-height:1.8">
+        🔴 معناها خصم راح عليك من غير مقابل — طلبات حاسباها بالكامل.<br>
+        🟠 معناها الكاشير سجّل القيمة كاملة وطلبات خصمت — بيعاتك عندك أعلى من الحقيقة.
+      </div>
+      ${rows.length?`<div style="max-height:200px;overflow:auto;border:1px solid #fcd34d;border-radius:8px;margin-top:9px;background:#fff">
+        <table style="width:100%;font-size:11px"><thead><tr style="color:var(--muted)">
+          <th style="text-align:right;padding:4px">أوردر</th><th>كود طلبات</th><th>القيمة</th>
+          <th>خصم طلبات</th><th>خصم الكاشير</th><th>الحالة</th></tr></thead>
+        <tbody>${rows.slice(0,80).map(x=>`<tr>
+          <td style="padding:3px 6px;font-family:Roboto,sans-serif;font-weight:800">${escapeHtml(x.shopify_order||'—')}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted)">${escapeHtml(x.order_id)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${_tsMoney(x.subtotal)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${x.talabat_discount?_tsMoney(x.talabat_discount)+(x.talabat_discount_pct?` <span style="color:var(--muted)">(${x.talabat_discount_pct}%)</span>`:''):'—'}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${x.pos_discount?_tsMoney(x.pos_discount):(x.pos_tpro?'✓':'—')}</td>
+          <td style="text-align:center;font-weight:800;color:${C[x.discount_flag]||'#b45309'}">${escapeHtml(x.discount_flag)}</td>
+        </tr>`).join('')}</tbody></table></div>`:''}
+    ` : `<div style="margin-top:8px;font-size:12px;color:#16a34a;font-weight:800">✅ خصم الكاشير متطابق مع خصم طلبات في كل الأوردرات</div>`}
+  </div>`;
+}
+
 // 🆕 v507: مطابقة كشف حساب طلبات
 let _talSetRows = null;
 async function talSetPick(file){
@@ -21409,6 +21484,8 @@ async function talSetPick(file){
     _talSetRows = r.rows;
     const bad = r.rows.filter(x=>x.flag);
     box.innerHTML = `
+      ${talSheetWarnHtml(r)}
+      ${talDiscountHtml(r)}
       ${talAuditHtml(r.contract_audit)}
       <div style="display:flex;gap:16px;flex-wrap:wrap;font-weight:700;margin-bottom:10px">
         <span>صفوف: ${r.count}</span>
@@ -21418,9 +21495,13 @@ async function talSetPick(file){
         ${r.partial_refunds?`<span style="color:var(--muted)">مرتجع جزئي: ${r.partial_refunds}</span>`:''}
         <span style="color:#7c3aed">متوسط نسبة طلبات: ${r.avg_take_rate!=null?r.avg_take_rate+'%':'—'}</span>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.9">
         إجمالي الكشف ${r.totals.subtotal.toLocaleString()} ج · تحويل ${r.totals.payout.toLocaleString()} ج ·
         كاش معاك ${r.totals.cash.toLocaleString()} ج · عمولة ${r.totals.commission.toLocaleString()} ج
+        ${r.totals.online_fee?` · رسوم دفع ${r.totals.online_fee.toLocaleString()} ج`:''}
+        ${r.totals.marketing?` · تسويق/tPro ${r.totals.marketing.toLocaleString()} ج`:''}
+        ${r.discount_review?.total?` · <b style="color:#b45309">خصم ${r.discount_review.total.toLocaleString()} ج</b>`:''}
+        ${r.totals.earnings?` · <b style="color:#16a34a">صافي ${r.totals.earnings.toLocaleString()} ج</b>`:''}
       </div>
       ${r.missing_from_sheet.length?`<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px">
         ⚠️ ${r.missing_from_sheet.length} أوردر طلبات عندك مش موجود في الكشف ده — يمكن فترة تانية، أو طلبات مادفعتش عنه.</div>`:''}
@@ -21493,6 +21574,12 @@ function talSetExcel(){
     'إجمالي شوبيفاي': x.shopify_total!=null?x.shopify_total:'',
     'الفرق': x.diff!=null?x.diff:'',
     'ملاحظة': x.flag||'',
+    'خصم طلبات': x.talabat_discount||0,
+    'منه مستتر': x.hidden_discount||0,
+    'خصم طلبات %': x.talabat_discount_pct||0,
+    'خصم الكاشير': x.pos_discount||0,
+    'المفروض عندك': x.expected_pos!=null?x.expected_pos:'',
+    'مراجعة الخصم': x.discount_flag||'',
     'أوردر مقترح': x.suggestion?x.suggestion.shopify_order:'',
     'الكود الغلط': x.suggestion?x.suggestion.wrong_code:'',
     'نسبة طلبات %': x.take_rate_pct!=null?x.take_rate_pct:'',
@@ -21512,7 +21599,9 @@ function talSetExcel(){
     'Payout Amount': x.payout_amount,
   }));
   const ws=XLSX.utils.json_to_sheet(data);
-  ws['!cols']=[{wch:14},{wch:14},{wch:18},{wch:14},{wch:10},{wch:16},{wch:14},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12},{wch:20},{wch:12},{wch:11},{wch:13},{wch:16},{wch:12},{wch:16},{wch:16},{wch:22},{wch:20},{wch:14}];
+  ws['!cols']=[{wch:14},{wch:14},{wch:18},{wch:14},{wch:10},{wch:16},
+    {wch:12},{wch:12},{wch:12},{wch:13},{wch:14},{wch:20},
+    {wch:14},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12},{wch:20},{wch:12},{wch:11},{wch:13},{wch:16},{wch:12},{wch:16},{wch:16},{wch:22},{wch:20},{wch:14}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'مطابقة طلبات');
   XLSX.writeFile(wb, `مطابقة_كشف_طلبات_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
