@@ -6865,8 +6865,55 @@ tr:hover td{background:#fafbff}
       <button class="btn btn-secondary btn-sm" onclick="document.getElementById('po-imp-file').click()">📥 استيراد من Zoho</button>
       <input type="file" id="po-imp-file" accept=".csv" style="display:none" onchange="poImpPick(this.files[0])">
       <button class="btn btn-primary btn-sm" onclick="openNewPO()">➕ أمر شراء جديد</button>
+      <!-- 🆕 v634: منتج جديد من غير أمر شراء -->
+      <button class="btn btn-sm" onclick="openNewProductSolo()" style="background:#7c3aed;color:#fff;font-weight:700" title="اعمل منتج على Shopify من غير ما ترتبط بأمر شراء">🆕 منتج جديد</button>
       <!-- 🔄 v586 -->
       <button class="btn btn-sm" onclick="syncAllPOTransfers()" style="background:#6366f1;color:#fff;font-weight:700" title="اقرا المستلم من Transfers شوبيفاي لكل الأوامر المفتوحة">🔄 زامن الاستلام من Shopify</button>
+    </div>
+  </div>
+  <!-- 💰 v633: تحديث التكلفة تلقائياً على آخر سعر شراء -->
+  <div class="card" id="cu-card" style="margin-bottom:14px;border:2px solid #b45309">
+    <div style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap;cursor:pointer" onclick="cuToggle()">
+      <span style="font-weight:900">💰 تحديث التكلفة تلقائياً</span>
+      <span id="cu-badge" style="display:none;background:#dc2626;color:#fff;font-size:11px;font-weight:800;border-radius:999px;padding:2px 8px"></span>
+      <span id="cu-state" style="font-size:11.5px;color:var(--muted)"></span>
+      <span id="cu-arrow" style="margin-inline-start:auto;font-size:13px">▼</span>
+    </div>
+    <div id="cu-body" style="display:none;padding:12px 14px">
+      <div style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:10px">
+        مع كل <b>استلام</b>، تكلفة كل صنف بتتحدّث على <b>صافي سعر الشراء</b> (بعد الخصم والضريبة) — في المخزون وعلى Shopify وعند المورد.<br>
+        سعر صفر بيتجاهل، وأي قفزة أكبر من حد المراجعة بتستنى موافقتك تحت.
+      </div>
+      <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;padding:10px;background:var(--elev);border-radius:9px;margin-bottom:12px">
+        <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:700">
+          <input type="checkbox" id="cu-enabled"> شغّال</label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:700">
+          <input type="checkbox" id="cu-shopify"> يبعت لـ Shopify</label>
+        <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:2px">يستنى موافقة فوق</label>
+          <input id="cu-review" class="form-input" type="number" min="1" max="1000" step="1" style="width:80px"> <span style="font-size:11px">%</span></div>
+        <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:2px">يتجاهل تغيير أقل من</label>
+          <input id="cu-min" class="form-input" type="number" min="0" max="100" step="0.1" style="width:80px"> <span style="font-size:11px">%</span></div>
+        <button class="btn btn-sm" style="background:#b45309;color:#fff;font-weight:700" onclick="cuSave()">💾 احفظ</button>
+        <span style="margin-inline-start:auto;display:flex;gap:6px">
+          <select id="cu-filter" class="form-input" style="width:150px" onchange="cuLoad()">
+            <option value="pending">⏳ مستني موافقة</option>
+            <option value="applied">✅ اتطبّق</option>
+            <option value="rejected">🚫 اترفض</option>
+            <option value="all">الكل</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="cuLoad()">🔄 تحديث</button>
+        </span>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 10px;background:#fef3c7;color:#78350f;border-radius:9px;margin-bottom:12px;font-size:12px">
+        <b>مزامنة بأثر رجعي:</b> حدّث كل الأصناف على آخر أمر شراء مستلم ليها.
+        <label style="display:flex;gap:5px;align-items:center;font-weight:700">
+          <input type="checkbox" id="cu-onlyzero" checked> اللي تكلفتها صفر بس</label>
+        <button class="btn btn-sm" style="background:#b45309;color:#fff" onclick="cuBackfill(true)">👁️ معاينة</button>
+        <button class="btn btn-sm" style="background:#dc2626;color:#fff" onclick="cuBackfill(false)">▶️ نفّذ</button>
+      </div>
+      <div id="cu-bf" style="margin-bottom:12px"></div>
+      <div id="cu-list"></div>
     </div>
   </div>
   <div id="po-imp-box" style="margin-bottom:14px"></div>
@@ -7114,6 +7161,20 @@ tr:hover td{background:#fafbff}
   </div>
 </div>
 
+<!-- 🆕 v634: منتج جديد لوحده — الفورم نفسه بيتنقل هنا، مش نسخة تانية
+     (نسخة تانية معناها IDs مكررة وكل حاجة تبوظ) -->
+<div id="m-np-solo" class="modal-overlay" style="display:none;z-index:1100">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-header">
+      <h3 style="margin:0">🆕 منتج جديد على Shopify</h3>
+      <button class="modal-close" onclick="closeNpSolo()">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="np-solo-host"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Add Item to PO Modal -->
 <div id="m-po-add-item" class="modal-overlay" style="display:none;z-index:1100">
   <div class="modal" style="max-width:600px">
@@ -7156,6 +7217,24 @@ tr:hover td{background:#fafbff}
           <input id="pnp-tags" class="form-input" placeholder="sauce, new">
           <div id="pnp-tag-sugg" style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px"></div>
         </div>
+        <!-- 🖼️ v634: صورة المنتج -->
+        <div style="margin-top:10px">
+          <label class="np-l2">🖼️ صورة المنتج</label>
+          <div id="pnp-img-drop" style="display:flex;gap:9px;align-items:center;border:1px dashed var(--border);border-radius:8px;padding:8px;background:var(--bg)">
+            <div id="pnp-img-thumb" style="width:52px;height:52px;flex:0 0 52px;border-radius:7px;background:var(--elev);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:19px;overflow:hidden">🖼️</div>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;gap:5px;flex-wrap:wrap">
+                <button type="button" class="btn btn-ghost btn-xs" onclick="document.getElementById('pnp-img-file').click()">📁 اختار ملف</button>
+                <button type="button" class="btn btn-ghost btn-xs" onclick="pnpImgFromUrl()">🔗 من لينك</button>
+                <button type="button" class="btn btn-ghost btn-xs" id="pnp-img-clear" style="display:none;color:#dc2626" onclick="pnpImgClear()">🗑️ شيلها</button>
+              </div>
+              <div id="pnp-img-note" style="font-size:10.5px;color:var(--muted);margin-top:4px">
+                أو الصق الصورة هنا (Ctrl+V) — اختيارية، تقدر تضيفها بعدين من Shopify
+              </div>
+            </div>
+          </div>
+          <input type="file" id="pnp-img-file" accept="image/*" style="display:none" onchange="pnpImgPick(this.files[0])">
+        </div>
         <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
           <label style="font-size:11.5px;display:flex;align-items:center;gap:5px;cursor:pointer;font-weight:700">
             <input type="checkbox" id="pnp-multi" onchange="pnpToggleMulti()"> أكتر من فاريانت
@@ -7172,7 +7251,7 @@ tr:hover td{background:#fafbff}
         <div id="pnp-msg" style="margin-top:8px"></div>
         <div style="margin-top:10px;display:flex;gap:6px">
           <button class="btn btn-primary btn-sm" id="pnp-save" onclick="pnpCreate()" style="font-weight:700">🚀 اعمله وضيفه للأمر</button>
-          <button class="btn btn-ghost btn-sm" onclick="pnpMode(null)">إلغاء</button>
+          <button class="btn btn-ghost btn-sm" onclick="pnpCancel()">إلغاء</button>
         </div>
       </div>
 
@@ -32691,6 +32770,7 @@ let _poVariantSearchResults = [];
 let _poInvWarehouses = [];
 
 async function loadPurchaseOrdersPage(){
+  cuBadgeOnly();   // 💰 v633
   const list = document.getElementById('po-list');
   if(!list) return;
   
@@ -53388,6 +53468,129 @@ function _pnpBox(id, html, kind){
 const pnpMsg = (h, k) => _pnpBox('pnp-msg', h, k);
 const pbcMsg = (h, k) => _pnpBox('pbc-msg', h, k);
 
+
+// ══════════════════════════════════════════════════════════════════
+// 🖼️ v634: صورة المنتج وقت إنشاءه من أمر الشراء
+//   الصورة بترفع لـ Shopify أول ما تختارها، مش وقت الحفظ — عشان لو
+//   الرفع فشل تعرف دلوقتي مش بعد ما المنتج يتعمل من غير صورة.
+// ══════════════════════════════════════════════════════════════════
+let _pnpImgUrl = null;      // resourceUrl بتاع Shopify بعد الرفع
+let _pnpImgBusy = false;
+
+function _pnpImgNote(html, color){
+  const n = document.getElementById('pnp-img-note');
+  if(n){ n.innerHTML = html; n.style.color = color || 'var(--muted)'; }
+}
+
+function pnpImgClear(){
+  _pnpImgUrl = null;
+  const t = document.getElementById('pnp-img-thumb');
+  if(t) t.innerHTML = '🖼️';
+  const c = document.getElementById('pnp-img-clear');
+  if(c) c.style.display = 'none';
+  const f = document.getElementById('pnp-img-file');
+  if(f) f.value = '';
+  _pnpImgNote('أو الصق الصورة هنا (Ctrl+V) — اختيارية، تقدر تضيفها بعدين من Shopify');
+}
+
+function _pnpImgShow(src){
+  const t = document.getElementById('pnp-img-thumb');
+  if(t) t.innerHTML = `<img src="${src}" style="width:100%;height:100%;object-fit:cover">`;
+  const c = document.getElementById('pnp-img-clear');
+  if(c) c.style.display = 'inline-block';
+}
+
+async function pnpImgPick(file){
+  if(!file) return;
+  if(!/^image\//.test(file.type)) return _pnpImgNote('ده مش ملف صورة', '#dc2626');
+  if(file.size > 8 * 1024 * 1024) return _pnpImgNote('الصورة أكبر من 8 ميجا — صغّرها الأول', '#dc2626');
+  if(_pnpImgBusy) return;
+  _pnpImgBusy = true;
+
+  const dataUrl = await new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload  = () => resolve(fr.result);
+    fr.onerror = () => reject(new Error('مش قادر أقرا الملف'));
+    fr.readAsDataURL(file);
+  }).catch(e => { _pnpImgNote(e.message, '#dc2626'); return null; });
+  if(!dataUrl){ _pnpImgBusy = false; return; }
+
+  _pnpImgShow(dataUrl);                      // معاينة فورية قبل ما الرفع يخلص
+  _pnpImgNote('⏳ بترفع لـ Shopify...', '#b45309');
+  try{
+    const r = await apiFetch('/api/products/upload-image','POST',{ dataUrl, name: file.name });
+    _pnpImgUrl = r.url;
+    _pnpImgNote(`✅ اترفعت (${Math.round((r.bytes||0)/1024)} كيلو)`, '#16a34a');
+  }catch(e){
+    _pnpImgUrl = null;
+    _pnpImgNote('❌ الرفع فشل: ' + e.message, '#dc2626');
+  }finally{ _pnpImgBusy = false; }
+}
+
+function pnpImgFromUrl(){
+  const u = (prompt('لينك الصورة (لازم يكون لينك مباشر للصورة):') || '').trim();
+  if(!u) return;
+  if(!/^https?:\/\//i.test(u)) return _pnpImgNote('اللينك لازم يبدأ بـ http', '#dc2626');
+  _pnpImgUrl = u;
+  _pnpImgShow(u);
+  _pnpImgNote('🔗 من لينك خارجي — Shopify هيسحبها وقت الإنشاء', '#2563eb');
+}
+
+// لصق الصورة من الكليب بورد وهو واقف في الفورم
+document.addEventListener('paste', e => {
+  const panel = document.getElementById('pnp-panel');
+  if(!panel || panel.style.display === 'none') return;
+  const it = [...(e.clipboardData?.items || [])].find(x => x.type.startsWith('image/'));
+  if(!it) return;
+  e.preventDefault();
+  pnpImgPick(it.getAsFile());
+});
+
+
+// ══════════════════════════════════════════════════════════════════
+// 🆕 v634: منتج جديد من غير أمر شراء
+//   نفس الفورم بيتنقل DOM للمودال ده ويرجع مكانه وقت القفل. عملتها
+//   كده مش نسخة تانية من الماركب عشان الـ IDs مايتكررش.
+// ══════════════════════════════════════════════════════════════════
+let _pnpSolo = false;
+
+function openNewProductSolo(){
+  const np = document.getElementById('pnp-panel');
+  const host = document.getElementById('np-solo-host');
+  if(!np || !host) return;
+  _pnpSolo = true;
+  host.appendChild(np);
+  np.style.display = 'block';
+  np.style.marginBottom = '0';
+
+  // فورم نضيف
+  ['pnp-title','pnp-tags','pnp-type','pnp-optname'].forEach(k => { const e = $(k); if(e) e.value = ''; });
+  const mu = $('pnp-multi'); if(mu) mu.checked = false;
+  const rows = $('pnp-rows'); if(rows) rows.innerHTML = '';
+  _pnpRows = 0;
+  if(typeof pnpImgClear === 'function') pnpImgClear();
+  const msg = $('pnp-msg'); if(msg) msg.innerHTML = '';
+
+  npInit();
+  pnpToggleMulti(); pnpAddRow(); pnpHandlePrev();
+  const sv = $('pnp-save'); if(sv) sv.textContent = '🚀 اعمل المنتج';
+
+  openM('m-np-solo');
+  setTimeout(() => $('pnp-title')?.focus(), 120);
+}
+
+function closeNpSolo(){
+  const np = document.getElementById('pnp-panel');
+  const back = document.getElementById('pbc-panel');
+  if(np && back && back.parentNode) back.parentNode.insertBefore(np, back);  // رجّعه مكانه
+  if(np){ np.style.display = 'none'; np.style.marginBottom = ''; }
+  const sv = $('pnp-save'); if(sv) sv.textContent = '🚀 اعمله وضيفه للأمر';
+  _pnpSolo = false;
+  closeM('m-np-solo');
+}
+
+function pnpCancel(){ _pnpSolo ? closeNpSolo() : pnpMode(null); }
+
 async function pnpCreate(){
   const g = id => ($(id)?.value || '').trim();
   const title = g('pnp-title'), vendor = g('pnp-vendor');
@@ -53416,6 +53619,8 @@ async function pnpCreate(){
     if(multi && !v.option_value) return pnpMsg(`الصنف #${i+1}: قيمة الخيار مطلوبة`, 'err');
   }
 
+  if(_pnpImgBusy) return pnpMsg('استنى الصورة تخلص رفع', 'warn');   // 🖼️ v634
+
   const supSel = $('po-supplier')?.value || '';
   const btn = $('pnp-save');
   btn.disabled = true; btn.textContent = '⏳ بيتعمل...';
@@ -53423,6 +53628,7 @@ async function pnpCreate(){
   try{
     const r = await apiFetch('/api/products/new', 'POST', {
       title, vendor, product_type: g('pnp-type'), tags,
+      image_url: _pnpImgUrl || null,                                  // 🖼️ v634
       supplier_id: (supSel && supSel !== 'custom') ? supSel : null,
       option_name: multi ? (g('pnp-optname') || 'الخيار') : 'Title',
       handle: npSlug(title) || npSlug(rows[0].sku),
@@ -53430,6 +53636,13 @@ async function pnpCreate(){
     });
     const made = r.product.variants || [];
     if(!made.length) throw new Error('Shopify ما رجعش أي فاريانت');
+
+    if(_pnpSolo){
+      // 🆕 v634: مش مربوط بأمر شراء — خلاص، المنتج اتعمل Draft على Shopify
+      toast(`✅ ${r.product.title} اتعمل على Shopify (Draft) — ${made.length} صنف`);
+      closeNpSolo();
+      return;
+    }
 
     if(made.length === 1){
       // فاريانت واحد → حطّه كمنتج الأمر المختار، هو يكمّل الكمية
@@ -53464,13 +53677,15 @@ async function pnpCreate(){
     const mu = $('pnp-multi'); if(mu) mu.checked = false;
     pnpToggleMulti(); pnpAddRow(); pnpHandlePrev();
     $('pnp-msg').innerHTML = '';
+    if(typeof pnpImgClear === 'function') pnpImgClear();   // 🖼️ v634
     $('pnp-panel').style.display = 'none';
-    $('po-item-results').style.display = 'none';
-    $('po-item-search').value = '';
+    const _pr = $('po-item-results'); if(_pr) _pr.style.display = 'none';
+    const _ps = $('po-item-search');  if(_ps) _ps.value = '';
   }catch(e){
     pnpMsg('❌ ' + escapeHtml(e.message), 'err');
   }finally{
-    btn.disabled = false; btn.textContent = '🚀 اعمله وضيفه للأمر';
+    btn.disabled = false;
+    btn.textContent = _pnpSolo ? '🚀 اعمل المنتج' : '🚀 اعمله وضيفه للأمر';
   }
 }
 
@@ -53896,6 +54111,150 @@ async function rqImpact(){
 
 
 // 🔐 v632: إدارة حسابات بوابة الموردين
+
+// ══════════════════════════════════════════════════════════════════
+// 💰 v633: تحديث التكلفة تلقائياً على آخر سعر شراء
+// ══════════════════════════════════════════════════════════════════
+let _cuOpen = false;
+function cuToggle(){
+  _cuOpen = !_cuOpen;
+  document.getElementById('cu-body').style.display  = _cuOpen ? 'block' : 'none';
+  document.getElementById('cu-arrow').textContent   = _cuOpen ? '▲' : '▼';
+  if(_cuOpen) cuLoad();
+}
+
+function _cuMoney(n){
+  const v = parseFloat(n);
+  return Number.isFinite(v) ? v.toLocaleString('en-EG',{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+}
+
+async function cuLoad(){
+  const box = document.getElementById('cu-list');
+  if(box) box.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted)">...</div>';
+  try{
+    const st = document.getElementById('cu-filter')?.value || 'pending';
+    const r  = await apiFetch('/api/cost-updates?status=' + encodeURIComponent(st) + '&limit=300');
+    const cfg = r.settings || {};
+    document.getElementById('cu-enabled').checked = !!cfg.enabled;
+    document.getElementById('cu-shopify').checked = !!cfg.pushShopify;
+    document.getElementById('cu-review').value    = cfg.reviewPct ?? 50;
+    document.getElementById('cu-min').value       = cfg.minPct ?? 0.5;
+
+    const pend = (r.counts || {}).pending || 0;
+    const bd = document.getElementById('cu-badge');
+    bd.style.display = pend ? 'inline-block' : 'none';
+    bd.textContent   = pend + ' مستني موافقة';
+    document.getElementById('cu-state').textContent =
+      (cfg.enabled ? 'شغّال' : '⏸️ متوقف') +
+      ' · حد المراجعة ' + (cfg.reviewPct ?? 50) + '%' +
+      ' · اتطبّق ' + ((r.counts||{}).applied || 0);
+
+    if(!box) return;
+    const rows = r.rows || [];
+    if(!rows.length){ box.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted)">مفيش حاجة هنا</div>'; return; }
+
+    box.innerHTML = `<div class="tbl-wrap"><table style="width:100%;font-size:12.5px">
+      <thead><tr>
+        <th style="text-align:start">الصنف</th><th>SKU</th>
+        <th>التكلفة القديمة</th><th>الجديدة</th><th>التغيير</th>
+        <th>أمر الشراء</th><th>التاريخ</th><th>الحالة</th><th></th>
+      </tr></thead><tbody>${rows.map(x => {
+        const pct = x.change_pct == null ? null : parseFloat(x.change_pct);
+        const up  = pct != null && pct > 0;
+        const pctHtml = pct == null
+          ? '<span style="color:var(--muted)">من صفر</span>'
+          : `<b style="color:${up ? '#dc2626' : '#16a34a'}">${up ? '▲' : '▼'} ${Math.abs(pct).toFixed(1)}%</b>`;
+        const badge = x.status === 'pending'  ? '<span style="background:#fef3c7;color:#92400e;border-radius:6px;padding:2px 7px;font-weight:800">⏳ مستني</span>'
+                    : x.status === 'applied'  ? ('<span style="background:#dcfce7;color:#166534;border-radius:6px;padding:2px 7px;font-weight:800">✅ اتطبّق</span>' +
+                        (x.shopify_error ? `<div style="font-size:10.5px;color:#b45309;margin-top:2px" title="${_esc(x.shopify_error)}">⚠️ Shopify: ${_esc(String(x.shopify_error).slice(0,40))}</div>` : ''))
+                    : `<span style="background:#fee2e2;color:#991b1b;border-radius:6px;padding:2px 7px;font-weight:800">🚫 ${x.status}</span>`;
+        const act = x.status === 'pending'
+          ? `<div style="display:flex;gap:4px;justify-content:center">
+               <button class="btn btn-sm" style="background:#16a34a;color:#fff;padding:3px 9px" onclick="cuDecide(${x.id},'approve')">وافق</button>
+               <button class="btn btn-sm" style="background:#6b7280;color:#fff;padding:3px 9px" onclick="cuDecide(${x.id},'reject')">ارفض</button>
+             </div>` : '';
+        return `<tr>
+          <td style="text-align:start">${_esc(x.product_title || '—')}${x.variant_title ? `<div style="font-size:11px;color:var(--muted)">${_esc(x.variant_title)}</div>` : ''}</td>
+          <td style="text-align:center;font-family:monospace;font-size:11.5px">${_esc(x.sku || '—')}</td>
+          <td style="text-align:center">${_cuMoney(x.old_cost)}</td>
+          <td style="text-align:center;font-weight:800">${_cuMoney(x.new_cost)}</td>
+          <td style="text-align:center">${pctHtml}</td>
+          <td style="text-align:center">${_esc(x.po_number || '—')}</td>
+          <td style="text-align:center;font-size:11.5px">${x.created_at ? String(x.created_at).slice(0,10) : '—'}</td>
+          <td style="text-align:center">${badge}</td>
+          <td style="text-align:center">${act}</td>
+        </tr>`;
+      }).join('')}</tbody></table></div>`;
+  }catch(e){
+    if(box) box.innerHTML = `<div style="padding:14px;color:#dc2626">${_esc(e.message)}</div>`;
+  }
+}
+
+async function cuSave(){
+  try{
+    await apiFetch('/api/cost-updates/settings','POST',{
+      enabled:     document.getElementById('cu-enabled').checked,
+      pushShopify: document.getElementById('cu-shopify').checked,
+      reviewPct:   parseFloat(document.getElementById('cu-review').value),
+      minPct:      parseFloat(document.getElementById('cu-min').value),
+    });
+    toast('💾 اتحفظ','success'); cuLoad();
+  }catch(e){ toast(e.message,'error'); }
+}
+
+async function cuDecide(id, what){
+  try{
+    const r = await apiFetch('/api/cost-updates/' + id + '/' + what, 'POST', {});
+    if(what === 'approve' && r.shopifyError) toast('اتطبّق محلياً بس Shopify رفض: ' + r.shopifyError, 'error');
+    else toast(what === 'approve' ? '✅ اتطبّق' : '🚫 اترفض', 'success');
+    cuLoad();
+  }catch(e){ toast(e.message,'error'); }
+}
+
+async function cuBackfill(dryRun){
+  const box = document.getElementById('cu-bf');
+  const onlyZero = document.getElementById('cu-onlyzero').checked;
+  if(!dryRun && !confirm('هيحدّث تكلفة الأصناف على آخر أمر شراء مستلم ليها، وهيبعتها لـ Shopify.\nمتأكد؟')) return;
+  box.innerHTML = '<div style="padding:12px;color:var(--muted)">...</div>';
+  try{
+    const r = await apiFetch('/api/cost-updates/backfill','POST',{ dryRun, onlyZero });
+    if(!dryRun){
+      box.innerHTML = `<div style="padding:11px;background:#dcfce7;color:#166534;border-radius:9px;font-size:12.5px">
+        ▶️ شغّالة في الخلفية على <b>${r.total}</b> صنف — Shopify بيقبل ~2 طلب/ثانية فممكن تاخد شوية.
+        اضغط «تحديث» بعد دقايق وغيّر الفلتر لـ «اتطبّق».</div>`;
+      return;
+    }
+    const pv = r.preview || [];
+    if(!r.total){ box.innerHTML = '<div style="padding:11px;background:var(--elev);border-radius:9px;font-size:12.5px">مفيش أصناف تحتاج تحديث</div>'; return; }
+    box.innerHTML = `<div style="padding:10px;background:var(--elev);border-radius:9px">
+      <div style="font-weight:800;margin-bottom:7px;font-size:13px">👁️ معاينة — ${r.total} صنف${pv.length < r.total ? ` (أول ${pv.length})` : ''}</div>
+      <div class="tbl-wrap" style="max-height:280px;overflow-y:auto"><table style="width:100%;font-size:12px">
+        <thead><tr><th style="text-align:start">الصنف</th><th>SKU</th><th>الحالية</th><th>الجديدة</th><th>أمر الشراء</th><th>تاريخه</th></tr></thead>
+        <tbody>${pv.map(x => `<tr>
+          <td style="text-align:start">${_esc(x.title || '—')}</td>
+          <td style="text-align:center;font-family:monospace;font-size:11px">${_esc(x.sku || '—')}</td>
+          <td style="text-align:center">${_cuMoney(x.old_cost)}</td>
+          <td style="text-align:center;font-weight:800">${_cuMoney(x.new_cost)}</td>
+          <td style="text-align:center">${_esc(x.po_number || '—')}</td>
+          <td style="text-align:center;font-size:11px">${x.src_date ? String(x.src_date).slice(0,10) : '—'}</td>
+        </tr>`).join('')}</tbody></table></div></div>`;
+  }catch(e){ box.innerHTML = `<div style="padding:12px;color:#dc2626">${_esc(e.message)}</div>`; }
+}
+
+// شارة "مستني موافقة" بتبان من غير ما تفتح الكارت
+async function cuBadgeOnly(){
+  try{
+    const r = await apiFetch('/api/cost-updates?status=pending&limit=1');
+    const n = (r.counts || {}).pending || 0;
+    const bd = document.getElementById('cu-badge');
+    if(!bd) return;
+    bd.style.display = n ? 'inline-block' : 'none';
+    bd.textContent   = n + ' مستني موافقة';
+    const st = document.getElementById('cu-state');
+    if(st && !_cuOpen) st.textContent = (r.settings?.enabled ? 'شغّال' : '⏸️ متوقف') + ' · اضغط للتفاصيل';
+  }catch(_){}
+}
+
 async function supUsersLoad(){
   const box=$('su-box'); if(!box) return;
   try{
