@@ -4292,6 +4292,56 @@ tr:hover td{background:#fafbff}
   <!-- 🆕 v213: CUSTOMER RISK ASSESSMENT PAGE -->
   <!-- 📞 v630: طابور «اتصل قبل الشحن» — أوردرات مرتّبة باحتمال إنها تتشحن وترجع -->
   <div class="page" id="page-risk-queue">
+  <!-- 🎯 v637: درجة الخطورة كتاج على الأوردر في Shopify -->
+    <div class="card" id="rt-card" style="margin-bottom:14px;border:2px solid #7c3aed">
+      <div style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap;cursor:pointer" onclick="rtToggle()">
+        <span style="font-weight:900">🎯 ابعت الدرجة لـ Shopify</span>
+        <span id="rt-state" style="font-size:11.5px;color:var(--muted)"></span>
+        <span id="rt-arrow" style="margin-inline-start:auto;font-size:13px">▼</span>
+      </div>
+      <div id="rt-body" style="display:none;padding:12px 14px">
+        <div style="font-size:12px;color:var(--muted);line-height:1.9;margin-bottom:10px">
+          بعد كل طلب بيتحط على الأوردر في Shopify تاج <code style="font-family:Roboto,monospace;color:#7c3aed">R=33%</code>
+          وتاج نطاق (<code style="font-family:Roboto,monospace">risk-high</code> فوق 30،
+          <code style="font-family:Roboto,monospace">risk-mid</code> فوق 15) عشان تقدر تفلتر بمدى —
+          التاج بالرقم لوحده مابيفلترش «أعلى من كذا». والأسباب بتتحفظ في metafield
+          <code style="font-family:Roboto,monospace">cafelax.risk</code>.<br>
+          <b style="color:#15803d">التاجات إدارية — العميل مايشوفهاش.</b><br>
+          <b>أونلاين بس</b> — بيعات الكاشير والمحل وطلبات والماركت بليس والـ Draft كلها بتتعدّى.
+          وبيشتغل أوتوماتيك مع كل طلب جديد، وكل أوردر بياخد تاج مرة واحدة بس.
+        </div>
+        <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;padding:10px;background:var(--elev);border-radius:9px;margin-bottom:12px">
+          <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:700">
+            <input type="checkbox" id="rt-enabled"> شغّال</label>
+          <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:700">
+            <input type="checkbox" id="rt-band"> تاج النطاق</label>
+          <label style="display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:700"
+                 title="أوردر أونلاين بيتستلم من المحل — مش بيتشحن">
+            <input type="checkbox" id="rt-pickup"> يشمل الاستلام من المحل</label>
+          <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:2px">متحطّش أقل من</label>
+            <input id="rt-min" class="form-input" type="number" min="0" max="100" step="1" style="width:76px"> <span style="font-size:11px">%</span></div>
+          <button class="btn btn-sm" style="background:#7c3aed;color:#fff;font-weight:700" onclick="rtSave()">💾 احفظ</button>
+        </div>
+        <label style="display:flex;gap:7px;align-items:start;font-size:12px;padding:9px 10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:9px;margin-bottom:12px;cursor:pointer">
+          <input type="checkbox" id="rt-note" onchange="rtSave()" style="margin-top:2px">
+          <span style="color:#991b1b;line-height:1.8"><b>اكتبها في الـ note كمان</b> — مقفولة افتراضياً.
+          الـ note بيتقري في قوالب إيميل Shopify وصفحة حالة الطلب، فمافيش ضمان إن العميل مايشوفهوش.
+          سيبها مقفولة إلا لو محتاجها في نظام تاني بيقرا الـ note.</span>
+        </label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 10px;background:#f5f3ff;border-radius:9px;margin-bottom:10px;font-size:12px">
+          <b>بأثر رجعي:</b>
+          <select id="rt-days" class="form-input" style="width:130px">
+            <option value="3">آخر 3 أيام</option><option value="7" selected>آخر أسبوع</option>
+            <option value="30">آخر شهر</option><option value="90">آخر 3 شهور</option>
+          </select>
+          <label style="display:flex;gap:5px;align-items:center;font-weight:700">
+            <input type="checkbox" id="rt-redo"> أعد حساب اللي اتعمل قبل كده</label>
+          <button class="btn btn-sm" style="background:#7c3aed;color:#fff" onclick="rtBackfill(true)">👁️ معاينة</button>
+          <button class="btn btn-sm" style="background:#dc2626;color:#fff" onclick="rtBackfill(false)">▶️ نفّذ</button>
+        </div>
+        <div id="rt-out" style="font-size:12px"></div>
+      </div>
+    </div>
     <div class="card" style="margin-bottom:14px">
       <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <span style="font-weight:900;font-size:15px">📞 اتصل قبل الشحن</span>
@@ -54147,6 +54197,57 @@ let _rqRows=[];
 const _RQ_OUT=[['confirmed','✅ أكّد','#16a34a'],['changed','📝 عدّل العنوان','#2563eb'],
                ['unreachable','📵 مردش','#b45309'],['cancelled','❌ لغى','#dc2626'],['skipped','⏭️ تخطّي','#64748b']];
 function _rqColor(s){ return s>=30?'#dc2626':(s>=18?'#ea580c':(s>=10?'#b45309':'#16a34a')); }
+
+// ══════════════════════════════════════════════════════════════════
+// 🎯 v637: إعدادات تاج الخطورة على Shopify
+// ══════════════════════════════════════════════════════════════════
+let _rtOpen = false;
+function rtToggle(){
+  _rtOpen = !_rtOpen;
+  document.getElementById('rt-body').style.display = _rtOpen ? 'block' : 'none';
+  document.getElementById('rt-arrow').textContent  = _rtOpen ? '▲' : '▼';
+  if(_rtOpen) rtLoad();
+}
+async function rtLoad(){
+  try{
+    const c = await apiFetch('/api/risk/tag/settings');
+    $('rt-enabled').checked = !!c.enabled;
+    $('rt-band').checked    = !!c.band;
+    $('rt-pickup').checked  = !!c.pickup;
+    $('rt-note').checked    = !!c.note;
+    $('rt-min').value       = c.minScore ?? 0;
+    const st = $('rt-state');
+    if(st) st.textContent = (c.enabled ? 'شغّال' : '⏸️ متوقف')
+      + ' · أونلاين بس'
+      + (c.minScore ? ` · من ${c.minScore}% فوق` : '')
+      + (c.note ? ' · + note' : '');
+    if(c.last) $('rt-out').innerHTML =
+      `<div style="color:var(--muted)">آخر تشغيلة: ✅ ${c.last.done} · تخطّى ${c.last.skipped} · فشل ${c.last.failed}</div>`;
+  }catch(e){ const o=$('rt-out'); if(o) o.innerHTML = `<span style="color:#dc2626">${escapeHtml(e.message)}</span>`; }
+}
+async function rtSave(){
+  try{
+    await apiFetch('/api/risk/tag/settings','POST',{
+      enabled: $('rt-enabled').checked, band: $('rt-band').checked,
+      pickup: $('rt-pickup').checked,
+      note: $('rt-note').checked, minScore: parseInt($('rt-min').value,10) || 0 });
+    toast('💾 اتحفظ','success'); rtLoad();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function rtBackfill(dryRun){
+  const box = $('rt-out');
+  const days = parseInt($('rt-days').value,10) || 7;
+  const redo = $('rt-redo').checked;
+  if(!dryRun && !confirm(`هيحسب الدرجة ويحطها تاج على أوردرات آخر ${days} يوم في Shopify.\nمتأكد؟`)) return;
+  box.innerHTML = '<span style="color:var(--muted)">...</span>';
+  try{
+    const r = await apiFetch('/api/risk/tag/backfill','POST',{ days, dryRun, redo });
+    box.innerHTML = dryRun
+      ? `<div style="padding:9px;background:var(--elev);border-radius:8px">👁️ <b>${r.total}</b> أوردر هيتعمله تاج (آخر ${r.days} يوم)</div>`
+      : `<div style="padding:9px;background:#dcfce7;color:#166534;border-radius:8px">▶️ شغّالة في الخلفية على <b>${r.total}</b> أوردر — Shopify بيقبل ~2 طلب/ثانية. افتح الكارت تاني بعد شوية تشوف النتيجة.</div>`;
+  }catch(e){ box.innerHTML = `<span style="color:#dc2626">${escapeHtml(e.message)}</span>`; }
+}
+
 async function rqLoad(){
   const box=$('rq-box'); if(!box) return;
   box.innerHTML='<span style="color:var(--muted)">⏳ بيحسب الدرجات...</span>';
