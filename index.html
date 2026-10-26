@@ -4322,12 +4322,26 @@ tr:hover td{background:#fafbff}
             <input id="rt-min" class="form-input" type="number" min="0" max="100" step="1" style="width:76px"> <span style="font-size:11px">%</span></div>
           <button class="btn btn-sm" style="background:#7c3aed;color:#fff;font-weight:700" onclick="rtSave()">💾 احفظ</button>
         </div>
-        <label style="display:flex;gap:7px;align-items:start;font-size:12px;padding:9px 10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:9px;margin-bottom:12px;cursor:pointer">
+        <div style="padding:10px;background:#f0fdf4;border:1px solid #86efac;border-radius:9px;margin-bottom:12px;font-size:12px;color:#14532d;line-height:1.9">
+          🔒 <b>السطر بيتكتب في خانة «درجة الخطورة» في صفحة الأوردر</b> —
+          نفس شكل الـ note بالظبط (<code style="font-family:Roboto,monospace">R=33% — عميل جديد · الطلب اتعمل بالليل</code>)،
+          بس ده metafield صلاحياته للإدارة بس: الموقع وحساب العميل محجوبين عنه،
+          فمفيش قالب إيميل ولا صفحة يقدروا يوصّلوه للعميل.
+        </div>
+        <label style="display:flex;gap:7px;align-items:start;font-size:12px;padding:9px 10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:9px;margin-bottom:10px;cursor:pointer">
           <input type="checkbox" id="rt-note" onchange="rtSave()" style="margin-top:2px">
-          <span style="color:#991b1b;line-height:1.8"><b>اكتبها في الـ note كمان</b> — مقفولة افتراضياً.
-          الـ note بيتقري في قوالب إيميل Shopify وصفحة حالة الطلب، فمافيش ضمان إن العميل مايشوفهوش.
-          سيبها مقفولة إلا لو محتاجها في نظام تاني بيقرا الـ note.</span>
+          <span style="color:#991b1b;line-height:1.8"><b>اكتبها في الـ note العادي كمان</b> — سيبها مقفولة.
+          الـ note بيتقري في قوالب إيميل Shopify والفاتورة، فمافيش ضمان إن العميل مايشوفهوش.
+          مالهاش لازمة بعد خانة «درجة الخطورة» فوق.</span>
         </label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 10px;background:#fffbeb;border-radius:9px;margin-bottom:12px;font-size:12px;color:#78350f">
+          <b>🧽 سطور [RISK] اللي اتكتبت في الـ note قبل كده:</b>
+          <select id="rt-cdays" class="form-input" style="width:120px">
+            <option value="7">آخر أسبوع</option><option value="30" selected>آخر شهر</option><option value="90">آخر 3 شهور</option>
+          </select>
+          <button class="btn btn-sm" style="background:#b45309;color:#fff" onclick="rtCleanNotes(true)">👁️ معاينة</button>
+          <button class="btn btn-sm" style="background:#dc2626;color:#fff" onclick="rtCleanNotes(false)">🧽 شيلها</button>
+        </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 10px;background:#f5f3ff;border-radius:9px;margin-bottom:10px;font-size:12px">
           <b>بأثر رجعي:</b>
           <select id="rt-days" class="form-input" style="width:130px">
@@ -4339,6 +4353,12 @@ tr:hover td{background:#fafbff}
           <button class="btn btn-sm" style="background:#7c3aed;color:#fff" onclick="rtBackfill(true)">👁️ معاينة</button>
           <button class="btn btn-sm" style="background:#dc2626;color:#fff" onclick="rtBackfill(false)">▶️ نفّذ</button>
         </div>
+        <!-- 🧹 v641: الحالة الفعلية — ليه أوردر مااتعملوش تاج -->
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn btn-ghost btn-sm" onclick="rtStatus()" style="font-weight:700">📊 الحالة — ليه مش بياخد تاج؟</button>
+          <button class="btn btn-ghost btn-sm" onclick="rtSweep()">🧹 امسح دلوقتي</button>
+        </div>
+        <div id="rt-status" style="margin-bottom:10px"></div>
         <div id="rt-out" style="font-size:12px"></div>
       </div>
     </div>
@@ -46151,12 +46171,70 @@ async function dbCleanupPreview(){
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:10px;flex-wrap:wrap">
             <div style="font-weight:800">الإجمالي: <span style="font-family:monospace;color:#dc2626">${totalRows.toLocaleString()}</span> صف</div>
-            <button class="btn btn-primary" onclick="dbCleanupRun()" ${totalRows ? '' : 'disabled'} style="background:#dc2626;border-color:#dc2626;font-weight:800">🧹 نفّذ التنظيف</button>
+            <div style="display:flex;gap:8px">
+              <!-- 🔍 v640: صفر في كل القواعد مش بالضرورة معناه مفيش حاجة قديمة -->
+              <button class="btn btn-ghost" onclick="dbDiagnose()" style="font-weight:700">🔍 ليه مالقاش حاجة؟</button>
+              <button class="btn btn-primary" onclick="dbCleanupRun()" ${totalRows ? '' : 'disabled'} style="background:#dc2626;border-color:#dc2626;font-weight:800">🧹 نفّذ التنظيف</button>
+            </div>
           </div>
+          <div id="db-diag-box" style="margin-top:12px"></div>
         </div>
       </div>`;
   }catch(e){
     box.innerHTML = `<div style="color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// 🔍 v640: ليه التنظيف مالقاش حاجة
+// ══════════════════════════════════════════════════════════════════
+async function dbDiagnose(){
+  const box = document.getElementById('db-diag-box');
+  if(!box) return;
+  box.innerHTML = '<div style="padding:12px;color:var(--muted)">⏳ بيفحص الجداول...</div>';
+  try{
+    const r = await apiFetch('/api/admin/db-cleanup/diagnose');
+    if(!r || !Array.isArray(r.tables)){
+      box.innerHTML = '<div style="padding:10px;background:#fef2f2;color:#991b1b;border-radius:8px">⚠️ انشر آخر نسخة من السيرفر الأول.</div>';
+      return;
+    }
+    box.innerHTML = `<div style="border:1px solid var(--border);border-radius:9px;overflow:hidden">
+      <div style="padding:9px 11px;background:var(--elev);font-weight:800;font-size:13px">🔍 حالة الجداول الفعلية</div>
+      <div class="tbl-wrap"><table style="width:100%;font-size:11.5px">
+        <thead><tr style="color:var(--muted)">
+          <th style="text-align:right;padding:5px">الجدول</th><th>عمود التاريخ</th><th>صفوف</th>
+          <th>أقدم تاريخ</th><th>عمره</th><th>تاريخه فاضي</th></tr></thead>
+        <tbody>${r.tables.map(t => {
+          if(t.error) return `<tr><td style="padding:5px;font-family:Roboto,sans-serif">${escapeHtml(t.table)}</td>
+            <td colspan="5" style="color:#dc2626;padding:5px">${escapeHtml(t.error)}</td></tr>`;
+          const old = t.oldest_days != null
+            ? `<b style="color:${t.oldest_days > 365 ? '#dc2626' : t.oldest_days > 60 ? '#b45309' : 'var(--muted)'}">${t.oldest_days} يوم</b>`
+            : '—';
+          const nulls = t.null_dates
+            ? `<b style="color:#dc2626">${t.null_dates.toLocaleString()}</b>` : '0';
+          return `<tr style="border-top:1px solid var(--border)">
+            <td style="padding:5px;font-family:Roboto,sans-serif">${escapeHtml(t.table)}</td>
+            <td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted)">${escapeHtml(t.date_col)}</td>
+            <td style="text-align:center;font-family:Roboto,sans-serif">${(t.total||0).toLocaleString()}</td>
+            <td style="text-align:center;font-family:Roboto,sans-serif;font-size:10.5px">${escapeHtml(String(t.oldest||'—').slice(0,19))}</td>
+            <td style="text-align:center">${old}</td>
+            <td style="text-align:center;font-family:Roboto,sans-serif">${nulls}</td>
+          </tr>`;
+        }).join('')}</tbody></table></div>
+      ${r.tables.filter(t => t.status_values?.length).map(t => `
+        <div style="padding:8px 11px;border-top:1px solid var(--border);font-size:11.5px">
+          <b>${escapeHtml(t.table)}.${escapeHtml(t.status_col)}</b> —
+          ${t.status_values.map(v => `<span style="font-family:Roboto,sans-serif;background:var(--elev);border-radius:5px;padding:1px 6px;margin-inline-end:4px">${escapeHtml(v.value===null?'NULL':String(v.value))}: ${v.n.toLocaleString()}</span>`).join('')}
+        </div>`).join('')}
+      <div style="padding:9px 11px;border-top:1px solid var(--border);font-size:11.5px;color:var(--muted);line-height:1.9">
+        اقرا كده: <b>عمره</b> أقل من مدة القاعدة ⟵ فعلاً مفيش حاجة قديمة.
+        <b>تاريخه فاضي</b> برقم كبير ⟵ الصفوف دي مش بتطابق أي مقارنة تاريخ، فهتفضل للأبد.
+        وقيم <b>الحالة</b> لو مختلفة عن اللي القاعدة بتدوّر عليه ⟵ الشرط نفسه هو الغلط.
+      </div>
+    </div>`;
+  }catch(e){
+    box.innerHTML = `<div style="padding:10px;color:#dc2626">${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -54255,6 +54333,77 @@ async function rtSave(){
     toast('💾 اتحفظ','success'); rtLoad();
   }catch(e){ toast(e.message,'error'); }
 }
+
+// 🧹 v641: حالة التاجات — بيفرّق بين «مش شغّال» و«قناة متخطّاة» و«فشل»
+async function rtStatus(){
+  const box = $('rt-status');
+  box.innerHTML = '<div style="padding:10px;color:var(--muted)">⏳ ...</div>';
+  try{
+    const r = await apiFetch('/api/risk/tag/status');
+    if(!r || !r.counts){
+      box.innerHTML = '<div style="padding:9px;background:#fef2f2;color:#991b1b;border-radius:8px">⚠️ انشر آخر نسخة من السيرفر الأول.</div>';
+      return;
+    }
+    const c = r.counts;
+    const chip = (lbl,v,col) => `<span style="background:var(--elev);border-radius:6px;padding:3px 9px;font-size:11.5px;font-weight:700">
+      ${lbl}: <b style="color:${col||'inherit'};font-family:Roboto,sans-serif">${(v||0).toLocaleString()}</b></span>`;
+    box.innerHTML = `<div style="border:1px solid var(--border);border-radius:9px;padding:10px">
+      <div style="font-weight:800;font-size:12.5px;margin-bottom:7px">📊 آخر ${r.window_days} يوم</div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px">
+        ${chip('كل الطلبات', c.total)}
+        ${chip('اتعمله تاج', c.tagged, '#16a34a')}
+        ${chip('مستني', c.pending_online, c.pending_online ? '#b45309' : 'var(--muted)')}
+        ${chip('قناة متخطّاة', c.offline_channel, 'var(--muted)')}
+        ${chip('من غير shopify_id', c.no_shopify_id, c.no_shopify_id ? '#dc2626' : 'var(--muted)')}
+        ${chip('وقف بعد 3 محاولات', c.gave_up, c.gave_up ? '#dc2626' : 'var(--muted)')}
+      </div>
+      <div class="tbl-wrap"><table style="width:100%;font-size:11.5px">
+        <thead><tr style="color:var(--muted)"><th style="text-align:right;padding:4px">المصدر</th><th>طلبات</th><th>اتعمله تاج</th></tr></thead>
+        <tbody>${(r.by_source||[]).map(x=>`<tr style="border-top:1px solid var(--border)">
+          <td style="padding:4px;font-family:Roboto,sans-serif">${escapeHtml(x.src)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${x.n.toLocaleString()}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:${x.tagged?'#16a34a':'var(--muted)'}">${x.tagged.toLocaleString()}</td>
+        </tr>`).join('')}</tbody></table></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:7px;line-height:1.8">
+        «مستني» بيقل لوحده — الماسح بيلف بعد كل سحب (كل دقيقة).
+        «من غير shopify_id» مش هياخد تاج أبداً، و«وقف بعد 3 محاولات» معناه Shopify رفض — شوف اللوج.
+      </div>
+    </div>`;
+  }catch(e){ box.innerHTML = `<div style="padding:9px;color:#dc2626">${escapeHtml(e.message)}</div>`; }
+}
+
+
+// 🧽 v642: تنضيف سطور [RISK] من الـ note
+async function rtCleanNotes(dryRun){
+  const box = $('rt-out');
+  const days = parseInt($('rt-cdays').value,10) || 30;
+  if(!dryRun && !confirm(`هيشيل سطور [RISK] من الـ note في أوردرات آخر ${days} يوم.\nباقي محتوى الـ note مش هيتلمس.\nتمام؟`)) return;
+  box.innerHTML = '<span style="color:var(--muted)">⏳ ...</span>';
+  try{
+    const r = await apiFetch('/api/risk/tag/clean-notes','POST',{ days, dryRun });
+    if(!r || (r.candidates == null)){
+      box.innerHTML = '<div style="padding:9px;background:#fef2f2;color:#991b1b;border-radius:8px">⚠️ انشر آخر نسخة من السيرفر الأول.</div>';
+      return;
+    }
+    box.innerHTML = dryRun
+      ? `<div style="padding:9px;background:var(--elev);border-radius:8px">👁️ هيتفحص <b>${r.candidates}</b> أوردر — اللي فيه [RISK] بس هو اللي هيتعدّل</div>`
+      : `<div style="padding:9px;background:#dcfce7;color:#166534;border-radius:8px">🧽 شغّال في الخلفية على <b>${r.candidates}</b> أوردر</div>`;
+  }catch(e){ box.innerHTML = `<span style="color:#dc2626">${escapeHtml(e.message)}</span>`; }
+}
+
+async function rtSweep(){
+  const box = $('rt-out');
+  box.innerHTML = '<span style="color:var(--muted)">⏳ بيمسح...</span>';
+  try{
+    const r = await apiFetch('/api/risk/tag/sweep','POST',{ limit: 50 });
+    box.innerHTML = r?.off ? '<span style="color:#b45309">⏸️ متوقف — شغّله الأول</span>'
+      : r?.busy ? '<span style="color:var(--muted)">في مسح شغّال دلوقتي</span>'
+      : `<div style="padding:9px;background:#dcfce7;color:#166534;border-radius:8px">
+          ✅ ${r.done||0} اتعملهم تاج · ${r.skipped||0} اتخطّوا · ${r.failed||0} فشلوا</div>`;
+    rtStatus();
+  }catch(e){ box.innerHTML = `<span style="color:#dc2626">${escapeHtml(e.message)}</span>`; }
+}
+
 async function rtBackfill(dryRun){
   const box = $('rt-out');
   const days = parseInt($('rt-days').value,10) || 7;
