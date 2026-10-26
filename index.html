@@ -10840,6 +10840,12 @@ function addToOfflineQueue(path, method, body){
 
 async function processOfflineQueue(){
   if(_syncInProgress || !_offlineQueue.length || !API_URL) return;
+  // 🐛 v639: من غير توكن كل حاجة هترجع 401 — استنى بدل ما تحرق المحاولات
+  if(!window._adminToken){
+    console.warn('[v639] الطابور مستني تسجيل الدخول —', _offlineQueue.length, 'عملية');
+    updateNetStatusBadge();
+    return;
+  }
   _syncInProgress = true;
   const baseUrl = API_URL.replace(/\/$/,'');
   const remaining = [];
@@ -10849,12 +10855,27 @@ async function processOfflineQueue(){
     try{
       const opts = { method:item.method, headers:{'Content-Type':'application/json'}, mode:'cors' };
       if(item.body) opts.body = JSON.stringify(item.body);
+      // 🐛 v639: الطابور كان بيبعت من غير توكن خالص، فكل عملية إدارية
+      //   بترجع 401 وتتحذف على طول. أي حاجة اتحطت في الطابور وانت
+      //   مقطوع — بيعة، تغيير حالة، تصفية — كانت بتضيع في صمت.
+      if(window._adminToken && item.path !== '/api/login'){
+        opts.headers['Authorization'] = 'Bearer ' + window._adminToken;
+      }
       const r = await fetch(baseUrl+item.path, opts);
       if(r.ok){
         synced++;
         continue; // نجحت → ما نضيفهاش للـ remaining
       }
-      // خطأ 4xx يعني بيانات غلط — نحذفها
+      // 🐛 v639: 401/403 مش بيانات غلط — ده توكن ناقص أو منتهي.
+      //   سيبها في الطابور لحد ما تسجّل دخول تاني.
+      if(r.status === 401 || r.status === 403){
+        console.warn('[v639] محتاج تسجيل دخول — اتأجّلت:', item.path);
+        item.retries = (item.retries||0) + 1;
+        if(item.retries < 200) remaining.push(item);
+        else failed++;
+        continue;
+      }
+      // باقي الـ 4xx يعني بيانات غلط فعلاً — نحذفها
       if(r.status >= 400 && r.status < 500){
         console.warn('Dropping bad request:', item.path, r.status);
         failed++;
@@ -54242,6 +54263,14 @@ async function rtBackfill(dryRun){
   box.innerHTML = '<span style="color:var(--muted)">...</span>';
   try{
     const r = await apiFetch('/api/risk/tag/backfill','POST',{ days, dryRun, redo });
+    // 🐛 v639: لو السيرفر القديم لسه شغّال، الطلب بيروح لمسار الأوردر
+    //   الواحد ويرجع { skipped } — من غير الفحص ده كانت بتطلع "undefined"
+    if(r && r.total == null){
+      box.innerHTML = `<div style="padding:9px;background:#fef2f2;color:#991b1b;border-radius:8px">
+        ⚠️ السيرفر مش فاهم الطلب — انشر آخر نسخة من السيرفر الأول.
+        ${r.skipped ? `<span style="font-family:Roboto,sans-serif">(${escapeHtml(String(r.skipped))})</span>` : ''}</div>`;
+      return;
+    }
     box.innerHTML = dryRun
       ? `<div style="padding:9px;background:var(--elev);border-radius:8px">👁️ <b>${r.total}</b> أوردر هيتعمله تاج (آخر ${r.days} يوم)</div>`
       : `<div style="padding:9px;background:#dcfce7;color:#166534;border-radius:8px">▶️ شغّالة في الخلفية على <b>${r.total}</b> أوردر — Shopify بيقبل ~2 طلب/ثانية. افتح الكارت تاني بعد شوية تشوف النتيجة.</div>`;
