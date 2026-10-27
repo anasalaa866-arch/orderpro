@@ -1910,6 +1910,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="sales-velocity" onclick="goPage(this,'sales-velocity')"><span class="ni-icon">📊</span><span class="ni-label">سرعة المبيعات</span></div>
         <div class="ni" data-p="replenishment" onclick="goPage(this,'replenishment')"><span class="ni-icon">📈</span><span class="ni-label">لوحة إعادة الطلب</span></div>
         <div class="ni" data-p="item-analysis" onclick="goPage(this,'item-analysis')"><span class="ni-icon">🔬</span><span class="ni-label">أطلب منه قد إيه؟</span></div>
+        <div class="ni" data-p="day-analysis" onclick="goPage(this,'day-analysis')"><span class="ni-icon">📅</span><span class="ni-label">تحليل يوم</span></div>
         <div class="ni" data-p="snapshots" onclick="goPage(this,'snapshots')"><span class="ni-icon">📸</span><span class="ni-label">حفظ المخزون اليومي</span></div>
         <div class="ni" data-p="zero-stocks" onclick="goPage(this,'zero-stocks')"><span class="ni-icon">⛔</span><span class="ni-label">المنتجات اللي خلصت</span></div>
         <div class="ni" data-p="expiry" onclick="goPage(this,'expiry')"><span class="ni-icon">⏳</span><span class="ni-label">تواريخ الصلاحية</span><span class="nbadge" id="nb-expiry" style="background:var(--danger)"></span></div>
@@ -4917,8 +4918,11 @@ tr:hover td{background:#fafbff}
     <div style="padding:12px 14px;display:flex;gap:10px;align-items:end;flex-wrap:wrap">
       <div style="flex:1;min-width:240px">
         <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">الصنف (اسم / SKU / باركود)</label>
-        <input id="ia-q" class="form-input" style="width:100%" placeholder="Alpro Barista Oat Milk أو 5411188130550"
-               onkeydown="if(event.key==='Enter')iaRun()">
+        <input id="ia-q" class="form-input" style="width:100%" placeholder="اكتب حرفين وهتطلع لك قايمة..." autocomplete="off"
+               oninput="iaSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();iaPickFirst();}">
+        <div id="ia-results" style="display:none;position:relative;z-index:30">
+          <div style="position:absolute;top:2px;left:0;right:0;max-height:320px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
+        </div>
       </div>
       <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">تغطية</label>
         <select id="ia-cover" class="form-input" style="width:110px" onchange="iaRun()">
@@ -4931,6 +4935,24 @@ tr:hover td{background:#fafbff}
     </div>
   </div>
   <div id="ia-out"></div>
+</div>
+
+
+<!-- 📅 v649: تحليل يوم كامل -->
+<div class="page" id="page-day-analysis">
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:12px 14px;display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+      <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">اليوم</label>
+        <input id="da-date" type="date" class="form-input" style="width:170px" onchange="daRun()"></div>
+      <button class="btn btn-ghost btn-sm" onclick="daShift(-1)">◀ امبارح</button>
+      <button class="btn btn-ghost btn-sm" onclick="daShift(1)">بكرة ▶</button>
+      <label style="display:flex;gap:6px;align-items:center;font-size:12px;font-weight:700">
+        <input type="checkbox" id="da-all" onchange="daRun()"> يشمل الكاشير وطلبات</label>
+      <button class="btn btn-primary" onclick="daRun()" style="font-weight:700">📅 حلّل</button>
+      <button class="btn btn-sm" onclick="daExcel()" style="background:#16a34a;color:#fff">⬇️ Excel</button>
+    </div>
+  </div>
+  <div id="da-out"></div>
 </div>
 
 <div class="page" id="page-bought-together">
@@ -10194,7 +10216,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -48320,6 +48342,8 @@ function goPage(el,page){
   if(page==='sku-audit')bcWatch();
   if(page==='bought-together')btLoad();
   if(page==='item-analysis') setTimeout(()=>$('ia-q')?.focus(),100);
+  if(page==='day-analysis'){ const e=$('da-date');
+    if(e && !e.value){ e.value = new Date(Date.now()-864e5).toLocaleDateString('en-CA',{timeZone:'Africa/Cairo'}); daRun(); } }
   if(page==='couriers')renderCouriers();
   if(page==='assign'){
     // 🆕 v236: تأكد إن الـ rates محملة قبل التوزيع
@@ -50738,13 +50762,62 @@ function _iaSpark(series){
     `<div title="${series.slice(-30)[i].day}: ${q}" style="flex:1;min-width:3px;height:${Math.max(2,Math.round(q/mx*46))}px;background:${q?'var(--accent)':'var(--border)'};border-radius:2px 2px 0 0"></div>`).join('')}</div>`;
 }
 
+
+// 🔎 v650: قايمة اختيار — الكود مايختارش لوحده
+let _iaPick = null, _iaTmr = null, _iaCands = [];
+function iaSearch(){
+  clearTimeout(_iaTmr);
+  _iaPick = null;
+  _iaTmr = setTimeout(async () => {
+    const q = ($('ia-q').value||'').trim();
+    const box = $('ia-results'), inner = box.firstElementChild;
+    if(q.length < 2){ box.style.display='none'; _iaCands=[]; return; }
+    try{
+      const r = await apiFetch('/api/item-analysis/search?q=' + encodeURIComponent(q));
+      _iaCands = r?.rows || [];
+      if(!_iaCands.length){
+        inner.innerHTML = '<div style="padding:11px;color:var(--muted);font-size:12px">مفيش نتائج</div>';
+        box.style.display='block'; return;
+      }
+      inner.innerHTML = _iaCands.map((x,i)=>`
+        <div onclick="iaChoose(${i})" style="padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;gap:9px;align-items:center"
+             onmouseover="this.style.background='var(--elev)'" onmouseout="this.style.background=''">
+          ${x.image_url?`<img src="${escapeHtml(x.image_url)}" style="width:34px;height:34px;object-fit:contain;border-radius:6px;background:#fff;flex:none">`
+                       :'<div style="width:34px;height:34px;flex:none"></div>'}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:700">${escapeHtml(x.product_title||'')}${x.variant_title&&x.variant_title!=='Default Title'?` <span style="color:var(--muted)">— ${escapeHtml(x.variant_title)}</span>`:''}</div>
+            <div style="font-size:10.5px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(x.sku||'')}</div>
+          </div>
+          <div style="text-align:left;font-size:11px;flex:none">
+            <div>رصيد <b style="font-family:Roboto,sans-serif;color:${x.stock?'inherit':'#dc2626'}">${x.stock}</b></div>
+            <div style="color:var(--muted)">محل 30ي: <b style="font-family:Roboto,sans-serif">${x.sold_pos}</b></div>
+          </div>
+        </div>`).join('');
+      box.style.display='block';
+    }catch(e){ box.style.display='none'; }
+  }, 250);
+}
+function iaChoose(i){
+  const x = _iaCands[i]; if(!x) return;
+  _iaPick = x.variant_id;
+  $('ia-q').value = x.product_title + (x.variant_title && x.variant_title!=='Default Title' ? ' — '+x.variant_title : '');
+  $('ia-results').style.display='none';
+  iaRun();
+}
+function iaPickFirst(){ if(_iaCands.length) iaChoose(0); else iaRun(); }
+document.addEventListener('click', e => {
+  const b = document.getElementById('ia-results');
+  if(b && !b.contains(e.target) && e.target.id !== 'ia-q') b.style.display='none';
+});
+
 async function iaRun(){
   const q = ($('ia-q').value||'').trim();
   const box = $('ia-out');
   if(!q){ box.innerHTML=''; return; }
   box.innerHTML = '<div class="card" style="padding:20px;text-align:center;color:var(--muted)">⏳ بيحلّل...</div>';
   try{
-    const r = await apiFetch('/api/item-analysis?q=' + encodeURIComponent(q)
+    const r = await apiFetch('/api/item-analysis?'
+      + (_iaPick ? 'variantId=' + encodeURIComponent(_iaPick) : 'q=' + encodeURIComponent(q))
       + '&cover=' + ($('ia-cover').value||30) + '&service=' + ($('ia-svc').value||95));
     if(!r || !r.ok){
       box.innerHTML = `<div class="card" style="padding:16px;color:#dc2626">${escapeHtml(r?.error||'مش لاقي الصنف')}</div>`; return;
@@ -50841,6 +50914,117 @@ async function iaRun(){
       </div>
     </div></div>`;
   }catch(e){ box.innerHTML = `<div class="card" style="padding:16px;color:#dc2626">${escapeHtml(e.message)}</div>`; }
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// 📅 v649: تحليل يوم كامل — كل طلب ودرجته
+// ══════════════════════════════════════════════════════════════════
+let _daRows = null, _daDate = null;
+function daShift(n){
+  const e = $('da-date'); if(!e?.value) return;
+  const d = new Date(e.value + 'T12:00:00'); d.setDate(d.getDate() + n);
+  e.value = d.toLocaleDateString('en-CA'); daRun();
+}
+function _daN(n,d){ const v=Number(n); return Number.isFinite(v)?v.toLocaleString('en-EG',{maximumFractionDigits:d??0}):'—'; }
+
+async function daRun(){
+  const date = $('da-date')?.value; if(!date) return;
+  const box = $('da-out');
+  box.innerHTML = '<div class="card" style="padding:20px;text-align:center;color:var(--muted)">⏳ ...</div>';
+  try{
+    const r = await apiFetch('/api/risk/day?date=' + date + ($('da-all').checked ? '&all=1' : ''));
+    if(!r?.ok){ box.innerHTML = `<div class="card" style="padding:16px;color:#dc2626">${escapeHtml(r?.error||'فشل')}</div>`; return; }
+    _daRows = r.rows; _daDate = date;
+    const s = r.summary;
+    if(!s.orders){ box.innerHTML = '<div class="card" style="padding:20px;text-align:center;color:var(--muted)">مفيش طلبات في اليوم ده</div>'; return; }
+
+    const kpi = (lbl,val,sub,col) => `<div class="card"><div style="padding:11px 13px">
+      <div style="font-size:11px;color:var(--muted)">${lbl}</div>
+      <div style="font-size:21px;font-weight:900;color:${col||'inherit'}">${val}</div>
+      ${sub?`<div style="font-size:10.5px;color:var(--muted)">${sub}</div>`:''}</div></div>`;
+
+    // التحقق: هل الشريحة الأعلى بترجّع أكتر؟
+    const withRate = r.bands.filter(b=>b.rate!=null);
+    let ordered = null;
+    if(withRate.length >= 2){
+      ordered = withRate.every((b,i)=> i===0 || b.rate >= withRate[i-1].rate - 0.01);
+    }
+
+    box.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin-bottom:14px">
+      ${kpi('طلبات', _daN(s.orders))}
+      ${kpi('إيراد', _daN(s.revenue)+' ج', 'متوسط '+_daN(s.avg_order)+' ج')}
+      ${kpi('متوسط الدرجة', s.avg_score+'%', 'وسيط '+s.median_score+'% · أعلى '+s.max_score+'%','#7c3aed')}
+      ${kpi('دفع عند الاستلام', _daN(s.cod), 'مدفوع مقدماً '+_daN(s.prepaid))}
+      ${kpi('اتحسم', _daN(s.settled), 'لسه مفتوح '+_daN(s.still_open))}
+      ${kpi('رجع/اتلغى', _daN(s.bad), s.bad_value?_daN(s.bad_value)+' ج':'', s.bad?'#dc2626':'#16a34a')}
+      ${s.bad_rate!=null?kpi('نسبة الرجيع', s.bad_rate+'%','من اللي اتحسم', s.bad_rate>12?'#dc2626':'#16a34a'):''}
+      ${s.called?kpi('اتكلّمنا معاهم', _daN(s.called)):''}
+    </div>
+
+    <div class="card" style="margin-bottom:14px"><div style="padding:13px 14px">
+      <div style="font-weight:800;font-size:13px;margin-bottom:9px">🎯 هل الموديل شغال؟ — نسبة الرجيع الفعلية في كل شريحة</div>
+      <div class="tbl-wrap"><table style="width:100%;font-size:12.5px">
+        <thead><tr style="color:var(--muted)"><th style="text-align:right;padding:5px">الشريحة</th>
+          <th>طلبات</th><th>اتحسم</th><th>رجع</th><th>النسبة</th></tr></thead>
+        <tbody>${r.bands.map(b=>`<tr style="border-top:1px solid var(--border)">
+          <td style="padding:6px">${escapeHtml(b.label)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${b.n}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted)">${b.settled}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${b.bad}</td>
+          <td style="text-align:center;font-weight:800;font-family:Roboto,sans-serif;color:${b.rate==null?'var(--muted)':b.rate>12?'#dc2626':'inherit'}">${b.rate==null?'—':b.rate+'%'}</td>
+        </tr>`).join('')}</tbody></table></div>
+      <div style="font-size:11.5px;margin-top:8px;line-height:1.9;color:${ordered===false?'#b45309':'var(--muted)'}">
+        ${ordered===null ? 'لسه مفيش طلبات متحسمة كفاية في اليوم ده عشان نحكم — ارجع له بعد أسبوع.'
+          : ordered ? '✅ النسبة بتزيد مع الدرجة — الترتيب سليم.'
+          : '⚠️ النسبة مش بتزيد مع الدرجة في اليوم ده. يوم واحد عينة صغيرة، بس لو اتكرر على أيام كتير يبقى الموديل محتاج إعادة تدريب.'}
+      </div>
+    </div></div>
+
+    <div class="card"><div style="padding:13px 14px">
+      <div style="font-weight:800;font-size:13px;margin-bottom:9px">📋 كل الطلبات — مرتّبة بالدرجة</div>
+      <div class="tbl-wrap" style="max-height:620px;overflow:auto"><table style="width:100%;font-size:12px">
+        <thead><tr style="color:var(--muted);position:sticky;top:0;background:var(--bg)">
+          <th style="padding:6px">الدرجة</th><th style="text-align:right">الأوردر</th><th>الساعة</th>
+          <th>القيمة</th><th>الدفع</th><th style="text-align:right">المنطقة</th>
+          <th style="text-align:right">ليه؟</th><th>الحالة</th></tr></thead>
+        <tbody>${r.rows.map(x=>{
+          const oc = x.outcome==='bad' ? '#dc2626' : x.outcome==='good' ? '#16a34a' : 'var(--muted)';
+          const sc = x.score>=11?'#dc2626':x.score>=8?'#b45309':x.score>=5?'#7c3aed':'var(--muted)';
+          return `<tr style="border-top:1px solid var(--border)">
+          <td style="text-align:center;padding:6px"><b style="color:${sc};font-family:Roboto,sans-serif">${x.score}%</b>${x.stored?'':'<div style="font-size:9px;color:var(--muted)">محسوبة</div>'}</td>
+          <td style="font-family:Roboto,sans-serif;font-weight:700">${escapeHtml(String(x.order_id).replace(/^SH-/,''))}
+            <div style="font-size:10.5px;color:var(--muted)">${escapeHtml((x.customer||'').slice(0,22))}</div></td>
+          <td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted)">${escapeHtml(x.at)}</td>
+          <td style="text-align:center;font-family:Roboto,sans-serif">${_daN(x.total)}</td>
+          <td style="text-align:center;font-size:11px">${x.paid?'<span style="color:#16a34a">مقدماً</span>':'<span style="color:#b45309">عند الاستلام</span>'}</td>
+          <td style="font-size:11px">${escapeHtml((x.area||'').slice(0,20))}</td>
+          <td style="font-size:10.5px;color:var(--muted);max-width:260px">${(x.up||[]).slice(0,3).map(u=>escapeHtml(u.text)).join(' · ')||'—'}</td>
+          <td style="text-align:center;font-size:11px;color:${oc};font-weight:700">${escapeHtml(x.status||'—')}
+            ${x.call_outcome?`<div style="font-size:9.5px;color:#2563eb">📞 ${escapeHtml(x.call_outcome)}</div>`:''}</td>
+        </tr>`;}).join('')}</tbody></table></div>
+    </div></div>`;
+  }catch(e){ box.innerHTML = `<div class="card" style="padding:16px;color:#dc2626">${escapeHtml(e.message)}</div>`; }
+}
+
+function daExcel(){
+  if(!_daRows?.length){ toast('حلّل يوم الأول'); return; }
+  const data = _daRows.map(x=>({
+    'الدرجة %': x.score, 'الأوردر': String(x.order_id).replace(/^SH-/,''),
+    'العميل': x.customer||'', 'التليفون': x.phone||'', 'الساعة': x.at,
+    'القيمة': x.total, 'الدفع': x.paid?'مقدماً':'عند الاستلام',
+    'المنطقة': x.area||'', 'المصدر': x.source||'',
+    'أسباب الرفع': (x.up||[]).map(u=>u.text).join(' · '),
+    'أسباب الخفض': (x.down||[]).map(u=>u.text).join(' · '),
+    'الحالة': x.status||'', 'النتيجة': x.outcome==='bad'?'رجع/اتلغى':x.outcome==='good'?'تم':'مفتوح',
+    'المكالمة': x.call_outcome||'',
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:9},{wch:11},{wch:20},{wch:13},{wch:8},{wch:10},{wch:13},{wch:18},{wch:14},{wch:40},{wch:30},{wch:14},{wch:11},{wch:12}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'تحليل اليوم');
+  XLSX.writeFile(wb, 'day-' + (_daDate||'') + '.xlsx');
 }
 
 async function btLoad(){
