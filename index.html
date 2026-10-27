@@ -4920,9 +4920,7 @@ tr:hover td{background:#fafbff}
         <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:700">الصنف (اسم / SKU / باركود)</label>
         <input id="ia-q" class="form-input" style="width:100%" placeholder="اكتب حرفين وهتطلع لك قايمة..." autocomplete="off"
                oninput="iaSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();iaPickFirst();}">
-        <div id="ia-results" style="display:none;position:relative;z-index:30">
-          <div style="position:absolute;top:2px;left:0;right:0;max-height:320px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
-        </div>
+
       </div>
       <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">تغطية</label>
         <select id="ia-cover" class="form-input" style="width:110px" onchange="iaRun()">
@@ -50765,21 +50763,48 @@ function _iaSpark(series){
 
 // 🔎 v650: قايمة اختيار — الكود مايختارش لوحده
 let _iaPick = null, _iaTmr = null, _iaCands = [];
+
+// 🐛 v651: القايمة كانت جوه الـ .card، و.card عنده overflow:hidden —
+//   فكانت بتتقص لشريط رفيع. دلوقتي عنصر على مستوى الصفحة بـ fixed،
+//   متظبّط على مكان خانة البحث، فمفيش أب يقدر يقصّه.
+function _iaBox(){
+  let b = document.getElementById('ia-results');
+  if(!b){
+    b = document.createElement('div');
+    b.id = 'ia-results';
+    b.style.cssText = 'display:none;position:fixed;z-index:9999;max-height:340px;overflow:auto;'
+      + 'background:var(--card);border:1px solid var(--border);border-radius:10px;'
+      + 'box-shadow:0 10px 30px rgba(0,0,0,.18)';
+    document.body.appendChild(b);
+  }
+  return b;
+}
+function _iaPlace(){
+  const b = document.getElementById('ia-results'), q = document.getElementById('ia-q');
+  if(!b || !q || b.style.display === 'none') return;
+  const r = q.getBoundingClientRect();
+  b.style.top   = (r.bottom + 4) + 'px';
+  b.style.left  = r.left + 'px';
+  b.style.width = r.width + 'px';
+}
+window.addEventListener('scroll', _iaPlace, true);
+window.addEventListener('resize', _iaPlace);
+function _iaHide(){ const b=document.getElementById('ia-results'); if(b) b.style.display='none'; }
 function iaSearch(){
   clearTimeout(_iaTmr);
   _iaPick = null;
   _iaTmr = setTimeout(async () => {
     const q = ($('ia-q').value||'').trim();
-    const box = $('ia-results'), inner = box.firstElementChild;
+    const box = _iaBox();
     if(q.length < 2){ box.style.display='none'; _iaCands=[]; return; }
     try{
       const r = await apiFetch('/api/item-analysis/search?q=' + encodeURIComponent(q));
       _iaCands = r?.rows || [];
       if(!_iaCands.length){
-        inner.innerHTML = '<div style="padding:11px;color:var(--muted);font-size:12px">مفيش نتائج</div>';
-        box.style.display='block'; return;
+        box.innerHTML = '<div style="padding:11px;color:var(--muted);font-size:12px">مفيش نتائج</div>';
+        box.style.display='block'; _iaPlace(); return;
       }
-      inner.innerHTML = _iaCands.map((x,i)=>`
+      box.innerHTML = _iaCands.map((x,i)=>`
         <div onclick="iaChoose(${i})" style="padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;gap:9px;align-items:center"
              onmouseover="this.style.background='var(--elev)'" onmouseout="this.style.background=''">
           ${x.image_url?`<img src="${escapeHtml(x.image_url)}" style="width:34px;height:34px;object-fit:contain;border-radius:6px;background:#fff;flex:none">`
@@ -50793,7 +50818,7 @@ function iaSearch(){
             <div style="color:var(--muted)">محل 30ي: <b style="font-family:Roboto,sans-serif">${x.sold_pos}</b></div>
           </div>
         </div>`).join('');
-      box.style.display='block';
+      box.style.display='block'; _iaPlace();
     }catch(e){ box.style.display='none'; }
   }, 250);
 }
@@ -50801,7 +50826,7 @@ function iaChoose(i){
   const x = _iaCands[i]; if(!x) return;
   _iaPick = x.variant_id;
   $('ia-q').value = x.product_title + (x.variant_title && x.variant_title!=='Default Title' ? ' — '+x.variant_title : '');
-  $('ia-results').style.display='none';
+  _iaHide();
   iaRun();
 }
 function iaPickFirst(){ if(_iaCands.length) iaChoose(0); else iaRun(); }
@@ -50809,6 +50834,7 @@ document.addEventListener('click', e => {
   const b = document.getElementById('ia-results');
   if(b && !b.contains(e.target) && e.target.id !== 'ia-q') b.style.display='none';
 });
+document.addEventListener('keydown', e => { if(e.key === 'Escape') _iaHide(); });
 
 async function iaRun(){
   const q = ($('ia-q').value||'').trim();
