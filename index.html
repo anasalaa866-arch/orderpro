@@ -15275,6 +15275,12 @@ async function bwFake(mode){
         <button class="btn btn-sm" style="background:#16a34a;color:#fff" onclick="bwOpenPdf()">📄 افتح البوليصة</button>
         <button class="btn btn-ghost btn-sm" onclick="bwSavePdf()">⬇️ نزّلها</button></div>`;
     }
+    // 📄 v658: ماجتش مع الرد؟ بوسطة بتاخد وقت — اسأل تاني بالـ ID
+    if(!r.awbBase64 && r.deliveryId){
+      html += `<div id="bw-awb-box" style="margin-top:9px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-sm" style="background:#16a34a;color:#fff" onclick="bwFetchAwb()">📄 جيب البوليصة دلوقتي</button>
+        <span style="font-size:11px;color:var(--muted)">بوسطة بتاخد من ١٠ لـ ٦٠ ثانية تجهّزها</span></div>`;
+    }
     // 🗑️ v657: الشحنة دي حقيقية عند بوسطة — لازم طريقة تمسحها من هنا
     if(r.deliveryId){
       _bwDel = { id: r.deliveryId, env: mode === 'staging' ? 'staging' : ($('bosta-env')?.value || 'production') };
@@ -15291,6 +15297,32 @@ async function bwFake(mode){
 
 let _bwPdf = null;
 let _bwDel = null;   // 🗑️ v657: آخر شحنة اتعملت من لوحة التجربة
+
+// 📄 v658: اسأل بوسطة تاني عن الـ PDF برقم الشحنة
+async function bwFetchAwb(){
+  if(!_bwDel) return;
+  const el = document.getElementById('bw-awb-box');
+  if(el) el.innerHTML = '<span style="color:var(--muted)">⏳ بيجيب...</span>';
+  try{
+    const r = await apiFetch('/api/bosta/awb-by-id','POST',{
+      apiKey: bostaApiKey, env: _bwDel.env, deliveryId: _bwDel.id });
+    if(r?.success && r.base64){
+      _bwPdf = r.base64;
+      if(el) el.innerHTML = `
+        <button class="btn btn-sm" style="background:#16a34a;color:#fff" onclick="bwOpenPdf()">📄 افتح البوليصة</button>
+        <button class="btn btn-ghost btn-sm" onclick="bwSavePdf()">⬇️ نزّلها</button>
+        <span style="font-size:11px;color:var(--muted)">${r.kb||'?'} ك.ب · ${escapeHtml(r.via||'')}</span>`;
+    }else{
+      if(el) el.innerHTML = `<div style="font-size:12px;color:#b45309;line-height:1.8">
+          ⏳ ${escapeHtml(r?.error || 'لسه مش جاهزة')} — استنى شوية وجرّب تاني
+          ${r?.tried ? `<br><span style="font-size:10px;color:var(--muted);direction:ltr;display:inline-block;text-align:left">${escapeHtml(r.tried.join(' | '))}</span>` : ''}
+        </div>
+        <button class="btn btn-sm" style="background:#16a34a;color:#fff;margin-top:7px" onclick="bwFetchAwb()">🔁 جرّب تاني</button>`;
+    }
+  }catch(e){
+    if(el) el.innerHTML = `<div style="font-size:12px;color:#991b1b">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
 
 async function bwTerminate(){
   if(!_bwDel) return;
