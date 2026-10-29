@@ -2691,6 +2691,8 @@ tr:hover td{background:#fafbff}
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-sm" style="background:#7c3aed;color:#fff" onclick="bwFake('preview')">👁️ معاينة الحمولة</button>
             <button class="btn btn-sm" style="background:#b45309;color:#fff" onclick="bwFake('staging')">🧪 جرّب على Staging</button>
+            <!-- 🚨 v657: بوليصة حقيقية على الحساب الحقيقي — وزرار مسحها بيظهر بعدها -->
+            <button class="btn btn-sm" style="background:#dc2626;color:#fff" onclick="bwFake('production')">🚨 بوليصة حقيقية</button>
             <button class="btn btn-ghost btn-sm" onclick="bwDupes()" style="margin-inline-start:auto">🔁 كشف التكرار</button>
           </div>
           <div style="font-size:11px;color:var(--muted);margin-top:7px;line-height:1.8">
@@ -15236,6 +15238,13 @@ async function bwFake(mode){
   const o = _bwFakeOrder();
   if(!o.name || !o.phone || !o.addr){ box.innerHTML = '<span style="color:#dc2626">الاسم والتليفون والعنوان مطلوبين</span>'; return; }
   if(mode === 'staging' && !confirm('هيعمل شحنة على بيئة بوسطة التجريبية بأوردر وهمي.\nمفيش حاجة هتتحفظ في طلباتك.\nتمام؟')) return;
+  // 🚨 v657: الإنتاج = شحنة حقيقية على حسابك الحقيقي في بوسطة.
+  if(mode === 'production' && !confirm(
+      'شحنة حقيقية على حسابك الحقيقي في بوسطة.\n\n'
+    + '· هتظهر في داشبورد بوسطة وممكن تدخل في طلب استلام.\n'
+    + '· مش هتتحفظ في طلباتك هنا.\n'
+    + '· هيظهرلك زرار "امسح الشحنة" بعدها — امسحها فوراً قبل ما المندوب يستلم،\n'
+    + '  لأن بوسطة بترفض الإلغاء بعد الاستلام.\n\nتكمّل؟')) return;
 
   box.innerHTML = '<span style="color:var(--muted)">⏳ ...</span>';
   try{
@@ -15262,15 +15271,49 @@ async function bwFake(mode){
       <br><span style="font-size:11px">مفيش حاجة اتحفظت في طلباتك.</span></div>`;
     if(r.awbBase64){
       _bwPdf = r.awbBase64;
-      html += `<div style="margin-top:9px;display:flex;gap:8px">
+      html += `<div style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-sm" style="background:#16a34a;color:#fff" onclick="bwOpenPdf()">📄 افتح البوليصة</button>
         <button class="btn btn-ghost btn-sm" onclick="bwSavePdf()">⬇️ نزّلها</button></div>`;
+    }
+    // 🗑️ v657: الشحنة دي حقيقية عند بوسطة — لازم طريقة تمسحها من هنا
+    if(r.deliveryId){
+      _bwDel = { id: r.deliveryId, env: mode === 'staging' ? 'staging' : ($('bosta-env')?.value || 'production') };
+      html += `<div id="bw-del-box" style="margin-top:9px;padding:10px;background:#fef2f2;border:1px solid #fca5a5;border-radius:9px">
+        <div style="font-size:12px;color:#991b1b;margin-bottom:7px">
+          الشحنة دي موجودة عند بوسطة دلوقتي. امسحها قبل ما المندوب يستلم — بعد الاستلام بوسطة بترفض الإلغاء.
+        </div>
+        <button class="btn btn-sm" style="background:#dc2626;color:#fff" onclick="bwTerminate()">🗑️ امسح الشحنة من بوسطة</button>
+      </div>`;
     }
     box.innerHTML = html;
   }catch(e){ box.innerHTML = `<div style="padding:11px;color:#dc2626">${escapeHtml(e.message)}</div>`; }
 }
 
 let _bwPdf = null;
+let _bwDel = null;   // 🗑️ v657: آخر شحنة اتعملت من لوحة التجربة
+
+async function bwTerminate(){
+  if(!_bwDel) return;
+  if(!confirm(`هتمسح الشحنة ${_bwDel.id} من بوسطة نهائياً.\nتمام؟`)) return;
+  const el = document.getElementById('bw-del-box');
+  if(el) el.innerHTML = '<span style="color:var(--muted)">⏳ بيمسح...</span>';
+  try{
+    const r = await apiFetch('/api/bosta/terminate','POST',{
+      apiKey: bostaApiKey, env: _bwDel.env, deliveryId: _bwDel.id });
+    if(r?.success){
+      _bwDel = null;
+      if(el) el.outerHTML = '<div style="margin-top:9px;padding:10px;background:#dcfce7;color:#166534;border-radius:9px">🗑️ <b>الشحنة اتمسحت من بوسطة</b></div>';
+    }else{
+      if(el) el.innerHTML = `<div style="color:#991b1b;font-size:12px;line-height:1.8">
+        ❌ ${escapeHtml(r?.error || 'مانفعش')}<br>
+        <span style="font-size:11px">لو بوسطة رفضت، الغيها من داشبورد بوسطة على طول.</span></div>
+        <button class="btn btn-sm" style="background:#dc2626;color:#fff;margin-top:7px" onclick="bwTerminate()">🔁 جرّب تاني</button>`;
+    }
+  }catch(e){
+    if(el) el.innerHTML = `<div style="color:#991b1b;font-size:12px">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
 function _bwBlob(){
   const bin = atob(_bwPdf); const arr = new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
