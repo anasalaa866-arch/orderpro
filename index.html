@@ -15460,12 +15460,44 @@ async function openAwbPrint(){
         <h3 style="margin:0 0 3px;font-size:17px">🖨️ طباعة البوالص مرتبة</h3>
         <div style="font-size:12px;color:var(--muted)">كل البوالص في ملف واحد، مرتبة برقم الأوردر — مش بترتيب بوسطة.</div>
       </div>
+      <div style="padding:0 20px 10px">
+        <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">الدفعة</label>
+        <select id="awb-batch" class="form-input" style="width:100%" onchange="awbLoad()">
+          <option value="">⏳ بيحمّل الدفعات...</option>
+        </select>
+      </div>
       <div id="awb-body" style="flex:1;overflow-y:auto;padding:0 20px"></div>
       <div id="awb-foot" style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
     </div>`;
   ov.onclick = e => { if(e.target === ov) ov.remove(); };
   document.body.appendChild(ov);
-  awbLoad();
+  awbBatches();
+}
+
+// 📦 v663: الدفعات اللي فيها طلبات بوسطة — الطباعة بتتم بالدفعة.
+//   من غير كده القايمة كانت بتجيب تاريخ الطلبات كله.
+async function awbBatches(){
+  const sel = document.getElementById('awb-batch');
+  const body = document.getElementById('awb-body');
+  try{
+    const r = await apiFetch('/api/bosta/batches','GET');
+    const bs = r?.batches || [];
+    if(!bs.length){
+      sel.innerHTML = '<option value="">مفيش دفعات فيها طلبات بوسطة</option>';
+      body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">مفيش دفعات فيها طلبات موزّعة بوسطة</div>';
+      return;
+    }
+    sel.innerHTML = bs.map((b, i) => `
+      <option value="${escapeHtml(b.batch_code)}" ${i === 0 ? 'selected' : ''}>
+        ${escapeHtml(b.batch_code)} — 🚚 ${b.bosta_total} بوسطة
+        ${b.needs_create ? ` · ${b.needs_create} مالهمش بوليصة` : ' · كلهم جاهزين'}
+        ${b.status === 'open' ? ' · مفتوحة' : ''}
+      </option>`).join('');
+    awbLoad();
+  }catch(e){
+    sel.innerHTML = '<option value="">❌ مانفعش</option>';
+    body.innerHTML = `<div style="padding:30px;text-align:center;color:#dc2626">${escapeHtml(e.message)}</div>`;
+  }
 }
 
 async function awbLoad(){
@@ -15474,11 +15506,13 @@ async function awbLoad(){
   body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">⏳ بيجمّع...</div>';
   foot.innerHTML = '';
   try{
-    const r = await apiFetch('/api/bosta/print-list','POST',{ desc:_awbDesc });
+    const batchCode = document.getElementById('awb-batch')?.value || '';
+    if(!batchCode){ body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">اختار دفعة</div>'; return; }
+    const r = await apiFetch('/api/bosta/print-list','POST',{ desc:_awbDesc, batchCode });
     if(!r?.ok) throw new Error(r?.error || 'فشل');
     _awbList = r.items || [];
     if(!_awbList.length){
-      body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">مفيش طلبات عليها شحنات على بوسطة</div>';
+      body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">الدفعة دي مفيهاش طلبات بوسطة</div>';
       return;
     }
     const need = _awbList.filter(i => i.needsCreate).length;
