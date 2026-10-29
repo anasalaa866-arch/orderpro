@@ -15447,7 +15447,7 @@ async function bwRun(mode){
 //   بوسطة بتطبع بترتيبها هي؛ الكومة بتطلع مش على ترتيب Shopify
 //   ولازم تدوّر على كل بوليصة. هنا بندمجهم بالترتيب الرقمي الصح.
 // ══════════════════════════════════════════════════════════════
-let _awbList = [], _awbDesc = false;
+let _awbList = [], _awbDesc = false, _awbOldBatch = null;
 
 async function openAwbPrint(){
   document.getElementById('awb-modal')?.remove();
@@ -15487,12 +15487,18 @@ async function awbBatches(){
       body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">مفيش دفعات فيها طلبات موزّعة بوسطة</div>';
       return;
     }
-    sel.innerHTML = bs.map((b, i) => `
-      <option value="${escapeHtml(b.batch_code)}" ${i === 0 ? 'selected' : ''}>
-        ${escapeHtml(b.batch_code)} — 🚚 ${b.bosta_total} بوسطة
-        ${b.needs_create ? ` · ${b.needs_create} مالهمش بوليصة` : ' · كلهم جاهزين'}
+    // 🗓️ v664: التاريخ لازم يبان — الدفعة القديمة واللي النهاردة
+    //   شكلهم واحد من غيره، وده خطر مع زرار بيعمل شحنات حقيقية.
+    const today = new Date().toISOString().slice(0,10);
+    sel.innerHTML = bs.map((b, i) => {
+      const d = (b.batch_date || String(b.batch_code).replace(/^B-/,'').slice(0,10) || '');
+      const isToday = d === today;
+      return `<option value="${escapeHtml(b.batch_code)}" ${i === 0 ? 'selected' : ''}>
+        ${isToday ? '🟢 النهاردة · ' : (d ? d + ' · ' : '')}${escapeHtml(b.batch_code)}
+        — 🚚 ${b.bosta_total} بوسطة${b.needs_create ? ` · ${b.needs_create} مالهمش بوليصة` : ' · كلهم جاهزين'}
         ${b.status === 'open' ? ' · مفتوحة' : ''}
-      </option>`).join('');
+      </option>`;
+    }).join('');
     awbLoad();
   }catch(e){
     sel.innerHTML = '<option value="">❌ مانفعش</option>';
@@ -15515,9 +15521,15 @@ async function awbLoad(){
       body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">الدفعة دي مفيهاش طلبات بوسطة</div>';
       return;
     }
+    // 🗓️ v664
+    const _sel = document.getElementById('awb-batch');
+    const _d = (_sel?.value || '').replace(/^B-/,'').slice(0,10);
+    _awbOldBatch = (_d && _d !== new Date().toISOString().slice(0,10)) ? _d : null;
     const need = _awbList.filter(i => i.needsCreate).length;
     const miss = _awbList.filter(i => !i.needsCreate && !i.hasAwb).length;
     body.innerHTML = `
+      ${_awbOldBatch ? `<div style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:8px">
+        🗓️ <b>الدفعة دي مش بتاعة النهاردة (${escapeHtml(_awbOldBatch)}).</b> اتأكد إنها اللي إنت قاصدها قبل ما تعمل شحنات.</div>` : ''}
       ${need ? `<div style="background:#eef2ff;color:#3730a3;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:8px">
         🏭 <b>${need} طلب لسه مالهوش شحنة على بوسطة.</b> زرار «اعمل الناقص واطبع» هيعملهم الأول —
         دي شحنات حقيقية وبتتكلّف.</div>` : ''}
@@ -15556,7 +15568,10 @@ async function awbCreateThenPrint(){
   const picked = [...document.querySelectorAll('.awb-chk:checked')].map(c => c.value);
   const need = _awbList.filter(i => i.needsCreate && picked.includes(i.orderId));
   if(!need.length) return awbPrint();
-  if(!confirm(`هيتعمل ${need.length} شحنة حقيقية على بوسطة.\nدي بتتكلّف ومش بتترجع بسهولة.\n\nتكمّل؟`)) return;
+  const _b = document.getElementById('awb-batch')?.value || '';
+  if(!confirm(`هيتعمل ${need.length} شحنة حقيقية على بوسطة.\n`
+    + `الدفعة: ${_b}${_awbOldBatch ? ` (${_awbOldBatch} — مش النهاردة!)` : ''}\n\n`
+    + `دي بتتكلّف ومش بتترجع بسهولة.\n\nتكمّل؟`)) return;
 
   const prog = document.getElementById('awb-prog');
   const say = h => { if(prog) prog.innerHTML = h; };
