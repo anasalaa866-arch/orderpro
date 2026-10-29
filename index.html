@@ -1761,6 +1761,8 @@ tr:hover td{background:#fafbff}
 .orders-range-btn-active{background:#3b82f6 !important;color:#fff !important;border-color:#3b82f6 !important;font-weight:800 !important}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- 🖨️ v660: دمج البوالص في PDF واحد — في المتصفح، عشان السيرفر مافيهوش مكتبة PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 </head>
 <body>
 
@@ -2716,38 +2718,13 @@ tr:hover td{background:#fafbff}
       </div>
     </div>
 
-    <!-- إعداد بوسطة (يظهر لو مش متربط) -->
+    <!-- 📍 v659: الإعداد اتنقل لصفحة الإعدادات -->
     <div id="bosta-setup-banner" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
       <div>
         <div style="font-size:15px;font-weight:700;margin-bottom:3px">🚚 ربط بوسطة API</div>
         <div style="font-size:12px;opacity:.85">حط الـ API Key بتاع بوسطة عشان ترفع البوليصات تلقائياً</div>
       </div>
-      <button class="btn btn-sm" style="background:#fff;color:#6366f1;font-weight:700" onclick="toggleBostaSetup()">⚙️ إعداد الـ API</button>
-    </div>
-
-    <!-- فورم الإعداد (مخفي بالأصل) -->
-    <div id="bosta-setup-form" style="display:none" class="card">
-      <div class="card-hd"><h3>⚙️ إعداد بوسطة API</h3></div>
-      <div class="card-body">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="fg"><label>Bosta API Key</label><input type="password" id="bosta-api-key" placeholder="أدخل الـ API Key من داشبورد بوسطة"></div>
-          <div class="fg"><label>البيئة</label>
-            <select id="bosta-env">
-              <option value="production">Production (الحقيقي)</option>
-              <option value="staging">Staging (تجريبي)</option>
-            </select>
-          </div>
-          <div class="fg"><label>Business Location ID (اختياري)</label><input type="text" id="bosta-location-id" placeholder="ID موقع الاستلام من داشبورد بوسطة"></div>
-          <div class="fg"><label>اسم المحل</label><input type="text" id="bosta-business-name" placeholder="مثال: متجر النور"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="fg"><label>عنوان المحل (للبوليصة) *</label><input type="text" id="bosta-pickup-address" placeholder="مثال: شارع التحرير، الدقي، الجيزة"></div>
-          <div class="fg"><label>مدينة المحل</label><input type="text" id="bosta-pickup-city" placeholder="القاهرة"></div>
-        </div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">للحصول على الـ API Key: سجل دخول على <a href="https://business.bosta.co" target="_blank" style="color:var(--accent)">business.bosta.co</a> ← الإعدادات ← API</div>
-        <button class="btn btn-primary btn-sm" onclick="saveBostaSettings()">💾 حفظ وتجربة الاتصال</button>
-        <span id="bosta-conn-status" style="font-size:12px;margin-right:10px"></span>
-      </div>
+      <button class="btn btn-sm" style="background:#fff;color:#6366f1;font-weight:700" onclick="gotoSettings()">⚙️ روح للإعدادات</button>
     </div>
 
     <!-- إحصائيات -->
@@ -2766,6 +2743,8 @@ tr:hover td{background:#fafbff}
           <button class="btn btn-ghost btn-sm" onclick="bostaSelAll()">☐ تحديد الكل</button>
           <span id="bosta-sel-info" style="font-size:12px;color:var(--muted)"></span>
           
+          <!-- 🖨️ v660 -->
+          <button class="btn btn-sm" style="background:#4f46e5;color:#fff;border-color:#4f46e5;font-weight:700" onclick="openAwbPrint()">🖨️ اطبع البوالص مرتبة</button>
           <button class="btn btn-ghost btn-sm" id="bosta-export-btn" style="background:#10b981;color:#fff;border-color:#10b981" onclick="exportBostaExcel()">📥 تصدير Excel</button>
         </div>
       </div>
@@ -4742,6 +4721,42 @@ tr:hover td{background:#fafbff}
 
   <!-- SETTINGS -->
   <div class="page" id="page-settings">
+    <!-- 🚚 v659: إعداد بوسطة — كان في صفحة بوسطة، مكانه هنا -->
+    <!-- إعداد بوسطة -->
+    <div id="bosta-setup-banner2" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:3px">🚚 ربط بوسطة API</div>
+        <div style="font-size:12px;opacity:.85">حط الـ API Key بتاع بوسطة عشان ترفع البوليصات تلقائياً</div>
+      </div>
+      <button class="btn btn-sm" style="background:#fff;color:#6366f1;font-weight:700" onclick="bostaTestNow()">🔄 تجربة الاتصال</button>
+    </div>
+
+    <!-- فورم الإعداد (مخفي بالأصل) -->
+    <div id="bosta-setup-form" class="card">
+      <div class="card-hd"><h3>⚙️ إعداد بوسطة API</h3></div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="fg"><label>Bosta API Key</label><input type="password" id="bosta-api-key" placeholder="أدخل الـ API Key من داشبورد بوسطة"></div>
+          <div class="fg"><label>البيئة</label>
+            <select id="bosta-env">
+              <option value="production">Production (الحقيقي)</option>
+              <option value="staging">Staging (تجريبي)</option>
+            </select>
+          </div>
+          <div class="fg"><label>Business Location ID (اختياري)</label><input type="text" id="bosta-location-id" placeholder="ID موقع الاستلام من داشبورد بوسطة"></div>
+          <div class="fg"><label>اسم المحل</label><input type="text" id="bosta-business-name" placeholder="مثال: متجر النور"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="fg"><label>عنوان المحل (للبوليصة) *</label><input type="text" id="bosta-pickup-address" placeholder="مثال: شارع التحرير، الدقي، الجيزة"></div>
+          <div class="fg"><label>مدينة المحل</label><input type="text" id="bosta-pickup-city" placeholder="القاهرة"></div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">للحصول على الـ API Key: سجل دخول على <a href="https://business.bosta.co" target="_blank" style="color:var(--accent)">business.bosta.co</a> ← الإعدادات ← API</div>
+        <button class="btn btn-primary btn-sm" onclick="saveBostaSettings()">💾 حفظ وتجربة الاتصال</button>
+        <span id="bosta-conn-status" style="font-size:12px;margin-right:10px"></span>
+      </div>
+    </div>
+
+
     <!-- Setup Card -->
     <div class="card" style="margin-bottom:16px">
       <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:16px 20px;color:#fff"><h3 style="font-size:15px;font-weight:800;margin-bottom:3px">🚀 خطوات ربط Shopify</h3><p style="font-size:12px;opacity:.85">اتبع الخطوات دي بالترتيب</p></div>
@@ -15427,6 +15442,185 @@ async function bwRun(mode){
   }catch(e){ box.innerHTML = `<div style="padding:11px;color:#dc2626">${escapeHtml(e.message)}</div>`; }
 }
 
+// ══════════════════════════════════════════════════════════════
+// 🖨️ v660: طباعة البوالص مرتبة برقم الأوردر
+//   بوسطة بتطبع بترتيبها هي؛ الكومة بتطلع مش على ترتيب Shopify
+//   ولازم تدوّر على كل بوليصة. هنا بندمجهم بالترتيب الرقمي الصح.
+// ══════════════════════════════════════════════════════════════
+let _awbList = [], _awbDesc = false;
+
+async function openAwbPrint(){
+  document.getElementById('awb-modal')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'awb-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10002;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML = `
+    <div style="background:var(--card,#fff);border-radius:14px;max-width:640px;width:100%;max-height:88vh;display:flex;flex-direction:column">
+      <div style="padding:18px 20px 12px">
+        <h3 style="margin:0 0 3px;font-size:17px">🖨️ طباعة البوالص مرتبة</h3>
+        <div style="font-size:12px;color:var(--muted)">كل البوالص في ملف واحد، مرتبة برقم الأوردر — مش بترتيب بوسطة.</div>
+      </div>
+      <div id="awb-body" style="flex:1;overflow-y:auto;padding:0 20px"></div>
+      <div id="awb-foot" style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
+    </div>`;
+  ov.onclick = e => { if(e.target === ov) ov.remove(); };
+  document.body.appendChild(ov);
+  awbLoad();
+}
+
+async function awbLoad(){
+  const body = document.getElementById('awb-body');
+  const foot = document.getElementById('awb-foot');
+  body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">⏳ بيجمّع...</div>';
+  foot.innerHTML = '';
+  try{
+    const r = await apiFetch('/api/bosta/print-list','POST',{ desc:_awbDesc });
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    _awbList = r.items || [];
+    if(!_awbList.length){
+      body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">مفيش طلبات عليها شحنات على بوسطة</div>';
+      return;
+    }
+    const need = _awbList.filter(i => i.needsCreate).length;
+    const miss = _awbList.filter(i => !i.needsCreate && !i.hasAwb).length;
+    body.innerHTML = `
+      ${need ? `<div style="background:#eef2ff;color:#3730a3;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:8px">
+        🏭 <b>${need} طلب لسه مالهوش شحنة على بوسطة.</b> زرار «اعمل الناقص واطبع» هيعملهم الأول —
+        دي شحنات حقيقية وبتتكلّف.</div>` : ''}
+      ${miss ? `<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:10px">
+        ⚠️ ${miss} بوليصة مش محفوظة عندنا — هنجيبها من بوسطة وقت الطباعة (قراءة بس، مفيش شحنة جديدة بتتعمل).</div>` : ''}
+      <div class="tbl-wrap"><table style="width:100%;font-size:12px">
+        <thead><tr>
+          <th style="width:34px"><input type="checkbox" checked onchange="awbAll(this.checked)"></th>
+          <th>رقم الأوردر</th><th>العميل</th><th>المنطقة</th><th>التتبع</th><th>البوليصة</th>
+        </tr></thead>
+        <tbody>${_awbList.map(i => `
+          <tr>
+            <td><input type="checkbox" class="awb-chk" value="${escapeHtml(i.orderId)}" checked></td>
+            <td style="font-family:Roboto,sans-serif;font-weight:700">${i.num < Number.MAX_SAFE_INTEGER ? i.num : escapeHtml(i.orderId)}</td>
+            <td>${escapeHtml(i.customer || '')}</td>
+            <td style="color:var(--muted)">${escapeHtml(i.area || '')}</td>
+            <td style="font-family:Roboto,sans-serif;font-size:11px;color:var(--muted)">${escapeHtml(i.tracking || '')}</td>
+            <td>${i.needsCreate ? '<span style="color:#4f46e5;font-weight:700">هتتعمل</span>'
+                  : (i.hasAwb ? '✅' : '<span style="color:#b45309">هتتجاب</span>')}</td>
+          </tr>`).join('')}</tbody>
+      </table></div>`;
+    foot.innerHTML = `
+      ${need ? `<button class="btn" style="background:#4f46e5;color:#fff;border-color:#4f46e5;font-weight:700" onclick="awbCreateThenPrint()">🏭 اعمل الناقص واطبع</button>` : ''}
+      <button class="btn btn-primary" onclick="awbPrint()">🖨️ ادمج واطبع</button>
+      <button class="btn btn-sm" onclick="awbPrint(true)">⬇️ نزّل PDF</button>
+      <button class="btn btn-ghost btn-sm" onclick="_awbDesc=!_awbDesc;awbLoad()">↕️ ${_awbDesc ? 'من الأكبر للأصغر' : 'من الأصغر للأكبر'}</button>
+      <span style="margin-right:auto;font-size:12px;color:var(--muted)">${_awbList.length} بوليصة</span>
+      <div id="awb-prog" style="width:100%;font-size:12px;color:var(--muted)"></div>`;
+  }catch(e){
+    body.innerHTML = `<div style="padding:30px;text-align:center;color:#dc2626">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// 🏭 v661: اعمل البوالص الناقصة في الخلفية، وبعدين اطبع الكل مرتب
+async function awbCreateThenPrint(){
+  const picked = [...document.querySelectorAll('.awb-chk:checked')].map(c => c.value);
+  const need = _awbList.filter(i => i.needsCreate && picked.includes(i.orderId));
+  if(!need.length) return awbPrint();
+  if(!confirm(`هيتعمل ${need.length} شحنة حقيقية على بوسطة.\nدي بتتكلّف ومش بتترجع بسهولة.\n\nتكمّل؟`)) return;
+
+  const prog = document.getElementById('awb-prog');
+  const say = h => { if(prog) prog.innerHTML = h; };
+  try{
+    const r = await apiFetch('/api/bosta/batch','POST',{ orderIds: need.map(i => i.orderId) });
+    if(r?.nothingToDo) return awbPrint();
+    if(!r?.ok) return say(`<span style="color:#dc2626">❌ ${escapeHtml(r?.error || 'فشل')}</span>`);
+
+    // المتابعة — الدفعة شغّالة على السيرفر، التاب ممكن يتقفل وهي تكمّل
+    for(;;){
+      await new Promise(x => setTimeout(x, 2000));
+      const st = await apiFetch('/api/bosta/batch/' + r.batchId);
+      if(!st?.ok) break;
+      const b = st.batch;
+      const pct = b.total ? Math.round((Number(b.done) + Number(b.failed)) * 100 / b.total) : 0;
+      say(`<div style="margin-bottom:5px">🏭 ${Number(b.done)+Number(b.failed)} من ${b.total}
+             · ✅ ${b.done}${Number(b.failed) ? ` · ❌ ${b.failed}` : ''}</div>
+           <div style="background:#e5e7eb;border-radius:99px;height:7px;overflow:hidden">
+             <div style="background:#4f46e5;height:100%;width:${pct}%;transition:width .4s"></div></div>`);
+
+      if(b.status === 'done' || b.status === 'failed'){
+        const bad = (st.items || []).filter(i => i.status === 'failed' || i.status === 'skipped');
+        if(bad.length) say(prog.innerHTML + `<div style="margin-top:7px;color:#b45309;font-size:11px;line-height:1.8">
+          ${bad.slice(0,12).map(i => escapeHtml(`${i.order_id}: ${i.error || i.status}`)).join('<br>')}
+          ${bad.length>12?`<br>+${bad.length-12} كمان`:''}</div>`);
+        break;
+      }
+      if(st.stalled){
+        say(prog.innerHTML + `<div style="margin-top:7px;color:#b45309;font-size:12px">
+          ⚠️ الدفعة وقفت (السيرفر اترستارت؟)
+          <button class="btn btn-sm" style="margin-right:6px" onclick="apiFetch('/api/bosta/batch/${r.batchId}/resume','POST',{}).then(()=>awbCreateThenPrint())">كمّلها</button></div>`);
+        return;
+      }
+    }
+    await awbLoad();              // عشان الصفوف تتحدّث
+    awbAll(true);
+    await awbPrint();
+  }catch(e){ say(`<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`); }
+}
+
+function awbAll(on){ document.querySelectorAll('.awb-chk').forEach(c => c.checked = on); }
+
+async function awbPrint(downloadOnly){
+  const picked = [...document.querySelectorAll('.awb-chk:checked')].map(c => c.value);
+  if(!picked.length) return toast('❗ مفيش حاجة مختارة');
+  if(typeof PDFLib === 'undefined') return toast('❌ مكتبة الـ PDF مش محمّلة — اعمل ريفرش');
+  const prog = document.getElementById('awb-prog');
+  const say = t => { if(prog) prog.textContent = t; };
+
+  // الترتيب من القايمة نفسها — هي اللي اترتّبت على السيرفر
+  const order = _awbList.filter(i => picked.includes(i.orderId) && !i.needsCreate)
+                        .map(i => i.orderId);
+  if(!order.length) return toast('❗ المختار كله لسه مالوش شحنة — استخدم «اعمل الناقص واطبع»');
+
+  try{
+    const merged = await PDFLib.PDFDocument.create();
+    const bad = [];
+    // على دفعات ٢٠ — رد واحد بـ ٦٠ بوليصة بيبقى ٤ ميجا
+    for(let i = 0; i < order.length; i += 20){
+      const chunk = order.slice(i, i + 20);
+      say(`⏳ بيجيب ${Math.min(i + chunk.length, order.length)} من ${order.length}...`);
+      const r = await apiFetch('/api/bosta/awb-pdfs','POST',{ orderIds: chunk });
+      const map = new Map((r?.items || []).map(x => [x.orderId, x]));
+      for(const id of chunk){
+        const it = map.get(id);
+        if(!it?.base64){ bad.push(`${id}: ${it?.error || 'مفيش بوليصة'}`); continue; }
+        try{
+          const bin = atob(it.base64);
+          const arr = new Uint8Array(bin.length);
+          for(let k = 0; k < bin.length; k++) arr[k] = bin.charCodeAt(k);
+          const src = await PDFLib.PDFDocument.load(arr, { ignoreEncryption:true });
+          const pages = await merged.copyPages(src, src.getPageIndices());
+          pages.forEach(pg => merged.addPage(pg));
+        }catch(e){ bad.push(`${id}: الملف مش مقروء`); }
+      }
+    }
+    if(!merged.getPageCount()) { say(''); return toast('❌ مفيش ولا بوليصة اتجمعت'); }
+
+    say(`✅ ${merged.getPageCount()} صفحة${bad.length ? ` · ${bad.length} فشلوا` : ''}`);
+    const bytes = await merged.save();
+    const url = URL.createObjectURL(new Blob([bytes], { type:'application/pdf' }));
+
+    if(downloadOnly){
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `بوالص-${new Date().toISOString().slice(0,10)}-${merged.getPageCount()}ص.pdf`;
+      a.click();
+    }else{
+      const w = window.open(url, '_blank');
+      if(!w) toast('❗ المتصفح منع النافذة — استخدم "نزّل PDF"');
+    }
+    if(bad.length && prog){
+      prog.innerHTML += `<div style="margin-top:6px;color:#b45309;font-size:11px;line-height:1.7">
+        ${bad.slice(0,10).map(escapeHtml).join('<br>')}${bad.length>10?`<br>+${bad.length-10} كمان`:''}</div>`;
+    }
+  }catch(e){ say('❌ ' + e.message); }
+}
+
 async function bwDupes(){
   const box = $('bw-out');
   box.innerHTML = '<span style="color:var(--muted)">⏳ ...</span>';
@@ -15441,35 +15635,82 @@ async function bwDupes(){
   }catch(e){ box.innerHTML = `<span style="color:#dc2626">${escapeHtml(e.message)}</span>`; }
 }
 
-function toggleBostaSetup(){
-  const f=$('bosta-setup-form');
-  f.style.display=f.style.display==='none'?'block':'none';
-  if(f.style.display==='block'){
-    $('bosta-api-key').value=bostaApiKey;
-    $('bosta-env').value=bostaEnv;
-    $('bosta-location-id').value=bostaLocationId;
-    $('bosta-business-name').value=bostaBusinessName;
-    if($('bosta-pickup-address'))$('bosta-pickup-address').value=bostaPickupAddress;
-    if($('bosta-pickup-city'))$('bosta-pickup-city').value=bostaPickupCity;
-  }
+// 📍 v659: الفورم بقى في صفحة الإعدادات وظاهر دايماً — الدالة دي
+//   بقت بتعبّي الحقول بس.
+function toggleBostaSetup(){ bostaFillForm(); }
+
+function bostaFillForm(){
+  const set = (id, v) => { const el = $(id); if(el) el.value = v || ''; };
+  set('bosta-api-key', bostaApiKey);
+  set('bosta-env', bostaEnv || 'production');
+  set('bosta-location-id', bostaLocationId);
+  set('bosta-business-name', bostaBusinessName);
+  set('bosta-pickup-address', bostaPickupAddress);
+  set('bosta-pickup-city', bostaPickupCity || 'القاهرة');
 }
+
+// ⚙️ v659: هات الإعدادات من السيرفر — عشان متصفح جديد أو جهاز تاني
+//   مايبدأش من الصفر. المفتاح بيرجع مقنّع، فلو عندنا نسخة محلية
+//   بنستعملها، وإلا بنبعت المقنّع والسيرفر بيتجاهله ويستعمل المحفوظ.
+async function bostaLoadConfig(){
+  try{
+    const c = await apiFetch('/api/bosta/config');
+    if(!c?.ok) return false;
+    if(!bostaApiKey && c.hasKey) bostaApiKey = c.keyMasked;   // علامة إنه متسجّل
+    bostaEnv           = bostaEnv           || c.env;
+    bostaLocationId    = bostaLocationId    || c.locationId;
+    bostaBusinessName  = bostaBusinessName  || c.businessName;
+    bostaPickupAddress = bostaPickupAddress || c.pickupAddress;
+    bostaPickupCity    = bostaPickupCity    || c.pickupCity;
+    bostaFillForm();
+    return c.hasKey || !!bostaApiKey;
+  }catch(e){ return false; }
+}
+
+function bostaTestNow(){ bostaFillForm(); testBostaConnection(); }
+
+// 📍 v659: goPage محتاج عنصر القائمة نفسه (بيعمل el.classList.add)
+function gotoSettings(){
+  const el = document.querySelector('.ni[data-p="settings"]');
+  if(el) goPage(el, 'settings'); else location.hash = '#settings';
+  setTimeout(bostaFillForm, 100);
+}
+
+// 🔄 v659: عند فتح البرنامج — لو في مفتاح محفوظ، اتصل لوحدك.
+//   قبل كده البانر كان بيفضل بنفسجي "اربط بوسطة" لحد ما تدوس يدوي،
+//   فكل مرة كانت بتبان كأنك بتربط من الأول.
+async function bostaAutoConnect(){
+  if(!API_URL) return;
+  const has = await bostaLoadConfig();
+  if(has) testBostaConnection();
+}
+document.addEventListener('DOMContentLoaded', () => setTimeout(bostaAutoConnect, 2500));
 
 let bostaPickupAddress = localStorage.getItem('bosta_pickup_address')||'';
 let bostaPickupCity = localStorage.getItem('bosta_pickup_city')||'القاهرة';
 
 function saveBostaSettings(){
-  bostaApiKey=$('bosta-api-key').value.trim();
+  // 🔒 v659: لو الحقل لسه فيه القيمة المقنّعة، سيب المفتاح زي ما هو
+  const _typed=$('bosta-api-key').value.trim();
+  if(_typed && !/^[•*]+/.test(_typed)) bostaApiKey=_typed;
   bostaEnv=$('bosta-env').value;
   bostaLocationId=$('bosta-location-id').value.trim();
   bostaBusinessName=$('bosta-business-name').value.trim();
   bostaPickupAddress=$('bosta-pickup-address').value.trim();
   bostaPickupCity=$('bosta-pickup-city').value.trim()||'القاهرة';
-  localStorage.setItem('bosta_api_key',bostaApiKey);
+  if(bostaApiKey && !/^[•*]+/.test(bostaApiKey)) localStorage.setItem('bosta_api_key',bostaApiKey);
   localStorage.setItem('bosta_env',bostaEnv);
   localStorage.setItem('bosta_location_id',bostaLocationId);
   localStorage.setItem('bosta_business_name',bostaBusinessName);
   localStorage.setItem('bosta_pickup_address',bostaPickupAddress);
   localStorage.setItem('bosta_pickup_city',bostaPickupCity);
+  // ⚙️ v659: واحفظ على السيرفر كمان — localStorage لوحده معناه إنك
+  //   بتعيد الإدخال على كل متصفح/جهاز
+  apiFetch('/api/bosta/config','POST',{
+    apiKey: bostaApiKey, env: bostaEnv, locationId: bostaLocationId,
+    businessName: bostaBusinessName, pickupAddress: bostaPickupAddress,
+    pickupCity: bostaPickupCity
+  }).catch(e => console.warn('[v659] bosta config save:', e.message));
   $('bosta-conn-status').textContent='⏳ جاري الاتصال...';
   testBostaConnection();
 }
@@ -15490,8 +15731,12 @@ async function testBostaConnection(){
     if(data.success){
       $('bosta-conn-status').textContent='✅ '+data.message;
       $('bosta-conn-status').style.color='var(--success)';
-      $('bosta-setup-banner').style.background='linear-gradient(135deg,#10b981,#059669)';
-      $('bosta-setup-banner').querySelector('div').innerHTML='<div style="font-size:15px;font-weight:700;margin-bottom:3px">✅ بوسطة متصلة</div><div style="font-size:12px;opacity:.85">عدد الـ pickup locations: '+( data.locations||0)+'</div>';
+      // 🔄 v659: البانرين — اللي في صفحة بوسطة واللي في الإعدادات
+      for(const bid of ['bosta-setup-banner','bosta-setup-banner2']){
+        const b = $(bid); if(!b) continue;
+        b.style.background='linear-gradient(135deg,#10b981,#059669)';
+        b.querySelector('div').innerHTML='<div style="font-size:15px;font-weight:700;margin-bottom:3px">✅ بوسطة متصلة</div><div style="font-size:12px;opacity:.85">عدد الـ pickup locations: '+(data.locations||0)+'</div>';
+      }
     }else{
       throw new Error(data.error||'HTTP error');
     }
@@ -15527,7 +15772,7 @@ function renderBostaPage(){
       ?`<div style="font-size:11px"><span style="background:var(--success-light);color:#065f46;padding:2px 7px;border-radius:10px;font-weight:700">✅ مرفوعة</span><br><span style="font-size:10px;color:var(--muted);font-family:monospace">${o.bostaTrackingNo||o.bostaId}</span></div>`
       :'<span style="background:var(--warn-light);color:#92400e;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:700">⏳ لم ترفع</span>';
     return`<tr>
-      <td style="text-align:center"><input type="checkbox" class="bosta-chk" onchange="updateBostaBulkBtns()" value="${o.id}" onchange="updateBostaBulkBtn()"></td>
+      <td style="text-align:center"><input type="checkbox" class="bosta-chk" value="${o.id}" onchange="updateBostaBulkBtns();updateBostaBulkBtn()"></td>
       <td><strong>${o.id}</strong><br>${deliveryBadge(o)}</td>
       <td><strong>${o.name}</strong></td>
       <td style="direction:ltr;text-align:right;font-size:11px">${o.phone||'—'}</td>
@@ -15553,9 +15798,14 @@ function updateBostaBulkBtn(){
   const n=checked.length;
   const info=$('bosta-sel-info');
   if(info) info.textContent=n?n+' طلب محدد':'';
-  $('bosta-bulk-btn').style.display=n?'inline-block':'none';
+  // 🐞 v661: العنصر ده مش موجود في الصفحة أصلاً — السطر ده كان بيرمي
+  //   TypeError كل ما تدوس "تحديد الكل"، فالتحديد كان بيقف في النص.
+  const bulk=$('bosta-bulk-btn');
+  if(bulk){
+    bulk.style.display=n?'inline-block':'none';
+    if(n) bulk.textContent='🚀 رفع '+n+' طلب على بوسطة';
+  }
   if($('bosta-export-btn'))$('bosta-export-btn').style.display=n?'inline-block':'none';
-  if(n) $('bosta-bulk-btn').textContent='🚀 رفع '+n+' طلب على بوسطة';
 }
 
 function bostaSetFilter(f, btn){
@@ -41677,6 +41927,53 @@ async function talAutoPubSave(){
     toast(on ? '✅ الشيت هيتنشر فور تنزيله' : '✅ هتأكّد بإيدك بعد الرفع');
   }catch(e){ toast('❌ '+e.message); }
 }
+// 📊 v662: كام هيتفتح وكام هيتقفل في الشيت الجاي
+async function talSheetDiff(){
+  const el = $('tal-diff'); if(!el) return;
+  try{
+    const r = await apiFetch('/api/talabat/sheet-diff','GET');
+    if(!r?.ok) { el.innerHTML = ''; return; }
+    _talDiff = r;
+    const bits = [];
+    if(r.willOpen)   bits.push(`<span style="color:#16a34a">🟢 ${r.willOpen} هيتفتح</span>`);
+    if(r.willClose)  bits.push(`<span style="color:#dc2626">🔴 ${r.willClose} هيتقفل</span>`);
+    if(r.newOnSheet) bits.push(`<span style="color:#2563eb">🆕 ${r.newOnSheet} لأول مرة</span>`);
+    el.innerHTML = bits.length
+      ? bits.join(' · ') + ` <a href="#" onclick="talDiffShow();return false" style="font-weight:400;font-size:11px">التفاصيل</a>`
+      : `<span style="color:var(--muted);font-weight:400">مفيش فتح ولا قفل — الشيت زي المنشور</span>`;
+  }catch(e){ el.innerHTML = ''; }
+}
+let _talDiff = null;
+
+function talDiffShow(){
+  if(!_talDiff) return;
+  const grp = (title, color, arr) => !arr.length ? '' : `
+    <div style="margin-bottom:14px">
+      <div style="font-weight:800;color:${color};font-size:13px;margin-bottom:5px">${title} (${arr.length})</div>
+      <div class="tbl-wrap"><table style="width:100%;font-size:12px">
+        <thead><tr><th>الصنف</th><th style="width:70px">الرصيد</th><th style="width:90px">السبب</th></tr></thead>
+        <tbody>${arr.map(i => `<tr>
+          <td>${escapeHtml(i.name)}</td>
+          <td style="font-family:Roboto,sans-serif">${i.qty}</td>
+          <td style="color:var(--muted);font-size:11px">${i.locked ? '🔒 مقفول يدوي' : (i.qty > 0 ? 'فيه رصيد' : 'الرصيد صفر')}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10003;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML = `<div style="background:var(--card,#fff);border-radius:14px;max-width:640px;width:100%;max-height:85vh;overflow-y:auto;padding:20px">
+      <h3 style="margin:0 0 4px;font-size:16px">📊 الشيت الجاي هيغيّر إيه على طلبات</h3>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px">
+        مقارنة بآخر شيت اترفع · ${_talDiff.unchanged} صنف من غير تغيير</div>
+      ${grp('🟢 هيتفتح', '#16a34a', _talDiff.open)}
+      ${grp('🔴 هيتقفل', '#dc2626', _talDiff.close)}
+      ${grp('🆕 هيتنزل لأول مرة', '#2563eb', _talDiff.fresh)}
+      <button class="btn" onclick="this.closest('div[style*=fixed]').remove()">إغلاق</button>
+    </div>`;
+  ov.onclick = e => { if(e.target === ov) ov.remove(); };
+  document.body.appendChild(ov);
+}
+
 async function talNeedsClose(){
   try{
     const r=await apiFetch('/api/talabat/needs-close','GET');
@@ -41686,6 +41983,7 @@ async function talNeedsClose(){
 }
 async function talPubStatus(){
   const box=$('tal-pub'); if(!box) return;
+  setTimeout(talSheetDiff, 0);        // 📊 v662
   try{
     const r=await apiFetch('/api/talabat/price-drift','GET');
     if(!r||r.error){ box.innerHTML=''; return; }
@@ -41701,6 +41999,7 @@ async function talPubStatus(){
           ${r.pending?`<span style="color:#2563eb">📄 ${r.pending} في شيت مولّد لسه ماتأكّدش</span>`:''}
           ${r.pending?`<button class="btn btn-sm" style="background:#2563eb;color:#fff" onclick="talConfirmPub()">✅ أكّدت الرفع على طلبات</button>`:''}
         <span id="tal-needs-close" style="font-size:12px;font-weight:700;color:#dc2626"></span>
+          <span id="tal-diff" style="font-size:12px;font-weight:700"></span>
           <label style="font-size:11px;font-weight:700;margin-inline-start:auto"><input type="checkbox" id="tal-autopub" onchange="talAutoPubSave()"> الشيت يتنشر فور تنزيله</label>
         </div>
         ${needsUpload?`<div style="font-size:11px;color:var(--muted);margin-top:6px">
@@ -46831,11 +47130,15 @@ async function loadNeoPage(){
   const box = document.getElementById('neo-list');
   if(!box) return;
   const status = document.getElementById('neo-filter')?.value || 'active';
-  box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div>';
+  // 📍 v661: أول تحميل بس بيشيل المحتوى — التحديث التلقائي بيستبدل
+  //   في مكانه من غير وميض
+  if(!box.dataset.loaded)
+    box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div>';
   try{
     const r = await apiFetch('/api/near-expiry-offers?status=' + encodeURIComponent(status));
     _neoOffers = r?.offers || [];
     renderNeoList();
+    box.dataset.loaded = '1';
     const badge = document.getElementById('nb-neo');
     if(badge){
       const n = _neoOffers.filter(o => o.status === 'active').length;
@@ -54114,30 +54417,51 @@ async function ordBulkAddProblem(){
   if(currentPage!=='problems'){goPage(document.querySelector('[data-p="problems"]'),'problems');}
 }
 
+// 📍 v661: التحديث التلقائي كل ٣٠ ثانية كان بيعيد رسم الصفحة
+//   ويرجّع السكرول لفوق وإنت بتقرا. دلوقتي بنحفظ مكان السكرول وبنرجّعه
+//   بعد الرسم — وبنرجّعه بس لو القفزة حصلت فعلاً (بقى صفر وهو مكانش)،
+//   عشان لو إنت اللي سكرولت في النص مانزاحمكش.
+const _PAGE_RENDER = {
+  dashboard: () => renderDash(),
+  orders: () => renderOrders(),
+  assign: () => renderAssignPage(),
+  pickup: () => renderPickupPage(),
+  transit: () => renderTransitPage(),
+  bosta: () => renderBostaPage(),
+  'bosta-exported': () => renderBostaExportedPage(),
+  'shop-accounting': () => renderShopAccounting(),
+  checks: () => (typeof chkRenderActive === 'function' ? chkRenderActive : renderChecksPage)(),
+  expiry: () => loadBatchesPage(),
+  'near-expiry-offers': () => loadNeoPage(),
+  'addr-changes': () => loadAddrChanges(),
+  'risk-queue': () => rqLoad(),
+  suppliers: () => supUsersLoad(),
+  'db-size': () => loadDbSize(),
+  'courier-orders': () => renderCourierOrdersPage(),
+  accounting: () => { renderAcc(); renderAccDet(); },
+  reports: () => renderReports(),
+  couriers: () => renderCouriers(),
+  'delivery-sheet': () => dsRender(),
+};
+
 function refreshAll(){
   updateStats();
-  switch(currentPage){
-    case 'dashboard': renderDash(); break;
-    case 'orders': renderOrders(); break;
-    case 'assign': renderAssignPage(); break;
-    case 'pickup': renderPickupPage(); break;
-    case 'transit': renderTransitPage(); break;
-    case 'bosta': renderBostaPage(); break;
-    case 'bosta-exported': renderBostaExportedPage(); break;
-    case 'shop-accounting': renderShopAccounting(); break;
-    case 'checks': (typeof chkRenderActive==='function' ? chkRenderActive : renderChecksPage)(); break;
-    case 'expiry': loadBatchesPage(); break;
-    case 'near-expiry-offers': loadNeoPage(); break;
-    case 'addr-changes': loadAddrChanges(); break;
-    case 'risk-queue': rqLoad(); break;
-    case 'suppliers': supUsersLoad(); break;
-    case 'db-size': loadDbSize(); break;
-    case 'courier-orders': renderCourierOrdersPage(); break;
-    case 'accounting': renderAcc();renderAccDet(); break;
-    case 'reports': renderReports(); break;
-    case 'couriers': renderCouriers(); break;
-    case 'delivery-sheet': dsRender(); break;
-  }
+  const fn = _PAGE_RENDER[currentPage];
+  if(!fn) return;
+
+  const box = document.querySelector('.content');
+  const before = box ? box.scrollTop : 0;
+  const restore = () => {
+    if(!box || !before) return;
+    // رجّع بس لو الرسم هو اللي رماه لفوق
+    if(box.scrollTop === 0 && box.scrollHeight > box.clientHeight) box.scrollTop = before;
+  };
+
+  let r;
+  try{ r = fn(); }catch(e){ console.warn('refreshAll', currentPage, e); return; }
+  if(r && typeof r.then === 'function') r.then(() => requestAnimationFrame(restore))
+                                         .catch(() => {});
+  else requestAnimationFrame(restore);
 }
 
 // ===== Missing helpers (added v181 fix) =====
