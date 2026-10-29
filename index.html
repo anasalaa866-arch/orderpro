@@ -15476,7 +15476,7 @@ async function openAwbPrint(){
 
 // 📦 v663: الدفعات اللي فيها طلبات بوسطة — الطباعة بتتم بالدفعة.
 //   من غير كده القايمة كانت بتجيب تاريخ الطلبات كله.
-async function awbBatches(){
+async function awbBatches(keep){
   const sel = document.getElementById('awb-batch');
   const body = document.getElementById('awb-body');
   try{
@@ -15490,15 +15490,19 @@ async function awbBatches(){
     // 🗓️ v664: التاريخ لازم يبان — الدفعة القديمة واللي النهاردة
     //   شكلهم واحد من غيره، وده خطر مع زرار بيعمل شحنات حقيقية.
     const today = new Date().toISOString().slice(0,10);
+    // 🔄 v665: بعد ما تعمل شحنات، الأرقام في الـ dropdown بتبقى قديمة.
+    //   keep = الدفعة اللي كانت مختارة، نرجّعها بعد التحديث.
     sel.innerHTML = bs.map((b, i) => {
       const d = (b.batch_date || String(b.batch_code).replace(/^B-/,'').slice(0,10) || '');
       const isToday = d === today;
-      return `<option value="${escapeHtml(b.batch_code)}" ${i === 0 ? 'selected' : ''}>
+      const pick = keep ? (b.batch_code === keep) : (i === 0);
+      return `<option value="${escapeHtml(b.batch_code)}" ${pick ? 'selected' : ''}>
         ${isToday ? '🟢 النهاردة · ' : (d ? d + ' · ' : '')}${escapeHtml(b.batch_code)}
         — 🚚 ${b.bosta_total} بوسطة${b.needs_create ? ` · ${b.needs_create} مالهمش بوليصة` : ' · كلهم جاهزين'}
         ${b.status === 'open' ? ' · مفتوحة' : ''}
       </option>`;
     }).join('');
+    if(keep) sel.value = keep;
     awbLoad();
   }catch(e){
     sel.innerHTML = '<option value="">❌ مانفعش</option>';
@@ -15606,7 +15610,7 @@ async function awbCreateThenPrint(){
         return;
       }
     }
-    await awbLoad();              // عشان الصفوف تتحدّث
+    await awbBatches(_b);         // 🔄 v665: الصفوف وأرقام الـ dropdown
     awbAll(true);
     await awbPrint();
   }catch(e){ say(`<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`); }
