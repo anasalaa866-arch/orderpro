@@ -5317,6 +5317,9 @@ tr:hover td{background:#fafbff}
       <button class="btn btn-ghost btn-sm" onclick="bulkActivateStart()" title="تفعيل كل المخازن لكل المنتجات على Shopify" style="color:#7c3aed">🏬 تفعيل كل المخازن</button>
       <button class="btn btn-ghost btn-sm" onclick="syncInventoryLevels()">🔄 مزامنة الكميات</button>
       <button class="btn btn-primary btn-sm" onclick="syncInventoryFull()">🔁 مزامنة كاملة</button>
+      <!-- 🧹 v653: الأصناف اللي اتمسحت من Shopify وفضلت هنا -->
+      <button class="btn btn-sm" onclick="pruneDeleted(true)" style="background:#b45309;color:#fff"
+              title="يسأل Shopify عن أصنافك ويأرشف اللي اتمسح — أسرع من المزامنة الكاملة">🧹 نضّف المحذوف</button>
       <button class="btn btn-ghost btn-sm" onclick="cancelStuckSync()" title="لو فيه مزامنة معلّقة ومش بتخلص" style="color:var(--danger);border-color:var(--danger)">🛑 إلغاء مزامنة معلّقة</button>
     </div>
   </div>
@@ -30083,6 +30086,34 @@ async function syncInventoryLevels(){
   }catch(e){ toast('❌ ' + e.message); }
 }
 
+
+// ══════════════════════════════════════════════════════════════════
+// 🧹 v653: أرشفة الأصناف اللي اتمسحت من Shopify
+//   products/delete بقى مسجّل من v608، فالمسح الجديد بيوصل لوحده.
+//   ده للأشباح اللي اتمسحت قبل كده وفضلت.
+// ══════════════════════════════════════════════════════════════════
+async function pruneDeleted(dryRun){
+  if(!dryRun && !confirm('هيأرشف الأصناف اللي مش موجودة على Shopify.\nالأرشفة مش مسح — تقدر ترجّعها.\nتمام؟')) return;
+  toast(dryRun ? '🔎 بيفحص الكتالوج...' : '🧹 بيأرشف...');
+  try{
+    const r = await apiFetch('/api/inventory/prune-deleted','POST',{ dryRun });
+    if(!r?.ok){ toast('❌ ' + (r?.error || 'فشل'), 'error'); return; }
+
+    if(dryRun){
+      if(!r.count){ toast('✅ مفيش أصناف شبح — كله متطابق مع Shopify','success'); return; }
+      const list = (r.missing||[]).slice(0,15)
+        .map(x => `• ${x.product_title || ''}${x.sku ? ` (${x.sku})` : ''}`).join('\n');
+      if(confirm(`🔎 اتفحص ${r.checked} صنف\n\n` +
+                 `لقيت ${r.count} مش موجودين على Shopify:\n\n${list}` +
+                 (r.count > 15 ? `\n… و${r.count - 15} غيرهم` : '') +
+                 `\n\nتأرشفهم؟`)) pruneDeleted(false);
+      return;
+    }
+    toast(`🧹 اتأرشف ${r.archived} صنف`, 'success');
+    if(typeof loadInventory === 'function') loadInventory();
+  }catch(e){ toast('❌ ' + e.message, 'error'); }
+}
+
 async function syncInventoryFull(){
   if(!confirm('مزامنة كاملة (مخازن + منتجات + كميات)؟ ممكن تاخد دقيقة')) return;
   try{
@@ -50858,6 +50889,16 @@ async function iaRun(){
         <div style="flex:1;min-width:220px">
           <div style="font-weight:900;font-size:15px">${escapeHtml(r.item.title||'')}</div>
           <div style="font-size:11.5px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(r.item.sku||'')}</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:7px;font-size:12px">
+            <span style="background:var(--elev);border-radius:7px;padding:3px 9px">
+              بيع <b style="font-family:Roboto,sans-serif">${_iaN(r.item.price,2)}</b> ج</span>
+            ${r.item.cost>0?`<span style="background:var(--elev);border-radius:7px;padding:3px 9px">
+              تكلفة <b style="font-family:Roboto,sans-serif">${_iaN(r.item.cost,2)}</b> ج</span>`:''}
+            ${r.item.price>0&&r.item.cost>0?(()=>{const m=(r.item.price-r.item.cost)/r.item.price*100;
+              return `<span style="background:${m<20?'#fee2e2':'#dcfce7'};color:${m<20?'#991b1b':'#166534'};border-radius:7px;padding:3px 9px;font-weight:700">
+                هامش ${m.toFixed(1)}%</span>`;})():''}
+            ${r.item.cost<=0?'<span style="background:#fef3c7;color:#92400e;border-radius:7px;padding:3px 9px">⚠️ مفيش تكلفة مسجّلة</span>':''}
+          </div>
         </div>
         <div style="text-align:center;padding:10px 18px;border-radius:11px;background:${V}1a;border:2px solid ${V}">
           <div style="font-size:11px;color:${V};font-weight:700">${escapeHtml(r.verdict.text)}</div>
@@ -50887,13 +50928,27 @@ async function iaRun(){
         </div></div></div>
 
       <div class="card"><div style="padding:12px 14px">
-        <div style="font-weight:800;font-size:13px;margin-bottom:8px">📦 المخزون</div>
-        <div style="font-size:12px;line-height:2">
-          عندك <b>${_iaN(r.stock.on_hand)}</b> قطعة
-          ${r.stock.on_order?` · متطلب <b style="color:#2563eb">${_iaN(r.stock.on_order)}</b>${r.stock.nearest_po?` <span style="color:var(--muted)">(متوقع ${escapeHtml(r.stock.nearest_po)})</span>`:''}`:''}<br>
-          ${r.stock.days_left!=null?`يكفّي <b style="color:${r.stock.days_left<r.lead.days?'#dc2626':'inherit'}">${_iaN(r.stock.days_left,1)}</b> يوم`:'<span style="color:var(--muted)">مفيش بيع يحسب عليه</span>'}<br>
-          ${r.stock.by_warehouse.map(w=>`<span style="color:var(--muted)">${escapeHtml(w.wh)}:</span> ${_iaN(w.qty)}`).join(' · ')}
-        </div></div></div>
+        <div style="font-weight:800;font-size:13px;margin-bottom:10px">📦 المخزون</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:11px">
+          <div><div style="font-size:10.5px;color:var(--muted)">عندك دلوقتي</div>
+            <div style="font-size:23px;font-weight:900;line-height:1.1">${_iaN(r.stock.on_hand)}</div></div>
+          ${r.stock.on_order?`<div><div style="font-size:10.5px;color:var(--muted)">متطلب</div>
+            <div style="font-size:23px;font-weight:900;color:#2563eb;line-height:1.1">${_iaN(r.stock.on_order)}</div>
+            ${r.stock.nearest_po?`<div style="font-size:10px;color:var(--muted)">${escapeHtml(r.stock.nearest_po)}</div>`:''}</div>`:''}
+          <div><div style="font-size:10.5px;color:var(--muted)">يكفّي</div>
+            <div style="font-size:23px;font-weight:900;line-height:1.1;color:${r.stock.days_left==null?'var(--muted)':r.stock.days_left<r.lead.days?'#dc2626':'#16a34a'}">
+              ${r.stock.days_left!=null?_iaN(r.stock.days_left,0):'—'}</div>
+            <div style="font-size:10px;color:var(--muted)">${r.stock.days_left!=null?'يوم':'مفيش بيع'}</div></div>
+        </div>
+        ${(()=>{const mx=Math.max(1,...r.stock.by_warehouse.map(w=>w.qty||0));
+          return r.stock.by_warehouse.map(w=>`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:11.5px">
+            <div style="flex:0 0 112px;color:${w.qty?'inherit':'var(--muted)'}">${escapeHtml(w.wh)}</div>
+            <div style="flex:1;background:var(--elev);border-radius:99px;height:7px;overflow:hidden">
+              <div style="width:${Math.round((w.qty||0)/mx*100)}%;height:100%;background:${w.qty?'var(--accent)':'transparent'}"></div></div>
+            <b style="flex:0 0 38px;text-align:left;font-family:Roboto,sans-serif;color:${w.qty?'inherit':'var(--muted)'}">${_iaN(w.qty)}</b>
+          </div>`).join('');})()}
+        </div></div>
 
       <div class="card"><div style="padding:12px 14px">
         <div style="font-weight:800;font-size:13px;margin-bottom:8px">🚚 مدة التوريد</div>
@@ -50902,6 +50957,10 @@ async function iaRun(){
           <span style="color:var(--muted)">المصدر: ${escapeHtml(r.lead.source)}${r.lead.samples?` (${r.lead.samples} أمر)`:''}</span>
           ${r.lead.max?`<br><span style="color:var(--muted)">أطول مرة: ${r.lead.max} يوم</span>`:''}
           ${r.lead.samples<2?'<br><b style="color:#b45309">⚠️ مفيش تاريخ كفاية — الرقم تقديري</b>':''}
+          ${r.lead.days<=1&&r.lead.samples>=5?`<br><b style="color:#dc2626">⚠️ يوم واحد؟</b>
+            <span style="color:#991b1b">إنت بتسجّل أمر الشراء وقت الاستلام، فتاريخ الطلب والاستلام بيطلعوا نفس اليوم —
+            الرقم ده مش مدة التوريد الحقيقية. استهلاك فترة التوريد ومخزون الأمان تحت محسوبين عليه،
+            فالمقترح طالع أقل من اللازم.</span>`:''}
         </div></div></div>
 
       ${r.expiry.batches.length?`<div class="card"><div style="padding:12px 14px">
