@@ -15583,6 +15583,9 @@ async function awbCreateThenPrint(){
   const picked = [...document.querySelectorAll('.awb-chk:checked')].map(c => c.value);
   const need = _awbList.filter(i => i.needsCreate && picked.includes(i.orderId));
   if(!need.length) return awbPrint();
+  // 🗺️ v667: راجع المناطق الأول — المدينة الغلط بتبعت الشحنة لمحافظة تانية
+  const okAreas = await awbReviewAreas(need.map(i => i.orderId));
+  if(!okAreas) return;
   const _b = document.getElementById('awb-batch')?.value || '';
   if(!confirm(`هيتعمل ${need.length} شحنة حقيقية على بوسطة.\n`
     + `الدفعة: ${_b}${_awbOldBatch ? ` (${_awbOldBatch} — مش النهاردة!)` : ''}\n\n`
@@ -15629,6 +15632,110 @@ async function awbCreateThenPrint(){
     awbAll(true);
     await awbPrint();
   }catch(e){ say(`<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`); }
+}
+
+// 🗺️ v667: شاشة مراجعة المناطق. بترجّع true لو المستخدم أكّد.
+//   المدينة بتتبعت لبوسطة كنص وبتتطابق بقايمة عندهم — فالمنطقة
+//   اللي مش معروفة بتوقف الشحنة، واللي متطابقة غلط بتبعتها لمحافظة
+//   تانية. المراجعة هنا قبل الإنشاء مش بعده.
+async function awbReviewAreas(orderIds){
+  return new Promise(async resolve => {
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10004;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML = `<div style="background:var(--card,#fff);border-radius:14px;max-width:760px;width:100%;max-height:88vh;display:flex;flex-direction:column">
+        <div style="padding:18px 20px 10px">
+          <h3 style="margin:0 0 3px;font-size:17px">🗺️ راجع المناطق قبل ما ترفع</h3>
+          <div style="font-size:12px;color:var(--muted)">بوسطة بتطابق المدينة بقايمة عندها. اللي مش مظبوط هيوقف أو يروح محافظة غلط.</div>
+        </div>
+        <div id="ar-body" style="flex:1;overflow-y:auto;padding:0 20px"><div style="padding:30px;text-align:center;color:var(--muted)">⏳ بيطابق...</div></div>
+        <div id="ar-foot" style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
+      </div>`;
+    document.body.appendChild(ov);
+    const close = v => { ov.remove(); resolve(v); };
+    ov.onclick = e => { if(e.target === ov) close(false); };
+
+    const body = ov.querySelector('#ar-body'), foot = ov.querySelector('#ar-foot');
+    let cities = [], items = [];
+    try{
+      const [cr, mr] = await Promise.all([
+        apiFetch('/api/bosta/cities','GET'),
+        apiFetch('/api/bosta/match-areas','POST',{ orderIds })
+      ]);
+      cities = cr?.cities || [];
+      if(mr?.needSync || !cities.length){
+        body.innerHTML = `<div style="padding:24px;text-align:center">
+            <div style="font-size:13px;margin-bottom:12px">مفيش مدن بوسطة محفوظة عندنا.</div>
+            <button class="btn btn-primary" onclick="awbSyncCities(this)">⬇️ اجلب المدن من بوسطة</button>
+            <div id="ar-sync" style="font-size:12px;color:var(--muted);margin-top:10px"></div>
+          </div>`;
+        foot.innerHTML = `<button class="btn" onclick="this.closest('div[style*=fixed]').remove()">إلغاء</button>`;
+        return;
+      }
+      items = mr?.items || [];
+    }catch(e){
+      body.innerHTML = `<div style="padding:30px;text-align:center;color:#dc2626">${escapeHtml(e.message)}</div>`;
+      foot.innerHTML = `<button class="btn" onclick="this.closest('div[style*=fixed]').remove()">إغلاق</button>`;
+      return;
+    }
+
+    const opts = sel => '<option value="">— اختار المدينة —</option>' +
+      cities.map(c => `<option value="${escapeHtml(c.id)}" data-n="${escapeHtml(c.name)}" ${c.id === sel ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+
+    body.innerHTML = `<div class="tbl-wrap"><table style="width:100%;font-size:12px">
+        <thead><tr><th style="width:70px">الأوردر</th><th>المنطقة عندنا</th>
+          <th style="width:190px">مدينة بوسطة</th><th style="width:90px">الحالة</th></tr></thead>
+        <tbody>${items.map(i => `
+          <tr data-oid="${escapeHtml(i.orderId)}" data-key="${escapeHtml(i.areaKey)}" data-area="${escapeHtml(i.area)}">
+            <td style="font-family:Roboto,sans-serif;font-weight:700">${i.num}</td>
+            <td><div>${escapeHtml(i.area || '—')}</div>
+                <div style="font-size:10px;color:var(--muted)">${escapeHtml((i.addr||'').slice(0,70))}</div></td>
+            <td><select class="form-input ar-city" style="width:100%;font-size:12px;padding:5px">${opts(i.suggestId)}</select></td>
+            <td style="font-size:11px">${
+              i.source === 'محفوظ' ? '<span style="color:#16a34a">✅ محفوظ</span>'
+              : i.suggestId ? `<span style="color:${i.score>=90?'#16a34a':'#b45309'}">${i.score>=90?'✅':'⚠️'} ${escapeHtml(i.source)}</span>`
+              : `<span style="color:#dc2626">⬜ اختار</span>${i.nearest?`<div style="font-size:10px;color:var(--muted)">أقرب: ${escapeHtml(i.nearest)}</div>`:''}`
+            }</td>
+          </tr>`).join('')}</tbody></table></div>`;
+
+    const need = items.filter(i => !i.suggestId).length;
+    foot.innerHTML = `
+      <button class="btn btn-primary" id="ar-go">✅ أكّد واعمل البوالص</button>
+      <button class="btn" id="ar-cancel">إلغاء</button>
+      <span style="margin-right:auto;font-size:12px;color:var(--muted)">
+        ${items.length} طلب${need ? ` · <b style="color:#dc2626">${need} محتاج اختيار</b>` : ''}</span>
+      <div id="ar-msg" style="width:100%;font-size:12px;color:#dc2626"></div>`;
+    ov.querySelector('#ar-cancel').onclick = () => close(false);
+    ov.querySelector('#ar-go').onclick = async () => {
+      const rows = [...body.querySelectorAll('tr[data-oid]')];
+      const missing = rows.filter(r => !r.querySelector('.ar-city').value);
+      if(missing.length){
+        ov.querySelector('#ar-msg').textContent =
+          `❌ لسه ${missing.length} طلب من غير مدينة — اختارهم الأول`;
+        missing[0].scrollIntoView({ block:'center' });
+        return;
+      }
+      const map = rows.map(r => {
+        const sel = r.querySelector('.ar-city');
+        return { areaKey: r.dataset.key, area: r.dataset.area,
+                 cityId: sel.value, cityName: sel.selectedOptions[0]?.dataset.n || '' };
+      });
+      try{ await apiFetch('/api/bosta/area-map','POST',{ map }); }
+      catch(e){ ov.querySelector('#ar-msg').textContent = '❌ ' + e.message; return; }
+      close(true);
+    };
+  });
+}
+
+async function awbSyncCities(btn){
+  const box = document.getElementById('ar-sync');
+  btn.disabled = true; if(box) box.textContent = '⏳ بيجيب من بوسطة...';
+  try{
+    const r = await apiFetch('/api/bosta/cities/sync','POST',{});
+    if(box) box.innerHTML = r?.ok
+      ? `✅ ${r.count} مدينة اتحفظت — اقفل وافتح تاني`
+      : `❌ ${escapeHtml(r?.error || 'فشل')}${r?.sample ? `<div style="font-size:10px;direction:ltr;text-align:left;margin-top:6px">${escapeHtml(String(r.sample).slice(0,300))}</div>` : ''}`;
+  }catch(e){ if(box) box.textContent = '❌ ' + e.message; }
+  btn.disabled = false;
 }
 
 function awbAll(on){ document.querySelectorAll('.awb-chk').forEach(c => c.checked = on); }
