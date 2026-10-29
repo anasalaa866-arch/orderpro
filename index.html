@@ -15448,6 +15448,8 @@ async function bwRun(mode){
 //   ولازم تدوّر على كل بوليصة. هنا بندمجهم بالترتيب الرقمي الصح.
 // ══════════════════════════════════════════════════════════════
 let _awbList = [], _awbDesc = false, _awbOldBatch = null;
+let _awbFails = {};   // 🐞 v666: orderId → سبب الفشل، بيعيش بعد التحديث
+let _awbLastBatch = null;
 
 async function openAwbPrint(){
   document.getElementById('awb-modal')?.remove();
@@ -15517,6 +15519,8 @@ async function awbLoad(){
   foot.innerHTML = '';
   try{
     const batchCode = document.getElementById('awb-batch')?.value || '';
+    if(_awbLastBatch && _awbLastBatch !== batchCode) _awbFails = {};
+    _awbLastBatch = batchCode;
     if(!batchCode){ body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">اختار دفعة</div>'; return; }
     const r = await apiFetch('/api/bosta/print-list','POST',{ desc:_awbDesc, batchCode });
     if(!r?.ok) throw new Error(r?.error || 'فشل');
@@ -15532,6 +15536,11 @@ async function awbLoad(){
     const need = _awbList.filter(i => i.needsCreate).length;
     const miss = _awbList.filter(i => !i.needsCreate && !i.hasAwb).length;
     body.innerHTML = `
+      ${Object.keys(_awbFails).length ? `<div style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:8px">
+        <div style="font-weight:800;margin-bottom:5px">❌ ${Object.keys(_awbFails).length} طلب بوسطة رفضتهم — ده ردّها بالنص:</div>
+        <div style="line-height:1.9;font-size:11px">${Object.entries(_awbFails).map(([k,v]) =>
+          `<b style="font-family:Roboto,sans-serif">${escapeHtml(String(k).replace(/^SH-/,''))}</b>: ${escapeHtml(v)}`).join('<br>')}</div>
+      </div>` : ''}
       ${_awbOldBatch ? `<div style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:8px">
         🗓️ <b>الدفعة دي مش بتاعة النهاردة (${escapeHtml(_awbOldBatch)}).</b> اتأكد إنها اللي إنت قاصدها قبل ما تعمل شحنات.</div>` : ''}
       ${need ? `<div style="background:#eef2ff;color:#3730a3;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:8px">
@@ -15551,8 +15560,10 @@ async function awbLoad(){
             <td>${escapeHtml(i.customer || '')}</td>
             <td style="color:var(--muted)">${escapeHtml(i.area || '')}</td>
             <td style="font-family:Roboto,sans-serif;font-size:11px;color:var(--muted)">${escapeHtml(i.tracking || '')}</td>
-            <td>${i.needsCreate ? '<span style="color:#4f46e5;font-weight:700">هتتعمل</span>'
-                  : (i.hasAwb ? '✅' : '<span style="color:#b45309">هتتجاب</span>')}</td>
+            <td>${_awbFails[i.orderId]
+                  ? `<span style="color:#dc2626;font-weight:700" title="${escapeHtml(_awbFails[i.orderId])}">❌ فشل</span>`
+                  : (i.needsCreate ? '<span style="color:#4f46e5;font-weight:700">هتتعمل</span>'
+                  : (i.hasAwb ? '✅' : '<span style="color:#b45309">هتتجاب</span>'))}</td>
           </tr>`).join('')}</tbody>
       </table></div>`;
     foot.innerHTML = `
@@ -15597,10 +15608,14 @@ async function awbCreateThenPrint(){
              <div style="background:#4f46e5;height:100%;width:${pct}%;transition:width .4s"></div></div>`);
 
       if(b.status === 'done' || b.status === 'failed'){
-        const bad = (st.items || []).filter(i => i.status === 'failed' || i.status === 'skipped');
-        if(bad.length) say(prog.innerHTML + `<div style="margin-top:7px;color:#b45309;font-size:11px;line-height:1.8">
-          ${bad.slice(0,12).map(i => escapeHtml(`${i.order_id}: ${i.error || i.status}`)).join('<br>')}
-          ${bad.length>12?`<br>+${bad.length-12} كمان`:''}</div>`);
+        // 🐞 v666: الأسباب كانت بتتكتب في awb-prog، وawbLoad بعدها
+        //   بيعيد بناء الفوتر فيمسحها قبل ما تشوفها. دلوقتي بتتخزّن
+        //   وبتتعرض جنب الصف نفسه في الجدول.
+        _awbFails = {};
+        for(const i of (st.items || [])){
+          if(i.status === 'failed' || i.status === 'skipped')
+            _awbFails[i.order_id] = i.error || i.status;
+        }
         break;
       }
       if(st.stalled){
