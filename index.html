@@ -11109,6 +11109,15 @@ async function processOfflineQueue(){
 const _apiLastModified = {};
 const _apiCachedData = {};
 
+// 🔑 v656: الهيدرز الصح لأي fetch خام. apiFetch بيعمل كده لوحده،
+//   لكن في أماكن بتستعمل fetch مباشرة عشان عايزة رسالة الخطأ كاملة —
+//   وكانت بتنسى الـ token، والسيرفر يرد "No admin token".
+function _authHeaders(extra){
+  const h = Object.assign({'Content-Type':'application/json'}, extra||{});
+  if(window._adminToken) h['Authorization'] = 'Bearer ' + window._adminToken;
+  return h;
+}
+
 async function apiFetch(path, method='GET', body=null){
   const baseUrl = API_URL || BACKEND_URL;
   if(!baseUrl) return null;
@@ -13422,7 +13431,7 @@ async function sendAiMessage(){
     if(!API_URL){ throw new Error('Backend غير متصل'); }
     const context = buildAiContext();
     const r = await fetch(API_URL.replace(/\/$/,'')+'/api/ai/chat', {
-      method:'POST', headers:{'Content-Type':'application/json'},
+      method:'POST', headers:_authHeaders(),   // 🔑 v656
       body: JSON.stringify({ message: msg, history: _aiHistory.slice(0,-1), context })
     });
     const data = await r.json();
@@ -15395,9 +15404,11 @@ async function testBostaConnection(){
   if(!API_URL){$('bosta-conn-status').textContent='❗ الـ Backend مش متصل';return;}
   try{
     $('bosta-conn-status').textContent='⏳ جاري الاتصال...';
+    // 🔑 v656: كان من غير Authorization و/api/bosta/test عليه adminAuth —
+    //   فالسيرفر كان بيرد "No admin token" مهما كان الـ API Key صح.
     const r=await fetch(API_URL+'/api/bosta/test',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:_authHeaders(),
       body:JSON.stringify({apiKey:bostaApiKey,env:bostaEnv})
     });
     const data=await r.json();
@@ -15685,9 +15696,10 @@ async function createBostaDelivery(o){
     toast('❗ الـ Backend مش متصل — محتاج تربط الـ Backend عشان تستخدم بوسطة');
     return{success:false,error:'Backend not connected'};
   }
+  // 🔑 v656: نفس مشكلة /test — الإنشاء كله كان بيترفض قبل ما يوصل لبوسطة
   const r=await fetch(API_URL+'/api/bosta/create',{
     method:'POST',
-    headers:{'Content-Type':'application/json'},
+    headers:_authHeaders(),
     body:JSON.stringify({
       apiKey:bostaApiKey,
       env:bostaEnv,
@@ -15702,7 +15714,7 @@ async function createBostaDelivery(o){
       try{
         const awbR = await fetch(API_URL+'/api/bosta/awb',{
           method:'POST',
-          headers:{'Content-Type':'application/json'},
+          headers:_authHeaders(),   // 🔑 v656
           body:JSON.stringify({apiKey:bostaApiKey,env:bostaEnv,deliveryId:data.deliveryId})
         });
         const awbData = await awbR.json();
@@ -46804,13 +46816,15 @@ function renderNeoList(){
 
       <div style="margin-top:10px">
         <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:4px">
-          <span>اتباع ${sold} من ${limit}</span>
+          <span>اتباع ${sold} من ${limit} أونلاين${o.sold_pos ? ` <span style="font-weight:600;color:var(--muted)">+ ${o.sold_pos} كاشير</span>` : ''}</span>
           <span style="color:${pct >= 100 ? '#16a34a' : 'var(--muted)'}">${pct}%${limit > sold ? ` · باقي ${limit - sold}` : ''}</span>
         </div>
         <div style="background:#e5e7eb;border-radius:99px;height:8px;overflow:hidden">
           <div style="background:${pct >= 100 ? '#16a34a' : '#f59e0b'};height:100%;width:${pct}%;transition:width .4s"></div>
         </div>
       </div>
+
+      ${o.status === 'active' ? neoForecastHtml(o) : ''}
 
       ${o.last_error ? `<div style="margin-top:8px;background:#fef2f2;border:1px solid #ef4444;border-radius:6px;padding:6px 10px;font-size:11px;color:#991b1b">⚠️ ${escapeHtml(o.last_error)}</div>` : ''}
       ${o.marks_error ? `<div style="margin-top:8px;background:#7f1d1d;border-radius:6px;padding:6px 10px;font-size:11px;color:#fff">🏷️ ${escapeHtml(o.marks_error)}</div>` : ''}
@@ -46821,11 +46835,110 @@ function renderNeoList(){
           ${o.ended_at ? ` · قفل ${new Date(o.ended_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'})}` : ''}
         </div>
         ${o.status === 'active'
-          ? `<button class="btn btn-sm" onclick="endNeo(${o.id})" style="background:#dc2626;border-color:#dc2626;color:#fff;font-weight:700">⏹️ إنهاء ورجّع السعر</button>`
+          ? `<div style="display:flex;gap:6px">
+               <button class="btn btn-sm" onclick="openNeoEdit(${o.id})" style="font-weight:700">✏️ عدّل السعر</button>
+               <button class="btn btn-sm" onclick="endNeo(${o.id})" style="background:#dc2626;border-color:#dc2626;color:#fff;font-weight:700">⏹️ إنهاء ورجّع السعر</button>
+             </div>`
           : ''}
       </div>
     </div>`;
   }).join('');
+}
+
+// 🔮 v656: كارت التوقع — هل البضاعة تخلص قبل الصلاحية بمعدل البيع ده
+function neoForecastHtml(o){
+  const V = {
+    no_stock:    { ic:'📭', c:'#6d7175', bg:'#f3f4f6', t:'مفيش رصيد على النظام' },
+    no_exp_date: { ic:'❓', c:'#6d7175', bg:'#f3f4f6', t:'مافيش تاريخ صلاحية — مش قادر أتوقع' },
+    expired:     { ic:'🛑', c:'#991b1b', bg:'#fee2e2', t:'تاريخ الصلاحية عدّى' },
+    too_early:   { ic:'🕐', c:'#6d7175', bg:'#f3f4f6', t:'لسه بدري — استنى ٣ أيام عشان المعدل يبان' },
+    stalled:     { ic:'🧊', c:'#991b1b', bg:'#fee2e2', t:'واقف' },
+    wont_clear:  { ic:'⚠️', c:'#92400e', bg:'#fef3c7', t:'مش هتخلص قبل الصلاحية' },
+    ok:          { ic:'✅', c:'#166534', bg:'#dcfce7', t:'هتخلص قبل الصلاحية' },
+  };
+  const v = V[o.verdict]; if(!v) return '';
+  const rate = Number(o.rate_per_day) || 0;
+  const num  = n => Number(n).toLocaleString('ar-EG',{maximumFractionDigits:2});
+
+  // صف الأرقام — بيظهر بس لما يكون في معدل فعلي نتكلم عنه
+  const stats = ['stalled','wont_clear','ok'].includes(o.verdict) ? `
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;font-size:11px;color:var(--muted)">
+      <span>المعدل: <b style="color:var(--text,#111);font-family:monospace">${num(rate)}</b>/يوم</span>
+      <span>الرصيد: <b style="color:var(--text,#111);font-family:monospace">${num(o.stock_now)}</b></span>
+      ${o.days_to_exp != null ? `<span>فاضل: <b style="color:var(--text,#111);font-family:monospace">${o.days_to_exp}</b> يوم</span>` : ''}
+      ${o.need_rate_per_day != null ? `<span>المطلوب: <b style="color:var(--text,#111);font-family:monospace">${num(o.need_rate_per_day)}</b>/يوم</span>` : ''}
+      ${o.margin_pct != null ? `<span>الهامش: <b style="color:${o.margin_pct < 0 ? '#dc2626' : 'var(--text,#111)'};font-family:monospace">${o.margin_pct}%</b></span>` : ''}
+    </div>` : '';
+
+  const sug = o.suggest_price ? `
+    <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--muted)">مقترح:</span>
+      <b style="font-family:monospace;font-size:14px;color:${o.advice?.dir === 'up' ? '#166534' : '#991b1b'}">${num(o.suggest_price)} ج</b>
+      <span style="font-size:11px;color:var(--muted)">بدل ${num(o.offer_price)}</span>
+      <button class="btn btn-sm" onclick="openNeoEdit(${o.id}, ${o.suggest_price})" style="font-size:11px;padding:2px 10px">طبّقه</button>
+      ${o.advice?.warn ? `<span style="font-size:11px;color:#dc2626;font-weight:700">⚠️ ${escapeHtml(o.advice.warn)}</span>` : ''}
+    </div>` : '';
+
+  return `
+    <div style="margin-top:10px;background:${v.bg};border-radius:8px;padding:9px 12px">
+      <div style="font-size:12px;font-weight:800;color:${v.c}">${v.ic} ${v.t}</div>
+      ${o.advice?.text ? `<div style="font-size:11px;color:${v.c};opacity:.9;margin-top:3px">${escapeHtml(o.advice.text)}</div>` : ''}
+      ${stats}${sug}
+    </div>`;
+}
+
+// ✏️ v656: تعديل السعر والعرض شغّال — من غير ما تقفله وتفتحه تاني
+//   (القفل بيرجّع السعر الأصلي على Shopify في النص ويصفّر العدّاد)
+function openNeoEdit(id, presetPrice){
+  const o = _neoOffers.find(x => String(x.id) === String(id));
+  if(!o) return;
+  document.getElementById('neo-edit-modal')?.remove();
+  const ov = document.createElement('div');
+  ov.id = 'neo-edit-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10001;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML = `
+    <div style="background:var(--card,#fff);border-radius:14px;max-width:420px;width:100%;padding:20px">
+      <h3 style="margin:0 0 4px;font-size:16px">✏️ تعديل العرض</h3>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px">${escapeHtml(o.product_title || '')}</div>
+
+      <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">السعر المخفض (ج)</label>
+      <input id="neo-ed-price" type="number" step="0.01" class="form-input" style="width:100%"
+             value="${presetPrice != null ? presetPrice : parseFloat(o.offer_price).toFixed(2)}">
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">
+        الأصلي ${parseFloat(o.original_price).toFixed(2)} ج${o.cost ? ` · التكلفة ${Number(o.cost).toFixed(2)} ج` : ''}
+      </div>
+
+      <label style="display:block;font-size:12px;font-weight:700;margin:12px 0 4px">الحصّة (قطعة)</label>
+      <input id="neo-ed-qty" type="number" class="form-input" style="width:100%" value="${parseInt(o.qty_limit)||0}">
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">اتباع منها ${parseInt(o.sold_qty)||0} أونلاين — مينفعش تقل عن كده</div>
+
+      <div id="neo-ed-err" style="display:none;margin-top:10px;background:#fee2e2;color:#991b1b;border-radius:6px;padding:7px 10px;font-size:12px"></div>
+
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn-primary" style="flex:1" onclick="saveNeoEdit(${o.id})">💾 احفظ</button>
+        <button class="btn" onclick="document.getElementById('neo-edit-modal').remove()">إلغاء</button>
+      </div>
+    </div>`;
+  ov.onclick = e => { if(e.target === ov) ov.remove(); };
+  document.body.appendChild(ov);
+  setTimeout(() => document.getElementById('neo-ed-price')?.focus(), 50);
+}
+
+async function saveNeoEdit(id){
+  const err = document.getElementById('neo-ed-err');
+  const show = m => { err.textContent = '❌ ' + m; err.style.display = ''; };
+  const price = parseFloat(document.getElementById('neo-ed-price').value);
+  const qty   = parseInt(document.getElementById('neo-ed-qty').value, 10);
+  if(!(price > 0)) return show('السعر لازم يكون أكبر من صفر');
+  if(!(qty > 0))   return show('الحصّة لازم تكون أكبر من صفر');
+  try{
+    const r = await apiFetch(`/api/near-expiry-offers/${id}`, 'PATCH',
+                             { offerPrice: price, qtyLimit: qty });
+    if(!r || r.error) return show(r?.error || 'مانفعش');
+    document.getElementById('neo-edit-modal')?.remove();
+    toast('✅ اتعدّل — السعر راح على Shopify');
+    loadNeoPage();
+  }catch(e){ show(e.message); }
 }
 
 function openNeoNew(){
