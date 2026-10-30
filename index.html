@@ -15569,7 +15569,10 @@ async function awbLoad(){
         for(const it of (mr?.items || [])) _awbAreas[it.orderId] = it;
       }catch(e){ noCities = true; }
     }
-    const opts = sel => '<option value="">— اختار —</option>' + cities.map(c =>
+    // 📊 v675: مرتّبة بالأكثر استخداماً، وفاصل بعدها عشان الترتيب يبان مقصود
+    const _top = cities.filter(c => c.uses > 0).length;
+    const opts = sel => '<option value="">— اختار —</option>' + cities.map((c, k) =>
+      ((_top && k === _top) ? '<option disabled>──────────</option>' : '') +
       `<option value="${escapeHtml(c.id)}" data-n="${escapeHtml(c.name)}" ${c.id === sel ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
 
     body.innerHTML = `
@@ -15788,8 +15791,10 @@ async function arZones(citySel){
     }catch(e){ list = _arZoneCache[cid] = []; }
   }
   const want = zs.dataset.want || '';
+  const top = list.filter(z => z.uses > 0).length;   // 📊 v675
   zs.innerHTML = '<option value="">— كل المحافظة —</option>' +
-    list.map(z => `<option value="${escapeHtml(z.id)}" data-n="${escapeHtml(z.name)}" ${z.id === want ? 'selected' : ''}>${escapeHtml(z.name)}</option>`).join('');
+    list.map((z, k) => ((top && k === top) ? '<option disabled>──────────</option>' : '') +
+      `<option value="${escapeHtml(z.id)}" data-n="${escapeHtml(z.name)}" ${z.id === want ? 'selected' : ''}>${escapeHtml(z.name)}</option>`).join('');
   if(!list.length) zs.innerHTML = '<option value="">— مفيش مدن محفوظة —</option>';
 }
 
