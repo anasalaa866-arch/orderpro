@@ -15632,11 +15632,14 @@ async function awbLoad(){
     });
 
     const noPick = Object.values(_awbAreas).filter(a => !a.suggestId).length;
+    // 🔄 v677: لو الناقص سببه إن province فاضي، الزرار ده بيجيبها من شوبيفاي
+    const noGov = Object.values(_awbAreas).filter(a => !a.govCode).length;
     foot.innerHTML = `
       ${need ? `<button class="btn" style="background:#4f46e5;color:#fff;border-color:#4f46e5;font-weight:700" onclick="awbCreateThenPrint()">🏭 اعمل الناقص واطبع</button>` : ''}
       <button class="btn btn-primary" onclick="awbPrint()">🖨️ ادمج واطبع</button>
       <button class="btn btn-sm" onclick="awbPrint(true)">⬇️ نزّل PDF</button>
       ${need ? `<button class="btn btn-ghost btn-sm" onclick="awbAreasOnly()">💾 احفظ المناطق بس</button>` : ''}
+      ${noGov ? `<button class="btn btn-sm" style="background:#b45309;color:#fff" onclick="awbBackfillGov(this)">🔄 هات المحافظات من شوبيفاي (${noGov})</button>` : ''}
       <button class="btn btn-ghost btn-sm" onclick="_awbDesc=!_awbDesc;awbLoad()">↕️ ${_awbDesc ? 'من الأكبر للأصغر' : 'من الأصغر للأكبر'}</button>
       <span style="margin-right:auto;font-size:12px;color:var(--muted)">${_awbList.length} طلب${noPick ? ` · <b style="color:#dc2626">${noPick} محتاج محافظة</b>` : ''}</span>
       <div id="awb-prog" style="width:100%;font-size:12px;color:var(--muted)"></div>`;
@@ -15804,13 +15807,29 @@ async function arZones(citySel){
   if(!list.length) zs.innerHTML = '<option value="">— مفيش مدن محفوظة —</option>';
 }
 
+// 🔄 v677: الطلبات القديمة مالهاش province — هاتها من شوبيفاي
+async function awbBackfillGov(btn){
+  const p = document.getElementById('awb-prog');
+  btn.disabled = true;
+  if(p) p.innerHTML = '⏳ بيجيب المحافظات من شوبيفاي...';
+  try{
+    const r = await apiFetch('/api/orders/backfill-province','POST',{ days: 14 });
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    if(p) p.innerHTML = `✅ ${r.updated} طلب اتملى${r.stillMissing ? ` · ${r.stillMissing} لسه ناقص` : ''}`;
+    await awbLoad();
+  }catch(e){
+    if(p) p.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`;
+    btn.disabled = false;
+  }
+}
+
 async function awbSyncCities(btn){
   const box = document.getElementById('ar-sync');
   btn.disabled = true; if(box) box.textContent = '⏳ بيجيب من بوسطة...';
   try{
     const r = await apiFetch('/api/bosta/cities/sync','POST',{});
     if(box) box.innerHTML = r?.ok
-      ? `✅ ${r.count} محافظة · ${r.zones || 0} مدينة — اقفل وافتح تاني`
+      ? `✅ ${r.count} محافظة · ${r.zones || 0} مدينة${r.linked ? ` · ${r.linked} كود مربوط` : ''} — اقفل وافتح تاني`
         + (r.zoneErrors?.length ? `<div style="font-size:10px;color:#b45309;margin-top:5px">${escapeHtml(r.zoneErrors.join(' | '))}</div>` : '')
       : `❌ ${escapeHtml(r?.error || 'فشل')}${r?.sample ? `<div style="font-size:10px;direction:ltr;text-align:left;margin-top:6px">${escapeHtml(String(r.sample).slice(0,300))}</div>` : ''}`;
   }catch(e){ if(box) box.textContent = '❌ ' + e.message; }
