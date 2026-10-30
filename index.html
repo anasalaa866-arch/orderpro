@@ -1,6 +1,10 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v686 — 🖼️ صورة الصنف في الصلاحية وعروض قرب الانتهاء (2026-10-31)
+  🖼️ v686: صورة المنتج في الشاشتين. اللي مالوش صورة بياخد مربع
+     بنفس المقاس عشان الصفوف ماترقصش، وفشل التحميل بيخفي الصورة
+     بدل ما يسيب أيقونة مكسورة.
   OrderPro v685 — 🎁 تابات فرعية في «بيتشتروا مع بعض» (2026-10-31)
   🎁 v685: التاب فيه ٣ تابات فرعية زي صفحة طلبات: أزواج · تلات
      أصناف · نفس الصنف بكمية. البادچ على كل زرار بيقول فيه كام،
@@ -47901,6 +47905,19 @@ let _neoOffers = [];
 let _neoPicked = null;
 let _neoSearchTimer = null;
 
+// 🖼️ v686: صورة الصنف. المنتج اللي مالهوش صورة بياخد مربع رمادي
+//   بنفس المقاس عشان الصفوف ماترقصش، وفشل التحميل بيخفيها بدل
+//   ما تسيب أيقونة مكسورة.
+function _prodImg(url, size){
+  const sz = size || 42;
+  const box = `width:${sz}px;height:${sz}px;border-radius:8px;flex:0 0 ${sz}px;`;
+  if(!url) return `<div style="${box}background:var(--bg);border:1px solid var(--border);
+      display:flex;align-items:center;justify-content:center;font-size:${Math.round(sz*0.45)}px;opacity:.35">📦</div>`;
+  return `<img src="${escapeHtml(url)}" loading="lazy" alt=""
+      onerror="this.style.visibility='hidden'"
+      style="${box}object-fit:contain;background:#fff;border:1px solid var(--border)">`;
+}
+
 async function loadNeoPage(){
   const box = document.getElementById('neo-list');
   if(!box) return;
@@ -47950,13 +47967,16 @@ function renderNeoList(){
     return `
     <div class="card" style="padding:14px;margin-bottom:10px;border-right:4px solid ${st.c}">
       <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
-        <div style="flex:1;min-width:220px">
+        <div style="flex:1;min-width:220px;display:flex;gap:10px;align-items:flex-start">
+          ${_prodImg(o.image_url, 48)}
+          <div style="min-width:0;flex:1">
           <div style="font-weight:800;font-size:14px">${escapeHtml(o.product_title || '')}${o.variant_title && o.variant_title !== 'Default Title' ? ` · ${escapeHtml(o.variant_title)}` : ''}</div>
           <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:2px">${escapeHtml(o.sku || '')}</div>
           <div style="margin-top:8px;font-size:14px">
             <b style="color:#dc2626;font-family:monospace">${parseFloat(o.offer_price).toFixed(2)} ج</b>
             <span style="color:var(--muted);text-decoration:line-through;font-family:monospace;font-size:12px;margin-right:6px">${parseFloat(o.original_price).toFixed(2)}</span>
             <span style="background:#fee2e2;color:#991b1b;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:800;margin-right:6px">−${off}%</span>
+          </div>
           </div>
         </div>
         <div style="text-align:left">
@@ -48504,10 +48524,13 @@ function renderBatchesPage(){
       <div class="card" style="overflow:hidden;border-right:4px solid ${isExpired ? 'var(--danger)' : (isUrgent ? 'var(--warn)' : 'var(--success)')}">
         <!-- Header -->
         <div style="padding:14px 16px;background:var(--bg);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-          <div style="flex:1;min-width:200px">
-            <div style="font-weight:800;font-size:14px;color:var(--text)">📦 ${escapeHtml(p.product_title || '')}${p.variant_title ? ' - ' + escapeHtml(p.variant_title) : ''}</div>
-            <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:3px">
-              ${p.sku ? 'SKU: ' + escapeHtml(p.sku) : ''}${p.sku && p.barcode ? ' · ' : ''}${p.barcode ? escapeHtml(p.barcode) : ''}
+          <div style="flex:1;min-width:200px;display:flex;gap:10px;align-items:center">
+            ${_prodImg(p.image_url, 44)}
+            <div style="min-width:0;flex:1">
+              <div style="font-weight:800;font-size:14px;color:var(--text)">${escapeHtml(p.product_title || '')}${p.variant_title ? ' - ' + escapeHtml(p.variant_title) : ''}</div>
+              <div style="font-size:11px;color:var(--muted);font-family:monospace;margin-top:3px">
+                ${p.sku ? 'SKU: ' + escapeHtml(p.sku) : ''}${p.sku && p.barcode ? ' · ' : ''}${p.barcode ? escapeHtml(p.barcode) : ''}
+              </div>
             </div>
           </div>
           <div style="display:flex;gap:10px;align-items:center;font-size:12px">
