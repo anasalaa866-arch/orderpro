@@ -15677,7 +15677,7 @@ async function awbReviewAreas(orderIds){
     ov.innerHTML = `<div style="background:var(--card,#fff);border-radius:14px;max-width:760px;width:100%;max-height:88vh;display:flex;flex-direction:column">
         <div style="padding:18px 20px 10px">
           <h3 style="margin:0 0 3px;font-size:17px">🗺️ راجع المناطق قبل ما ترفع</h3>
-          <div style="font-size:12px;color:var(--muted)">بوسطة بتطابق المدينة بقايمة عندها. اللي مش مظبوط هيوقف أو يروح محافظة غلط.</div>
+          <div style="font-size:12px;color:var(--muted)">المحافظة إجبارية. المدينة اختيارية — بس بتوصّل الشحنة لفرع بوسطة الصح بدل مركز المحافظة.</div>
         </div>
         <div id="ar-body" style="flex:1;overflow-y:auto;padding:0 20px"><div style="padding:30px;text-align:center;color:var(--muted)">⏳ بيطابق...</div></div>
         <div id="ar-foot" style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
@@ -15714,14 +15714,19 @@ async function awbReviewAreas(orderIds){
       cities.map(c => `<option value="${escapeHtml(c.id)}" data-n="${escapeHtml(c.name)}" ${c.id === sel ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
 
     body.innerHTML = `<div class="tbl-wrap"><table style="width:100%;font-size:12px">
-        <thead><tr><th style="width:70px">الأوردر</th><th>المنطقة عندنا</th>
-          <th style="width:190px">مدينة بوسطة</th><th style="width:90px">الحالة</th></tr></thead>
+        <thead><tr><th style="width:62px">الأوردر</th><th>المنطقة عندنا</th>
+          <th style="width:150px">المحافظة</th>
+          <th style="width:160px">المدينة <span style="font-weight:400;color:var(--muted)">(اختياري)</span></th>
+          <th style="width:85px">الحالة</th></tr></thead>
         <tbody>${items.map(i => `
           <tr data-oid="${escapeHtml(i.orderId)}" data-key="${escapeHtml(i.areaKey)}" data-area="${escapeHtml(i.area)}">
             <td style="font-family:Roboto,sans-serif;font-weight:700">${i.num}</td>
             <td><div>${escapeHtml(i.area || '—')}</div>
                 <div style="font-size:10px;color:var(--muted)">${escapeHtml((i.addr||'').slice(0,70))}</div></td>
-            <td><select class="form-input ar-city" style="width:100%;font-size:12px;padding:5px">${opts(i.suggestId)}</select></td>
+            <td><select class="form-input ar-city" style="width:100%;font-size:12px;padding:5px"
+                        onchange="arZones(this)">${opts(i.suggestId)}</select></td>
+            <td><select class="form-input ar-zone" style="width:100%;font-size:12px;padding:5px"
+                        data-want="${escapeHtml(i.zoneId||'')}"><option value="">— كل المحافظة —</option></select></td>
             <td style="font-size:11px">${
               i.source === 'محفوظ' ? '<span style="color:#16a34a">✅ محفوظ</span>'
               : i.suggestId ? `<span style="color:${i.score>=90?'#16a34a':'#b45309'}">${i.score>=90?'✅':'⚠️'} ${escapeHtml(i.source)}</span>`
@@ -15729,6 +15734,11 @@ async function awbReviewAreas(orderIds){
             }</td>
           </tr>`).join('')}</tbody></table></div>`;
 
+    // 🗺️ v672: عبّي المدن لكل صف عليه محافظة
+    body.querySelectorAll('tr[data-oid]').forEach(tr => {
+      const c = tr.querySelector('.ar-city');
+      if(c && c.value) arZones(c);
+    });
     const need = items.filter(i => !i.suggestId).length;
     foot.innerHTML = `
       <button class="btn btn-primary" id="ar-go">✅ أكّد واعمل البوالص</button>
@@ -15748,8 +15758,11 @@ async function awbReviewAreas(orderIds){
       }
       const map = rows.map(r => {
         const sel = r.querySelector('.ar-city');
+        const zs  = r.querySelector('.ar-zone');
         return { areaKey: r.dataset.key, area: r.dataset.area,
-                 cityId: sel.value, cityName: sel.selectedOptions[0]?.dataset.n || '' };
+                 cityId: sel.value, cityName: sel.selectedOptions[0]?.dataset.n || '',
+                 zoneId: zs?.value || null,
+                 zoneName: zs?.selectedOptions?.[0]?.dataset?.n || null };
       });
       try{ await apiFetch('/api/bosta/area-map','POST',{ map }); }
       catch(e){ ov.querySelector('#ar-msg').textContent = '❌ ' + e.message; return; }
@@ -15758,13 +15771,37 @@ async function awbReviewAreas(orderIds){
   });
 }
 
+// 🗺️ v672: المدن بتتعبّى حسب المحافظة المختارة. بنكاش القايمة
+//   لأن الصفوف كتير بتشترك في نفس المحافظة.
+const _arZoneCache = {};
+async function arZones(citySel){
+  const tr = citySel.closest('tr');
+  const zs = tr?.querySelector('.ar-zone');
+  if(!zs) return;
+  const cid = citySel.value;
+  if(!cid){ zs.innerHTML = '<option value="">— كل المحافظة —</option>'; return; }
+  let list = _arZoneCache[cid];
+  if(!list){
+    zs.innerHTML = '<option value="">⏳ ...</option>';
+    try{
+      const r = await apiFetch('/api/bosta/zones?cityId=' + encodeURIComponent(cid), 'GET');
+      list = _arZoneCache[cid] = (r?.zones || []);
+    }catch(e){ list = _arZoneCache[cid] = []; }
+  }
+  const want = zs.dataset.want || '';
+  zs.innerHTML = '<option value="">— كل المحافظة —</option>' +
+    list.map(z => `<option value="${escapeHtml(z.id)}" data-n="${escapeHtml(z.name)}" ${z.id === want ? 'selected' : ''}>${escapeHtml(z.name)}</option>`).join('');
+  if(!list.length) zs.innerHTML = '<option value="">— مفيش مدن محفوظة —</option>';
+}
+
 async function awbSyncCities(btn){
   const box = document.getElementById('ar-sync');
   btn.disabled = true; if(box) box.textContent = '⏳ بيجيب من بوسطة...';
   try{
     const r = await apiFetch('/api/bosta/cities/sync','POST',{});
     if(box) box.innerHTML = r?.ok
-      ? `✅ ${r.count} مدينة اتحفظت — اقفل وافتح تاني`
+      ? `✅ ${r.count} محافظة · ${r.zones || 0} مدينة — اقفل وافتح تاني`
+        + (r.zoneErrors?.length ? `<div style="font-size:10px;color:#b45309;margin-top:5px">${escapeHtml(r.zoneErrors.join(' | '))}</div>` : '')
       : `❌ ${escapeHtml(r?.error || 'فشل')}${r?.sample ? `<div style="font-size:10px;direction:ltr;text-align:left;margin-top:6px">${escapeHtml(String(r.sample).slice(0,300))}</div>` : ''}`;
   }catch(e){ if(box) box.textContent = '❌ ' + e.message; }
   btn.disabled = false;
