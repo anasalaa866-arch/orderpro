@@ -15563,8 +15563,9 @@ async function awbLoad(){
       ${_awbOldBatch ? `<div style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:8px">
         🗓️ <b>الدفعة دي مش بتاعة النهاردة (${escapeHtml(_awbOldBatch)}).</b> اتأكد إنها اللي إنت قاصدها قبل ما تعمل شحنات.</div>` : ''}
       ${need ? `<div style="background:#eef2ff;color:#3730a3;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:8px">
-        🏭 <b>${need} طلب لسه مالهوش شحنة على بوسطة.</b> زرار «اعمل الناقص واطبع» هيعملهم الأول —
-        دي شحنات حقيقية وبتتكلّف.</div>` : ''}
+        🏭 <b>${need} طلب لسه مالهوش شحنة على بوسطة.</b>
+        زرار «اعمل الناقص واطبع» هيوريك <b>مراجعة المناطق</b> الأول، وبعد ما تأكّد بيعمل الشحنات —
+        دي شحنات حقيقية وبتتكلّف. أو افتح «🗺️ راجع المناطق» لوحدها من غير ما تعمل حاجة.</div>` : ''}
       ${miss ? `<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:10px">
         ⚠️ ${miss} بوليصة مش محفوظة عندنا — هنجيبها من بوسطة وقت الطباعة (قراءة بس، مفيش شحنة جديدة بتتعمل).</div>` : ''}
       <div class="tbl-wrap"><table style="width:100%;font-size:12px">
@@ -15586,7 +15587,8 @@ async function awbLoad(){
           </tr>`).join('')}</tbody>
       </table></div>`;
     foot.innerHTML = `
-      ${need ? `<button class="btn" style="background:#4f46e5;color:#fff;border-color:#4f46e5;font-weight:700" onclick="awbCreateThenPrint()">🏭 اعمل الناقص واطبع</button>` : ''}
+      ${need ? `<button class="btn" style="background:#4f46e5;color:#fff;border-color:#4f46e5;font-weight:700" onclick="awbCreateThenPrint()">🏭 اعمل الناقص واطبع</button>
+               <button class="btn btn-sm" onclick="awbAreasOnly()" title="راجع وعدّل المناطق من غير ما تعمل شحنات">🗺️ راجع المناطق</button>` : ''}
       <button class="btn btn-primary" onclick="awbPrint()">🖨️ ادمج واطبع</button>
       <button class="btn btn-sm" onclick="awbPrint(true)">⬇️ نزّل PDF</button>
       <button class="btn btn-ghost btn-sm" onclick="_awbDesc=!_awbDesc;awbLoad()">↕️ ${_awbDesc ? 'من الأكبر للأصغر' : 'من الأصغر للأكبر'}</button>
@@ -15651,6 +15653,17 @@ async function awbCreateThenPrint(){
     awbAll(true);
     await awbPrint();
   }catch(e){ say(`<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`); }
+}
+
+// 🗺️ v671: افتح المراجعة لوحدها — من غير ما تعمل أي شحنة.
+//   كانت بتفتح مع زرار الإنشاء بس، فمكانش في طريقة تظبّط منطقة
+//   وإنت لسه بتجهّز.
+async function awbAreasOnly(){
+  const picked = [...document.querySelectorAll('.awb-chk:checked')].map(c => c.value);
+  const need = _awbList.filter(i => i.needsCreate && picked.includes(i.orderId));
+  if(!need.length) return toast('المختار كله عليه بوالص — مفيش مناطق تتراجع');
+  const ok = await awbReviewAreas(need.map(i => i.orderId));
+  if(ok) toast('✅ المناطق اتحفظت — تقدر تعمل البوالص دلوقتي');
 }
 
 // 🗺️ v667: شاشة مراجعة المناطق. بترجّع true لو المستخدم أكّد.
