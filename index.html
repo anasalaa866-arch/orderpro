@@ -15704,6 +15704,7 @@ async function awbReviewAreas(orderIds){
         return;
       }
       items = mr?.items || [];
+      _arRates = mr?.shipRates || {};   // 💸 v673: سعر الشحن لكل محافظة
     }catch(e){
       body.innerHTML = `<div style="padding:30px;text-align:center;color:#dc2626">${escapeHtml(e.message)}</div>`;
       foot.innerHTML = `<button class="btn" onclick="this.closest('div[style*=fixed]').remove()">إغلاق</button>`;
@@ -15717,16 +15718,20 @@ async function awbReviewAreas(orderIds){
         <thead><tr><th style="width:62px">الأوردر</th><th>المنطقة عندنا</th>
           <th style="width:150px">المحافظة</th>
           <th style="width:160px">المدينة <span style="font-weight:400;color:var(--muted)">(اختياري)</span></th>
+          <th style="width:130px">فرق الشحن</th>
           <th style="width:85px">الحالة</th></tr></thead>
         <tbody>${items.map(i => `
-          <tr data-oid="${escapeHtml(i.orderId)}" data-key="${escapeHtml(i.areaKey)}" data-area="${escapeHtml(i.area)}">
+          <tr data-oid="${escapeHtml(i.orderId)}" data-key="${escapeHtml(i.areaKey)}" data-area="${escapeHtml(i.area)}"
+              data-cust="${escapeHtml(i.custGovAr||'')}" data-paid="${i.paidShip||0}" data-total="${i.total||0}">
             <td style="font-family:Roboto,sans-serif;font-weight:700">${i.num}</td>
             <td><div>${escapeHtml(i.area || '—')}</div>
                 <div style="font-size:10px;color:var(--muted)">${escapeHtml((i.addr||'').slice(0,70))}</div></td>
             <td><select class="form-input ar-city" style="width:100%;font-size:12px;padding:5px"
-                        onchange="arZones(this)">${opts(i.suggestId)}</select></td>
+                        onchange="arZones(this);arDiff(this)">${opts(i.suggestId)}</select>
+                ${i.custGovAr ? `<div style="font-size:10px;color:var(--muted);margin-top:3px">العميل اختار: ${escapeHtml(i.custGovAr)}</div>` : ''}</td>
             <td><select class="form-input ar-zone" style="width:100%;font-size:12px;padding:5px"
                         data-want="${escapeHtml(i.zoneId||'')}"><option value="">— كل المحافظة —</option></select></td>
+            <td class="ar-diff" style="font-size:11px"></td>
             <td style="font-size:11px">${
               i.source === 'محفوظ' ? '<span style="color:#16a34a">✅ محفوظ</span>'
               : i.suggestId ? `<span style="color:${i.score>=90?'#16a34a':'#b45309'}">${i.score>=90?'✅':'⚠️'} ${escapeHtml(i.source)}</span>`
@@ -15737,7 +15742,7 @@ async function awbReviewAreas(orderIds){
     // 🗺️ v672: عبّي المدن لكل صف عليه محافظة
     body.querySelectorAll('tr[data-oid]').forEach(tr => {
       const c = tr.querySelector('.ar-city');
-      if(c && c.value) arZones(c);
+      if(c && c.value){ arZones(c); arDiff(c); }
     });
     const need = items.filter(i => !i.suggestId).length;
     foot.innerHTML = `
@@ -15766,6 +15771,22 @@ async function awbReviewAreas(orderIds){
       });
       try{ await apiFetch('/api/bosta/area-map','POST',{ map }); }
       catch(e){ ov.querySelector('#ar-msg').textContent = '❌ ' + e.message; return; }
+
+      // 💸 v673: طبّق فروق الشحن اللي المستخدم علّم عليها
+      const diffs = rows.map(r => {
+        const cb = r.querySelector('.ar-apply');
+        return (cb && cb.checked && Number(cb.dataset.diff))
+          ? { orderId: r.dataset.oid, diff: Number(cb.dataset.diff) } : null;
+      }).filter(Boolean);
+      if(diffs.length){
+        try{
+          const d = await apiFetch('/api/bosta/apply-ship-diff','POST',{ items: diffs });
+          if(d?.ok) toast(`💸 ${d.updated.length} طلب اتعدّلت قيمته`);
+        }catch(e){ 
+          ov.querySelector('#ar-msg').textContent = '⚠️ المناطق اتحفظت بس فرق الشحن فشل: ' + e.message;
+          return;
+        }
+      }
       close(true);
     };
   });
@@ -15774,6 +15795,43 @@ async function awbReviewAreas(orderIds){
 // 🗺️ v672: المدن بتتعبّى حسب المحافظة المختارة. بنكاش القايمة
 //   لأن الصفوف كتير بتشترك في نفس المحافظة.
 const _arZoneCache = {};
+let _arRates = {};
+
+// 💸 v673: لو المحافظة اتغيّرت عن اللي العميل اختاره، احسب فرق الشحن.
+//   السعر لكل محافظة متحسوب من تاريخ طلباتك الفعلي.
+function arDiff(citySel){
+  const tr = citySel.closest('tr');
+  const cell = tr?.querySelector('.ar-diff');
+  if(!cell) return;
+  const cust = tr.dataset.cust || '';
+  const paid = Number(tr.dataset.paid) || 0;
+  const now  = citySel.selectedOptions[0]?.dataset.n || '';
+  if(!now || !cust || now === cust){ cell.innerHTML = ''; return; }
+
+  const rate = _arRates[now];
+  if(rate == null){
+    cell.innerHTML = `<span style="color:var(--muted)">محافظة اتغيّرت<br>
+      <span style="font-size:10px">مفيش سعر محفوظ لـ${escapeHtml(now)}</span></span>`;
+    return;
+  }
+  const diff = Math.round((rate - paid) * 100) / 100;
+  if(Math.abs(diff) < 0.5){
+    cell.innerHTML = `<span style="color:var(--muted);font-size:10px">نفس سعر الشحن</span>`;
+    return;
+  }
+  const up = diff > 0;
+  cell.innerHTML = `
+    <label style="display:flex;gap:5px;align-items:flex-start;cursor:pointer">
+      <input type="checkbox" class="ar-apply" data-diff="${diff}" ${up ? 'checked' : ''}>
+      <span>
+        <b style="color:${up ? '#dc2626' : '#16a34a'}">${up ? '+' : ''}${diff} ج</b>
+        <div style="font-size:10px;color:var(--muted)">
+          دفع ${paid} · ${escapeHtml(now)} بـ ${rate}<br>
+          التحصيل يبقى ${(Number(tr.dataset.total) || 0) + diff}
+        </div>
+      </span>
+    </label>`;
+}
 async function arZones(citySel){
   const tr = citySel.closest('tr');
   const zs = tr?.querySelector('.ar-zone');
