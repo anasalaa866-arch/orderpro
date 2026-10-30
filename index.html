@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v679 — 🔎 متابعة المرتجعات + 💰 ترتيب التحويلات بالقيمة (2026-10-30)
+  🔎 v679: شاشة جديدة "متابعة المرتجعات". "رجعت لبوسطة" بقت إشارة مش
+     قرار — الطلب بيفضل بحالته لحد ما يوصل فعلاً ونرجّعه على شوبيفاي.
+     تلات مراحل (في الطريق / وصل ومترجعش / ضايع-تالف) + تنبيه على
+     اللي عدّى المدة، والبادج في القايمة بيعدّ المتأخر.
+  💰 v679: ذكاء التحويلات — عمود "القيمة" (العدد المقترح × سعر البيع)
+     وقايمة ترتيب: الأكبر قيمةً (افتراضي) / الأكبر عدداً / الأولوية.
+     الشريط السفلي بيعرض قيمة المحدد، والصنف بلا سعر بيتعلّم ⚠️.
+  ═══════════════════════════════════════════════════════════════════
   OrderPro v609 — 💾 الأسعار اللي بتكتبها مابتضيعش مع الريفريش (2026-10-15)
   💾 v609: كل قيمة تكتبها في التسعير بتتحفظ في المتصفح أول بأول. لو
   الصفحة اتقفلت أو اتعمل ريفريش قبل الحفظ، بترجع تلاقيها مكانها مع
@@ -1848,6 +1857,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="order-tracker" onclick="goPage(this,'order-tracker')"><span class="ni-icon">📊</span><span class="ni-label">متابعة الأرقام</span><span class="nbadge" id="nb-tracker-gaps" style="background:var(--warn)">0</span></div>
         <div class="ni" data-p="manual-orders" onclick="goPage(this,'manual-orders')"><span class="ni-icon">📝</span><span class="ni-label">طلبات يدوية</span></div>
         <div class="ni" data-p="returns" onclick="goPage(this,'returns')"><span class="ni-icon">↩️</span><span class="ni-label">مرتجعات</span></div>
+        <div class="ni" data-p="returns-watch" onclick="goPage(this,'returns-watch')"><span class="ni-icon">🔎</span><span class="ni-label">متابعة المرتجعات</span><span class="nbadge" id="nb-returns-watch" style="background:var(--danger)"></span></div>
         <div class="ni" data-p="sync-failures" onclick="goPage(this,'sync-failures')"><span class="ni-icon">🔄</span><span class="ni-label">بيعات لم تتزامن</span><span class="nbadge" id="nb-sync-failures" style="background:var(--danger)">0</span></div>
         <div class="ni" data-p="delivery-sheet" onclick="goPage(this,'delivery-sheet')"><span class="ni-icon">🖨️</span><span class="ni-label">ورقة التوصيل</span></div>
         <div class="ni" data-p="import-excel" onclick="goPage(this,'import-excel')"><span class="ni-icon">📥</span><span class="ni-label">استيراد Excel</span></div>
@@ -2039,6 +2049,34 @@ tr:hover td{background:#fafbff}
   <div class="content">
 
   <!-- DASHBOARD -->
+  <div class="page" id="page-returns-watch">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="margin:0">🔎 متابعة المرتجعات</h2>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">
+          بوسطة بتقول "رجعت" والبضاعة لسه في الطريق. الطلب بيفضل زي ما هو لحد ما
+          <strong>توصل فعلاً</strong> و<strong>نرجّعها على شوبيفاي</strong> — ساعتها بس يبقى "مرتجع".
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:11px;color:var(--muted)">ينبّه بعد</label>
+        <input type="number" id="rw-days-transit" min="1" max="120" style="width:58px;padding:5px;border:1px solid var(--border);border-radius:6px;text-align:center;font-family:Cairo,sans-serif">
+        <span style="font-size:11px;color:var(--muted)">يوم في الطريق ·</span>
+        <input type="number" id="rw-days-shopify" min="1" max="120" style="width:58px;padding:5px;border:1px solid var(--border);border-radius:6px;text-align:center;font-family:Cairo,sans-serif">
+        <span style="font-size:11px;color:var(--muted)">يوم بعد الاستلام</span>
+        <button class="btn btn-ghost btn-sm" onclick="rwSaveDays()">💾 احفظ</button>
+        <button class="btn btn-ghost btn-sm" onclick="rwLoad()">🔄 تحديث</button>
+      </div>
+    </div>
+    <div id="rw-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px"></div>
+    <div id="rw-body">
+      <div style="text-align:center;padding:50px;color:var(--muted)">
+        <div style="font-size:48px;opacity:.3">🔎</div>
+        <div style="margin-top:10px;font-weight:700">جاري التحميل…</div>
+      </div>
+    </div>
+  </div>
+
   <div class="page" id="page-returns">
     <div class="card" style="margin-bottom:14px">
       <div style="padding:14px">
@@ -8141,6 +8179,12 @@ tr:hover td{background:#fafbff}
       <div class="sc-label">إجمالي الكمية المقترحة</div>
       <div class="sc-val" id="tp-stat-qty" style="color:#10b981">0</div>
     </div>
+    <div class="sc" style="border-right:4px solid #8b5cf6">
+      <div class="sc-icon">💰</div>
+      <div class="sc-label">قيمة التحويل المقترح</div>
+      <div class="sc-val" id="tp-stat-value" style="color:#8b5cf6">0</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px" id="tp-stat-value-note"></div>
+    </div>
     <div class="sc" style="border-right:4px solid #f59e0b">
       <div class="sc-icon">⚠️</div>
       <div class="sc-label">المصدر مش كفاية</div>
@@ -8158,6 +8202,12 @@ tr:hover td{background:#fafbff}
     <div style="padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <input id="tp-search" placeholder="🔍 ابحث عن منتج..." oninput="tpRender()"
              style="flex:1;min-width:180px;padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px">
+      <select id="tp-sort" onchange="tpRender()" title="ترتيب النتائج"
+              style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer">
+        <option value="value">💰 الأكبر قيمةً</option>
+        <option value="qty">🔢 الأكبر عدداً</option>
+        <option value="priority">🚨 الأولوية (الأقرب على الخلوص)</option>
+      </select>
       <button class="btn btn-ghost btn-sm" onclick="tpSelectAll(true)">☑️ حدد الكل</button>
       <button class="btn btn-ghost btn-sm" onclick="tpSelectAll(false)">⬜ إلغاء الكل</button>
     </div>
@@ -10316,7 +10366,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة المرتجعات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -15569,11 +15619,11 @@ async function awbLoad(){
         for(const it of (mr?.items || [])) _awbAreas[it.orderId] = it;
       }catch(e){ noCities = true; }
     }
-    // 📊 v675: مرتّبة بالأكثر استخداماً، وفاصل بعدها عشان الترتيب يبان مقصود
-    const _top = cities.filter(c => c.uses > 0).length;
-    const opts = sel => '<option value="">— اختار —</option>' + cities.map((c, k) =>
-      ((_top && k === _top) ? '<option disabled>──────────</option>' : '') +
-      `<option value="${escapeHtml(c.id)}" data-n="${escapeHtml(c.name)}" ${c.id === sel ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+    // 🔎 v678: بقت خانة كتابة مع datalist — تكتب جزء من الاسم وهي بتفلتر.
+    //   الـ select العادي مابيسمحش بده، والقوايم طويلة (٢٨ محافظة ومئات المدن).
+    _awbCityList = cities;
+    const _govDl = '<datalist id="dl-gov">' + cities.map(c =>
+      `<option value="${escapeHtml(c.name)}">`).join('') + '</datalist>';
 
     body.innerHTML = `
       ${Object.keys(_awbFails).length ? `<div style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:8px">
@@ -15590,6 +15640,7 @@ async function awbLoad(){
         🏭 <b>${need} طلب لسه مالهوش شحنة.</b> راجع المحافظة والمدينة في الجدول، وبعدين «اعمل الناقص واطبع» — دي شحنات حقيقية وبتتكلّف.</div>` : ''}
       ${miss ? `<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:10px">
         ⚠️ ${miss} بوليصة مش محفوظة عندنا — هنجيبها من بوسطة وقت الطباعة (قراءة بس).</div>` : ''}
+      ${_govDl}
       <div class="tbl-wrap"><table style="width:100%;font-size:12px">
         <thead><tr>
           <th style="width:34px"><input type="checkbox" checked onchange="awbAll(this.checked)"></th>
@@ -15608,7 +15659,10 @@ async function awbLoad(){
             <td style="font-family:Roboto,sans-serif;font-weight:700">${i.num < Number.MAX_SAFE_INTEGER ? i.num : escapeHtml(i.orderId)}</td>
             <td>${escapeHtml(i.customer || '')}</td>
             <td style="color:var(--muted)">${escapeHtml(i.area || '')}</td>
-            <td>${a ? `<select class="form-input ar-city" style="width:100%;font-size:12px;padding:4px" onchange="arZones(this);arDiff(this)">${opts(a.suggestId)}</select>${(() => {
+            <td>${a ? `<input class="form-input ar-city" list="dl-gov" placeholder="اكتب أو اختار"
+                        style="width:100%;font-size:12px;padding:4px"
+                        value="${escapeHtml(a.suggest || '')}" data-id="${escapeHtml(a.suggestId || '')}"
+                        oninput="arCityPick(this)" onchange="arCityPick(this)">${(() => {
                          // 🔬 v676: لو فضلت فاضية، قول السبب بدل ما تسيبها ساكتة
                          if(a.custGovAr) return `<div style="font-size:10px;color:var(--muted);margin-top:2px">العميل: ${escapeHtml(a.custGovAr)}</div>`;
                          if(a.govCode)   return `<div style="font-size:10px;color:#b45309;margin-top:2px">كود ${escapeHtml(a.govCode)} — مش في قايمة بوسطة</div>`;
@@ -15616,7 +15670,11 @@ async function awbLoad(){
                          return `<div style="font-size:10px;color:#dc2626;margin-top:2px">الباك إند قديم — ارفع v633</div>`;
                        })()}`
                      : '<span style="color:var(--muted);font-size:11px">—</span>'}</td>
-            <td>${a ? `<select class="form-input ar-zone" style="width:100%;font-size:12px;padding:4px" data-want="${escapeHtml(a.zoneId||'')}"><option value="">— كل المحافظة —</option></select>` : ''}</td>
+            <td>${a ? `<input class="form-input ar-zone" list="dlz-${escapeHtml(i.orderId)}" placeholder="— كل المحافظة —"
+                        style="width:100%;font-size:12px;padding:4px"
+                        value="${escapeHtml(a.zone || '')}" data-id="${escapeHtml(a.zoneId||'')}" data-want="${escapeHtml(a.zoneId||'')}"
+                        oninput="arZonePick(this)" onchange="arZonePick(this)">
+                       <datalist id="dlz-${escapeHtml(i.orderId)}"></datalist>` : ''}</td>
             <td class="ar-diff" style="font-size:11px"></td>
             <td style="font-family:Roboto,sans-serif;font-size:11px;color:var(--muted)">${escapeHtml(i.tracking || '')}</td>
             <td>${_awbFails[i.orderId]
@@ -15628,7 +15686,7 @@ async function awbLoad(){
 
     body.querySelectorAll('tr[data-key]').forEach(tr => {
       const c = tr.querySelector('.ar-city');
-      if(c && c.value){ arZones(c); arDiff(c); }
+      if(c && c.dataset.id){ arZones(c); arDiff(c); }
     });
 
     const noPick = Object.values(_awbAreas).filter(a => !a.suggestId).length;
@@ -15654,7 +15712,7 @@ async function awbSaveAreas(){
   const body = document.getElementById('awb-body');
   const rows = [...body.querySelectorAll('tr[data-key]')];
   if(!rows.length) return true;
-  const missing = rows.filter(r => !r.querySelector('.ar-city')?.value);
+  const missing = rows.filter(r => !r.querySelector('.ar-city')?.dataset.id);
   if(missing.length){
     const p = document.getElementById('awb-prog');
     if(p) p.innerHTML = `<span style="color:#dc2626">❌ لسه ${missing.length} طلب من غير محافظة — اختارهم الأول</span>`;
@@ -15665,8 +15723,8 @@ async function awbSaveAreas(){
   const map = rows.map(r => {
     const sel = r.querySelector('.ar-city'), zs = r.querySelector('.ar-zone');
     return { areaKey:r.dataset.key, area:r.dataset.area,
-             cityId:sel.value, cityName:sel.selectedOptions[0]?.dataset.n || '',
-             zoneId:zs?.value || null, zoneName:zs?.selectedOptions?.[0]?.dataset?.n || null };
+             cityId:sel.dataset.id, cityName:sel.dataset.n || sel.value,
+             zoneId:zs?.dataset.id || null, zoneName:zs?.dataset.n || null };
   });
   await apiFetch('/api/bosta/area-map','POST',{ map });
 
@@ -15749,6 +15807,34 @@ async function awbCreateThenPrint(){
 //   لأن الصفوف كتير بتشترك في نفس المحافظة.
 const _arZoneCache = {};
 let _arRates = {};
+let _awbCityList = [];
+
+// 🔎 v678: تطبيع خفيف عشان المقارنة متتكسرش بالهمزة أو التاء المربوطة
+const _arN = t => String(t||'').replace(/[أإآٱ]/g,'ا').replace(/[ىئ]/g,'ي')
+  .replace(/ة/g,'ه').replace(/\s+/g,' ').trim().toLowerCase();
+
+// المحافظة: بتحوّل اللي اتكتب لـ id. لو مش في القايمة، بتتعلّم أحمر.
+function arCityPick(inp){
+  const v = _arN(inp.value);
+  const hit = _awbCityList.find(c => _arN(c.name) === v || _arN(c.en) === v);
+  inp.dataset.id = hit ? hit.id : '';
+  inp.dataset.n  = hit ? hit.name : '';
+  inp.style.borderColor = (!inp.value || hit) ? '' : '#dc2626';
+  if(hit){ inp.value = hit.name; arZones(inp); arDiff(inp); }
+  else { const tr = inp.closest('tr'); const z = tr?.querySelector('.ar-zone');
+         if(z){ z.value = ''; z.dataset.id = ''; } }
+}
+
+function arZonePick(inp){
+  const list = _arZoneCache[inp.dataset.city || ''] || [];
+  const v = _arN(inp.value);
+  if(!v){ inp.dataset.id = ''; inp.dataset.n = ''; inp.style.borderColor = ''; return; }
+  const hit = list.find(z => _arN(z.name) === v || _arN(z.en) === v);
+  inp.dataset.id = hit ? hit.id : '';
+  inp.dataset.n  = hit ? hit.name : '';
+  inp.style.borderColor = hit ? '' : '#dc2626';
+  if(hit) inp.value = hit.name;
+}
 
 // 💸 v673: لو المحافظة اتغيّرت عن اللي العميل اختاره، احسب فرق الشحن.
 //   السعر لكل محافظة متحسوب من تاريخ طلباتك الفعلي.
@@ -15758,7 +15844,7 @@ function arDiff(citySel){
   if(!cell) return;
   const cust = tr.dataset.cust || '';
   const paid = Number(tr.dataset.paid) || 0;
-  const now  = citySel.selectedOptions[0]?.dataset.n || '';
+  const now  = citySel.dataset.n || citySel.value || '';   // 🔎 v678
   if(!now || !cust || now === cust){ cell.innerHTML = ''; return; }
 
   const rate = _arRates[now];
@@ -15785,26 +15871,31 @@ function arDiff(citySel){
       </span>
     </label>`;
 }
-async function arZones(citySel){
-  const tr = citySel.closest('tr');
+// 🔎 v678: بتعبّي الـ datalist بتاع المدن حسب المحافظة المختارة
+async function arZones(cityInp){
+  const tr = cityInp.closest('tr');
   const zs = tr?.querySelector('.ar-zone');
-  if(!zs) return;
-  const cid = citySel.value;
-  if(!cid){ zs.innerHTML = '<option value="">— كل المحافظة —</option>'; return; }
+  const dl = tr?.querySelector('datalist');
+  if(!zs || !dl) return;
+  const cid = cityInp.dataset.id || '';
+  zs.dataset.city = cid;
+  if(!cid){ dl.innerHTML = ''; zs.value = ''; zs.dataset.id = ''; return; }
   let list = _arZoneCache[cid];
   if(!list){
-    zs.innerHTML = '<option value="">⏳ ...</option>';
+    zs.placeholder = '⏳ ...';
     try{
       const r = await apiFetch('/api/bosta/zones?cityId=' + encodeURIComponent(cid), 'GET');
       list = _arZoneCache[cid] = (r?.zones || []);
     }catch(e){ list = _arZoneCache[cid] = []; }
   }
+  zs.placeholder = list.length ? '— كل المحافظة —' : '— مفيش مدن محفوظة —';
+  dl.innerHTML = list.map(z => `<option value="${escapeHtml(z.name)}">`).join('');
+  // لو جاي باقتراح محفوظ، ثبّته
   const want = zs.dataset.want || '';
-  const top = list.filter(z => z.uses > 0).length;   // 📊 v675
-  zs.innerHTML = '<option value="">— كل المحافظة —</option>' +
-    list.map((z, k) => ((top && k === top) ? '<option disabled>──────────</option>' : '') +
-      `<option value="${escapeHtml(z.id)}" data-n="${escapeHtml(z.name)}" ${z.id === want ? 'selected' : ''}>${escapeHtml(z.name)}</option>`).join('');
-  if(!list.length) zs.innerHTML = '<option value="">— مفيش مدن محفوظة —</option>';
+  if(want){
+    const hit = list.find(z => z.id === want);
+    if(hit){ zs.value = hit.name; zs.dataset.id = hit.id; zs.dataset.n = hit.name; }
+  } else if(zs.value) arZonePick(zs);
 }
 
 // 🔄 v677: الطلبات القديمة مالهاش province — هاتها من شوبيفاي
@@ -31495,6 +31586,14 @@ function tpUpdateStats(){
   document.getElementById('tp-toolbar').style.display = 'block';
   document.getElementById('tp-stat-needs').textContent = s.needs_transfer || 0;
   document.getElementById('tp-stat-qty').textContent = (s.total_suggested_qty || 0).toLocaleString('ar-EG');
+  const vEl = document.getElementById('tp-stat-value');
+  if(vEl) vEl.textContent = tpMoney(s.total_suggested_value || 0);
+  const vNote = document.getElementById('tp-stat-value-note');
+  if(vNote){
+    // الصناف اللي مالهاش سعر بتنزل تحت في ترتيب القيمة — لازم نقولها
+    vNote.textContent = (s.no_price > 0)
+      ? `⚠️ ${s.no_price} صنف من غير سعر بيع` : '';
+  }
   document.getElementById('tp-stat-insufficient').textContent = s.insufficient_source || 0;
   tpUpdateSelectionUI();
 }
@@ -31503,6 +31602,10 @@ function tpUpdateSelectionUI(){
   const ids = Object.keys(_tpSelected).filter(k => (_tpSelected[k] || 0) > 0);
   const count = ids.length;
   const totalQty = ids.reduce((sum, k) => sum + (_tpSelected[k] || 0), 0);
+  const planById = {};
+  for(const p of (_tpData?.plan || [])) planById[p.variant_id] = p;
+  const totalVal = ids.reduce((sum, k) =>
+    sum + ((_tpSelected[k] || 0) * Number(planById[k]?.unit_price || 0)), 0);
   const selStat = document.getElementById('tp-stat-selected');
   if(selStat) selStat.textContent = count;
 
@@ -31511,7 +31614,7 @@ function tpUpdateSelectionUI(){
   if(bar && _tpData){
     if(count > 0){
       bar.style.display = 'block';
-      summary.innerHTML = `📤 <strong>${escapeHtml(_tpData.from.warehouse_name)}</strong> → 📥 <strong>${escapeHtml(_tpData.to.warehouse_name)}</strong> · ${count} منتج · ${totalQty.toLocaleString('ar-EG')} قطعة`;
+      summary.innerHTML = `📤 <strong>${escapeHtml(_tpData.from.warehouse_name)}</strong> → 📥 <strong>${escapeHtml(_tpData.to.warehouse_name)}</strong> · ${count} منتج · ${totalQty.toLocaleString('ar-EG')} قطعة · <strong style="color:#8b5cf6">${tpMoney(totalVal)}</strong>`;
     } else {
       bar.style.display = 'none';
     }
@@ -31564,6 +31667,15 @@ function tpSelectAll(select){
   tpRender();
 }
 
+// 💰 v679: القيمة = الكمية × سعر البيع. بنحسبها على **المحدد** لو
+//   المستخدم عدّل الكمية، وعلى المقترح لو لسه ماختارش — عشان الرقم
+//   اللي في الشريط يبقى هو اللي هيتحوّل فعلاً مش اقتراح قديم.
+function tpRowValue(p, useSelected){
+  const q = useSelected ? (_tpSelected[p.variant_id] || 0) : (p.suggested_qty || 0);
+  return q * Number(p.unit_price || 0);
+}
+const tpMoney = v => Math.round(Number(v) || 0).toLocaleString('ar-EG') + ' ج';
+
 function tpVisiblePlan(){
   if(!_tpData) return [];
   let plan = _tpData.plan || [];
@@ -31575,6 +31687,23 @@ function tpVisiblePlan(){
       (p.barcode || '').toLowerCase().includes(search)
     );
   }
+  // نسخة جديدة — sort بيعدّل المصفوفة الأصلية، ومش عايزين نخرّب
+  // ترتيب _tpData.plan اللي الباك إند بعته.
+  plan = plan.slice();
+  const mode = document.getElementById('tp-sort')?.value || 'value';
+  if(mode === 'value'){
+    plan.sort((a,b) => (tpRowValue(b,false) - tpRowValue(a,false))
+                    || ((b.suggested_qty||0) - (a.suggested_qty||0)));
+  } else if(mode === 'qty'){
+    plan.sort((a,b) => ((b.suggested_qty||0) - (a.suggested_qty||0))
+                    || (tpRowValue(b,false) - tpRowValue(a,false)));
+  } else {
+    // الأولوية = ترتيب الباك إند (أقل أيام تغطية الأول)
+    plan.sort((a,b) => {
+      const da = a.to_days_left ?? Infinity, db = b.to_days_left ?? Infinity;
+      return (da - db) || ((b.suggested_qty||0) - (a.suggested_qty||0));
+    });
+  }
   return plan;
 }
 
@@ -31582,9 +31711,23 @@ function tpUpdateRowPreview(variantId){
   if(!_tpData) return;
   const p = (_tpData.plan || []).find(x => x.variant_id === variantId);
   if(!p) return;
+  const q = _tpSelected[variantId] || 0;
+  const vb = document.getElementById('tp-val-' + variantId);
+  if(vb) vb.innerHTML = tpRowValueHtml(p, q);
   const box = document.getElementById('tp-preview-' + variantId);
   if(!box) return;
-  box.innerHTML = tpRowPreviewHtml(p, _tpSelected[variantId] || 0);
+  box.innerHTML = tpRowPreviewHtml(p, q);
+}
+
+// 💰 v679: خلية القيمة. بتتحدّث مع الكمية عشان الرقم يفضل صادق.
+function tpRowValueHtml(p, qty){
+  const price = Number(p.unit_price || 0);
+  if(!(price > 0)){
+    return `<span style="font-size:10px;color:#f59e0b" title="الصنف ده مالوش سعر بيع في المخزون">⚠️ بلا سعر</span>`;
+  }
+  const v = qty * price;
+  return `<div style="font-weight:800;font-size:12px;color:${v>0?'#8b5cf6':'var(--muted)'}">${tpMoney(v)}</div>
+          <div style="font-size:9px;color:var(--muted)">${tpMoney(price)} × ${qty}</div>`;
 }
 
 // HTML الـ preview لصف واحد (رصيد المصدر/الوجهة بعد التحويل)
@@ -31643,7 +31786,7 @@ function tpRender(){
       ? `<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;margin-right:4px">⚠️ المصدر مش كفاية</span>` : '';
 
     return `
-      <div class="tp-row" style="display:grid;grid-template-columns:30px 1fr 90px 90px 120px 1fr;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);background:${isSelected?'#f0f9ff':'transparent'}">
+      <div class="tp-row" style="display:grid;grid-template-columns:30px 1fr 90px 90px 120px 100px 1fr;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);background:${isSelected?'#f0f9ff':'transparent'}">
         <div style="text-align:center">
           <input type="checkbox" id="tp-cb-${p.variant_id}" ${isSelected?'checked':''}
                  onchange="tpToggleProduct('${p.variant_id}', ${p.suggested_qty > 0 ? p.suggested_qty : Math.max(1,p.needed_qty)})"
@@ -31673,18 +31816,20 @@ function tpRender(){
             <button class="btn btn-ghost btn-sm" onclick="tpQtyStep('${p.variant_id}',1)" style="padding:2px 8px;font-size:14px">+</button>
           </div>
         </div>
+        <div style="text-align:center" id="tp-val-${p.variant_id}">${tpRowValueHtml(p, qty)}</div>
         <div id="tp-preview-${p.variant_id}" style="font-size:11px;line-height:1.5">${tpRowPreviewHtml(p, qty)}</div>
       </div>`;
   }).join('');
 
   results.innerHTML = `
     <div class="card" style="overflow:hidden">
-      <div style="display:grid;grid-template-columns:30px 1fr 90px 90px 120px 1fr;gap:10px;padding:10px 12px;background:var(--bg);font-size:10px;color:var(--muted);font-weight:700;border-bottom:2px solid var(--border)">
+      <div style="display:grid;grid-template-columns:30px 1fr 90px 90px 120px 100px 1fr;gap:10px;padding:10px 12px;background:var(--bg);font-size:10px;color:var(--muted);font-weight:700;border-bottom:2px solid var(--border)">
         <div></div>
         <div>المنتج</div>
         <div style="text-align:center">رصيد المصدر</div>
         <div style="text-align:center">رصيد الوجهة</div>
         <div style="text-align:center">كمية التحويل</div>
+        <div style="text-align:center">القيمة</div>
         <div>بعد التحويل</div>
       </div>
       ${rows}
@@ -54773,8 +54918,170 @@ async function ordBulkAddProblem(){
 //   ويرجّع السكرول لفوق وإنت بتقرا. دلوقتي بنحفظ مكان السكرول وبنرجّعه
 //   بعد الرسم — وبنرجّعه بس لو القفزة حصلت فعلاً (بقى صفر وهو مكانش)،
 //   عشان لو إنت اللي سكرولت في النص مانزاحمكش.
+
+// ══════════════════════════════════════════════════════════════
+// 🔎 v679: متابعة المرتجعات — الإشارة مش الواقعة
+//   "Returned to business" من بوسطة = الشحنة راجعة، مش إنها رجعت.
+//   الطلب بيفضل بحالته لحد ما يوصل ونرجّعه على شوبيفاي.
+// ══════════════════════════════════════════════════════════════
+let _rwData = null;
+
+const RW_BUCKET = {
+  transit:  { t:'🚚 في الطريق',            c:'#f59e0b', d:'بوسطة قالت راجع — لسه مجاش' },
+  received: { t:'📦 وصل ومترجعش',          c:'#3b82f6', d:'استلمناه — لسه مترجعش على شوبيفاي' },
+  claim:    { t:'⚠️ ضايع / تالف',          c:'#ef4444', d:'بوسطة مش هتردّه — محتاج مطالبة' },
+  done:     { t:'✅ خلص',                   c:'#10b981', d:'وصل واترجع — بقى مرتجع' },
+};
+
+async function rwLoad(){
+  const body = document.getElementById('rw-body');
+  if(!body) return;
+  try{
+    const r = await apiFetch('/api/returns/watch');
+    _rwData = r;
+    const dt = document.getElementById('rw-days-transit');
+    const ds = document.getElementById('rw-days-shopify');
+    if(dt && !dt.value) dt.value = r.transitDays;
+    if(ds && !ds.value) ds.value = r.shopifyDays;
+    rwRender();
+  }catch(e){
+    body.innerHTML = `<div style="text-align:center;padding:30px">
+      <div style="font-size:36px;color:#ef4444">❌</div>
+      <div style="font-weight:700;color:#ef4444;margin-top:8px">فشل التحميل</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+function rwRender(){
+  if(!_rwData) return;
+  const c = _rwData.counts || {};
+  const money = v => Math.round(Number(v)||0).toLocaleString('ar-EG') + ' ج';
+  const card = (icon,label,val,col,note) => `
+    <div class="sc" style="border-right:4px solid ${col}">
+      <div class="sc-icon">${icon}</div>
+      <div class="sc-label">${label}</div>
+      <div class="sc-val" style="color:${col}">${val}</div>
+      ${note ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">${note}</div>` : ''}
+    </div>`;
+  document.getElementById('rw-stats').innerHTML =
+    card('🚚','في الطريق', c.transit||0, '#f59e0b', `بعد ${_rwData.transitDays} يوم بينبّه`) +
+    card('📦','وصل ومترجعش', c.received||0, '#3b82f6', `بعد ${_rwData.shopifyDays} يوم بينبّه`) +
+    card('⚠️','ضايع / تالف', c.claim||0, '#ef4444', 'محتاج مطالبة') +
+    card('🔔','متأخر — محتاج تحرّك', c.overdue||0, c.overdue ? '#ef4444' : '#10b981') +
+    card('💰','قيمة معلّقة', money(_rwData.value_at_risk||0), '#8b5cf6', 'لسه مجاش');
+
+  // البادج في القايمة
+  const nb = document.getElementById('nb-returns-watch');
+  if(nb) nb.textContent = (c.overdue||0) > 0 ? String(c.overdue) : '';
+
+  const rows = (_rwData.rows || []).filter(r => r.bucket !== 'done');
+  const done = (_rwData.rows || []).filter(r => r.bucket === 'done').length;
+
+  if(!rows.length){
+    document.getElementById('rw-body').innerHTML = `
+      <div style="text-align:center;padding:50px;color:var(--muted)">
+        <div style="font-size:48px;opacity:.4">✅</div>
+        <div style="font-weight:700;margin-top:10px">مفيش مرتجعات معلّقة</div>
+        <div style="font-size:12px;margin-top:4px">${done ? done + ' مرتجع خلص وبقى "مرتجع"' : 'كل حاجة تمام'}</div>
+      </div>`;
+    return;
+  }
+
+  // المتأخر الأول، وبعدين الأقدم
+  rows.sort((a,b) => (b.overdue?1:0)-(a.overdue?1:0) || (b.age||0)-(a.age||0));
+
+  const html = rows.map(r => {
+    const b = RW_BUCKET[r.bucket] || RW_BUCKET.transit;
+    const num = String(r.id||'').replace(/^SH-/,'');
+    const late = r.overdue;
+    const ageTxt = r.bucket === 'received'
+      ? `مستلم من ${r.days_received} يوم`
+      : `بوسطة قالت راجع من ${r.days_signal} يوم`;
+    return `
+      <div style="display:grid;grid-template-columns:120px 1fr 140px 150px 200px;gap:10px;align-items:center;padding:11px 12px;border-bottom:1px solid var(--border);background:${late?'#fef2f2':'transparent'}">
+        <div>
+          <div style="font-weight:800;font-size:13px">#${escapeHtml(num)}</div>
+          <div style="font-size:10px;color:var(--muted)">${escapeHtml(r.bosta_tracking||'—')}</div>
+        </div>
+        <div style="min-width:0">
+          <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(r.name||'—')}</div>
+          <div style="font-size:10px;color:var(--muted)">${escapeHtml(r.province||'')}${r.city?' · '+escapeHtml(r.city):''} · الحالة: <strong>${escapeHtml(r.status||'—')}</strong></div>
+          ${r.return_watch_note ? `<div style="font-size:10px;color:#92400e;margin-top:2px">📝 ${escapeHtml(r.return_watch_note)}</div>` : ''}
+        </div>
+        <div style="text-align:center">
+          <span style="background:${b.c}22;color:${b.c};padding:3px 8px;border-radius:6px;font-size:10px;font-weight:800">${b.t}</span>
+          <div style="font-size:10px;color:${late?'#ef4444':'var(--muted)'};margin-top:3px;font-weight:${late?'800':'400'}">${late?'🔔 ':''}${ageTxt}</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-weight:800;font-size:13px">${Math.round(Number(r.total)||0).toLocaleString('ar-EG')} ج</div>
+          <div style="font-size:10px;color:var(--muted)">${escapeHtml(r.return_signal_state||'')}</div>
+        </div>
+        <div style="display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap">
+          ${r.bucket === 'received'
+            ? `<button class="btn btn-primary btn-sm" onclick="rwGoReturn('${escapeHtml(r.shopify_id||'')}')">↩️ ارجعه على شوبيفاي</button>`
+            : `<button class="btn btn-primary btn-sm" onclick="rwReceived('${escapeHtml(r.id)}')">📦 استلمته</button>`}
+          <button class="btn btn-ghost btn-sm" onclick="rwDismiss('${escapeHtml(r.id)}')" title="إشارة غلط — الشحنة مارجعتش">🚫</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('rw-body').innerHTML = `
+    <div class="card" style="overflow:hidden">
+      <div style="display:grid;grid-template-columns:120px 1fr 140px 150px 200px;gap:10px;padding:10px 12px;background:var(--bg);font-size:10px;color:var(--muted);font-weight:700;border-bottom:2px solid var(--border)">
+        <div>الأوردر</div><div>العميل</div><div style="text-align:center">المرحلة</div>
+        <div style="text-align:center">القيمة</div><div style="text-align:left">إجراء</div>
+      </div>
+      ${html}
+    </div>
+    ${done ? `<div style="text-align:center;padding:10px;font-size:11px;color:var(--muted)">✅ ${done} مرتجع خلص واترجع على شوبيفاي</div>` : ''}`;
+}
+
+async function rwReceived(orderId){
+  const note = prompt('وصل. أي ملاحظة؟ (ناقص حاجة، تالف، إلخ) — سيبها فاضية لو تمام');
+  if(note === null) return;   // كنسل
+  try{
+    const r = await apiFetch(`/api/returns/watch/${encodeURIComponent(orderId)}/received`,
+      'POST', { note });
+    toast('📦 اتسجّل الاستلام — فاضل ترجّعه على شوبيفاي');
+    void r; rwLoad();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function rwDismiss(orderId){
+  const why = prompt('إشارة غلط؟ اكتب السبب (الشحنة اتسلّمت للعميل، بوسطة غلطت…)');
+  if(why === null) return;
+  try{
+    await apiFetch(`/api/returns/watch/${encodeURIComponent(orderId)}/dismiss`,
+      'POST', { reason: why });
+    toast('🚫 اتشالت من المتابعة — حالة الطلب زي ما هي');
+    rwLoad();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// بيوديه على شاشة المرتجعات الموجودة أصلاً — هي اللي بترجّع على
+// شوبيفاي، وهي اللي بتحوّل الحالة لـ"مرتجع" لما المرتجع يكون كامل.
+function rwGoReturn(shopifyId){
+  const el = document.querySelector('.ni[data-p="returns"]');
+  if(el) goPage(el, 'returns');
+  setTimeout(() => {
+    const q = document.getElementById('ret-q');
+    if(q && shopifyId){ q.value = shopifyId; if(typeof returnsLookup==='function') returnsLookup(); }
+  }, 150);
+}
+
+async function rwSaveDays(){
+  const t = parseInt(document.getElementById('rw-days-transit')?.value);
+  const h = parseInt(document.getElementById('rw-days-shopify')?.value);
+  try{
+    await apiFetch('/api/returns/watch/days', 'POST', { transitDays:t, shopifyDays:h });
+    toast('💾 اتحفظت');
+    rwLoad();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
 const _PAGE_RENDER = {
   dashboard: () => renderDash(),
+  'returns-watch': () => rwLoad(),
   orders: () => renderOrders(),
   assign: () => renderAssignPage(),
   pickup: () => renderPickupPage(),
