@@ -15476,10 +15476,10 @@ async function openAwbPrint(){
   ov.id = 'awb-modal';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10002;display:flex;align-items:center;justify-content:center;padding:16px';
   ov.innerHTML = `
-    <div style="background:var(--card,#fff);border-radius:14px;max-width:640px;width:100%;max-height:88vh;display:flex;flex-direction:column">
+    <div style="background:var(--card,#fff);border-radius:14px;max-width:1180px;width:100%;max-height:92vh;display:flex;flex-direction:column">
       <div style="padding:18px 20px 12px">
-        <h3 style="margin:0 0 3px;font-size:17px">🖨️ طباعة البوالص مرتبة</h3>
-        <div style="font-size:12px;color:var(--muted)">كل البوالص في ملف واحد، مرتبة برقم الأوردر — مش بترتيب بوسطة.</div>
+        <h3 style="margin:0 0 3px;font-size:17px">🖨️ البوالص — مراجعة وطباعة</h3>
+        <div style="font-size:12px;color:var(--muted)">المناطق والبوالص في شاشة واحدة. الطباعة مرتبة برقم الأوردر — مش بترتيب بوسطة.</div>
       </div>
       <div style="padding:0 20px 10px">
         <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">الدفعة</label>
@@ -15536,6 +15536,7 @@ async function awbLoad(){
   const foot = document.getElementById('awb-foot');
   body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">⏳ بيجمّع...</div>';
   foot.innerHTML = '';
+  _awbAreas = {}; _arRates = {};
   try{
     const batchCode = document.getElementById('awb-batch')?.value || '';
     if(_awbLastBatch && _awbLastBatch !== batchCode) _awbFails = {};
@@ -15548,55 +15549,130 @@ async function awbLoad(){
       body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">الدفعة دي مفيهاش طلبات بوسطة</div>';
       return;
     }
-    // 🗓️ v664
-    const _sel = document.getElementById('awb-batch');
-    const _d = (_sel?.value || '').replace(/^B-/,'').slice(0,10);
+    const _d = (batchCode || '').replace(/^B-/,'').slice(0,10);
     _awbOldBatch = (_d && _d !== new Date().toISOString().slice(0,10)) ? _d : null;
-    const need = _awbList.filter(i => i.needsCreate).length;
+    const needRows = _awbList.filter(i => i.needsCreate);
+    const need = needRows.length;
     const miss = _awbList.filter(i => !i.needsCreate && !i.hasAwb).length;
+
+    // 🗺️ v674: المناطق بقت في نفس الشاشة — مفيش مودال تاني فوق الأول
+    let cities = [], noCities = false;
+    if(need){
+      try{
+        const [cr, mr] = await Promise.all([
+          apiFetch('/api/bosta/cities','GET'),
+          apiFetch('/api/bosta/match-areas','POST',{ orderIds: needRows.map(i => i.orderId) })
+        ]);
+        cities = cr?.cities || [];
+        noCities = !cities.length || !!mr?.needSync;
+        _arRates = mr?.shipRates || {};
+        for(const it of (mr?.items || [])) _awbAreas[it.orderId] = it;
+      }catch(e){ noCities = true; }
+    }
+    const opts = sel => '<option value="">— اختار —</option>' + cities.map(c =>
+      `<option value="${escapeHtml(c.id)}" data-n="${escapeHtml(c.name)}" ${c.id === sel ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+
     body.innerHTML = `
       ${Object.keys(_awbFails).length ? `<div style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:8px">
         <div style="font-weight:800;margin-bottom:5px">❌ ${Object.keys(_awbFails).length} طلب بوسطة رفضتهم — ده ردّها بالنص:</div>
         <div style="line-height:1.9;font-size:11px">${Object.entries(_awbFails).map(([k,v]) =>
-          `<b style="font-family:Roboto,sans-serif">${escapeHtml(String(k).replace(/^SH-/,''))}</b>: ${escapeHtml(v)}`).join('<br>')}</div>
-      </div>` : ''}
+          `<b style="font-family:Roboto,sans-serif">${escapeHtml(String(k).replace(/^SH-/,''))}</b>: ${escapeHtml(v)}`).join('<br>')}</div></div>` : ''}
       ${_awbOldBatch ? `<div style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:8px">
         🗓️ <b>الدفعة دي مش بتاعة النهاردة (${escapeHtml(_awbOldBatch)}).</b> اتأكد إنها اللي إنت قاصدها قبل ما تعمل شحنات.</div>` : ''}
+      ${noCities ? `<div style="background:#eef2ff;color:#3730a3;border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:8px">
+        مفيش مدن بوسطة محفوظة.
+        <button class="btn btn-sm" style="margin-inline-start:8px" onclick="awbSyncCities(this)">⬇️ اجلب المدن من بوسطة</button>
+        <span id="ar-sync" style="margin-inline-start:8px"></span></div>` : ''}
       ${need ? `<div style="background:#eef2ff;color:#3730a3;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:8px">
-        🏭 <b>${need} طلب لسه مالهوش شحنة على بوسطة.</b>
-        زرار «اعمل الناقص واطبع» هيوريك <b>مراجعة المناطق</b> الأول، وبعد ما تأكّد بيعمل الشحنات —
-        دي شحنات حقيقية وبتتكلّف. أو افتح «🗺️ راجع المناطق» لوحدها من غير ما تعمل حاجة.</div>` : ''}
+        🏭 <b>${need} طلب لسه مالهوش شحنة.</b> راجع المحافظة والمدينة في الجدول، وبعدين «اعمل الناقص واطبع» — دي شحنات حقيقية وبتتكلّف.</div>` : ''}
       ${miss ? `<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:10px">
-        ⚠️ ${miss} بوليصة مش محفوظة عندنا — هنجيبها من بوسطة وقت الطباعة (قراءة بس، مفيش شحنة جديدة بتتعمل).</div>` : ''}
+        ⚠️ ${miss} بوليصة مش محفوظة عندنا — هنجيبها من بوسطة وقت الطباعة (قراءة بس).</div>` : ''}
       <div class="tbl-wrap"><table style="width:100%;font-size:12px">
         <thead><tr>
           <th style="width:34px"><input type="checkbox" checked onchange="awbAll(this.checked)"></th>
-          <th>رقم الأوردر</th><th>العميل</th><th>المنطقة</th><th>التتبع</th><th>البوليصة</th>
+          <th style="width:62px">الأوردر</th><th style="width:105px">العميل</th>
+          <th>المنطقة عندنا</th>
+          <th style="width:140px">المحافظة</th>
+          <th style="width:148px">المدينة</th>
+          <th style="width:125px">فرق الشحن</th>
+          <th style="width:92px">التتبع</th><th style="width:68px">البوليصة</th>
         </tr></thead>
-        <tbody>${_awbList.map(i => `
-          <tr>
+        <tbody>${_awbList.map(i => {
+          const a = _awbAreas[i.orderId];
+          return `
+          <tr data-oid="${escapeHtml(i.orderId)}"${a ? ` data-key="${escapeHtml(a.areaKey)}" data-area="${escapeHtml(a.area)}" data-cust="${escapeHtml(a.custGovAr||'')}" data-paid="${a.paidShip||0}" data-total="${a.total||0}"` : ''}>
             <td><input type="checkbox" class="awb-chk" value="${escapeHtml(i.orderId)}" checked></td>
             <td style="font-family:Roboto,sans-serif;font-weight:700">${i.num < Number.MAX_SAFE_INTEGER ? i.num : escapeHtml(i.orderId)}</td>
             <td>${escapeHtml(i.customer || '')}</td>
             <td style="color:var(--muted)">${escapeHtml(i.area || '')}</td>
+            <td>${a ? `<select class="form-input ar-city" style="width:100%;font-size:12px;padding:4px" onchange="arZones(this);arDiff(this)">${opts(a.suggestId)}</select>${a.custGovAr ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">العميل: ${escapeHtml(a.custGovAr)}</div>` : ''}`
+                     : '<span style="color:var(--muted);font-size:11px">—</span>'}</td>
+            <td>${a ? `<select class="form-input ar-zone" style="width:100%;font-size:12px;padding:4px" data-want="${escapeHtml(a.zoneId||'')}"><option value="">— كل المحافظة —</option></select>` : ''}</td>
+            <td class="ar-diff" style="font-size:11px"></td>
             <td style="font-family:Roboto,sans-serif;font-size:11px;color:var(--muted)">${escapeHtml(i.tracking || '')}</td>
             <td>${_awbFails[i.orderId]
                   ? `<span style="color:#dc2626;font-weight:700" title="${escapeHtml(_awbFails[i.orderId])}">❌ فشل</span>`
                   : (i.needsCreate ? '<span style="color:#4f46e5;font-weight:700">هتتعمل</span>'
                   : (i.hasAwb ? '✅' : '<span style="color:#b45309">هتتجاب</span>'))}</td>
-          </tr>`).join('')}</tbody>
+          </tr>`; }).join('')}</tbody>
       </table></div>`;
+
+    body.querySelectorAll('tr[data-key]').forEach(tr => {
+      const c = tr.querySelector('.ar-city');
+      if(c && c.value){ arZones(c); arDiff(c); }
+    });
+
+    const noPick = Object.values(_awbAreas).filter(a => !a.suggestId).length;
     foot.innerHTML = `
-      ${need ? `<button class="btn" style="background:#4f46e5;color:#fff;border-color:#4f46e5;font-weight:700" onclick="awbCreateThenPrint()">🏭 اعمل الناقص واطبع</button>
-               <button class="btn btn-sm" onclick="awbAreasOnly()" title="راجع وعدّل المناطق من غير ما تعمل شحنات">🗺️ راجع المناطق</button>` : ''}
+      ${need ? `<button class="btn" style="background:#4f46e5;color:#fff;border-color:#4f46e5;font-weight:700" onclick="awbCreateThenPrint()">🏭 اعمل الناقص واطبع</button>` : ''}
       <button class="btn btn-primary" onclick="awbPrint()">🖨️ ادمج واطبع</button>
       <button class="btn btn-sm" onclick="awbPrint(true)">⬇️ نزّل PDF</button>
+      ${need ? `<button class="btn btn-ghost btn-sm" onclick="awbAreasOnly()">💾 احفظ المناطق بس</button>` : ''}
       <button class="btn btn-ghost btn-sm" onclick="_awbDesc=!_awbDesc;awbLoad()">↕️ ${_awbDesc ? 'من الأكبر للأصغر' : 'من الأصغر للأكبر'}</button>
-      <span style="margin-right:auto;font-size:12px;color:var(--muted)">${_awbList.length} بوليصة</span>
+      <span style="margin-right:auto;font-size:12px;color:var(--muted)">${_awbList.length} طلب${noPick ? ` · <b style="color:#dc2626">${noPick} محتاج محافظة</b>` : ''}</span>
       <div id="awb-prog" style="width:100%;font-size:12px;color:var(--muted)"></div>`;
   }catch(e){
     body.innerHTML = `<div style="padding:30px;text-align:center;color:#dc2626">${escapeHtml(e.message)}</div>`;
   }
+}
+let _awbAreas = {};
+
+// 🗺️ v674: الحفظ من نفس الجدول. false لو في محافظة ناقصة.
+async function awbSaveAreas(){
+  const body = document.getElementById('awb-body');
+  const rows = [...body.querySelectorAll('tr[data-key]')];
+  if(!rows.length) return true;
+  const missing = rows.filter(r => !r.querySelector('.ar-city')?.value);
+  if(missing.length){
+    const p = document.getElementById('awb-prog');
+    if(p) p.innerHTML = `<span style="color:#dc2626">❌ لسه ${missing.length} طلب من غير محافظة — اختارهم الأول</span>`;
+    missing[0].scrollIntoView({ block:'center' });
+    missing[0].style.background = '#fef2f2';
+    return false;
+  }
+  const map = rows.map(r => {
+    const sel = r.querySelector('.ar-city'), zs = r.querySelector('.ar-zone');
+    return { areaKey:r.dataset.key, area:r.dataset.area,
+             cityId:sel.value, cityName:sel.selectedOptions[0]?.dataset.n || '',
+             zoneId:zs?.value || null, zoneName:zs?.selectedOptions?.[0]?.dataset?.n || null };
+  });
+  await apiFetch('/api/bosta/area-map','POST',{ map });
+
+  const diffs = rows.map(r => {
+    const cb = r.querySelector('.ar-apply');
+    return (cb && cb.checked && Number(cb.dataset.diff))
+      ? { orderId:r.dataset.oid, diff:Number(cb.dataset.diff) } : null;
+  }).filter(Boolean);
+  if(diffs.length){
+    const d = await apiFetch('/api/bosta/apply-ship-diff','POST',{ items: diffs });
+    if(d?.ok) toast(`💸 ${d.updated.length} طلب اتعدّلت قيمته`);
+  }
+  return true;
+}
+
+async function awbAreasOnly(){
+  try{ if(await awbSaveAreas()) toast('✅ المناطق اتحفظت'); }
+  catch(e){ toast('❌ ' + e.message); }
 }
 
 // 🏭 v661: اعمل البوالص الناقصة في الخلفية، وبعدين اطبع الكل مرتب
@@ -15604,8 +15680,10 @@ async function awbCreateThenPrint(){
   const picked = [...document.querySelectorAll('.awb-chk:checked')].map(c => c.value);
   const need = _awbList.filter(i => i.needsCreate && picked.includes(i.orderId));
   if(!need.length) return awbPrint();
-  // 🗺️ v667: راجع المناطق الأول — المدينة الغلط بتبعت الشحنة لمحافظة تانية
-  const okAreas = await awbReviewAreas(need.map(i => i.orderId));
+  // 🗺️ v674: المناطق اتحفظت من نفس الجدول — مفيش مودال
+  let okAreas = false;
+  try{ okAreas = await awbSaveAreas(); }
+  catch(e){ const p=document.getElementById('awb-prog'); if(p) p.innerHTML=`<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; return; }
   if(!okAreas) return;
   const _b = document.getElementById('awb-batch')?.value || '';
   if(!confirm(`هيتعمل ${need.length} شحنة حقيقية على بوسطة.\n`
@@ -15653,143 +15731,6 @@ async function awbCreateThenPrint(){
     awbAll(true);
     await awbPrint();
   }catch(e){ say(`<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`); }
-}
-
-// 🗺️ v671: افتح المراجعة لوحدها — من غير ما تعمل أي شحنة.
-//   كانت بتفتح مع زرار الإنشاء بس، فمكانش في طريقة تظبّط منطقة
-//   وإنت لسه بتجهّز.
-async function awbAreasOnly(){
-  const picked = [...document.querySelectorAll('.awb-chk:checked')].map(c => c.value);
-  const need = _awbList.filter(i => i.needsCreate && picked.includes(i.orderId));
-  if(!need.length) return toast('المختار كله عليه بوالص — مفيش مناطق تتراجع');
-  const ok = await awbReviewAreas(need.map(i => i.orderId));
-  if(ok) toast('✅ المناطق اتحفظت — تقدر تعمل البوالص دلوقتي');
-}
-
-// 🗺️ v667: شاشة مراجعة المناطق. بترجّع true لو المستخدم أكّد.
-//   المدينة بتتبعت لبوسطة كنص وبتتطابق بقايمة عندهم — فالمنطقة
-//   اللي مش معروفة بتوقف الشحنة، واللي متطابقة غلط بتبعتها لمحافظة
-//   تانية. المراجعة هنا قبل الإنشاء مش بعده.
-async function awbReviewAreas(orderIds){
-  return new Promise(async resolve => {
-    const ov = document.createElement('div');
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10004;display:flex;align-items:center;justify-content:center;padding:16px';
-    ov.innerHTML = `<div style="background:var(--card,#fff);border-radius:14px;max-width:760px;width:100%;max-height:88vh;display:flex;flex-direction:column">
-        <div style="padding:18px 20px 10px">
-          <h3 style="margin:0 0 3px;font-size:17px">🗺️ راجع المناطق قبل ما ترفع</h3>
-          <div style="font-size:12px;color:var(--muted)">المحافظة إجبارية. المدينة اختيارية — بس بتوصّل الشحنة لفرع بوسطة الصح بدل مركز المحافظة.</div>
-        </div>
-        <div id="ar-body" style="flex:1;overflow-y:auto;padding:0 20px"><div style="padding:30px;text-align:center;color:var(--muted)">⏳ بيطابق...</div></div>
-        <div id="ar-foot" style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
-      </div>`;
-    document.body.appendChild(ov);
-    const close = v => { ov.remove(); resolve(v); };
-    ov.onclick = e => { if(e.target === ov) close(false); };
-
-    const body = ov.querySelector('#ar-body'), foot = ov.querySelector('#ar-foot');
-    let cities = [], items = [];
-    try{
-      const [cr, mr] = await Promise.all([
-        apiFetch('/api/bosta/cities','GET'),
-        apiFetch('/api/bosta/match-areas','POST',{ orderIds })
-      ]);
-      cities = cr?.cities || [];
-      if(mr?.needSync || !cities.length){
-        body.innerHTML = `<div style="padding:24px;text-align:center">
-            <div style="font-size:13px;margin-bottom:12px">مفيش مدن بوسطة محفوظة عندنا.</div>
-            <button class="btn btn-primary" onclick="awbSyncCities(this)">⬇️ اجلب المدن من بوسطة</button>
-            <div id="ar-sync" style="font-size:12px;color:var(--muted);margin-top:10px"></div>
-          </div>`;
-        foot.innerHTML = `<button class="btn" onclick="this.closest('div[style*=fixed]').remove()">إلغاء</button>`;
-        return;
-      }
-      items = mr?.items || [];
-      _arRates = mr?.shipRates || {};   // 💸 v673: سعر الشحن لكل محافظة
-    }catch(e){
-      body.innerHTML = `<div style="padding:30px;text-align:center;color:#dc2626">${escapeHtml(e.message)}</div>`;
-      foot.innerHTML = `<button class="btn" onclick="this.closest('div[style*=fixed]').remove()">إغلاق</button>`;
-      return;
-    }
-
-    const opts = sel => '<option value="">— اختار المدينة —</option>' +
-      cities.map(c => `<option value="${escapeHtml(c.id)}" data-n="${escapeHtml(c.name)}" ${c.id === sel ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
-
-    body.innerHTML = `<div class="tbl-wrap"><table style="width:100%;font-size:12px">
-        <thead><tr><th style="width:62px">الأوردر</th><th>المنطقة عندنا</th>
-          <th style="width:150px">المحافظة</th>
-          <th style="width:160px">المدينة <span style="font-weight:400;color:var(--muted)">(اختياري)</span></th>
-          <th style="width:130px">فرق الشحن</th>
-          <th style="width:85px">الحالة</th></tr></thead>
-        <tbody>${items.map(i => `
-          <tr data-oid="${escapeHtml(i.orderId)}" data-key="${escapeHtml(i.areaKey)}" data-area="${escapeHtml(i.area)}"
-              data-cust="${escapeHtml(i.custGovAr||'')}" data-paid="${i.paidShip||0}" data-total="${i.total||0}">
-            <td style="font-family:Roboto,sans-serif;font-weight:700">${i.num}</td>
-            <td><div>${escapeHtml(i.area || '—')}</div>
-                <div style="font-size:10px;color:var(--muted)">${escapeHtml((i.addr||'').slice(0,70))}</div></td>
-            <td><select class="form-input ar-city" style="width:100%;font-size:12px;padding:5px"
-                        onchange="arZones(this);arDiff(this)">${opts(i.suggestId)}</select>
-                ${i.custGovAr ? `<div style="font-size:10px;color:var(--muted);margin-top:3px">العميل اختار: ${escapeHtml(i.custGovAr)}</div>` : ''}</td>
-            <td><select class="form-input ar-zone" style="width:100%;font-size:12px;padding:5px"
-                        data-want="${escapeHtml(i.zoneId||'')}"><option value="">— كل المحافظة —</option></select></td>
-            <td class="ar-diff" style="font-size:11px"></td>
-            <td style="font-size:11px">${
-              i.source === 'محفوظ' ? '<span style="color:#16a34a">✅ محفوظ</span>'
-              : i.suggestId ? `<span style="color:${i.score>=90?'#16a34a':'#b45309'}">${i.score>=90?'✅':'⚠️'} ${escapeHtml(i.source)}</span>`
-              : `<span style="color:#dc2626">⬜ اختار</span>${i.nearest?`<div style="font-size:10px;color:var(--muted)">أقرب: ${escapeHtml(i.nearest)}</div>`:''}`
-            }</td>
-          </tr>`).join('')}</tbody></table></div>`;
-
-    // 🗺️ v672: عبّي المدن لكل صف عليه محافظة
-    body.querySelectorAll('tr[data-oid]').forEach(tr => {
-      const c = tr.querySelector('.ar-city');
-      if(c && c.value){ arZones(c); arDiff(c); }
-    });
-    const need = items.filter(i => !i.suggestId).length;
-    foot.innerHTML = `
-      <button class="btn btn-primary" id="ar-go">✅ أكّد واعمل البوالص</button>
-      <button class="btn" id="ar-cancel">إلغاء</button>
-      <span style="margin-right:auto;font-size:12px;color:var(--muted)">
-        ${items.length} طلب${need ? ` · <b style="color:#dc2626">${need} محتاج اختيار</b>` : ''}</span>
-      <div id="ar-msg" style="width:100%;font-size:12px;color:#dc2626"></div>`;
-    ov.querySelector('#ar-cancel').onclick = () => close(false);
-    ov.querySelector('#ar-go').onclick = async () => {
-      const rows = [...body.querySelectorAll('tr[data-oid]')];
-      const missing = rows.filter(r => !r.querySelector('.ar-city').value);
-      if(missing.length){
-        ov.querySelector('#ar-msg').textContent =
-          `❌ لسه ${missing.length} طلب من غير مدينة — اختارهم الأول`;
-        missing[0].scrollIntoView({ block:'center' });
-        return;
-      }
-      const map = rows.map(r => {
-        const sel = r.querySelector('.ar-city');
-        const zs  = r.querySelector('.ar-zone');
-        return { areaKey: r.dataset.key, area: r.dataset.area,
-                 cityId: sel.value, cityName: sel.selectedOptions[0]?.dataset.n || '',
-                 zoneId: zs?.value || null,
-                 zoneName: zs?.selectedOptions?.[0]?.dataset?.n || null };
-      });
-      try{ await apiFetch('/api/bosta/area-map','POST',{ map }); }
-      catch(e){ ov.querySelector('#ar-msg').textContent = '❌ ' + e.message; return; }
-
-      // 💸 v673: طبّق فروق الشحن اللي المستخدم علّم عليها
-      const diffs = rows.map(r => {
-        const cb = r.querySelector('.ar-apply');
-        return (cb && cb.checked && Number(cb.dataset.diff))
-          ? { orderId: r.dataset.oid, diff: Number(cb.dataset.diff) } : null;
-      }).filter(Boolean);
-      if(diffs.length){
-        try{
-          const d = await apiFetch('/api/bosta/apply-ship-diff','POST',{ items: diffs });
-          if(d?.ok) toast(`💸 ${d.updated.length} طلب اتعدّلت قيمته`);
-        }catch(e){ 
-          ov.querySelector('#ar-msg').textContent = '⚠️ المناطق اتحفظت بس فرق الشحن فشل: ' + e.message;
-          return;
-        }
-      }
-      close(true);
-    };
-  });
 }
 
 // 🗺️ v672: المدن بتتعبّى حسب المحافظة المختارة. بنكاش القايمة
