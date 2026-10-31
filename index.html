@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v689 — 🧪 اختبار تعديل التحصيل على شحنة قائمة (2026-10-31)
+  🧪 v689: زرار في إعدادات بوسطة بيجرّب لو تعديل التحصيل مسموح،
+     من غير ما يغيّر حاجة (بيبعت نفس القيمة الحالية). بيورّي رد
+     كل مسار اتجرّب عشان نعرف الصح.
+  OrderPro v688 — 🔎 بحث وفلاتر في عروض قرب الانتهاء (2026-10-31)
+  🔎 v688: بحث بالاسم/SKU/الباركود + فلتر النوع + فلتر الحالة
+     (مش هيخلص قبل الصلاحية / هيخلص / لسه بدري / تحت التكلفة)
+     + ترتيب (الأقرب انتهاءً، الأكتر رصيد، الأكتر بيعاً، الأبطأ).
+     كله على اللي محمّل — مفيش نداء للسيرفر مع كل حرف.
+  OrderPro v687 — 🧮 زرار تسوية الـ batches مع المبيع الحقيقي (2026-10-31)
+  🧮 v687: «احسب الفرق بالتفصيل» في صفحة الصلاحية — بيوريك لكل
+     منتج هيتخصم كام قبل ما ينفّذ أي حاجة، وزرار التنفيذ منفصل
+     وبتأكيد. الخصم بيتسجّل كأحداث فمش بيتكرر.
   OrderPro v686 — 🖼️ صورة الصنف في الصلاحية وعروض قرب الانتهاء (2026-10-31)
   🖼️ v686: صورة المنتج في الشاشتين. اللي مالوش صورة بياخد مربع
      بنفس المقاس عشان الصفوف ماترقصش، وفشل التحميل بيخفي الصورة
@@ -4850,6 +4863,27 @@ tr:hover td{background:#fafbff}
     </div>
 
 
+    <!-- 🧪 v689: هل بوسطة بتسمح بتعديل التحصيل؟ -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header">
+        <h3>🧪 تعديل التحصيل على شحنة قائمة — اختبار</h3>
+      </div>
+      <div class="card-body">
+        <div style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:10px">
+          قبل ما نبني تقسيم الطلب على بوالص، محتاجين نعرف لو بوسطة بتسمح بتعديل
+          التحصيل على شحنة اتعملت خلاص. الاختبار ده <b>بيبعت نفس التحصيل الحالي</b>
+          — يعني مابيغيّرش حاجة، بس بيقولنا لو مسموح ولا لأ.
+          <br>هات <code>deliveryId</code> من أي شحنة قائمة (عمود التتبع في شاشة بوسطة).
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="pcu-id" class="form-input" placeholder="deliveryId بتاع الشحنة"
+                 style="flex:1;min-width:220px;font-family:Roboto,monospace;font-size:12px">
+          <button class="btn btn-primary btn-sm" onclick="pcuProbe()">🧪 جرّب</button>
+        </div>
+        <div id="pcu-out" style="margin-top:10px;font-size:12px"></div>
+      </div>
+    </div>
+
     <!-- 📡 v668: ويبهوك بوسطة -->
     <div class="card" style="margin-bottom:16px">
       <div class="card-hd">
@@ -9437,6 +9471,35 @@ tr:hover td{background:#fafbff}
     <strong>مفيش أي رصيد بيتحرّك</strong>، والسعر بيرجع لوحده أول ما الكمية تخلص أو التاريخ يعدّي.
   </div>
 
+  <!-- 🔎 v688: بحث وفلاتر — بتشتغل على اللي محمّل من غير نداء جديد -->
+  <div class="card" style="margin-bottom:12px">
+    <div style="padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input id="neo-q" class="form-input" placeholder="🔎 ابحث باسم المنتج أو SKU أو الباركود..."
+             oninput="renderNeoList()" autocomplete="off"
+             style="flex:1;min-width:200px;font-size:12px;padding:6px 11px">
+      <select id="neo-f-kind" class="form-input" style="width:auto;font-size:12px" onchange="renderNeoList()">
+        <option value="">كل الأنواع</option>
+        <option value="near_expiry">⏳ قرب انتهاء</option>
+        <option value="best_before">📅 Best Before</option>
+      </select>
+      <select id="neo-f-risk" class="form-input" style="width:auto;font-size:12px" onchange="renderNeoList()">
+        <option value="">كل الحالات</option>
+        <option value="bad">⚠️ مش هيخلص قبل الصلاحية</option>
+        <option value="good">✅ هيخلص قبل الصلاحية</option>
+        <option value="early">🕐 لسه بدري</option>
+        <option value="loss">💸 تحت التكلفة</option>
+      </select>
+      <select id="neo-f-sort" class="form-input" style="width:auto;font-size:12px" onchange="renderNeoList()">
+        <option value="exp">⏳ الأقرب انتهاءً</option>
+        <option value="stock">📦 الأكتر رصيد</option>
+        <option value="sold">🔥 الأكتر بيعاً</option>
+        <option value="slow">🐌 الأبطأ</option>
+      </select>
+      <button class="btn btn-ghost btn-sm" onclick="neoClearFilters()">✖️ مسح</button>
+      <span id="neo-count" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+  </div>
+
   <div id="neo-list"><div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div></div>
 </div>
 
@@ -9485,8 +9548,11 @@ tr:hover td{background:#fafbff}
         <input type="number" id="exp-diag-days" value="60" min="1" max="365"
                style="width:56px;padding:4px;border:1px solid var(--border);border-radius:6px;text-align:center;font-family:Cairo,sans-serif"> يوم</label>
       <span style="font-size:11px;color:var(--muted)">بيقارن المبيع الحقيقي بالمخصوم من الـ batches</span>
+      <button class="btn btn-sm" style="background:#b45309;color:#fff;font-weight:700" onclick="expRecon(false)">
+        🧮 احسب الفرق بالتفصيل</button>
     </div>
     <div id="exp-diag" style="padding:0 14px 14px"></div>
+    <div id="exp-recon" style="padding:0 14px 14px"></div>
   </div>
 
   <!-- Controls -->
@@ -16207,6 +16273,36 @@ async function awbSyncCities(btn){
       : `❌ ${escapeHtml(r?.error || 'فشل')}${r?.sample ? `<div style="font-size:10px;direction:ltr;text-align:left;margin-top:6px">${escapeHtml(String(r.sample).slice(0,300))}</div>` : ''}`;
   }catch(e){ if(box) box.textContent = '❌ ' + e.message; }
   btn.disabled = false;
+}
+
+// 🧪 v689: اختبار تعديل التحصيل. بيبعت نفس القيمة الحالية فمفيش
+//   تغيير فعلي — الهدف نعرف لو الـ endpoint مسموح أصلاً.
+async function pcuProbe(){
+  const out = $('pcu-out');
+  const id = ($('pcu-id')?.value || '').trim();
+  if(!id){ out.innerHTML = '<span style="color:#dc2626">اكتب deliveryId</span>'; return; }
+  out.innerHTML = '<span style="color:var(--muted)">⏳ بيجرّب…</span>';
+  try{
+    const r = await apiFetch('/api/bosta/probe-cod-update', 'POST', { deliveryId: id });
+    if(!r){ out.innerHTML = '<span style="color:#dc2626">مفيش رد</span>'; return; }
+    const rows = (r.tried || []).map(t =>
+      `<div style="font-family:Roboto,monospace;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)">
+         <b>${escapeHtml(t.method)}</b> ${escapeHtml(t.path)} →
+         <span style="color:${t.status>=200&&t.status<300?'#16a34a':'#dc2626'}">${t.status ?? 'خطأ'}</span>
+         ${t.error ? ' · ' + escapeHtml(t.error) : ''}
+         ${t.body ? `<div style="color:var(--muted);word-break:break-all">${escapeHtml(t.body)}</div>` : ''}
+       </div>`).join('');
+    out.innerHTML = `
+      <div style="background:${r.ok?'#dcfce7':'#fef2f2'};color:${r.ok?'#166534':'#991b1b'};
+                  border-radius:8px;padding:10px 12px;font-weight:700;margin-bottom:8px">
+        ${escapeHtml(r.verdict || r.error || '')}
+      </div>
+      ${r.state ? `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">
+        حالة الشحنة: <b>${escapeHtml(String(r.state))}</b> ·
+        التحصيل قبل: <b>${r.currentCod ?? '؟'}</b> ·
+        بعد: <b>${r.codAfter ?? '؟'}</b></div>` : ''}
+      ${rows ? `<div style="background:var(--bg);border-radius:8px;padding:8px 10px">${rows}</div>` : ''}`;
+  }catch(e){ out.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; }
 }
 
 // 📡 v668: لوحة ويبهوك بوسطة
@@ -47942,6 +48038,62 @@ async function loadNeoPage(){
   }
 }
 
+// 🔎 v688: الفلترة والترتيب. بتشتغل على _neoOffers المحمّلة —
+//   مفيش نداء جديد لكل حرف.
+function neoClearFilters(){
+  for(const [id, v] of [['neo-q',''],['neo-f-kind',''],['neo-f-risk',''],['neo-f-sort','exp']]){
+    const e = document.getElementById(id); if(e) e.value = v;
+  }
+  renderNeoList();
+}
+
+function _neoRisk(o){
+  const limit = parseInt(o.qty_limit) || 0;
+  const sold  = parseInt(o.sold_qty) || 0;
+  const days  = o.days_to_exp == null ? null : parseInt(o.days_to_exp);
+  const run   = Math.max(1, parseInt(o.days_running) || 1);
+  if(run < 3) return 'early';                       // المعدل لسه مش باين
+  const rate  = sold / run;                          // قطعة/يوم
+  const left  = Math.max(0, limit - sold);
+  if(days == null) return 'good';
+  const need  = left / Math.max(0.0001, rate);
+  return need <= days ? 'good' : 'bad';
+}
+
+function _neoFiltered(){
+  const q    = (document.getElementById('neo-q')?.value || '').trim().toLowerCase();
+  const kind = document.getElementById('neo-f-kind')?.value || '';
+  const risk = document.getElementById('neo-f-risk')?.value || '';
+  const sort = document.getElementById('neo-f-sort')?.value || 'exp';
+  let rows = (_neoOffers || []).filter(o => {
+    if(q){
+      const hay = [o.product_title, o.variant_title, o.sku, o.barcode]
+        .map(x => String(x||'').toLowerCase()).join(' ');
+      if(!hay.includes(q)) return false;
+    }
+    if(kind && String(o.kind||'') !== kind) return false;
+    if(risk){
+      if(risk === 'loss'){
+        const c = Number(o.cost)||0, pr = Number(o.offer_price)||0;
+        if(!(c > 0 && pr < c)) return false;
+      } else if(_neoRisk(o) !== risk) return false;
+    }
+    return true;
+  });
+  const num = v => Number(v)||0;
+  rows = rows.slice().sort((a,b) => {
+    if(sort === 'stock') return num(b.stock_now) - num(a.stock_now);
+    if(sort === 'sold')  return num(b.sold_qty)  - num(a.sold_qty);
+    if(sort === 'slow'){
+      const r = o => num(o.sold_qty) / Math.max(1, num(o.days_running));
+      return r(a) - r(b);
+    }
+    const d = o => o.days_to_exp == null ? 99999 : num(o.days_to_exp);
+    return d(a) - d(b);
+  });
+  return rows;
+}
+
 function renderNeoList(){
   const box = document.getElementById('neo-list');
   if(!_neoOffers.length){
@@ -47958,7 +48110,21 @@ function renderNeoList(){
     expired:   { t: '📅 التاريخ عدّى', c: '#ca8a04' },
     cancelled: { t: '🚫 أُنهي يدوي',   c: '#6d7175' }
   };
-  box.innerHTML = _neoOffers.map(o => {
+  // 🔎 v688
+  const rows = _neoFiltered();
+  const cnt = document.getElementById('neo-count');
+  if(cnt) cnt.textContent = rows.length === _neoOffers.length
+    ? `${_neoOffers.length} عرض`
+    : `${rows.length} من ${_neoOffers.length}`;
+  if(!rows.length){
+    box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">
+      <div style="font-size:36px;opacity:.4">🔍</div>
+      <div style="font-weight:700;margin-top:8px">مفيش عرض بالفلاتر دي</div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="neoClearFilters()">✖️ امسح الفلاتر</button>
+    </div>`;
+    return;
+  }
+  box.innerHTML = rows.map(o => {
     const st = stLabel[o.status] || { t: o.status, c: '#6d7175' };
     const sold = parseInt(o.sold_qty) || 0;
     const limit = parseInt(o.qty_limit) || 0;
@@ -48330,6 +48496,67 @@ async function neoCheckNow(){
 //   بيعرض الحقيقة بالأرقام بدل ما نفترض: نوع العمود، عدد أحداث
 //   البيع المسجّلة، والمبيع الحقيقي مقابل المخصوم لكل منتج.
 // ══════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════
+// 🧮 v687: تسوية الـ batches. بيعرض الأول (apply=false) وماينفّذش
+//   غير لما تدوس تاني وتأكّد — الخصم مابيترجعش.
+// ══════════════════════════════════════════════════════════════
+let _reconPreview = null;
+
+async function expRecon(apply){
+  const box = $('exp-recon'); if(!box) return;
+  if(apply){
+    const n = _reconPreview?.totalMissing || 0;
+    if(!n){ toast('مفيش حاجة تتخصم'); return; }
+    if(!confirm(`🧮 هيتخصم ${n.toLocaleString('ar-EG')} قطعة من الـ batches على ${_reconPreview.rows.filter(r=>r.willDeduct>0).length} منتج.\n\n`
+      + `ده بيصلّح الأرقام بأثر رجعي عشان الخصم ماشتغلش من الأول.\n`
+      + `الخصم بيتسجّل كأحداث، فلو شغّلتها تاني مش هتخصم تاني.\n\n`
+      + `مفيش زرار تراجع. تمام؟`)) return;
+  }
+  box.innerHTML = `<div style="padding:16px;text-align:center;color:var(--muted)">⏳ ${apply?'بيخصم…':'بيحسب…'}</div>`;
+  try{
+    const r = await apiFetch('/api/product-batches/reconcile', 'POST', { apply: !!apply });
+    if(!r || r.error){
+      box.innerHTML = `<div style="padding:14px;color:#dc2626">❌ ${escapeHtml(String(r&&r.error||'فشل'))}`
+        + `<div style="font-size:11px;color:var(--muted);margin-top:4px">لو 404 يبقى الباك إند لسه مش v645</div></div>`;
+      return;
+    }
+    if(!apply) _reconPreview = r;
+    const n = v => Number(v||0).toLocaleString('ar-EG');
+    const rows = (r.rows||[]).filter(x => (x.willDeduct||0) > 0 || (x.capped||0) > 0);
+
+    box.innerHTML = `
+      <div style="background:${apply?'#dcfce7':'#fef3c7'};color:${apply?'#166534':'#92400e'};border-radius:8px;padding:11px 13px;font-size:12.5px;font-weight:700;margin-bottom:10px">
+        ${apply
+          ? `✅ اتخصم ${n(r.totalApplied)} قطعة على ${n(rows.length)} منتج. الأرقام بقت مظبوطة.`
+          : `🧮 محتاج يتخصم <b>${n(r.totalMissing)}</b> قطعة على <b>${n(rows.length)}</b> منتج — ده عرض بس، مااتخصمش حاجة.`}
+        ${r.overSold ? `<div style="font-weight:400;margin-top:4px">⚠️ ${n(r.overSold)} منتج اتباع منه أكتر من اللي في الـ batches — هيتخصم للصفر بس، والباقي محتاج مراجعة يدوية.</div>` : ''}
+      </div>
+      ${!apply && r.totalMissing ? `<button class="btn" style="background:#dc2626;color:#fff;font-weight:800;margin-bottom:10px" onclick="expRecon(true)">⚠️ نفّذ الخصم (${n(r.totalMissing)} قطعة)</button>` : ''}
+      ${!rows.length ? '<div style="padding:12px;color:#16a34a;font-size:12px">✅ كل الـ batches مظبوطة</div>' : `
+      <div style="overflow-x:auto;max-height:420px;overflow-y:auto"><table style="width:100%;font-size:12px;border-collapse:collapse">
+        <thead><tr style="border-bottom:2px solid var(--border);position:sticky;top:0;background:var(--card)">
+          <th style="text-align:right;padding:7px">المنتج</th>
+          <th style="width:80px;padding:7px">في الـ batches</th>
+          <th style="width:80px;padding:7px">اتباع</th>
+          <th style="width:80px;padding:7px">${apply?'اتخصم':'هيتخصم'}</th>
+          <th style="width:90px;padding:7px">زيادة</th>
+        </tr></thead><tbody>
+        ${rows.slice(0,100).map(x => `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:7px"><strong>${escapeHtml(x.title||x.sku||'؟')}</strong>
+            <div style="font-size:10px;color:var(--muted);font-family:monospace">${escapeHtml(x.sku||x.barcode||'')} · ${x.batches} batch</div></td>
+          <td style="padding:7px;text-align:center">${n(x.have)}</td>
+          <td style="padding:7px;text-align:center">${n(x.sold)}</td>
+          <td style="padding:7px;text-align:center;font-weight:800;color:#b45309">${n(apply ? (x.applied||0) : x.willDeduct)}</td>
+          <td style="padding:7px;text-align:center;color:${x.capped?'#dc2626':'var(--muted)'}">${x.capped?n(x.capped):'—'}</td>
+        </tr>`).join('')}
+        </tbody></table></div>`}`;
+    if(apply){ _reconPreview = null; loadBatchesPage(); }
+  }catch(e){
+    box.innerHTML = `<div style="padding:14px;color:#dc2626">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
 async function expDiag(){
   const box = $('exp-diag'); if(!box) return;
   const days = parseInt($('exp-diag-days')?.value) || 60;
