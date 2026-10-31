@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v693 — 💰 اختيار توزيع التحصيل + 📦 الطلب المدفوع أسهل (2026-10-31)
+  💰 v693: قايمة في شاشة التقسيم: بنسبة القيمة · البضاعة + الشحن
+     بالتساوي · التحصيل كله بالتساوي. وزرار «خليه الافتراضي» بيحفظ
+     اختيارك لكل الطلبات بدل ما تختار كل مرة.
+  📦 v693: الطلب المدفوع — التوزيع بقى اختياري والأصناف بتتوزّع
+     تلقائياً (عشان وصف البوليصة)، تدوس حفظ على طول.
+  OrderPro v692 — 💰 الشحن بالتساوي + 🐛 شاشة التقسيم كانت ورا البوالص (2026-10-31)
+  🐛 v692: مودال التقسيم كان z-index:1000 (من كلاس .overlay) وشاشة
+     البوالص 10002 — فكان بيفتح وراها. بقى 10010.
+  💰 v692: الشحن بيتقسم بالتساوي على الكراتين مش بالنسبة، وبقى
+     بيتعرض كسطر مستقل تحت التحصيل عشان تشوف نصيب كل كرتونة.
   OrderPro v691 — 📦 شاشة تقسيم الطلب على بوالص (2026-10-31)
   📦 v691: زرار «قسّم» في شاشة مراجعة البوالص. بتوزّع أصناف الطلب
      على الكراتين، والتحصيل بيتحسب لحظياً بنسبة قيمة كل كرتونة.
@@ -9781,7 +9792,7 @@ tr:hover td{background:#fafbff}
 </div></div>
 
 <!-- 📦 v691: تقسيم الطلب على بوالص -->
-<div class="overlay" id="m-osh"><div class="modal" style="max-width:900px">
+<div class="overlay" id="m-osh" style="z-index:10010"><div class="modal" style="max-width:900px">
   <div class="mhd">
     <h3>📦 تقسيم الطلب على بوالص</h3>
     <button class="xbtn" onclick="closeM('m-osh')">✕</button>
@@ -15957,7 +15968,11 @@ async function oshOpen(orderId){
         { seq:2, note:'', items: {} },
       ];
     }
-    oshRender();
+    _oshMode = r.shipMode || r.defaultMode || 'value';
+    // 📦 v693: الطلب المدفوع — التوزيع مالوش أثر على الفلوس، فبنوزّع
+    //   تلقائياً عشان كل بوليصة يبقى ليها وصف مفهوم للمندوب، والمستخدم
+    //   يدوس حفظ على طول.
+    if(!(r.orderCod > 0) && !r.shipments.length) oshSpread(); else oshRender();
   }catch(e){ body.innerHTML = `<div style="padding:20px;color:#dc2626">❌ ${escapeHtml(e.message)}</div>`; }
 }
 
@@ -15970,22 +15985,62 @@ function _oshBoxVal(b){
 function _oshAssigned(idx){
   return _oshBoxes.reduce((s,b) => s + (parseInt(b.items[idx])||0), 0);
 }
-// نفس حساب الباك إند بالظبط — عشان اللي على الشاشة هو اللي هيتحفظ
+// نفس حساب الباك إند بالحرف — عشان اللي على الشاشة هو اللي هيتحفظ
+// 💰 v693: تلات أوضاع — value / ship_equal / all_equal
+let _oshMode = 'value';
 function _oshCods(){
+  const n = _oshBoxes.length;
   const vals = _oshBoxes.map(_oshBoxVal);
-  const total = vals.reduce((a,b)=>a+b,0);
   const cod = _osh.orderCod;
+  if(!n) return [];
   if(!(cod > 0)) return vals.map(()=>0);
-  if(!(total > 0)){
-    const each = Math.floor((cod/_oshBoxes.length)*100)/100;
+  const even = () => {
+    const each = Math.floor((cod/n)*100)/100;
     const out = _oshBoxes.map(()=>each);
-    out[0] = Math.round((cod - each*(_oshBoxes.length-1))*100)/100;
+    out[0] = Math.round((cod - each*(n-1))*100)/100;
     return out;
-  }
-  const out = vals.map(v => Math.floor((v/total)*cod*100)/100);
+  };
+  if(_oshMode === 'all_equal') return even();
+  const goods = vals.reduce((a,b)=>a+b,0);
+  if(!(goods > 0)) return even();
+  const extra = cod - goods;
+  const out = _oshMode === 'ship_equal'
+    ? vals.map(v => Math.floor((v + extra/n)*100)/100)
+    : vals.map(v => Math.floor((v/goods)*cod*100)/100);
   const s = out.reduce((a,b)=>a+b,0);
   out[0] = Math.round((out[0] + (cod - s))*100)/100;
   return out;
+}
+
+const _OSH_MODE_LBL = {
+  value:      'بنسبة قيمة كل كرتونة',
+  ship_equal: 'البضاعة بقيمتها + الشحن بالتساوي',
+  all_equal:  'التحصيل كله بالتساوي',
+};
+function oshSetMode(m){ _oshMode = m; oshRender(); }
+async function oshMakeDefault(){
+  try{
+    await apiFetch('/api/orders/shipments/default','POST',{ mode:_oshMode });
+    if(_osh) _osh.defaultMode = _oshMode;
+    toast('✅ بقى الافتراضي لكل الطلبات');
+    oshRender();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+// صيغة العدد بالعربي: ٢ مثنى، ٣-١٠ جمع، ١١+ مفرد
+function _oshBoxWord(n){
+  return n === 2 ? 'كرتونتين' : (n <= 10 ? `${n} كراتين` : `${n} كرتونة`);
+}
+
+// نصيب الكرتونة من الشحن — للعرض
+function _oshShipShare(){
+  const n = _oshBoxes.length; if(!n) return 0;
+  const goods = _oshBoxes.map(_oshBoxVal).reduce((a,b)=>a+b,0);
+  return (_osh.orderCod - goods) / n;
+}
+// الفرق بين التحصيل وقيمة البضاعة = شحن (أو خصم لو بالسالب)
+function _oshExtra(){
+  const goods = _oshBoxes.map(_oshBoxVal).reduce((a,b)=>a+b,0);
+  return (_osh?.orderCod || 0) - goods;
 }
 
 function oshSet(seq, idx, val){
@@ -16039,14 +16094,17 @@ function oshRefresh(){
     if(row) row.style.background = ok ? '' : '#fff7ed';
   }
   const cods = _oshCods();
+  const sh = _oshShipShare();
+  document.querySelectorAll('.osh-ship').forEach(e => { e.textContent = money(sh); });
   cods.forEach((c,i) => {
     const cell = document.getElementById(`osh-cod-${i}`);
     if(cell) cell.innerHTML = `${money(c)}
       <div style="font-size:10px;color:var(--muted);font-weight:400">${
         Object.values(_oshBoxes[i].items).reduce((a,b)=>a+b,0)} قطعة</div>`;
   });
-  const bad = _osh.items.filter(i => _oshAssigned(i.idx) !== i.qty);
-  const empty = _oshBoxes.filter(b => !Object.keys(b.items).length);
+  const paid = !(_osh.orderCod > 0);
+  const bad = paid ? [] : _osh.items.filter(i => _oshAssigned(i.idx) !== i.qty);
+  const empty = paid ? [] : _oshBoxes.filter(b => !Object.keys(b.items).length);
   const msg = document.getElementById('osh-msg');
   if(msg){
     if(bad.length || empty.length){
@@ -16099,12 +16157,16 @@ function oshSpread(){
 function oshRender(){
   const body = $('osh-body'), foot = $('osh-foot');
   if(!_osh) return;
+  // 📦 v693: الطلب المدفوع تحصيله صفر على كل بوليصة، فالتوزيع
+  //   مالوش أثر على الفلوس — التحقق بيترخّى والشاشة بتقول كده.
+  const paid = !(_osh.orderCod > 0);
   const cods = _oshCods();
   const money = v => (Math.round(v*100)/100).toLocaleString('ar-EG', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ج';
 
   // كل صنف اتوزّع بالكامل؟
-  const bad = _osh.items.filter(i => _oshAssigned(i.idx) !== i.qty);
-  const empty = _oshBoxes.filter(b => !Object.keys(b.items).length);
+  const bad = paid ? [] : _osh.items.filter(i => _oshAssigned(i.idx) !== i.qty);
+  const empty = paid ? [] : _oshBoxes.filter(b => !Object.keys(b.items).length);
+  const over = _osh.items.filter(i => _oshAssigned(i.idx) > i.qty);
 
   body.innerHTML = `
     <div style="background:var(--bg);border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:12px">
@@ -16112,11 +16174,22 @@ function oshRender(){
       إجمالي الطلب <b>${money(_osh.order.total)}</b> ·
       التحصيل <b style="color:#b45309">${_osh.orderCod > 0 ? money(_osh.orderCod) : 'مدفوع — صفر'}</b>
       ${_osh.hasAwbs ? '<br><span style="color:#b45309">⚠️ فيه بوليصة اتعملت خلاص — تعديل تحصيلها هيحتاج إعادة طباعة.</span>' : ''}
+      ${paid ? '<br><span style="color:#166534">✅ الطلب مدفوع — كل البوالص تحصيلها صفر. التوزيع اختياري، للوصف على البوليصة بس.</span>' : ''}
     </div>
 
-    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-ghost btn-sm" onclick="oshAddBox()">➕ كرتونة</button>
       <button class="btn btn-ghost btn-sm" onclick="oshSpread()">⚖️ وزّع بالتساوي</button>
+      ${paid ? '' : `
+      <span style="margin-inline-start:auto;font-size:11px;color:var(--muted)">توزيع التحصيل</span>
+      <select onchange="oshSetMode(this.value)"
+              style="padding:5px 9px;border:1px solid var(--border);border-radius:7px;font-family:Cairo,sans-serif;font-size:11.5px;font-weight:700;cursor:pointer">
+        ${Object.entries(_OSH_MODE_LBL).map(([k,v]) =>
+          `<option value="${k}" ${_oshMode===k?'selected':''}>${v}</option>`).join('')}
+      </select>
+      ${_oshMode !== (_osh.defaultMode||'value')
+        ? `<button class="btn btn-ghost btn-xs" onclick="oshMakeDefault()" title="يبقى الافتراضي لكل الطلبات">📌 خليه الافتراضي</button>`
+        : `<span style="font-size:10px;color:#16a34a">الافتراضي</span>`}`}
     </div>
 
     <div style="overflow-x:auto">
@@ -16158,6 +16231,10 @@ function oshRender(){
             <div style="font-size:10px;color:var(--muted);font-weight:400">${Object.values(_oshBoxes[i].items).reduce((a,b)=>a+b,0)} قطعة</div>
           </td>`).join('')}
         </tr>
+        <tr style="font-size:11px;color:var(--muted);${(_oshMode==='ship_equal' && !paid)?'':'display:none'}">
+          <td style="padding:6px 9px" colspan="2">منها ${_oshExtra()>=0?'شحن':'خصم'} — بالتساوي على ${_oshBoxWord(_oshBoxes.length)}</td>
+          ${_oshBoxes.map(() => `<td style="padding:6px;text-align:center" class="osh-ship">${money(_oshShipShare())}</td>`).join('')}
+        </tr>
       </tbody>
     </table></div>
 
@@ -16182,7 +16259,8 @@ async function oshSave(){
     items: Object.entries(b.items).map(([idx,qty]) => ({ idx:Number(idx), qty:parseInt(qty)||0 })),
   }));
   try{
-    const r = await apiFetch(`/api/orders/${encodeURIComponent(_osh.order.id)}/shipments/plan`, 'POST', { boxes });
+    const r = await apiFetch(`/api/orders/${encodeURIComponent(_osh.order.id)}/shipments/plan`, 'POST',
+      { boxes, shipMode: _oshMode });
     if(!r || !r.ok){ toast('❌ ' + (r?.error || 'فشل')); return; }
     toast(`💾 اتحفظ — ${r.shipments.length} كرتونة`
       + (r.needReprint ? ` · ${r.needReprint} بوليصة محتاجة إعادة طباعة` : ''));
