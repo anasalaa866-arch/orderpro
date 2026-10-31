@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v691 — 📦 شاشة تقسيم الطلب على بوالص (2026-10-31)
+  📦 v691: زرار «قسّم» في شاشة مراجعة البوالص. بتوزّع أصناف الطلب
+     على الكراتين، والتحصيل بيتحسب لحظياً بنسبة قيمة كل كرتونة.
+     الحفظ مقفول لحد ما كل صنف يتوزّع بالكامل ومفيش كرتونة فاضية.
+  🐛 v691: خانة الكمية كانت بتقصّ على المتبقي — فنقل صنف من كرتونة
+     لكرتونة كان محتاج تصفّر الأولى الأول. دلوقتي بينقل لوحده.
+  🐛 v691: الجدول كان بيتبني من أول مع كل رقم — فالمستخدم بيفقد
+     مكانه وهو بيوزّع. بقى بيحدّث الأرقام المتغيّرة بس.
   OrderPro v690 — 🔑 المجسّ بيجيب الـ _id بنفسه (2026-10-31)
   🔑 v690: الاختبار بقى يورّي الـ _id الحقيقي ورقم التتبع، وبيقول
      لو اللي كتبته كان رقم تتبع. بيجرّب بالاتنين.
@@ -9772,6 +9780,18 @@ tr:hover td{background:#fafbff}
   </div>
 </div></div>
 
+<!-- 📦 v691: تقسيم الطلب على بوالص -->
+<div class="overlay" id="m-osh"><div class="modal" style="max-width:900px">
+  <div class="mhd">
+    <h3>📦 تقسيم الطلب على بوالص</h3>
+    <button class="xbtn" onclick="closeM('m-osh')">✕</button>
+  </div>
+  <div class="mbd" id="osh-body">
+    <div style="padding:30px;text-align:center;color:var(--muted)">⏳</div>
+  </div>
+  <div class="mft" id="osh-foot"></div>
+</div></div>
+
 <div class="overlay" id="m-order"><div class="modal">
   <div class="mhd"><h3>📦 إضافة طلب جديد</h3><button class="xbtn" onclick="closeM('m-order')">✕</button></div>
   <div class="mbd">
@@ -15879,7 +15899,9 @@ async function awbLoad(){
             <td>${_awbFails[i.orderId]
                   ? `<span style="color:#dc2626;font-weight:700" title="${escapeHtml(_awbFails[i.orderId])}">❌ فشل</span>`
                   : (i.needsCreate ? '<span style="color:#4f46e5;font-weight:700">هتتعمل</span>'
-                  : (i.hasAwb ? '✅' : '<span style="color:#b45309">هتتجاب</span>'))}</td>
+                  : (i.hasAwb ? '✅' : '<span style="color:#b45309">هتتجاب</span>'))}
+              <div><button class="btn btn-ghost btn-xs" style="margin-top:3px;white-space:nowrap"
+                 onclick="oshOpen('${escapeHtml(i.orderId)}')" title="الطلب على أكتر من كرتونة؟">📦 قسّم</button></div></td>
           </tr>`; }).join('')}</tbody>
       </table></div>`;
 
@@ -15904,6 +15926,283 @@ async function awbLoad(){
     body.innerHTML = `<div style="padding:30px;text-align:center;color:#dc2626">${escapeHtml(e.message)}</div>`;
   }
 }
+
+// ══════════════════════════════════════════════════════════════
+// 📦 v691: تقسيم الطلب على بوالص
+//   التحصيل بيتحسب بنسبة قيمة اللي جوا كل كرتونة — عشان لو العميل
+//   رفض كرتونة، اللي ماتحصّلش يبقى بالظبط قيمة اللي رجع.
+//   ده تخطيط بس — مفيش أي نداء لبوسطة من الشاشة دي.
+// ══════════════════════════════════════════════════════════════
+let _osh = null;          // { order, items, orderCod, shipments, hasAwbs }
+let _oshBoxes = [];       // [{ seq, items:{idx:qty}, note }]
+
+async function oshOpen(orderId){
+  openM('m-osh');
+  const body = $('osh-body'); const foot = $('osh-foot');
+  body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">⏳ بيحمّل الطلب…</div>';
+  foot.innerHTML = '';
+  try{
+    const r = await apiFetch(`/api/orders/${encodeURIComponent(orderId)}/shipments`, 'GET');
+    if(!r || !r.ok){ body.innerHTML = `<div style="padding:20px;color:#dc2626">❌ ${escapeHtml(r?.error||'فشل')}</div>`; return; }
+    _osh = r;
+    // خطة محفوظة؟ حمّلها. غير كده ابدأ بكرتونتين والكل في الأولى.
+    if(r.shipments.length >= 2){
+      _oshBoxes = r.shipments.map(sh => ({
+        seq: sh.seq, note: sh.note || '', locked: !!sh.bosta_id,
+        items: Object.fromEntries((sh.items||[]).map(x => [x.idx, x.qty])),
+      }));
+    } else {
+      _oshBoxes = [
+        { seq:1, note:'', items: Object.fromEntries(r.items.map(i => [i.idx, i.qty])) },
+        { seq:2, note:'', items: {} },
+      ];
+    }
+    oshRender();
+  }catch(e){ body.innerHTML = `<div style="padding:20px;color:#dc2626">❌ ${escapeHtml(e.message)}</div>`; }
+}
+
+function _oshBoxVal(b){
+  return Object.entries(b.items).reduce((s,[idx,q]) => {
+    const it = _osh.items.find(i => i.idx === Number(idx));
+    return s + (it ? it.price * (parseInt(q)||0) : 0);
+  }, 0);
+}
+function _oshAssigned(idx){
+  return _oshBoxes.reduce((s,b) => s + (parseInt(b.items[idx])||0), 0);
+}
+// نفس حساب الباك إند بالظبط — عشان اللي على الشاشة هو اللي هيتحفظ
+function _oshCods(){
+  const vals = _oshBoxes.map(_oshBoxVal);
+  const total = vals.reduce((a,b)=>a+b,0);
+  const cod = _osh.orderCod;
+  if(!(cod > 0)) return vals.map(()=>0);
+  if(!(total > 0)){
+    const each = Math.floor((cod/_oshBoxes.length)*100)/100;
+    const out = _oshBoxes.map(()=>each);
+    out[0] = Math.round((cod - each*(_oshBoxes.length-1))*100)/100;
+    return out;
+  }
+  const out = vals.map(v => Math.floor((v/total)*cod*100)/100);
+  const s = out.reduce((a,b)=>a+b,0);
+  out[0] = Math.round((out[0] + (cod - s))*100)/100;
+  return out;
+}
+
+function oshSet(seq, idx, val){
+  const b = _oshBoxes.find(x => x.seq === seq); if(!b) return;
+  const it = _osh.items.find(i => i.idx === idx); if(!it) return;
+  // 🐛 v691: كان بيقصّ على المتبقي — فلو عايز تنقل صنف من كرتونة
+  //   لكرتونة كان لازم تصفّر الأولى الأول وإلا بيرجع صفر.
+  //   دلوقتي بياخد لحد كمية الصنف، والزيادة بتتشال من الكراتين
+  //   التانية (من الآخر للأول) — النقل بقى حركة واحدة.
+  let v = Math.min(Math.max(0, parseInt(val) || 0), it.qty);
+  if(v) b.items[idx] = v; else delete b.items[idx];
+
+  let over = _oshAssigned(idx) - it.qty;
+  if(over > 0){
+    for(let i = _oshBoxes.length - 1; i >= 0 && over > 0; i--){
+      const o = _oshBoxes[i];
+      if(o.seq === seq || o.locked) continue;      // المقفولة ليها بوليصة
+      const have = parseInt(o.items[idx]) || 0;
+      if(!have) continue;
+      const take = Math.min(have, over);
+      if(have - take) o.items[idx] = have - take; else delete o.items[idx];
+      over -= take;
+      const el = document.getElementById(`osh-i-${o.seq}-${idx}`);
+      if(el) el.value = o.items[idx] || 0;
+    }
+    // لسه زيادة؟ يبقى الباقي كله في كراتين مقفولة — قصّ اللي كتبناه
+    if(over > 0){
+      const now = Math.max(0, v - over);
+      if(now) b.items[idx] = now; else delete b.items[idx];
+      v = now;
+    }
+  }
+  // 🐛 v691: كان بيعيد بناء الجدول كله مع كل رقم — فالمستخدم
+  //   بيفقد مكانه وهو بيوزّع. دلوقتي بنحدّث الأرقام المتغيّرة بس.
+  const inp = document.getElementById(`osh-i-${seq}-${idx}`);
+  if(inp && String(v) !== inp.value) inp.value = v;
+  oshRefresh();
+}
+
+// بيحدّث الأرقام والتحقق من غير ما يلمس خانات الإدخال
+function oshRefresh(){
+  if(!_osh) return;
+  const money = v => (Math.round(v*100)/100).toLocaleString('ar-EG',
+    {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ج';
+  for(const it of _osh.items){
+    const a = _oshAssigned(it.idx), ok = a === it.qty;
+    const badge = document.getElementById(`osh-a-${it.idx}`);
+    if(badge){ badge.textContent = ok ? '✓' : 'موزّع ' + a;
+               badge.style.color = ok ? '#16a34a' : '#dc2626'; }
+    const row = document.getElementById(`osh-r-${it.idx}`);
+    if(row) row.style.background = ok ? '' : '#fff7ed';
+  }
+  const cods = _oshCods();
+  cods.forEach((c,i) => {
+    const cell = document.getElementById(`osh-cod-${i}`);
+    if(cell) cell.innerHTML = `${money(c)}
+      <div style="font-size:10px;color:var(--muted);font-weight:400">${
+        Object.values(_oshBoxes[i].items).reduce((a,b)=>a+b,0)} قطعة</div>`;
+  });
+  const bad = _osh.items.filter(i => _oshAssigned(i.idx) !== i.qty);
+  const empty = _oshBoxes.filter(b => !Object.keys(b.items).length);
+  const msg = document.getElementById('osh-msg');
+  if(msg){
+    if(bad.length || empty.length){
+      msg.style.cssText = 'background:#fef2f2;color:#991b1b;border-radius:8px;padding:9px 12px;font-size:12px;margin-top:10px';
+      msg.innerHTML = bad.map(i => `• <b>${escapeHtml(i.name)}</b>: موزّع ${_oshAssigned(i.idx)} من ${i.qty}`).join('<br>')
+        + (empty.length ? `${bad.length?'<br>':''}• كرتونة ${empty.map(b=>b.seq).join(' و')} فاضية` : '');
+    } else {
+      msg.style.cssText = 'background:#dcfce7;color:#166534;border-radius:8px;padding:9px 12px;font-size:12px;margin-top:10px';
+      msg.innerHTML = `✅ كل الأصناف موزّعة · مجموع التحصيل ${money(cods.reduce((a,b)=>a+b,0))} = تحصيل الطلب`;
+    }
+  }
+  const btn = document.getElementById('osh-save');
+  if(btn){
+    const ready = !bad.length && !empty.length;
+    btn.disabled = !ready;
+    btn.style.cssText = ready ? '' : 'opacity:.5;cursor:not-allowed';
+  }
+}
+function oshAddBox(){
+  if(_oshBoxes.length >= 6){ toast('أقصى ٦ كراتين'); return; }
+  _oshBoxes.push({ seq:_oshBoxes.length+1, note:'', items:{} });
+  oshRender();
+}
+function oshDelBox(seq){
+  const b = _oshBoxes.find(x => x.seq === seq);
+  if(b?.locked){ toast('الكرتونة دي ليها بوليصة — مينفعش تتشال'); return; }
+  if(_oshBoxes.length <= 2){ toast('لازم كرتونتين على الأقل'); return; }
+  _oshBoxes = _oshBoxes.filter(x => x.seq !== seq).map((x,i) => ({ ...x, seq:i+1 }));
+  oshRender();
+}
+function oshSpread(){
+  // كل صنف بيتوزّع بالدور على الكراتين — قسمة عادلة بالقطعة
+  const n = _oshBoxes.length;
+  _oshBoxes.forEach(b => { if(!b.locked) b.items = {}; });
+  const free = _oshBoxes.filter(b => !b.locked);
+  if(!free.length) return;
+  let k = 0;
+  for(const it of _osh.items){
+    const taken = _oshBoxes.filter(b => b.locked)
+      .reduce((s,b)=>s+(parseInt(b.items[it.idx])||0),0);
+    for(let q = 0; q < it.qty - taken; q++){
+      const b = free[k % free.length];
+      b.items[it.idx] = (b.items[it.idx] || 0) + 1;
+      k++;
+    }
+  }
+  oshRender();
+}
+
+function oshRender(){
+  const body = $('osh-body'), foot = $('osh-foot');
+  if(!_osh) return;
+  const cods = _oshCods();
+  const money = v => (Math.round(v*100)/100).toLocaleString('ar-EG', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ج';
+
+  // كل صنف اتوزّع بالكامل؟
+  const bad = _osh.items.filter(i => _oshAssigned(i.idx) !== i.qty);
+  const empty = _oshBoxes.filter(b => !Object.keys(b.items).length);
+
+  body.innerHTML = `
+    <div style="background:var(--bg);border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:12px">
+      <b>${escapeHtml(_osh.order.name||'')}</b> · ${escapeHtml(_osh.order.area||'')} ·
+      إجمالي الطلب <b>${money(_osh.order.total)}</b> ·
+      التحصيل <b style="color:#b45309">${_osh.orderCod > 0 ? money(_osh.orderCod) : 'مدفوع — صفر'}</b>
+      ${_osh.hasAwbs ? '<br><span style="color:#b45309">⚠️ فيه بوليصة اتعملت خلاص — تعديل تحصيلها هيحتاج إعادة طباعة.</span>' : ''}
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="oshAddBox()">➕ كرتونة</button>
+      <button class="btn btn-ghost btn-sm" onclick="oshSpread()">⚖️ وزّع بالتساوي</button>
+    </div>
+
+    <div style="overflow-x:auto">
+    <table style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead><tr style="background:var(--bg)">
+        <th style="text-align:right;padding:8px;min-width:170px">الصنف</th>
+        <th style="width:62px;padding:8px">الكمية</th>
+        ${_oshBoxes.map(b => `<th style="width:92px;padding:8px;text-align:center">
+          كرتونة ${b.seq}${b.locked ? ' 🔒' : ''}
+          ${!b.locked && _oshBoxes.length > 2 ? `<div><button class="btn btn-ghost btn-xs" style="color:#dc2626" onclick="oshDelBox(${b.seq})">شيل</button></div>` : ''}
+        </th>`).join('')}
+      </tr></thead>
+      <tbody>
+        ${_osh.items.map(it => {
+          const a = _oshAssigned(it.idx);
+          const ok = a === it.qty;
+          return `<tr id="osh-r-${it.idx}" style="border-bottom:1px solid var(--border);${ok?'':'background:#fff7ed'}">
+            <td style="padding:7px">
+              <div style="font-weight:700">${escapeHtml(it.name)}</div>
+              <div style="font-size:10px;color:var(--muted);font-family:monospace">${escapeHtml(it.sku||'')} · ${money(it.price)}</div>
+            </td>
+            <td style="padding:7px;text-align:center">
+              <b>${it.qty}</b>
+              <div id="osh-a-${it.idx}" style="font-size:10px;color:${ok?'#16a34a':'#dc2626'}">${ok?'✓':'موزّع '+a}</div>
+            </td>
+            ${_oshBoxes.map(b => `<td style="padding:5px;text-align:center">
+              <input type="number" min="0" max="${it.qty}" value="${b.items[it.idx]||0}"
+                     id="osh-i-${b.seq}-${it.idx}" ${b.locked?'disabled':''}
+                     onchange="oshSet(${b.seq}, ${it.idx}, this.value)"
+                     style="width:58px;text-align:center;padding:4px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif${b.locked?';opacity:.5':''}">
+            </td>`).join('')}
+          </tr>`;
+        }).join('')}
+        <tr style="background:var(--bg);font-weight:800">
+          <td style="padding:9px">التحصيل على كل بوليصة</td>
+          <td style="padding:9px;text-align:center">${money(_osh.orderCod)}</td>
+          ${cods.map((c,i) => `<td id="osh-cod-${i}" style="padding:9px;text-align:center;color:#b45309">
+            ${money(c)}
+            <div style="font-size:10px;color:var(--muted);font-weight:400">${Object.values(_oshBoxes[i].items).reduce((a,b)=>a+b,0)} قطعة</div>
+          </td>`).join('')}
+        </tr>
+      </tbody>
+    </table></div>
+
+    ${bad.length || empty.length ? `<div id="osh-msg" style="background:#fef2f2;color:#991b1b;border-radius:8px;padding:9px 12px;font-size:12px;margin-top:10px">
+      ${bad.map(i => `• <b>${escapeHtml(i.name)}</b>: موزّع ${_oshAssigned(i.idx)} من ${i.qty}`).join('<br>')}
+      ${empty.length ? `${bad.length?'<br>':''}• كرتونة ${empty.map(b=>b.seq).join(' و')} فاضية` : ''}
+    </div>` : `<div id="osh-msg" style="background:#dcfce7;color:#166534;border-radius:8px;padding:9px 12px;font-size:12px;margin-top:10px">
+      ✅ كل الأصناف موزّعة · مجموع التحصيل ${money(cods.reduce((a,b)=>a+b,0))} = تحصيل الطلب
+    </div>`}`;
+
+  const ready = !bad.length && !empty.length;
+  foot.innerHTML = `
+    <button class="btn btn-ghost" onclick="closeM('m-osh')">إلغاء</button>
+    ${_osh.shipments.length && !_osh.hasAwbs ? `<button class="btn btn-ghost" style="color:#dc2626" onclick="oshClear()">🗑️ ألغِ التقسيم</button>` : ''}
+    <button class="btn btn-primary" id="osh-save" ${ready?'':'disabled style="opacity:.5;cursor:not-allowed"'} onclick="oshSave()">💾 احفظ التقسيم</button>`;
+}
+
+async function oshSave(){
+  if(!_osh) return;
+  const boxes = _oshBoxes.map(b => ({
+    note: b.note || '',
+    items: Object.entries(b.items).map(([idx,qty]) => ({ idx:Number(idx), qty:parseInt(qty)||0 })),
+  }));
+  try{
+    const r = await apiFetch(`/api/orders/${encodeURIComponent(_osh.order.id)}/shipments/plan`, 'POST', { boxes });
+    if(!r || !r.ok){ toast('❌ ' + (r?.error || 'فشل')); return; }
+    toast(`💾 اتحفظ — ${r.shipments.length} كرتونة`
+      + (r.needReprint ? ` · ${r.needReprint} بوليصة محتاجة إعادة طباعة` : ''));
+    closeM('m-osh');
+    // 🐛 v691: awbLoad بيكتب في #awb-body — لو الشاشة مش مفتوحة بيرمي
+    if(typeof awbLoad === 'function' && document.getElementById('awb-body')) awbLoad();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function oshClear(){
+  if(!_osh) return;
+  if(!confirm('تلغي التقسيم وترجّع الطلب بوليصة واحدة؟')) return;
+  try{
+    const r = await apiFetch(`/api/orders/${encodeURIComponent(_osh.order.id)}/shipments/plan`, 'DELETE');
+    if(!r || !r.ok){ toast('❌ ' + (r?.error || 'فشل')); return; }
+    toast('🗑️ اتلغى');
+    closeM('m-osh');
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
 let _awbAreas = {};
 
 // 🗺️ v674: الحفظ من نفس الجدول. false لو في محافظة ناقصة.
