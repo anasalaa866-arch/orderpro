@@ -5644,16 +5644,29 @@ tr:hover td{background:#fafbff}
           <option value="ACTIVE">✅ نشط</option>
           <option value="DRAFT">📝 مسودة</option>
         </select>
-        <select id="bnd-sort" class="form-input" style="width:190px;font-size:12px" onchange="bndRender()">
+        <select id="bnd-view" class="form-input" style="width:200px;font-size:12px" onchange="bndRender()">
+          <option value="">👁️ اعرض الكل</option>
+          <option value="over">🚨 أغلى من مكوّناته</option>
+          <option value="nosave">بدون توفير</option>
+          <option value="thin">توفير أقل من ٥٪</option>
+          <option value="deep">توفير أكتر من ٢٠٪</option>
+          <option value="out">مكوّن خلصان</option>
+          <option value="notactive">مكوّن مش نشط</option>
+          <option value="nostock">مخزون الباندل صفر</option>
+          <option value="sold">اتباع في الفترة</option>
+          <option value="unsold">مااتباعش خالص</option>
+        </select>
+        <select id="bnd-sort" class="form-input" style="width:185px;font-size:12px" onchange="bndRender()">
+          <option value="sold_desc">الأكتر مبيعاً</option>
           <option value="pct_asc">أقل توفير الأول</option>
           <option value="pct_desc">أكبر توفير الأول</option>
           <option value="save_desc">أكبر مبلغ توفير</option>
           <option value="price_desc">الأغلى</option>
           <option value="title">الاسم</option>
         </select>
-        <label style="font-size:12px;display:flex;gap:5px;align-items:center">
-          <input type="checkbox" id="bnd-bad" onchange="bndRender()"> المشاكل بس
-        </label>
+        <label style="font-size:12px;display:flex;gap:4px;align-items:center;white-space:nowrap">البيع آخر
+          <input id="bnd-days" class="form-input" type="number" min="1" max="365" value="30"
+                 style="width:62px;font-size:12px" onchange="bndLoad()"> يوم</label>
         <button class="btn btn-ghost btn-sm" onclick="bndCSV()">⬇️ CSV</button>
       </div>
       <div id="bnd-sum" style="margin-top:10px"></div>
@@ -31699,15 +31712,17 @@ let _invWarehouses = [];
 //   التوفير السالب = الباندل أغلى من شراء مكوّناته منفصلة. ده غلط
 //   تسعير حقيقي، فبيطلع أحمر وفوق القايمة.
 // ══════════════════════════════════════════════════════════════
-let _bnd = [], _bndSum = null, _bndOpen = {};
+let _bnd = [], _bndSum = null, _bndOpen = {}, _bndDays = 30, _bndSoldErr = null;
 
 async function bndLoad(){
   const body = $('bnd-body');
   body.innerHTML = '<div style="padding:22px;text-align:center;color:var(--muted)">⏳ بيجمّع الباندلز من شوبيفاي...</div>';
   try{
-    const r = await apiFetch('/api/bundles/list','GET');
+    const d = Math.min(Math.max(parseInt($('bnd-days')?.value, 10) || 30, 1), 365);
+    const r = await apiFetch('/api/bundles/list?days=' + d, 'GET');
     if(!r?.ok) throw new Error(r?.error || 'فشل');
     _bnd = r.rows || []; _bndSum = r.summary || null; _bndOpen = {};
+    _bndDays = r.days || d; _bndSoldErr = r.soldErr || null;
     bndRender();
   }catch(e){
     body.innerHTML = `<div style="padding:22px;text-align:center;color:#dc2626">❌ ${escapeHtml(e.message||'الطلب فشل')}<br>
@@ -31715,23 +31730,38 @@ async function bndLoad(){
   }
 }
 
+const _BND_VIEW = {
+  over:      r => r.saving < 0,
+  nosave:    r => r.saving === 0,
+  thin:      r => r.pct != null && r.pct > 0 && r.pct < 5,
+  deep:      r => r.pct != null && r.pct >= 20,
+  out:       r => r.compOut > 0,
+  notactive: r => r.compIssues > 0,
+  nostock:   r => (r.stock ?? 0) <= 0,
+  sold:      r => typeof r.sold === 'number' && r.sold > 0,
+  unsold:    r => typeof r.sold === 'number' && r.sold === 0,
+};
+
 function _bndFiltered(){
   const q  = _arKey($('bnd-q')?.value || '');
   const st = $('bnd-status')?.value || '';
-  const bad = $('bnd-bad')?.checked;
+  const view = $('bnd-view')?.value || '';
+  const vf = _BND_VIEW[view];
   const terms = q ? q.split(' ').filter(Boolean) : [];
   let list = _bnd.filter(r => {
     if(st && r.status !== st) return false;
-    if(bad && !(r.saving <= 0 || r.compIssues || r.compOut)) return false;
+    if(vf && !vf(r)) return false;
     if(!terms.length) return true;
     const hay = _arKey([r.title, r.sku, ...r.comps.map(c => c.title + ' ' + c.sku)].join(' '));
     const hayNS = hay.replace(/ /g, '');
     return terms.every(t => hay.includes(t) || hayNS.includes(t));
   });
-  const sort = $('bnd-sort')?.value || 'pct_asc';
+  const sort = $('bnd-sort')?.value || 'sold_desc';
   const P = v => (v == null ? Infinity : v);
+  const S = v => (typeof v === 'number' ? v : -1);   // المجهول تحت
   list.sort((a,b) =>
-      sort === 'pct_desc'   ? P(b.pct) - P(a.pct)
+      sort === 'sold_desc'  ? (S(b.sold) - S(a.sold)) || (P(a.pct) - P(b.pct))
+    : sort === 'pct_desc'   ? P(b.pct) - P(a.pct)
     : sort === 'save_desc'  ? b.saving - a.saving
     : sort === 'price_desc' ? b.price - a.price
     : sort === 'title'      ? String(a.title).localeCompare(String(b.title), 'ar')
@@ -31756,12 +31786,20 @@ function bndRender(){
     ${card('✅ نشط', n(S.active), '#16a34a')}
     ${card('📝 مسودة', n(S.draft), '#b45309')}
     ${card('متوسط التوفير', pc(S.avgPct), '#3b82f6')}
+    ${card(`باع (${n(_bndDays)} يوم)`, n(S.soldTotal), '#0ea5e9')}
+    ${S.soldNone ? card('مااتباعش خالص', n(S.soldNone), '#b45309') : ''}
     ${S.overpriced ? card('🚨 أغلى من مكوّناته', n(S.overpriced), '#dc2626') : ''}
     ${S.noSaving ? card('بدون توفير', n(S.noSaving), '#b45309') : ''}
     ${S.withIssues ? card('⚠️ مكوّن ناقص', n(S.withIssues), '#b45309') : ''}
   </div>
   ${S.overpriced ? `<div style="margin-top:9px;background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;padding:9px 12px;font-size:12px">
-    🚨 <b>${n(S.overpriced)} باندل سعره أغلى من شراء مكوّناته منفصلة.</b> العميل اللي هيحسب هيلاقي شراءها فُرادى أرخص.</div>` : ''}`;
+    🚨 <b>${n(S.overpriced)} باندل سعره أغلى من شراء مكوّناته منفصلة.</b> العميل اللي هيحسب هيلاقي شراءها فُرادى أرخص.</div>` : ''}
+  ${_bndSoldErr ? `<div style="margin-top:9px;background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:8px;padding:9px 12px;font-size:11.5px">
+    ⚠️ حساب المبيعات فشل (${escapeHtml(_bndSoldErr)}) — باقي التقرير سليم.</div>` : ''}
+  <div style="margin-top:9px;background:#eff6ff;color:#1e40af;border-radius:8px;padding:8px 12px;font-size:11.5px">
+    💡 المبيعات <b>مستنتجة من السعر</b>: شوبيفاي بتفكّ الباندل لمكوّناته وقت الأوردر فمابيسيبش أثر،
+    فبنعتبره اتباع لما مكوّناته تيجي في نفس الطلب ومجموع أسعارها يطابق سعره.${
+    S.soldUnknown ? ` ${n(S.soldUnknown)} باندل مكوّناته من غير SKU فمش محسوبين.` : ''}</div>`;
 
   const list = _bndFiltered();
   if(!list.length){ body.innerHTML = '<div style="padding:22px;text-align:center;color:var(--muted)">مفيش باندل مطابق</div>'; return; }
@@ -31782,6 +31820,7 @@ function bndRender(){
       <th style="padding:9px;width:110px">مجموع المكوّنات</th>
       <th style="padding:9px;width:100px">أرخص بـ</th>
       <th style="padding:9px;width:80px">النسبة</th>
+      <th style="padding:9px;width:92px">باع ${n(_bndDays)}ي</th>
       <th style="padding:9px;width:70px">مخزون</th>
     </tr></thead><tbody>
     ${list.map((r, i) => {
@@ -31808,9 +31847,15 @@ function bndRender(){
         <td style="padding:8px;text-align:center;font-weight:800;color:${col};font-family:Roboto,sans-serif">
           ${bad ? 'أغلى بـ ' + m(-r.saving) : zero ? 'ولا مليم' : m(r.saving)}</td>
         <td style="padding:8px;text-align:center;font-weight:800;color:${col}">${r.pct==null?'—':pc(Math.abs(r.pct))}</td>
+        <td style="padding:8px;text-align:center">${
+          typeof r.sold !== 'number'
+            ? '<span style="color:var(--muted)" title="مكوّناته من غير SKU — مش قادرين نستنتج">—</span>'
+            : r.sold > 0
+              ? `<b style="color:#0ea5e9">${n(r.sold)}</b> <span style="font-size:9px;color:var(--muted)">تقديري</span>`
+              : '<span style="color:#b45309">٠</span>'}</td>
         <td style="padding:8px;text-align:center;color:${(r.stock??0)<=0?'#dc2626':'inherit'}">${r.stock==null?'—':n(r.stock)}</td>
       </tr>
-      ${open ? `<tr><td colspan="7" style="padding:0 10px 10px 10px;background:var(--elev)">
+      ${open ? `<tr><td colspan="8" style="padding:0 10px 10px 10px;background:var(--elev)">
         <table style="width:100%;border-collapse:collapse;font-size:11.5px">
           ${r.comps.map(c => `<tr style="border-bottom:1px solid var(--border)">
             <td style="padding:6px 8px">${escapeHtml(c.title)}${c.variantTitle?` · ${escapeHtml(c.variantTitle)}`:''}
@@ -31834,10 +31879,13 @@ function bndCSV(){
   const list = _bndFiltered();
   if(!list.length) return toast('مفيش حاجة تتصدّر');
   const esc = v => `"${String(v==null?'':v).replace(/"/g,'""')}"`;
-  const head = ['الباندل','الـvariant','SKU','الحالة','سعر الباندل','مجموع المكوّنات','التوفير','النسبة %','المخزون','عدد المكوّنات','المكوّنات'];
+  const head = ['الباندل','الـvariant','SKU','الحالة','سعر الباندل','مجموع المكوّنات','التوفير','النسبة %',
+                `باع ${_bndDays} يوم (تقديري)`,'المخزون','عدد المكوّنات','مكوّن خلصان','مكوّن مش نشط','المكوّنات'];
   const body = list.map(r => [
     r.title, r.variantTitle, r.sku, r.status, r.price, r.compTotal,
-    +r.saving.toFixed(2), r.pct==null?'':+r.pct.toFixed(1), r.stock, r.comps.length,
+    +r.saving.toFixed(2), r.pct==null?'':+r.pct.toFixed(1),
+    typeof r.sold === 'number' ? r.sold : '', r.stock, r.comps.length,
+    r.compOut, r.compIssues,
     r.comps.map(c => `${c.title} ×${c.qty} @${c.price}`).join(' + '),
   ].map(esc).join(','));
   const csv = '﻿' + [head.map(esc).join(','), ...body].join('\r\n');
