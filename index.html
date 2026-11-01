@@ -47344,7 +47344,8 @@ function csRender(){
     ${_cs.lastResult ? `<div style="margin-top:7px;font-size:11px;color:var(--muted)">
       آخر تطبيق: ${_cs.lastRunAt?escapeHtml(new Date(_cs.lastRunAt).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'})):'—'} · ${escapeHtml(_cs.lastResult)}</div>` : ''}
     ${_cs.mode==='my_best' ? `<div style="margin-top:8px;background:#eff6ff;color:#1e40af;border-radius:8px;padding:8px 11px;font-size:11.5px">
-      💡 الوضع ده بيحسب المبيعات من طلباتنا إحنا — فالباندل بيتعدّ باسمه هو، مش على أصنافه زي ما شوبيفاي بتعمل.</div>` : ''}`;
+      💡 الوضع ده بيحسب المبيعات من طلباتنا إحنا. والباندلز — اللي شوبيفاي بتفكّها لمكوّناتها
+      ومابتعدّهاش خالص — بنستنتج مبيعاتها من السعر: المكوّنات في نفس الطلب ومجموع أسعارها يطابق سعر الباندل.</div>` : ''}`;
 
   // الترتيب المعروض: المثبّتين فوق بترتيبهم، وبعدين الباقي زي ما هو
   const byId = new Map(_cs.products.map(p => [p.id, p]));
@@ -47386,6 +47387,22 @@ function csRender(){
       الباقي (${rest.length}) — بيترتب بـ «${escapeHtml(CS_MODE_LABEL[_cs.mode]||_cs.mode)}»
     </div>
     ${rest.map(p => card(p, 0, false)).join('')}`;
+}
+
+function _csBundleCount(prev){ return (prev||[]).filter(x => x.isBundle).length; }
+
+// 📦 v702: ثبّت كل الباندلز فوق بضغطة. بنعرفهم من وصفتهم على شوبيفاي
+//   (productVariantComponents) مش من كلمة «Bundle» في العنوان.
+let _csLastPreview = [];
+function csPinBundles(){
+  const b = (_csLastPreview||[]).filter(x => x.isBundle).map(x => x.id);
+  if(!b.length) return toast('مفيش باندلز في الكوليكشن دي');
+  const have = new Set((_cs.pinned||[]).map(p => p.id));
+  const add = b.filter(id => !have.has(id)).map(id => ({ id, until:null }));
+  if(!add.length) return toast('كلهم مثبّتين خلاص');
+  _cs.pinned = (_cs.pinned||[]).concat(add);
+  toast(`📌 اتثبّت ${add.length} باندل — رتّبهم وبعدين احفظ وطبّق`);
+  csOpen();
 }
 
 function csSetMode(m){ _cs.mode = m; csRender(); }
@@ -47436,6 +47453,7 @@ async function csPreview(){
     await _csSave();
     const r = await apiFetch('/api/collection-sort/preview','POST',{ gid:_cs.gid });
     if(!r?.ok) throw new Error(r?.error||'فشل');
+    _csLastPreview = r.preview || [];
     const n = v => Number(v||0).toLocaleString('ar-EG');
     body.innerHTML = `
       <div style="padding:11px 13px;background:#eff6ff;color:#1e40af;font-size:12px;font-weight:700">
@@ -47445,6 +47463,15 @@ async function csPreview(){
       </div>
       ${(r.expired||[]).length ? `<div style="padding:9px 13px;background:#fffbeb;color:#92400e;font-size:11.5px">
         📅 ${n(r.expired.length)} تثبيت اتفك (عدّى تاريخه) — رجعوا للترتيب العادي.</div>` : ''}
+      ${_csBundleCount(r.preview) ? (() => {
+        const bs = (r.preview||[]).filter(x => x.isBundle);
+        const est = bs.filter(x => x.estimated).length;
+        const blind = bs.length - est;
+        return `<div style="padding:9px 13px;background:#fffbeb;color:#92400e;font-size:11.5px">
+        📦 <b>${n(bs.length)} باندل</b> في الكوليكشن دي. شوبيفاي بتفكّهم لمكوّناتهم وقت الأوردر فمبيعاتهم
+        مش موجودة في الطلب — الأرقام دي <b>مستنتجة من السعر</b>: المكوّنات في نفس الطلب ومجموع أسعارها
+        طابق سعر الباندل.${est ? ` (${n(est)} اتحسبوا كده` : ''}${blind ? `${est?' · ':' ('}${n(blind)} مكوّناتهم من غير SKU فمش محسوبين` : ''}${est||blind?')':''}
+        <button class="btn btn-ghost btn-sm" style="margin-inline-start:7px" onclick="csPinBundles()">📌 ثبّت الباندلز فوق</button></div>`; })() : ''}
       ${(r.preview||[]).map(x => `
         <div style="display:flex;gap:10px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);${x.pinned?'background:#fffbeb':''}">
           <div style="width:34px;text-align:center;font-weight:800;font-family:Roboto,sans-serif">${n(x.pos)}</div>
@@ -47453,7 +47480,11 @@ async function csPreview(){
           <img src="${escapeHtml(x.image||'')}" style="width:32px;height:32px;object-fit:contain;border-radius:5px;background:#fff;border:1px solid var(--border)" onerror="this.style.visibility='hidden'">
           <div style="flex:1;min-width:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
             ${x.pinned?'📌 ':''}${escapeHtml(x.title||'')}</div>
-          ${x.soldQty != null ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap">باع ${n(x.soldQty)}</div>` : ''}
+          ${x.isBundle
+              ? (x.estimated
+                  ? `<div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:2px 7px;white-space:nowrap" title="الباندل مابيسيبش أثر في الطلب — شوبيفاي بتفكّه لمكوّناته. الرقم ده مستنتج: المكوّنات ظهرت في نفس الطلب ومجموع أسعارها طابق سعر الباندل.">📦 باع ${n(x.soldQty)} <span style="font-size:9.5px;font-weight:700">تقديري</span></div>`
+                  : `<div style="font-size:10.5px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:2px 7px;white-space:nowrap" title="الباندل ده مكوّناته من غير SKU، فمش قادرين نستنتج مبيعاته. ثبّته يدوي.">📦 باندل · مش محسوب</div>`)
+              : (x.soldQty != null ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap">باع ${n(x.soldQty)}</div>` : '')}
         </div>`).join('')}`;
   }catch(e){ body.innerHTML = `<div style="padding:24px;text-align:center;color:#dc2626">❌ ${escapeHtml(e.message)}</div>`; }
 }
