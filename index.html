@@ -47280,7 +47280,17 @@ async function csList(){
         c.pins ? ` · ${c.pins} مثبّت` : ''}${
         c.configured && !c.auto ? ' · يدوي' : ''}</option>`).join('');
     if(_cs.gid) sel.value = _cs.gid;
-  }catch(e){ sel.innerHTML = `<option value="">❌ ${escapeHtml(e.message)}</option>`; }
+  }catch(e){
+    // 🐞 v701: apiFetch بترجّع null على أي فشل، فـ r.error دايماً فاضي
+    //   والرسالة كانت بتطلع «❌ فشل» من غير سبب. السبب الحقيقي بيتطبع
+    //   في الكونسول — بنقول للمستخدم يبص هناك بدل ما يفضل يخمّن.
+    sel.innerHTML = `<option value="">❌ ${escapeHtml(e.message||'الطلب فشل')}</option>`;
+    $('cs-body').innerHTML = `<div style="padding:20px;text-align:center;color:#dc2626;font-size:12.5px">
+      ❌ ${escapeHtml(e.message||'الطلب فشل')}<br>
+      <span style="color:var(--muted);font-size:11.5px">
+        افتح الكونسول (F12) — السبب الحقيقي بيتكتب هناك.
+        ولو بيقول 404 يبقى الباك إند لسه مش v657.</span></div>`;
+  }
 }
 
 async function csOpen(){
@@ -47296,7 +47306,9 @@ async function csOpen(){
             today:r.today||new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Cairo'}),
             lastRunAt:r.lastRunAt, lastResult:r.lastResult };
     csRender();
-  }catch(e){ body.innerHTML = `<div style="padding:24px;text-align:center;color:#dc2626">❌ ${escapeHtml(e.message)}</div>`; }
+  }catch(e){ body.innerHTML = `<div style="padding:24px;text-align:center;color:#dc2626">
+    ❌ ${escapeHtml(e.message||'الطلب فشل')}<br>
+    <span style="color:var(--muted);font-size:11.5px">السبب الكامل في الكونسول (F12)</span></div>`; }
 }
 
 function _csPinOf(id){ return (_cs.pinned||[]).find(p => p.id === id) || null; }
