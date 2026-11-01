@@ -31842,7 +31842,14 @@ function bndRender(){
           </div>
         </td>
         <td style="padding:8px;text-align:center">${stBadge(r.status)}</td>
-        <td style="padding:8px;text-align:center;font-weight:800;font-family:Roboto,sans-serif">${m(r.price)}</td>
+        <!-- ✏️ v707: السعر بيتعدّل من هنا وبيتكتب على شوبيفاي -->
+        <td style="padding:8px;text-align:center" onclick="event.stopPropagation()">
+          <input class="form-input" type="number" step="0.01" min="0"
+                 id="bp-${escapeHtml(r.variantGid)}" value="${r.price}"
+                 style="width:92px;font-size:12px;font-weight:800;text-align:center;font-family:Roboto,sans-serif"
+                 onkeydown="if(event.key==='Enter')bndSavePrice('${escapeHtml(r.variantGid)}')"
+                 onblur="bndSavePrice('${escapeHtml(r.variantGid)}')">
+        </td>
         <td style="padding:8px;text-align:center;color:var(--muted);font-family:Roboto,sans-serif">${m(r.compTotal)}</td>
         <td style="padding:8px;text-align:center;font-weight:800;color:${col};font-family:Roboto,sans-serif">
           ${bad ? 'أغلى بـ ' + m(-r.saving) : zero ? 'ولا مليم' : m(r.saving)}</td>
@@ -31871,6 +31878,75 @@ function bndRender(){
         </table></td></tr>` : ''}`;
     }).join('')}
     </tbody></table>`;
+}
+
+
+// ✏️ v707: حفظ سعر الباندل على شوبيفاي
+//   السعر ده بيروح للمتجر الحقيقي، فقبل ما يتبعت:
+//   • لازم يكون أكبر من صفر
+//   • تأكيد مكتوب فيه من كام لكام وهيبقى توفيره كام
+//   • تأكيد تاني لو التغيير أكبر من ٥٠٪ (الصفر الزيادة)
+//   • تأكيد تاني لو السعر الجديد لسه أغلى من مكوّناته
+//   والباك إند بيرفض لو السعر اتغيّر على شوبيفاي في نفس الوقت.
+let _bndSaving = {};
+
+async function bndSavePrice(vid){
+  const inp = document.getElementById('bp-' + vid);
+  const row = _bnd.find(r => r.variantGid === vid);
+  if(!inp || !row || _bndSaving[vid]) return;
+  const nv = Number(inp.value);
+  if(!(nv > 0)){ inp.value = row.price; return toast('❌ السعر لازم يكون أكبر من صفر'); }
+  if(Math.abs(nv - row.price) < 0.005) return;      // مفيش تغيير
+
+  const m  = v => Number(v||0).toLocaleString('ar-EG',{maximumFractionDigits:2}) + ' ج';
+  const pc = v => (Math.round(v*10)/10).toLocaleString('ar-EG') + '٪';
+  const newSaving = row.compTotal - nv;
+  const newPct = row.compTotal > 0 ? (newSaving / row.compTotal) * 100 : 0;
+
+  let msg = `تغيير سعر «${row.title}» على شوبيفاي؟\n\n`
+          + `من ${m(row.price)} إلى ${m(nv)}\n`
+          + `مجموع المكوّنات: ${m(row.compTotal)}\n`
+          + (newSaving > 0 ? `هيبقى أرخص بـ ${m(newSaving)} (${pc(newPct)})`
+           : newSaving === 0 ? `هيبقى مساوي لمكوّناته بالظبط — مفيش سبب يخلّي العميل ياخده`
+           : `⚠️ هيفضل أغلى من مكوّناته بـ ${m(-newSaving)}`);
+  if(!confirm(msg)) { inp.value = row.price; return; }
+
+  // الصفر الزيادة
+  const ratio = row.price > 0 ? Math.abs(nv - row.price) / row.price : 1;
+  if(ratio > 0.5 && !confirm(`⚠️ ده تغيير بـ ${pc(ratio*100)} من السعر الحالي.\n\n${m(row.price)} ← ${m(nv)}\n\nمتأكد إن الرقم مظبوط؟`)){
+    inp.value = row.price; return;
+  }
+  if(newSaving < 0 && !confirm(`🚨 السعر الجديد لسه أغلى من شراء المكوّنات منفصلة.\n\nتكمّل؟`)){
+    inp.value = row.price; return;
+  }
+
+  _bndSaving[vid] = true;
+  inp.disabled = true;
+  try{
+    const r = await apiFetch('/api/bundles/price','POST',{
+      productGid: row.productGid, variantGid: vid, price: nv, expectPrice: row.price });
+    if(!r?.ok) throw new Error(r?.error || 'التعديل فشل');
+    row.price = r.price; row.compTotal = r.compTotal;
+    row.saving = r.saving; row.pct = r.pct;
+    toast(`✅ اتغيّر لـ ${m(r.price)}`);
+    _bndRecalcSummary();
+    bndRender();
+  }catch(e){
+    inp.value = row.price;
+    toast('❌ ' + e.message);
+  }finally{
+    _bndSaving[vid] = false;
+    if(inp) inp.disabled = false;
+  }
+}
+
+// الكروت فوق لازم تتحدّث مع التعديل، من غير ما نجيب التقرير كله تاني
+function _bndRecalcSummary(){
+  if(!_bndSum) return;
+  const num = _bnd.filter(r => r.pct != null);
+  _bndSum.overpriced = _bnd.filter(r => r.saving < 0).length;
+  _bndSum.noSaving   = _bnd.filter(r => r.saving === 0).length;
+  _bndSum.avgPct = num.length ? +(num.reduce((a,r) => a + r.pct, 0) / num.length).toFixed(1) : null;
 }
 
 function bndToggle(vid){ _bndOpen[vid] = !_bndOpen[vid]; bndRender(); }
@@ -47578,6 +47654,7 @@ async function csOpen(){
     _csQ = ''; _csQFocus = false;
     _cs = { gid, products:r.products||[], pinned:r.pinned||[],
             mode:r.mode||'my_best', auto:r.auto!==false, days:r.days||60,
+            oosBottom: r.oosBottom === true,
             today:r.today||new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Cairo'}),
             lastRunAt:r.lastRunAt, lastResult:r.lastResult };
     csRender();
@@ -47609,6 +47686,12 @@ function csRender(){
         <input type="checkbox" ${_cs.auto?'checked':''} onchange="_cs.auto=this.checked">
         أعد الترتيب تلقائياً
       </label>
+      <!-- 📍 v708: الخلصان تحت — بمخزون مخزن الشحن بس -->
+      <label style="font-size:12px;display:flex;gap:5px;align-items:center"
+             title="بيقيس مخزون مخزن الشحن لوحده (العبور). بضاعة المحل مش قابلة للشحن أونلاين فمش بتتحسب.">
+        <input type="checkbox" ${_cs.oosBottom?'checked':''} onchange="_cs.oosBottom=this.checked;csRender()">
+        نزّل الخلصان تحت
+      </label>
       <div style="margin-inline-start:auto;display:flex;gap:7px;flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm" onclick="csPreview()">👁️ اعرض الترتيب الجديد</button>
         <button class="btn btn-primary btn-sm" onclick="csApply(this)">✅ احفظ وطبّق</button>
@@ -47618,6 +47701,10 @@ function csRender(){
       📌 ${act.length} مثبّت${exp.length?` · ${exp.length} اتفك تثبيته`:''}</div>` : ''}
     ${_cs.lastResult ? `<div style="margin-top:7px;font-size:11px;color:var(--muted)">
       آخر تطبيق: ${_cs.lastRunAt?escapeHtml(new Date(_cs.lastRunAt).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'})):'—'} · ${escapeHtml(_cs.lastResult)}</div>` : ''}
+    ${_cs.oosBottom ? `<div style="margin-top:8px;background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:8px;padding:8px 11px;font-size:11.5px">
+      📍 <b>الخلصان هينزل آخر الكوليكشن.</b> المخزون بيتقاس من <b>مخزن الشحن بس</b> — ده المخزن الوحيد اللي بيشحن أونلاين،
+      وبضاعة المحل مش قابلة للشحن فمش بتتحسب. والمثبّت لو خلص بينزل مع الخلصانين وتثبيته بيفضل محفوظ لحد ما يرجع.
+      <br>⚠️ اعرض الترتيب وطبّقه <b>قبل</b> ما تشيل شرط المخزون من قواعد الكوليكشن على شوبيفاي — غير كده الخلصان هيتناثر في النص.</div>` : ''}
     ${_cs.mode==='my_best' ? `<div style="margin-top:8px;background:#eff6ff;color:#1e40af;border-radius:8px;padding:8px 11px;font-size:11.5px">
       💡 الوضع ده بيحسب المبيعات من طلباتنا إحنا. والباندلز — اللي شوبيفاي بتفكّها لمكوّناتها
       ومابتعدّهاش خالص — بنستنتج مبيعاتها من السعر: المكوّنات في نفس الطلب ومجموع أسعارها يطابق سعر الباندل.</div>` : ''}`;
@@ -47741,7 +47828,8 @@ function csAllUntil(){
 
 async function _csSave(){
   const r = await apiFetch('/api/collection-sort/save','POST',{
-    gid:_cs.gid, pinned:_cs.pinned, mode:_cs.mode, auto:_cs.auto, days:_cs.days });
+    gid:_cs.gid, pinned:_cs.pinned, mode:_cs.mode, auto:_cs.auto, days:_cs.days,
+    oosBottom: !!_cs.oosBottom });
   if(!r?.ok) throw new Error(r?.error||'الحفظ فشل');
   return r;
 }
@@ -47763,6 +47851,8 @@ async function csPreview(){
       </div>
       ${(r.expired||[]).length ? `<div style="padding:9px 13px;background:#fffbeb;color:#92400e;font-size:11.5px">
         📅 ${n(r.expired.length)} تثبيت اتفك (عدّى تاريخه) — رجعوا للترتيب العادي.</div>` : ''}
+      ${r.oosCount ? `<div style="padding:9px 13px;background:#f0fdf4;color:#166534;font-size:11.5px">
+        📍 <b>${n(r.oosCount)} منتج خلصان</b> في «${escapeHtml(r.locName||'مخزن الشحن')}» ونزل آخر القايمة.</div>` : ''}
       ${_csBundleCount(r.preview) ? (() => {
         const bs = (r.preview||[]).filter(x => x.isBundle);
         const est = bs.filter(x => x.estimated).length;
@@ -47785,6 +47875,8 @@ async function csPreview(){
           <button class="btn btn-ghost btn-xs" style="${x.pinned?'color:#dc2626':''}"
                   onclick="csTogglePinFromPreview('${escapeHtml(x.id)}')"
                   title="${x.pinned?'فُك التثبيت':'ثبّته فوق'}">${x.pinned?'✕':'📌'}</button>
+          ${x.locStock != null ? `<div style="font-size:10.5px;white-space:nowrap;color:${x.locStock<=0?'#dc2626':'var(--muted)'}"
+            title="مخزون مخزن الشحن">${x.locStock<=0?'خلصان':'مخزن الشحن '+n(x.locStock)}</div>` : ''}
           ${x.isBundle
               ? (x.estimated
                   ? `<div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:2px 7px;white-space:nowrap" title="الباندل مابيسيبش أثر في الطلب — شوبيفاي بتفكّه لمكوّناته. الرقم ده مستنتج: المكوّنات ظهرت في نفس الطلب ومجموع أسعارها طابق سعر الباندل.">📦 باع ${n(x.soldQty)} <span style="font-size:9.5px;font-weight:700">تقديري</span></div>`
