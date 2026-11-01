@@ -9143,9 +9143,15 @@ tr:hover td{background:#fafbff}
       </div>
     </div>
     <div style="display:flex;gap:7px;flex-wrap:wrap">
-      <select id="cs-pick" class="form-input" style="min-width:300px;font-size:12px" onchange="csOpen()">
-        <option value="">⏳ بيحمّل الكوليكشنز...</option>
-      </select>
+      <!-- 🔎 v704: ٢٥٠+ كوليكشن. بقت combobox — نفس اللي في شاشة بوسطة:
+           تدوس تفتح بالكل · تكتب تترشّح · أسهم و Enter. -->
+      <div style="position:relative;display:flex;align-items:center">
+        <input id="cs-pick" class="form-input" style="min-width:340px;font-size:12px;padding-inline-end:26px"
+               placeholder="🔎 دوّر أو اختار كوليكشن" autocomplete="off"
+               onmousedown="cboToggle(this)" oninput="cboOpen(this,false)" onkeydown="cboKey(event,this)">
+        <span style="position:absolute;inset-inline-end:8px;color:var(--muted);cursor:pointer;font-size:10px"
+              onmousedown="event.preventDefault();cboToggle(document.getElementById('cs-pick'))">▼</span>
+      </div>
       <button class="btn btn-ghost btn-sm" onclick="csList()">🔄 تحديث</button>
     </div>
   </div>
@@ -16618,7 +16624,13 @@ const _arN = t => String(t||'').replace(/[أإآٱ]/g,'ا').replace(/[ىئ]/g,'�
 // ══════════════════════════════════════════════════════════════
 let _cbo = null;   // { inp, panel, opts, idx }
 
+// 🔌 v704: سجلّ مصادر عامة للـ combobox — عشان نعيد استخدامه في أي
+//   شاشة تانية من غير ما نلمس منطق بوسطة. المفتاح id الخانة.
+const _cboSrc = {};   // inputId → { opts: () => [{id,name,en}], pick: (o) => {} }
+
 function _cboOpts(inp){
+  const src = _cboSrc[inp.id];
+  if(src) return src.opts() || [];
   if(inp.classList.contains('ar-city')){
     return (_awbCityList || []).map(c => ({ id:c.id, name:c.name, en:c.en||'' }));
   }
@@ -16725,6 +16737,8 @@ function cboPick(i){
   inp.dataset.id = o.id || '';
   inp.dataset.n  = o.any ? '' : o.name;
   cboClose();
+  const src = _cboSrc[inp.id];
+  if(src){ src.pick(o); return; }
   // نفس المنطق القديم — التحقق وجلب المدن وحساب فرق الشحن
   if(inp.classList.contains('ar-city')) arCityPick(inp); else arZonePick(inp);
 }
@@ -47259,6 +47273,9 @@ async function openEmployee(id){
 //   الافتراضي هنا «من بياناتنا» — بيعدّ الباندل نفسه من الطلبات.
 // ══════════════════════════════════════════════════════════════
 let _cs = { gid:null, products:[], pinned:[], mode:'my_best', auto:true, days:60, today:'' };
+let _csQ = '', _csQFocus = false;
+
+function csSearch(v){ _csQ = v; _csQFocus = true; csRender(); }
 
 const CS_MODE_LABEL = {
   my_best:      'الأكثر مبيعاً — من بياناتنا (بيحسب الباندلز صح)',
@@ -47268,23 +47285,39 @@ const CS_MODE_LABEL = {
   price_desc:   'الأغلى',
 };
 
+let _csCols = [], _csPickGid = '';
+
+// 🔌 v704: الكوليكشنز كمصدر للـ combobox المشترك
+_cboSrc['cs-pick'] = {
+  opts: () => _csCols.map(c => ({
+    id: c.gid,
+    name: (c.configured ? '⭐ ' : '') + c.title,
+    en: `${c.count}${c.pins ? ' · ' + c.pins + ' مثبّت' : ''}${c.configured && !c.auto ? ' · يدوي' : ''}`,
+  })),
+  pick: (o) => { _csPickGid = o.id || ''; csOpen(); },
+};
+
+function _csColsRender(){
+  const inp = $('cs-pick'); if(!inp) return;
+  inp.placeholder = _csCols.length
+    ? `🔎 دوّر أو اختار من ${_csCols.length.toLocaleString('ar-EG')} كوليكشن`
+    : '🔎 دوّر أو اختار كوليكشن';
+  const cur = _csCols.find(c => c.gid === _csPickGid);
+  if(cur) inp.value = (cur.configured ? '⭐ ' : '') + cur.title;
+}
+
 async function csList(){
-  const sel = $('cs-pick'); if(!sel) return;
+  const inp = $('cs-pick'); if(!inp) return;
   try{
     const r = await apiFetch('/api/collection-sort/list','GET');
     if(!r?.ok) throw new Error(r?.error||'فشل');
-    const cs = r.collections || [];
-    sel.innerHTML = '<option value="">— اختار كوليكشن —</option>' + cs.map(c =>
-      `<option value="${escapeHtml(c.gid)}" ${c.gid===_cs.gid?'selected':''}>${
-        c.configured ? '⭐ ' : ''}${escapeHtml(c.title)} (${c.count})${
-        c.pins ? ` · ${c.pins} مثبّت` : ''}${
-        c.configured && !c.auto ? ' · يدوي' : ''}</option>`).join('');
-    if(_cs.gid) sel.value = _cs.gid;
+    _csCols = r.collections || [];
+    _csColsRender();
   }catch(e){
     // 🐞 v701: apiFetch بترجّع null على أي فشل، فـ r.error دايماً فاضي
     //   والرسالة كانت بتطلع «❌ فشل» من غير سبب. السبب الحقيقي بيتطبع
     //   في الكونسول — بنقول للمستخدم يبص هناك بدل ما يفضل يخمّن.
-    sel.innerHTML = `<option value="">❌ ${escapeHtml(e.message||'الطلب فشل')}</option>`;
+    inp.placeholder = '❌ ' + (e.message || 'الطلب فشل');
     $('cs-body').innerHTML = `<div style="padding:20px;text-align:center;color:#dc2626;font-size:12.5px">
       ❌ ${escapeHtml(e.message||'الطلب فشل')}<br>
       <span style="color:var(--muted);font-size:11.5px">
@@ -47294,13 +47327,14 @@ async function csList(){
 }
 
 async function csOpen(){
-  const gid = $('cs-pick')?.value || '';
+  const gid = _csPickGid || '';
   const body = $('cs-body'), cfg = $('cs-cfg');
   if(!gid){ _cs.gid=null; body.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">اختار كوليكشن من فوق</div>'; cfg.innerHTML=''; return; }
   body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">⏳ بيجيب المنتجات...</div>';
   try{
     const r = await apiFetch('/api/collection-sort/products?gid='+encodeURIComponent(gid),'GET');
     if(!r?.ok) throw new Error(r?.error||'فشل');
+    _csQ = ''; _csQFocus = false;
     _cs = { gid, products:r.products||[], pinned:r.pinned||[],
             mode:r.mode||'my_best', auto:r.auto!==false, days:r.days||60,
             today:r.today||new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Cairo'}),
@@ -47352,6 +47386,13 @@ function csRender(){
   const pinOrder = act.map(p => p.id).filter(id => byId.has(id));
   const seen = new Set(pinOrder);
   const rest = _cs.products.filter(p => !seen.has(p.id));
+  // _arKey بتطبّع العربي والأرقام العربية — نفس اللي في بحث السلف
+  const terms = _csQ ? _arKey(_csQ).split(' ').filter(Boolean) : [];
+  const shown = !terms.length ? rest : rest.filter(p => {
+    const hay = _arKey(p.title || '');
+    const hayNS = hay.replace(/ /g, '');
+    return terms.every(t => hay.includes(t) || hayNS.includes(t));
+  });
 
   const card = (p, i, pinned) => {
     const pin = _csPinOf(p.id);
@@ -47383,13 +47424,31 @@ function csRender(){
       <button class="btn btn-ghost btn-xs" style="margin-inline-start:9px" onclick="csAllUntil()">📅 حط تاريخ فك على الكل</button>
       <button class="btn btn-ghost btn-xs" style="color:#dc2626" onclick="csClearPins()">فُك الكل</button>
     </div>${pinOrder.map((id,i) => card(byId.get(id), i, true)).join('')}` : ''}
-    <div style="padding:9px 12px;background:var(--bg);font-size:12px;font-weight:800">
-      الباقي (${rest.length}) — بيترتب بـ «${escapeHtml(CS_MODE_LABEL[_cs.mode]||_cs.mode)}»
+    <div style="padding:9px 12px;background:var(--bg);font-size:12px;font-weight:800;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span>الباقي (${shown.length === rest.length ? rest.length : shown.length + ' من ' + rest.length}) — بيترتب بـ «${escapeHtml(CS_MODE_LABEL[_cs.mode]||_cs.mode)}»</span>
+      <!-- 🔎 v703: ٢٢٨ صنف مستحيل تدوّر فيهم بالعجلة -->
+      <input id="cs-q" class="form-input" style="margin-inline-start:auto;width:250px;font-size:12px;font-weight:400"
+             placeholder="🔎 دوّر على صنف عشان تثبّته"
+             value="${escapeHtml(_csQ)}"
+             oninput="csSearch(this.value)"
+             onkeydown="if(event.key==='Escape'){csSearch('')}">
     </div>
-    ${rest.map(p => card(p, 0, false)).join('')}`;
+    ${shown.length ? shown.map(p => card(p, 0, false)).join('')
+      : '<div style="padding:22px;text-align:center;color:var(--muted);font-size:12px">مفيش صنف مطابق</div>'}`;
+  // الكتابة بتعيد الرسم، فلازم نرجّع التركيز ومكان المؤشر
+  const q = $('cs-q');
+  if(q && _csQFocus){ q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
 }
 
 function _csBundleCount(prev){ return (prev||[]).filter(x => x.isBundle).length; }
+
+// المثبّت الجديد بيروح آخر المثبّتين، وبعدين بنعيد حساب المعاينة
+async function csTogglePinFromPreview(id){
+  const was = _csPinOf(id);
+  if(was) _cs.pinned = (_cs.pinned||[]).filter(p => p.id !== id);
+  else    _cs.pinned = (_cs.pinned||[]).concat([{ id, until:null }]);
+  await csPreview();
+}
 
 // 📦 v702: ثبّت كل الباندلز فوق بضغطة. بنعرفهم من وصفتهم على شوبيفاي
 //   (productVariantComponents) مش من كلمة «Bundle» في العنوان.
@@ -47480,6 +47539,11 @@ async function csPreview(){
           <img src="${escapeHtml(x.image||'')}" style="width:32px;height:32px;object-fit:contain;border-radius:5px;background:#fff;border:1px solid var(--border)" onerror="this.style.visibility='hidden'">
           <div style="flex:1;min-width:0;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
             ${x.pinned?'📌 ':''}${escapeHtml(x.title||'')}</div>
+          <!-- 📌 v703: التثبيت من المعاينة نفسها — انت شايف الترتيب هنا،
+               فمالوش لازمة ترجع للقايمة وتدوّر على الصنف تاني -->
+          <button class="btn btn-ghost btn-xs" style="${x.pinned?'color:#dc2626':''}"
+                  onclick="csTogglePinFromPreview('${escapeHtml(x.id)}')"
+                  title="${x.pinned?'فُك التثبيت':'ثبّته فوق'}">${x.pinned?'✕':'📌'}</button>
           ${x.isBundle
               ? (x.estimated
                   ? `<div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:2px 7px;white-space:nowrap" title="الباندل مابيسيبش أثر في الطلب — شوبيفاي بتفكّه لمكوّناته. الرقم ده مستنتج: المكوّنات ظهرت في نفس الطلب ومجموع أسعارها طابق سعر الباندل.">📦 باع ${n(x.soldQty)} <span style="font-size:9.5px;font-weight:700">تقديري</span></div>`
