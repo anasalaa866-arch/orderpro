@@ -9140,11 +9140,21 @@ tr:hover td{background:#fafbff}
   </div>
   
   <div class="card" style="margin-bottom:14px;padding:10px">
-    <div style="display:flex;gap:6px;flex-wrap:wrap" id="hr-adv-tabs">
-      <button class="chip on" onclick="filterAdvances('all', this)">الكل</button>
-      <button class="chip" onclick="filterAdvances('pending', this)">⏳ في الانتظار</button>
-      <button class="chip" onclick="filterAdvances('active', this)">✅ نشطة</button>
-      <button class="chip" onclick="filterAdvances('completed', this)">🏁 مكتملة</button>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="hr-adv-tabs">
+        <button class="chip on" onclick="filterAdvances('all', this)">الكل</button>
+        <button class="chip" onclick="filterAdvances('pending', this)">⏳ في الانتظار</button>
+        <button class="chip" onclick="filterAdvances('active', this)">✅ نشطة</button>
+        <button class="chip" onclick="filterAdvances('completed', this)">🏁 مكتملة</button>
+      </div>
+      <!-- 🔎 v699: بحث في السلف — بالاسم أو الكود أو السبب أو المبلغ -->
+      <div style="display:flex;gap:6px;align-items:center;margin-inline-start:auto">
+        <input id="hr-adv-q" class="form-input" style="width:260px;font-size:12px"
+               placeholder="🔎 اسم الموظف · الكود · السبب · المبلغ"
+               oninput="hrAdvSearch()"
+               onkeydown="if(event.key==='Escape'){this.value='';hrAdvSearch()}">
+        <span id="hr-adv-count" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>
+      </div>
     </div>
   </div>
   
@@ -47219,17 +47229,68 @@ async function openEmployee(id){
 }
 
 // ─── ADVANCES ───
+
+// 🔤 v699: تطبيع عربي للبحث. الأسماء بتتكتب بأشكال مختلفة
+//   (أحمد/احمد · عبدالرؤوف/عبد الرءوف · مصطفى/مصطفي)، ولو قارنّا
+//   حرفي البحث هيفشل على نص صح. وبنحوّل الأرقام العربية كمان لأن
+//   كل المبالغ في الشاشة معروضة بالعربي، فالنسخ منها بيجيب ٣٥٠.
+function _arKey(s){
+  return String(s == null ? '' : s)
+    .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0))
+    .replace(/[ً-ْـ]/g, '')      // تشكيل وتطويل
+    .replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي')
+    .replace(/[ةه]/g, 'ه').replace(/[ؤئء]/g, 'ء')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')            // أي فاصل = مسافة
+    .trim().toLowerCase();
+}
+
+let _hrAdvList = [];
+
 async function loadHrAdvances(){
   try{
     const status = _hrAdvancesFilter === 'all' ? '' : '?status=' + _hrAdvancesFilter;
-    const list = await apiFetch('/api/hr/advances' + status) || [];
-    
+    _hrAdvList = await apiFetch('/api/hr/advances' + status) || [];
+    _hrAdvRender();
+  }catch(e){
+    document.getElementById('hr-adv-table').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function hrAdvSearch(){ _hrAdvRender(); }
+
+function _hrAdvRender(){
+  try{
+    const all = _hrAdvList || [];
+    const q = _arKey(document.getElementById('hr-adv-q')?.value || '');
+    // كل كلمة لازم تتلاقى في أي عمود — فـ«محمد رضا» بترجع بغض النظر
+    //   عن ترتيب الكلمات، و«رضا ٣٥٠» بترجع سلفته بالمبلغ ده.
+    const terms = q ? q.split(' ').filter(Boolean) : [];
+    const list = !terms.length ? all : all.filter(a => {
+      const hay = _arKey([
+        a.employee_name, a.employee_code, a.reason,
+        a.amount, a.remaining_balance, a.monthly_deduction,
+        a.installments_count,
+      ].join(' '));
+      // ونسخة من غير مسافات كمان — «عبدالرؤوف» ملزوقة لازم تلاقي
+      //   «عبد الرؤوف» المكتوبة بمسافة، والعكس.
+      const hayNS = hay.replace(/ /g, '');
+      return terms.every(t => hay.includes(t) || hayNS.includes(t));
+    });
+
+    const cnt = document.getElementById('hr-adv-count');
+    if(cnt) cnt.textContent = terms.length
+      ? `${list.length.toLocaleString('ar-EG')} من ${all.length.toLocaleString('ar-EG')}`
+      : (all.length ? `${all.length.toLocaleString('ar-EG')} سلفة` : '');
+
     const container = document.getElementById('hr-adv-table');
     if(!list.length){
-      container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">مفيش سلف</div>';
+      container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">${
+        terms.length ? 'مفيش سلفة مطابقة للبحث' : 'مفيش سلف'}</div>`;
+      _hrAdvBadge(all);
       return;
     }
-    
+
     const rows = list.map(a => `
       <tr style="border-bottom:1px solid var(--border)">
         <td style="padding:8px 10px"><strong>${escapeHtml(a.employee_name||'—')}</strong><div style="font-size:10px;color:var(--muted)">${escapeHtml(a.employee_code||'')}</div></td>
@@ -47258,14 +47319,23 @@ async function loadHrAdvances(){
         <th style="text-align:right;padding:10px">التاريخ</th>
         <th style="text-align:center;padding:10px">إجراءات</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
-    
-    // update badge
-    const pendingCount = list.filter(a => a.status === 'pending').length;
-    const nb = document.getElementById('nb-hr-pending');
-    if(nb){ nb.textContent = pendingCount > 0 ? pendingCount : ''; nb.style.display = pendingCount > 0 ? '' : 'none'; }
+
+    _hrAdvBadge(all);
   }catch(e){
     document.getElementById('hr-adv-table').innerHTML = `<div style="text-align:center;padding:30px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
   }
+}
+
+// 🐞 v699: البادج بيتحسب من القايمة الكاملة مش المفلترة — قبل كده
+//   كان بيتحسب من المعروض، فالبحث كان هيخلّي «في الانتظار» في
+//   القايمة الجانبية يقلّ أو يختفي وهو مش ناقص.
+function _hrAdvBadge(all){
+  // والقايمة نفسها مفلترة بالحالة من الـ API — فلو إحنا على تاب
+  //   «نشطة» مفيش pending فيها أصلاً. نسيب آخر رقم صح زي ما هو.
+  if(_hrAdvancesFilter !== 'all') return;
+  const pendingCount = (all || []).filter(a => a.status === 'pending').length;
+  const nb = document.getElementById('nb-hr-pending');
+  if(nb){ nb.textContent = pendingCount > 0 ? pendingCount : ''; nb.style.display = pendingCount > 0 ? '' : 'none'; }
 }
 
 function filterAdvances(status, btn){
