@@ -5627,6 +5627,39 @@ tr:hover td{background:#fafbff}
       style="border:none;border-bottom:3px solid var(--accent);border-radius:0;font-weight:800">📦 المخزون</button>
     <button id="inv-tabbtn-hidden" class="btn btn-ghost btn-sm" onclick="invSwitchTab('hidden')"
       style="border:none;border-bottom:3px solid transparent;border-radius:0;font-weight:800">🙈 الكميات المخفية</button>
+    <!-- 📦 v705: الباندلز — سعرها مقابل مجموع مكوّناتها -->
+    <button id="inv-tabbtn-bundles" class="btn btn-ghost btn-sm" onclick="invSwitchTab('bundles')"
+      style="border:none;border-bottom:3px solid transparent;border-radius:0;font-weight:800">📦 الباندلز</button>
+  </div>
+
+  <div id="inv-tab-bundles" style="display:none">
+    <div class="card" style="padding:12px 14px;margin-bottom:14px">
+      <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-primary btn-sm" onclick="bndLoad()">🔄 حمّل الباندلز</button>
+        <input id="bnd-q" class="form-input" style="width:240px;font-size:12px"
+               placeholder="🔎 اسم الباندل أو مكوّن فيه" oninput="bndRender()"
+               onkeydown="if(event.key==='Escape'){this.value='';bndRender()}">
+        <select id="bnd-status" class="form-input" style="width:140px;font-size:12px" onchange="bndRender()">
+          <option value="">كل الحالات</option>
+          <option value="ACTIVE">✅ نشط</option>
+          <option value="DRAFT">📝 مسودة</option>
+        </select>
+        <select id="bnd-sort" class="form-input" style="width:190px;font-size:12px" onchange="bndRender()">
+          <option value="pct_asc">أقل توفير الأول</option>
+          <option value="pct_desc">أكبر توفير الأول</option>
+          <option value="save_desc">أكبر مبلغ توفير</option>
+          <option value="price_desc">الأغلى</option>
+          <option value="title">الاسم</option>
+        </select>
+        <label style="font-size:12px;display:flex;gap:5px;align-items:center">
+          <input type="checkbox" id="bnd-bad" onchange="bndRender()"> المشاكل بس
+        </label>
+        <button class="btn btn-ghost btn-sm" onclick="bndCSV()">⬇️ CSV</button>
+      </div>
+      <div id="bnd-sum" style="margin-top:10px"></div>
+    </div>
+    <div class="card"><div id="bnd-body" style="overflow-x:auto;padding:22px;text-align:center;color:var(--muted)">
+      دوس «حمّل الباندلز»</div></div>
   </div>
 
   <div id="inv-tab-hidden" style="display:none">
@@ -31660,17 +31693,177 @@ function showSupplierDetails(supplierName){
 let _invItems = [];
 let _invWarehouses = [];
 
+
+// ══════════════════════════════════════════════════════════════
+// 📦 v705: تقرير الباندلز — سعرها مقابل مجموع مكوّناتها
+//   التوفير السالب = الباندل أغلى من شراء مكوّناته منفصلة. ده غلط
+//   تسعير حقيقي، فبيطلع أحمر وفوق القايمة.
+// ══════════════════════════════════════════════════════════════
+let _bnd = [], _bndSum = null, _bndOpen = {};
+
+async function bndLoad(){
+  const body = $('bnd-body');
+  body.innerHTML = '<div style="padding:22px;text-align:center;color:var(--muted)">⏳ بيجمّع الباندلز من شوبيفاي...</div>';
+  try{
+    const r = await apiFetch('/api/bundles/list','GET');
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    _bnd = r.rows || []; _bndSum = r.summary || null; _bndOpen = {};
+    bndRender();
+  }catch(e){
+    body.innerHTML = `<div style="padding:22px;text-align:center;color:#dc2626">❌ ${escapeHtml(e.message||'الطلب فشل')}<br>
+      <span style="font-size:11.5px;color:var(--muted)">السبب الكامل في الكونسول (F12). لو ٤٠٤ يبقى الباك إند لسه مش v660.</span></div>`;
+  }
+}
+
+function _bndFiltered(){
+  const q  = _arKey($('bnd-q')?.value || '');
+  const st = $('bnd-status')?.value || '';
+  const bad = $('bnd-bad')?.checked;
+  const terms = q ? q.split(' ').filter(Boolean) : [];
+  let list = _bnd.filter(r => {
+    if(st && r.status !== st) return false;
+    if(bad && !(r.saving <= 0 || r.compIssues || r.compOut)) return false;
+    if(!terms.length) return true;
+    const hay = _arKey([r.title, r.sku, ...r.comps.map(c => c.title + ' ' + c.sku)].join(' '));
+    const hayNS = hay.replace(/ /g, '');
+    return terms.every(t => hay.includes(t) || hayNS.includes(t));
+  });
+  const sort = $('bnd-sort')?.value || 'pct_asc';
+  const P = v => (v == null ? Infinity : v);
+  list.sort((a,b) =>
+      sort === 'pct_desc'   ? P(b.pct) - P(a.pct)
+    : sort === 'save_desc'  ? b.saving - a.saving
+    : sort === 'price_desc' ? b.price - a.price
+    : sort === 'title'      ? String(a.title).localeCompare(String(b.title), 'ar')
+    :                         P(a.pct) - P(b.pct));
+  return list;
+}
+
+function bndRender(){
+  const body = $('bnd-body'), sum = $('bnd-sum');
+  if(!_bnd.length){ body.innerHTML = '<div style="padding:22px;text-align:center;color:var(--muted)">دوس «حمّل الباندلز»</div>'; return; }
+  const n  = v => Number(v||0).toLocaleString('ar-EG');
+  const m  = v => Number(v||0).toLocaleString('ar-EG',{minimumFractionDigits:0,maximumFractionDigits:2}) + ' ج';
+  const pc = v => v == null ? '—' : (Math.round(v*10)/10).toLocaleString('ar-EG') + '٪';
+  const S = _bndSum || {};
+
+  const card = (l,v,c) => `<div style="background:var(--elev);border-inline-start:4px solid ${c};border-radius:8px;padding:8px 11px;min-width:110px">
+    <div style="font-size:10.5px;color:var(--muted)">${l}</div>
+    <div style="font-size:16px;font-weight:800;color:${c}">${v}</div></div>`;
+
+  sum.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap">
+    ${card('باندل', n(_bnd.length), 'var(--accent)')}
+    ${card('✅ نشط', n(S.active), '#16a34a')}
+    ${card('📝 مسودة', n(S.draft), '#b45309')}
+    ${card('متوسط التوفير', pc(S.avgPct), '#3b82f6')}
+    ${S.overpriced ? card('🚨 أغلى من مكوّناته', n(S.overpriced), '#dc2626') : ''}
+    ${S.noSaving ? card('بدون توفير', n(S.noSaving), '#b45309') : ''}
+    ${S.withIssues ? card('⚠️ مكوّن ناقص', n(S.withIssues), '#b45309') : ''}
+  </div>
+  ${S.overpriced ? `<div style="margin-top:9px;background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;padding:9px 12px;font-size:12px">
+    🚨 <b>${n(S.overpriced)} باندل سعره أغلى من شراء مكوّناته منفصلة.</b> العميل اللي هيحسب هيلاقي شراءها فُرادى أرخص.</div>` : ''}`;
+
+  const list = _bndFiltered();
+  if(!list.length){ body.innerHTML = '<div style="padding:22px;text-align:center;color:var(--muted)">مفيش باندل مطابق</div>'; return; }
+
+  const stBadge = s => s === 'ACTIVE' ? '<span class="badge" style="background:#dcfce7;color:#166534">✅ نشط</span>'
+                   : s === 'DRAFT'  ? '<span class="badge" style="background:#fef3c7;color:#92400e">📝 مسودة</span>'
+                   : `<span class="badge" style="background:#f3f4f6;color:#6b7280">${escapeHtml(s||'—')}</span>`;
+
+  body.innerHTML = `<div style="padding:7px 12px;font-size:11.5px;color:var(--muted)">
+      ${list.length === _bnd.length ? `${n(_bnd.length)} باندل` : `${n(list.length)} من ${n(_bnd.length)}`}
+      · دوس على أي سطر عشان تشوف مكوّناته
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:880px">
+    <thead style="background:var(--bg)"><tr>
+      <th style="text-align:right;padding:9px">الباندل</th>
+      <th style="padding:9px;width:92px">الحالة</th>
+      <th style="padding:9px;width:92px">سعره</th>
+      <th style="padding:9px;width:110px">مجموع المكوّنات</th>
+      <th style="padding:9px;width:100px">أرخص بـ</th>
+      <th style="padding:9px;width:80px">النسبة</th>
+      <th style="padding:9px;width:70px">مخزون</th>
+    </tr></thead><tbody>
+    ${list.map((r, i) => {
+      const bad  = r.saving < 0;
+      const zero = r.saving === 0;
+      const col  = bad ? '#dc2626' : zero ? '#b45309' : '#16a34a';
+      const open = !!_bndOpen[r.variantGid];
+      return `<tr onclick="bndToggle('${escapeHtml(r.variantGid)}')"
+                  style="border-bottom:1px solid var(--border);cursor:pointer;${bad?'background:#fef2f2':''}">
+        <td style="padding:8px 10px">
+          <div style="display:flex;gap:9px;align-items:center">
+            <img src="${escapeHtml(r.image||'')}" style="width:38px;height:38px;object-fit:contain;border-radius:6px;background:#fff;border:1px solid var(--border)" onerror="this.style.visibility='hidden'">
+            <div style="min-width:0">
+              <div style="font-weight:600">${open?'▾':'▸'} ${escapeHtml(r.title)}${r.variantTitle?` <span style="color:var(--muted);font-weight:400">· ${escapeHtml(r.variantTitle)}</span>`:''}</div>
+              <div style="font-size:10px;color:var(--muted)">${n(r.comps.length)} مكوّن${
+                r.compIssues?` · <span style="color:#b45309">${n(r.compIssues)} مش نشط</span>`:''}${
+                r.compOut?` · <span style="color:#dc2626">${n(r.compOut)} خلصان</span>`:''}</div>
+            </div>
+          </div>
+        </td>
+        <td style="padding:8px;text-align:center">${stBadge(r.status)}</td>
+        <td style="padding:8px;text-align:center;font-weight:800;font-family:Roboto,sans-serif">${m(r.price)}</td>
+        <td style="padding:8px;text-align:center;color:var(--muted);font-family:Roboto,sans-serif">${m(r.compTotal)}</td>
+        <td style="padding:8px;text-align:center;font-weight:800;color:${col};font-family:Roboto,sans-serif">
+          ${bad ? 'أغلى بـ ' + m(-r.saving) : zero ? 'ولا مليم' : m(r.saving)}</td>
+        <td style="padding:8px;text-align:center;font-weight:800;color:${col}">${r.pct==null?'—':pc(Math.abs(r.pct))}</td>
+        <td style="padding:8px;text-align:center;color:${(r.stock??0)<=0?'#dc2626':'inherit'}">${r.stock==null?'—':n(r.stock)}</td>
+      </tr>
+      ${open ? `<tr><td colspan="7" style="padding:0 10px 10px 10px;background:var(--elev)">
+        <table style="width:100%;border-collapse:collapse;font-size:11.5px">
+          ${r.comps.map(c => `<tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px 8px">${escapeHtml(c.title)}${c.variantTitle?` · ${escapeHtml(c.variantTitle)}`:''}
+              ${c.status && c.status!=='ACTIVE' ? `<span style="color:#b45309"> · ${escapeHtml(c.status)}</span>`:''}</td>
+            <td style="padding:6px 8px;width:110px;text-align:center;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(c.sku||'')}</td>
+            <td style="padding:6px 8px;width:60px;text-align:center">×${n(c.qty)}</td>
+            <td style="padding:6px 8px;width:90px;text-align:center;font-family:Roboto,sans-serif">${m(c.price)}</td>
+            <td style="padding:6px 8px;width:100px;text-align:center;font-weight:700;font-family:Roboto,sans-serif">${m(c.price*c.qty)}</td>
+            <td style="padding:6px 8px;width:70px;text-align:center;color:${(c.stock??0)<=0?'#dc2626':'var(--muted)'}">${c.stock==null?'—':n(c.stock)}</td>
+          </tr>`).join('')}
+          <tr><td colspan="4" style="padding:6px 8px;text-align:left;font-weight:800">المجموع</td>
+              <td style="padding:6px 8px;text-align:center;font-weight:800;font-family:Roboto,sans-serif">${m(r.compTotal)}</td><td></td></tr>
+        </table></td></tr>` : ''}`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+function bndToggle(vid){ _bndOpen[vid] = !_bndOpen[vid]; bndRender(); }
+
+function bndCSV(){
+  const list = _bndFiltered();
+  if(!list.length) return toast('مفيش حاجة تتصدّر');
+  const esc = v => `"${String(v==null?'':v).replace(/"/g,'""')}"`;
+  const head = ['الباندل','الـvariant','SKU','الحالة','سعر الباندل','مجموع المكوّنات','التوفير','النسبة %','المخزون','عدد المكوّنات','المكوّنات'];
+  const body = list.map(r => [
+    r.title, r.variantTitle, r.sku, r.status, r.price, r.compTotal,
+    +r.saving.toFixed(2), r.pct==null?'':+r.pct.toFixed(1), r.stock, r.comps.length,
+    r.comps.map(c => `${c.title} ×${c.qty} @${c.price}`).join(' + '),
+  ].map(esc).join(','));
+  const csv = '﻿' + [head.map(esc).join(','), ...body].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv;charset=utf-8' }));
+  a.download = `bundles-${new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Cairo'})}.csv`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
 // ===== 🙈 v579: تبويب الكميات المخفية =====
 let _hiddenRows = [];
 
 function invSwitchTab(tab){
-  const isHidden = tab === 'hidden';
-  document.getElementById('inv-tab-levels').style.display = isHidden ? 'none' : '';
-  document.getElementById('inv-tab-hidden').style.display = isHidden ? '' : 'none';
+  const isHidden  = tab === 'hidden';
+  const isBundles = tab === 'bundles';
+  document.getElementById('inv-tab-levels').style.display  = (isHidden||isBundles) ? 'none' : '';
+  document.getElementById('inv-tab-hidden').style.display  = isHidden  ? '' : 'none';
+  const tb = document.getElementById('inv-tab-bundles');
+  if(tb) tb.style.display = isBundles ? '' : 'none';
   const bl = document.getElementById('inv-tabbtn-levels');
   const bh = document.getElementById('inv-tabbtn-hidden');
-  if(bl) bl.style.borderBottomColor = isHidden ? 'transparent' : 'var(--accent)';
-  if(bh) bh.style.borderBottomColor = isHidden ? 'var(--accent)' : 'transparent';
+  const bb = document.getElementById('inv-tabbtn-bundles');
+  if(bl) bl.style.borderBottomColor = (isHidden||isBundles) ? 'transparent' : 'var(--accent)';
+  if(bh) bh.style.borderBottomColor = isHidden  ? 'var(--accent)' : 'transparent';
+  if(bb) bb.style.borderBottomColor = isBundles ? 'var(--accent)' : 'transparent';
+  if(isBundles && !_bnd.length) bndLoad();
   if(isHidden){
     const sel = document.getElementById('hidden-wh');
     if(sel && !sel.options.length && Array.isArray(_invWarehouses)){
