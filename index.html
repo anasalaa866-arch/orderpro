@@ -49154,6 +49154,46 @@ async function expRecon(apply){
   }
 }
 
+// ══════════════════════════════════════════════════════════════
+// 🧹 v698: حالة ماسح الخصم (v655). الخصم بقى بيحصل بعد كل سحب
+//   من Shopify — مش في الـ webhook، لأن الطلبات مابتدخلش من هناك.
+// ══════════════════════════════════════════════════════════════
+async function _expSweepStatus(){
+  const box = $('exp-sweep'); if(!box) return;
+  try{
+    const r = await apiFetch('/api/product-batches/sweep-status','GET');
+    if(!r?.ok) throw new Error(r?.error || '');
+    const n = v => Number(v||0).toLocaleString('ar-EG');
+    const L = r.last;
+    const when = L?.at ? new Date(L.at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'}) : null;
+    box.innerHTML = `<div style="background:var(--elev);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:11.5px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <span>🧹 <b>ماسح الخصم</b></span>
+      <span>مستني: <b style="color:${r.pending?'#b45309':'#16a34a'}">${n(r.pending)}</b> طلب</span>
+      ${when ? `<span style="color:var(--muted)">آخر لفة ${escapeHtml(when)} · خصم ${n(L.deducted)} قطعة من ${n(L.scanned)} طلب${L.errors?` · ${n(L.errors)} خطأ`:''}</span>`
+             : '<span style="color:#b45309">لسه مالفش ولا لفة</span>'}
+      <button class="btn btn-sm" style="margin-inline-start:auto" onclick="expSweepNow(this)">▶️ شغّله دلوقتي</button>
+    </div>`;
+  }catch(e){
+    box.innerHTML = `<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:9px 12px;font-size:11.5px">
+      🧹 ماسح الخصم مش موجود في الباك إند — ارفع v655.</div>`;
+  }
+}
+
+async function expSweepNow(btn){
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ بيشتغل...'; }
+  try{
+    const r = await apiFetch('/api/product-batches/sweep-now','POST',{ limit:200, days:2 });
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    const n = v => Number(v||0).toLocaleString('ar-EG');
+    toast(`🧹 خصم ${n(r.deducted)} قطعة من ${n(r.scanned)} طلب` + (r.errors?` · ${n(r.errors)} خطأ`:''));
+    await _expSweepStatus();
+    expDiag();
+  }catch(e){
+    toast('❌ ' + e.message);
+    if(btn){ btn.disabled = false; btn.textContent = '▶️ حاول تاني'; }
+  }
+}
+
 async function expDiag(){
   const box = $('exp-diag'); if(!box) return;
   const days = parseInt($('exp-diag-days')?.value) || 60;
@@ -49175,7 +49215,9 @@ async function expDiag(){
       verdict = '🚨 عمود order_id لسه BIGINT — الهجرة مجتش. ارفع v643 وشغّل السيرفر تاني.';
       vcolor = '#dc2626';
     } else if(!r.saleEvents){
-      verdict = '🚨 مفيش ولا حدث بيع واحد مسجّل. يعني الخصم مابيحصلش خالص من أي قناة.';
+      // 🧹 v698: السبب معروف دلوقتي — الخصم كان في /webhook/shopify بس،
+      //   والطلبات بتدخل من السحب التلقائي مش من الـ webhook (v655).
+      verdict = '🚨 مفيش ولا حدث بيع واحد مسجّل. ارفع v655 — الخصم بقى ماسح بيشتغل بعد كل سحب.';
       vcolor = '#dc2626';
     } else if(s.withGap > 0){
       verdict = `⚠️ ${n(s.withGap)} منتج اتباع منه أكتر مما اتخصم. `
@@ -49205,6 +49247,7 @@ async function expDiag(){
         ${card('من المحل', n(s.totalPos), '#8b5cf6')}
         ${card('أونلاين', n(s.totalOnline), '#8b5cf6')}
       </div>
+      <div id="exp-sweep" style="margin-bottom:10px"></div>
       ${s.noSalesMatched ? `<div style="background:#fef3c7;color:#92400e;border-radius:8px;padding:9px 12px;font-size:11.5px;margin-bottom:10px">
         ⚠️ ${n(s.noSalesMatched)} منتج عليه batches ومالوش ولا بيعة في الفترة دي — يا إما مابيتباعش،
         يا إما الـ variant_id في الـ batch مش نفسه اللي في الطلبات.</div>` : ''}
@@ -49222,16 +49265,22 @@ async function expDiag(){
             <div style="font-size:10px;color:var(--muted)">${x.batches} batch · فاضل ${n(x.current)} من ${n(x.original)}</div></td>
           <td style="padding:7px;text-align:center">${n(x.soldAll)}</td>
           <td style="padding:7px;text-align:center">${n(x.movedByBatches)}</td>
+          <!-- 🐞 v698: كانت بتحط سالب على gap موجب — والسطر تحت مكتوب
+               «اتباع ناقص اتخصم»، يعني الإشارة كانت مقلوبة عن وصفها. -->
           <td style="padding:7px;text-align:center;font-weight:800;color:${x.gap>0?'#dc2626':(x.gap<0?'#b45309':'#16a34a')}">
-            ${x.gap>0?'-'+n(x.gap):(x.gap<0?'+'+n(-x.gap):'0')}</td>
+            ${x.gap>0 ? n(x.gap)+' <span style="font-weight:600;font-size:10px">ناقص خصم</span>'
+                      : (x.gap<0 ? n(-x.gap)+' <span style="font-weight:600;font-size:10px">خصم زيادة</span>'
+                                 : 'مظبوط')}</td>
           <td style="padding:7px;font-size:10.5px;color:var(--muted)">
             ${x.soldPos?`محل ${n(x.soldPos)}`:''}${x.soldOnline?` · أونلاين ${n(x.soldOnline)}`:''}${x.soldTalabat?` · طلبات ${n(x.soldTalabat)}`:''}
             ${!x.soldAll?'<span style="color:#b45309">مفيش بيعات متطابقة</span>':''}</td>
         </tr>`).join('')}
         </tbody></table></div>`}
       <div style="font-size:10.5px;color:var(--muted);margin-top:8px">
-        «الفرق» = اتباع ناقص اتخصم. الأرقام القديمة مش بتتصلح لوحدها — الإصلاح بيمنع التكرار من دلوقتي.
+        «الفرق» = اتباع ناقص اتخصم. «ناقص خصم» يعني اتباع أكتر مما اتخصم — الـ batch شايف كمية مش موجودة.
+        الأرقام القديمة مش بتتصلح لوحدها: الماسح بيمنع التكرار من دلوقتي، والتاريخ القديم شغلة «تسوية الـ batches».
       </div>`;
+    _expSweepStatus();
   }catch(e){
     box.innerHTML = `<div style="padding:14px;color:#dc2626">❌ ${escapeHtml(e.message)}</div>`;
   }
