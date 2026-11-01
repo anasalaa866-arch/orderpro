@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════
+  OrderPro v695 — 🔎 اختبار قراءة شحنات بوسطة (2026-11-01)
+  🔎 v695: زرار في إعدادات بوسطة بيجرّب مسارات قراءة الشحنات —
+     عشان نعرف لو نقدر نشوف البوالص اللي اتعملت من لوحتهم مباشرة.
+  OrderPro v694 — 🏭 بوالص الكراتين في شاشة الطباعة (2026-10-31)
+  🏭 v694: الطلب المتقسّم بيطلع سطر لكل كرتونة، مكتوب عليه «📦 ٢/٣»
+     وتحصيلها، ومتعلّم لو محتاج إعادة طباعة. زرار «اعمل بوالص
+     الكراتين» بيعملها كلها بتأكيد بيقول هتتكلّف كام شحنة.
+     الطباعة مرتبة برقم الأوردر ثم رقم الكرتونة.
   OrderPro v693 — 💰 اختيار توزيع التحصيل + 📦 الطلب المدفوع أسهل (2026-10-31)
   💰 v693: قايمة في شاشة التقسيم: بنسبة القيمة · البضاعة + الشحن
      بالتساوي · التحصيل كله بالتساوي. وزرار «خليه الافتراضي» بيحفظ
@@ -4904,6 +4912,14 @@ tr:hover td{background:#fafbff}
           <button class="btn btn-primary btn-sm" onclick="pcuProbe()">🧪 جرّب</button>
         </div>
         <div id="pcu-out" style="margin-top:10px;font-size:12px"></div>
+        <hr style="border:0;border-top:1px solid var(--border);margin:14px 0">
+        <div style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:8px">
+          <b>قراءة شحنات بوسطة</b> — لو حد عمل بوليصة من لوحة بوسطة مباشرة، نقدر نقراها
+          ونمنع إننا نعمل تانية بنفس رقم الطلب؟ الاختبار ده بيجرّب مسارات القراءة
+          <b>من غير ما يعمل أو يغيّر أي حاجة</b>.
+        </div>
+        <button class="btn btn-sm" style="background:#0ea5e9;color:#fff;font-weight:700" onclick="pblProbe()">🔎 جرّب القراءة</button>
+        <div id="pbl-out" style="margin-top:10px;font-size:12px"></div>
       </div>
     </div>
 
@@ -15740,6 +15756,97 @@ async function bwRun(mode){
 let _awbList = [], _awbDesc = false, _awbOldBatch = null;
 let _awbFails = {};   // 🐞 v666: orderId → سبب الفشل، بيعيش بعد التحديث
 let _awbLastBatch = null;
+let _awbOneId = null; // 🔎 v697: طلب واحد بالرقم — نطاق بديل عن الدفعة
+
+// ══════════════════════════════════════════════════════════════
+// 🔎 v697: «هات طلب برقمه واعمله بوليصة» — مخرج طوارئ للطلب اللي
+//   مش في أي دفعة ولا في نطاق المحوّلة. الباك إند هو اللي بيحكم،
+//   والقاعدة الحمراء عنده: الملغي على Shopify مرفوض من غير تجاوز.
+// ══════════════════════════════════════════════════════════════
+function _awbOneSay(html){
+  const m = document.getElementById('awb-one-msg');
+  if(m) m.innerHTML = html;
+}
+function _awbOneBox(bg, bd, fg, html){
+  return `<div style="background:${bg};border:1px solid ${bd};color:${fg};border-radius:8px;padding:9px 12px;font-size:12px;line-height:1.8">${html}</div>`;
+}
+function _awbOneHead(o){
+  return `<span style="font-family:Roboto,sans-serif">${escapeHtml(o.id)}</span>`
+    + (o.name ? ` · ${escapeHtml(o.name)}` : '')
+    + (o.area ? ` · ${escapeHtml(o.area)}` : '')
+    + (o.status ? ` · <b>${escapeHtml(o.status)}</b>` : '');
+}
+
+async function awbOne(){
+  const q = (document.getElementById('awb-one')?.value || '').trim();
+  if(!q) return _awbOneSay('');
+  _awbOneSay('<span style="font-size:12px;color:var(--muted)">⏳ بيدوّر...</span>');
+  let r;
+  try{ r = await apiFetch('/api/bosta/lookup?q=' + encodeURIComponent(q), 'GET'); }
+  catch(e){ return _awbOneSay(_awbOneBox('#fef2f2','#fca5a5','#991b1b', '❌ ' + escapeHtml(e.message))); }
+
+  const o = r?.order;
+  const v = r?.verdict;
+
+  // 🚫 الملغي على Shopify — ممنوع تماماً، مفيش زرار تجاوز خالص.
+  if(v === 'cancelled_shopify')
+    return _awbOneSay(_awbOneBox('#fef2f2','#fca5a5','#991b1b',
+      `🚫 <b>ملغي على Shopify — ممنوع.</b><br>${_awbOneHead(o)}`));
+
+  if(v === 'dead_local')
+    return _awbOneSay(_awbOneBox('#fffbeb','#fcd34d','#92400e',
+      `⚠️ ${escapeHtml(r.reason)}<br>${_awbOneHead(o)}`));
+
+  if(v === 'not_found' || v === 'bad' || v === 'empty')
+    return _awbOneSay(_awbOneBox('#f3f4f6','var(--border)','var(--muted)',
+      escapeHtml(r.reason || 'مش لاقيه')));
+
+  if(!o) return _awbOneSay(_awbOneBox('#fef2f2','#fca5a5','#991b1b',
+    '❌ ' + escapeHtml(r?.reason || r?.error || 'مانفعش')));
+
+  // محتاج يتعلّم بوسطة الأول (مع مندوب، أو مش معلّم خالص)
+  if(v === 'with_courier' || v === 'not_bosta'){
+    _awbOneSay(_awbOneBox('#eff6ff','#93c5fd','#1e40af',
+      `${_awbOneHead(o)}<br>${escapeHtml(r.reason)}
+       <div style="margin-top:7px">
+         <button class="btn btn-sm" onclick="awbOneMark('${escapeHtml(o.id)}',this)">
+           🔀 ${v === 'with_courier' ? 'حوّله لبوسطة واعمله بوليصة' : 'علّمه بوسطة واعمله بوليصة'}
+         </button></div>`));
+    return;
+  }
+
+  // جاهز، أو عليه بوليصة خلاص → افتحه في الجدول
+  _awbOneSay(_awbOneBox(v === 'has_awb' ? '#fffbeb' : '#f0fdf4',
+    v === 'has_awb' ? '#fcd34d' : '#86efac',
+    v === 'has_awb' ? '#92400e' : '#166534',
+    `${v === 'has_awb' ? '🖨️' : '✅'} ${_awbOneHead(o)}<br>${escapeHtml(r.reason)}`));
+  _awbOneId = o.id;
+  await awbLoad();
+}
+
+async function awbOneMark(id, btn){
+  if(!confirm(`تعلّم الطلب ${id} بوسطة وتشيل المندوب؟\n\nده بيغيّر تسجيل الطلب فعلاً، وبيتسجّل في تاريخ الطلب.`)) return;
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ بيتحوّل...'; }
+  try{
+    const r = await apiFetch('/api/bosta/mark-bosta','POST',{ orderId:id });
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    toast('✅ اتعلّم بوسطة' + (r.wasCourier ? ' (اتشال من المندوب)' : ''));
+    const o = orders.find(x => x.id === id);
+    if(o){ o.isBosta = true; o.courierId = null; }
+    document.getElementById('awb-one').value = id;
+    await awbOne();            // يرجع يقرا الحالة من الباك إند من تاني
+  }catch(e){
+    if(btn){ btn.disabled = false; btn.textContent = '🔀 حاول تاني'; }
+    _awbOneSay(_awbOneBox('#fef2f2','#fca5a5','#991b1b', '❌ ' + escapeHtml(e.message)));
+  }
+}
+
+function awbOneClear(){
+  _awbOneId = null;
+  const i = document.getElementById('awb-one'); if(i) i.value = '';
+  _awbOneSay('');
+  awbLoad();
+}
 
 async function openAwbPrint(){
   document.getElementById('awb-modal')?.remove();
@@ -15754,9 +15861,17 @@ async function openAwbPrint(){
       </div>
       <div style="padding:0 20px 10px">
         <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">الدفعة</label>
-        <select id="awb-batch" class="form-input" style="width:100%" onchange="awbLoad()">
+        <select id="awb-batch" class="form-input" style="width:100%" onchange="awbOneClear()">
           <option value="">⏳ بيحمّل الدفعات...</option>
         </select>
+        <!-- 🔎 v697: مخرج طوارئ — طلب واحد برقمه، مهما كان مش في أي نطاق -->
+        <div style="display:flex;gap:7px;align-items:center;margin-top:8px">
+          <input id="awb-one" class="form-input" style="flex:1;font-family:Roboto,sans-serif"
+                 placeholder="أو هات طلب واحد برقمه — ١٨٧٦٩٧"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();awbOne()}">
+          <button class="btn btn-sm" onclick="awbOne()">🔎 هاته</button>
+        </div>
+        <div id="awb-one-msg" style="margin-top:7px"></div>
       </div>
       <div id="awb-body" style="flex:1;overflow-y:auto;padding:0 20px"></div>
       <div id="awb-foot" style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap"></div>
@@ -15774,7 +15889,12 @@ async function awbBatches(keep){
   try{
     const r = await apiFetch('/api/bosta/batches','GET');
     const bs = r?.batches || [];
-    if(!bs.length){
+    // 🔀 v696: نطاق افتراضي للطلبات المحوّلة لبوسطة (من مندوب أو من المحل).
+    //   دي مش في دفعة النهاردة — واللي جاي من المحل مش في أي دفعة أصلاً،
+    //   فمكانش فيه ولا طريقة تعمله بوليصة من الشاشة دي.
+    const xf = r?.transferred || null;
+    const xfCode = r?.xferCode || '__XFER__';
+    if(!bs.length && !xf){
       sel.innerHTML = '<option value="">مفيش دفعات فيها طلبات بوسطة</option>';
       body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">مفيش دفعات فيها طلبات موزّعة بوسطة</div>';
       return;
@@ -15784,7 +15904,12 @@ async function awbBatches(keep){
     const today = new Date().toISOString().slice(0,10);
     // 🔄 v665: بعد ما تعمل شحنات، الأرقام في الـ dropdown بتبقى قديمة.
     //   keep = الدفعة اللي كانت مختارة، نرجّعها بعد التحديث.
-    sel.innerHTML = bs.map((b, i) => {
+    // الدفعة الافتراضية تفضل زي ماهي (أحدث دفعة) — النطاق ده بيبان فوق
+    //   بعدّاده بس، مابياخدش الاختيار من تحت إيدك.
+    const xfOpt = xf ? `<option value="${escapeHtml(xfCode)}" ${(keep === xfCode || !bs.length) ? 'selected' : ''}>
+        🔀 محوّلة لبوسطة (مش في دفعة النهاردة) — 🚚 ${xf.total} طلب${xf.needs_create ? ` · ${xf.needs_create} مالهمش بوليصة` : ' · كلهم جاهزين'}
+      </option>` : '';
+    sel.innerHTML = xfOpt + bs.map((b, i) => {
       const d = (b.batch_date || String(b.batch_code).replace(/^B-/,'').slice(0,10) || '');
       const isToday = d === today;
       const pick = keep ? (b.batch_code === keep) : (i === 0);
@@ -15809,18 +15934,27 @@ async function awbLoad(){
   foot.innerHTML = '';
   _awbAreas = {}; _arRates = {};
   try{
-    const batchCode = document.getElementById('awb-batch')?.value || '';
-    if(_awbLastBatch && _awbLastBatch !== batchCode) _awbFails = {};
-    _awbLastBatch = batchCode;
-    if(!batchCode){ body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">اختار دفعة</div>'; return; }
-    const r = await apiFetch('/api/bosta/print-list','POST',{ desc:_awbDesc, batchCode });
+    // 🔎 v697: _awbOneId مضبوط = النطاق طلب واحد بالرقم، مش دفعة.
+    const oneId = _awbOneId;
+    const batchCode = oneId ? '' : (document.getElementById('awb-batch')?.value || '');
+    const scopeKey = oneId ? ('ONE:' + oneId) : batchCode;
+    if(_awbLastBatch && _awbLastBatch !== scopeKey) _awbFails = {};
+    _awbLastBatch = scopeKey;
+    if(!oneId && !batchCode){ body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">اختار دفعة</div>'; return; }
+    const r = await apiFetch('/api/bosta/print-list','POST',
+      oneId ? { desc:_awbDesc, orderIds:[oneId] } : { desc:_awbDesc, batchCode });
     if(!r?.ok) throw new Error(r?.error || 'فشل');
     _awbList = r.items || [];
     if(!_awbList.length){
-      body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">الدفعة دي مفيهاش طلبات بوسطة</div>';
+      body.innerHTML = `<div style="padding:30px;text-align:center;color:var(--muted)">${
+        oneId ? 'الطلب ده مش بيرجع في قايمة البوالص — دوس «🔎 هاته» تاني وشوف السبب'
+        : batchCode === '__XFER__' ? 'مفيش طلبات محوّلة لبوسطة محتاجة بوليصة' : 'الدفعة دي مفيهاش طلبات بوسطة'}</div>`;
       return;
     }
-    const _d = (batchCode || '').replace(/^B-/,'').slice(0,10);
+    // 🔀 v696: النطاق الافتراضي مالوش تاريخ — تحذير «الدفعة مش النهاردة»
+    //   مايتطبّقش عليه، وإلا كان هيقرا '__XFER__' كتاريخ.
+    const _isXfer = batchCode === '__XFER__';
+    const _d = (_isXfer || oneId) ? '' : (batchCode || '').replace(/^B-/,'').slice(0,10);
     _awbOldBatch = (_d && _d !== new Date().toISOString().slice(0,10)) ? _d : null;
     const needRows = _awbList.filter(i => i.needsCreate);
     const need = needRows.length;
@@ -15853,6 +15987,11 @@ async function awbLoad(){
           `<b style="font-family:Roboto,sans-serif">${escapeHtml(String(k).replace(/^SH-/,''))}</b>: ${escapeHtml(v)}`).join('<br>')}</div></div>` : ''}
       ${_awbOldBatch ? `<div style="background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:8px">
         🗓️ <b>الدفعة دي مش بتاعة النهاردة (${escapeHtml(_awbOldBatch)}).</b> اتأكد إنها اللي إنت قاصدها قبل ما تعمل شحنات.</div>` : ''}
+      ${_isXfer ? `<div style="background:#f0fdf4;color:#166534;border:1px solid #86efac;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:8px">
+        🔀 <b>طلبات محوّلة لبوسطة</b> — من مندوب أو من المحل، آخر ٣٠ يوم. دي مش دفعة، فالطلب فاضل في دفعته الأصلية زي ماهو؛ ده نطاق عشان توصله وتعمله بوليصة بس.</div>` : ''}
+      ${oneId ? `<div style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d;border-radius:8px;padding:9px 12px;font-size:12px;margin-bottom:8px;display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+        <span>🔎 <b>طلب واحد بالرقم:</b> <span style="font-family:Roboto,sans-serif">${escapeHtml(oneId)}</span> — خارج أي دفعة.</span>
+        <button class="btn btn-ghost btn-sm" onclick="awbOneClear()">✕ ارجع للدفعات</button></div>` : ''}
       ${noCities ? `<div style="background:#eef2ff;color:#3730a3;border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:8px">
         مفيش مدن بوسطة محفوظة.
         <button class="btn btn-sm" style="margin-inline-start:8px" onclick="awbSyncCities(this)">⬇️ اجلب المدن من بوسطة</button>
@@ -15865,7 +16004,7 @@ async function awbLoad(){
       <div class="tbl-wrap"><table style="width:100%;font-size:12px">
         <thead><tr>
           <th style="width:34px"><input type="checkbox" checked onchange="awbAll(this.checked)"></th>
-          <th style="width:62px">الأوردر</th><th style="width:105px">العميل</th>
+          <th style="width:92px">الأوردر</th><th style="width:100px">العميل</th>
           <th>المنطقة عندنا</th>
           <th style="width:140px">المحافظة</th>
           <th style="width:148px">المدينة</th>
@@ -15876,8 +16015,10 @@ async function awbLoad(){
           const a = _awbAreas[i.orderId];
           return `
           <tr data-oid="${escapeHtml(i.orderId)}"${a ? ` data-key="${escapeHtml(a.areaKey)}" data-area="${escapeHtml(a.area)}" data-cust="${escapeHtml(a.custGovAr||'')}" data-paid="${a.paidShip||0}" data-total="${a.total||0}"` : ''}>
-            <td><input type="checkbox" class="awb-chk" value="${escapeHtml(i.orderId)}" checked></td>
-            <td style="font-family:Roboto,sans-serif;font-weight:700">${i.num < Number.MAX_SAFE_INTEGER ? i.num : escapeHtml(i.orderId)}</td>
+            <td><input type="checkbox" class="awb-chk" value="${escapeHtml(i.key || i.orderId)}" data-oid="${escapeHtml(i.orderId)}" checked></td>
+            <td style="font-family:Roboto,sans-serif;font-weight:700">${i.num < Number.MAX_SAFE_INTEGER ? i.num : escapeHtml(i.orderId)}
+              ${i.seq ? `<div style="font-size:10px;color:#4f46e5;font-weight:800;font-family:Cairo,sans-serif;white-space:nowrap">📦 ${i.seq}/${i.boxes}${i.cod!=null?` · ${Math.round(i.cod)}ج`:''}</div>` : ''}
+              ${i.needsReprint ? `<div style="font-size:9px;color:#b45309;font-family:Cairo,sans-serif">🖨️ إعادة طباعة</div>` : ''}</td>
             <td>${escapeHtml(i.customer || '')}</td>
             <td style="color:var(--muted)">${escapeHtml(i.area || '')}</td>
             <td>${a ? `<div style="position:relative"><input class="form-input ar-city cbo" placeholder="اكتب أو اختار"
@@ -15911,8 +16052,8 @@ async function awbLoad(){
                   ? `<span style="color:#dc2626;font-weight:700" title="${escapeHtml(_awbFails[i.orderId])}">❌ فشل</span>`
                   : (i.needsCreate ? '<span style="color:#4f46e5;font-weight:700">هتتعمل</span>'
                   : (i.hasAwb ? '✅' : '<span style="color:#b45309">هتتجاب</span>'))}
-              <div><button class="btn btn-ghost btn-xs" style="margin-top:3px;white-space:nowrap"
-                 onclick="oshOpen('${escapeHtml(i.orderId)}')" title="الطلب على أكتر من كرتونة؟">📦 قسّم</button></div></td>
+              ${!i.seq || i.seq === 1 ? `<div><button class="btn btn-ghost btn-xs" style="margin-top:3px;white-space:nowrap"
+                 onclick="oshOpen('${escapeHtml(i.orderId)}')" title="الطلب على أكتر من كرتونة؟">📦 ${i.seq?'عدّل':'قسّم'}</button></div>` : ''}</td>
           </tr>`; }).join('')}</tbody>
       </table></div>`;
 
@@ -15921,17 +16062,24 @@ async function awbLoad(){
       if(c && c.dataset.id){ arZones(c); arDiff(c); }
     });
 
+    // 📦 v694: كام كرتونة ناقصة وكام محتاجة إعادة طباعة
+    const boxNeed = _awbList.filter(i => i.seq && i.needsCreate).length;
+    const reprint = _awbList.filter(i => i.needsReprint).length;
     const noPick = Object.values(_awbAreas).filter(a => !a.suggestId).length;
     // 🔄 v677: لو الناقص سببه إن province فاضي، الزرار ده بيجيبها من شوبيفاي
     const noGov = Object.values(_awbAreas).filter(a => !a.govCode).length;
     foot.innerHTML = `
       ${need ? `<button class="btn" style="background:#4f46e5;color:#fff;border-color:#4f46e5;font-weight:700" onclick="awbCreateThenPrint()">🏭 اعمل الناقص واطبع</button>` : ''}
+      ${boxNeed ? `<button class="btn" style="background:#7c3aed;color:#fff;font-weight:700" onclick="awbCreateBoxes()">📦 اعمل بوالص الكراتين (${boxNeed})</button>` : ''}
       <button class="btn btn-primary" onclick="awbPrint()">🖨️ ادمج واطبع</button>
       <button class="btn btn-sm" onclick="awbPrint(true)">⬇️ نزّل PDF</button>
       ${need ? `<button class="btn btn-ghost btn-sm" onclick="awbAreasOnly()">💾 احفظ المناطق بس</button>` : ''}
       ${noGov ? `<button class="btn btn-sm" style="background:#b45309;color:#fff" onclick="awbBackfillGov(this)">🔄 هات المحافظات من شوبيفاي (${noGov})</button>` : ''}
       <button class="btn btn-ghost btn-sm" onclick="_awbDesc=!_awbDesc;awbLoad()">↕️ ${_awbDesc ? 'من الأكبر للأصغر' : 'من الأصغر للأكبر'}</button>
-      <span style="margin-right:auto;font-size:12px;color:var(--muted)">${_awbList.length} طلب${noPick ? ` · <b style="color:#dc2626">${noPick} محتاج محافظة</b>` : ''}</span>
+      <span style="margin-right:auto;font-size:12px;color:var(--muted)">${_awbList.length} بوليصة${
+        _awbList.filter(i=>i.seq).length ? ` (${new Set(_awbList.filter(i=>i.seq).map(i=>i.orderId)).size} طلب متقسّم)` : ''
+      }${noPick ? ` · <b style="color:#dc2626">${noPick} محتاج محافظة</b>` : ''}${
+        reprint ? ` · <b style="color:#b45309">${reprint} إعادة طباعة</b>` : ''}</span>
       <div id="awb-prog" style="width:100%;font-size:12px;color:var(--muted)"></div>`;
   }catch(e){
     body.innerHTML = `<div style="padding:30px;text-align:center;color:#dc2626">${escapeHtml(e.message)}</div>`;
@@ -16322,6 +16470,36 @@ async function awbAreasOnly(){
 }
 
 // 🏭 v661: اعمل البوالص الناقصة في الخلفية، وبعدين اطبع الكل مرتب
+// 🏭 v694: الطلبات المتقسّمة ليها مسار إنشاء خاص (بوليصة لكل كرتونة)
+async function awbCreateBoxes(){
+  const picked = [...document.querySelectorAll('.awb-chk:checked')].map(c => c.value);
+  const oids = [...new Set(_awbList
+    .filter(i => i.seq && picked.includes(i.key) && i.needsCreate)
+    .map(i => i.orderId))];
+  if(!oids.length) return toast('❗ مفيش كرتونة ناقصة في المختار');
+  const n = _awbList.filter(i => i.seq && picked.includes(i.key) && i.needsCreate).length;
+  if(!confirm(`🏭 هيتعمل ${n} بوليصة على ${oids.length} طلب متقسّم.
+
+`
+    + `دي شحنات حقيقية عند بوسطة وبتتكلّف.
+`
+    + `البوليصة الموجودة بتتعدّل مش بتتلغي — بس بتحتاج إعادة طباعة لأن المبلغ مطبوع عليها.
+
+تمام؟`)) return;
+  const prog = document.getElementById('awb-prog');
+  let ok = 0, fail = 0;
+  for(let i = 0; i < oids.length; i++){
+    if(prog) prog.textContent = `⏳ ${i+1} من ${oids.length}...`;
+    try{
+      const r = await apiFetch(`/api/orders/${encodeURIComponent(oids[i])}/shipments/create`, 'POST', {});
+      if(r?.ok) ok++; else { fail++; console.warn(oids[i], r?.failed || r?.error); }
+    }catch(e){ fail++; }
+  }
+  if(prog) prog.textContent = '';
+  toast(fail ? `⚠️ ${ok} تمام · ${fail} فشل — شوف الكونسول` : `✅ ${ok} طلب اتعملت بوالصه`);
+  awbLoad();
+}
+
 async function awbCreateThenPrint(){
   const picked = [...document.querySelectorAll('.awb-chk:checked')].map(c => c.value);
   const need = _awbList.filter(i => i.needsCreate && picked.includes(i.orderId));
@@ -16331,7 +16509,11 @@ async function awbCreateThenPrint(){
   try{ okAreas = await awbSaveAreas(); }
   catch(e){ const p=document.getElementById('awb-prog'); if(p) p.innerHTML=`<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; return; }
   if(!okAreas) return;
-  const _b = document.getElementById('awb-batch')?.value || '';
+  const _bRaw = document.getElementById('awb-batch')?.value || '';
+  // 🔀 v696: '__XFER__' مش كود دفعة — ماينفعش يبان كده في التأكيد.
+  // 🔎 v697: ولو إحنا على طلب واحد بالرقم، الدفعة اللي في القايمة مش هي النطاق.
+  const _b = _awbOneId ? `طلب واحد: ${_awbOneId}`
+           : _bRaw === '__XFER__' ? 'المحوّلة لبوسطة (مش دفعة)' : _bRaw;
   if(!confirm(`هيتعمل ${need.length} شحنة حقيقية على بوسطة.\n`
     + `الدفعة: ${_b}${_awbOldBatch ? ` (${_awbOldBatch} — مش النهاردة!)` : ''}\n\n`
     + `دي بتتكلّف ومش بتترجع بسهولة.\n\nتكمّل؟`)) return;
@@ -16373,7 +16555,8 @@ async function awbCreateThenPrint(){
         return;
       }
     }
-    await awbBatches(_b);         // 🔄 v665: الصفوف وأرقام الـ dropdown
+    await awbBatches(_bRaw);      // 🔄 v665: الصفوف وأرقام الـ dropdown
+                                  // 🔀 v696: _bRaw مش _b — ده الكود الحقيقي
     awbAll(true);
     await awbPrint();
   }catch(e){ say(`<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`); }
@@ -16691,6 +16874,33 @@ async function pcuProbe(){
   }catch(e){ out.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; }
 }
 
+// 🔎 v695: هل نقدر نقرا شحنات بوسطة؟
+async function pblProbe(){
+  const out = $('pbl-out');
+  out.innerHTML = '<span style="color:var(--muted)">⏳ بيجرّب المسارات…</span>';
+  try{
+    const r = await apiFetch('/api/bosta/probe-list', 'POST', {});
+    if(!r){ out.innerHTML = '<span style="color:#dc2626">مفيش رد</span>'; return; }
+    const rows = (r.tried || []).map(t =>
+      `<div style="font-family:Roboto,monospace;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border)">
+         <b>${escapeHtml(t.method)}</b> ${escapeHtml(t.path)} →
+         <span style="color:${t.status>=200&&t.status<300?'#16a34a':'#dc2626'}">${t.status ?? 'خطأ'}</span>
+         ${t.count!=null ? ` · <b>${t.count}</b> شحنة` : ''}
+         ${t.total!=null ? ` من ${t.total}` : ''}
+         ${t.hasBizRef ? ' · <span style="color:#16a34a">فيها businessReference ✅</span>' : (t.count ? ' · <span style="color:#b45309">مفيش businessReference</span>' : '')}
+         ${t.error ? ' · ' + escapeHtml(t.error) : ''}
+         ${t.fields ? `<div style="color:var(--muted);font-size:10px">الحقول: ${escapeHtml(t.fields.join(', '))}</div>` : ''}
+         ${t.sample && !t.count ? `<div style="color:var(--muted);word-break:break-all">${escapeHtml(t.sample)}</div>` : ''}
+       </div>`).join('');
+    out.innerHTML = `
+      <div style="background:${r.ok?'#dcfce7':'#fef2f2'};color:${r.ok?'#166534':'#991b1b'};
+                  border-radius:8px;padding:10px 12px;font-weight:700;margin-bottom:8px">
+        ${escapeHtml(r.verdict || '')}
+      </div>
+      <div style="background:var(--bg);border-radius:8px;padding:8px 10px">${rows}</div>`;
+  }catch(e){ out.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(e.message)}</span>`; }
+}
+
 // 📡 v668: لوحة ويبهوك بوسطة
 async function bwhLoad(){
   const box = document.getElementById('bwh-box'); if(!box) return;
@@ -16774,8 +16984,9 @@ async function awbPrint(downloadOnly){
   const say = t => { if(prog) prog.textContent = t; };
 
   // الترتيب من القايمة نفسها — هي اللي اترتّبت على السيرفر
-  const order = _awbList.filter(i => picked.includes(i.orderId) && !i.needsCreate)
-                        .map(i => i.orderId);
+  // 📦 v694: المفتاح ممكن يكون "SH-123" أو "SH-123#2" لكرتونة
+  const order = _awbList.filter(i => picked.includes(i.key || i.orderId) && !i.needsCreate)
+                        .map(i => i.key || i.orderId);
   if(!order.length) return toast('❗ المختار كله لسه مالوش شحنة — استخدم «اعمل الناقص واطبع»');
 
   try{
