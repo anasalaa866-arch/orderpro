@@ -1524,6 +1524,13 @@ tr:hover td{background:#fafbff}
 /* 🆕 v243: aliases لـ CSS classes اللي ضيفتها لـ Inventory و HR pages */
 /* 🔧 v246: modal-overlay بيستخدم flex لما يفتح (JS بيحدد display) */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px);display:none}
+/* 🖥️ v720: نافذة بحجم الصفحة كلها — للكشوف العريضة */
+.modal-overlay.full{padding:0;backdrop-filter:none}
+.modal-overlay.full > .modal{width:100vw;max-width:100vw;height:100vh;max-height:100vh;
+  border-radius:0;display:flex;flex-direction:column;overflow:hidden;transform:none}
+.modal-overlay.full > .modal > .modal-header{flex:0 0 auto;position:sticky;top:0;z-index:5;
+  background:var(--card);border-bottom:1px solid var(--border)}
+.modal-overlay.full > .modal > .modal-body{flex:1 1 auto;max-height:none;overflow:auto;padding:16px 20px}
 /* 🔧 v337: استخدم data attribute بدل style match عشان نتفادى false matches مع flex-start/flex-end */
 .modal-overlay[data-open="true"]{display:flex !important}
 
@@ -9319,6 +9326,19 @@ tr:hover td{background:#fafbff}
   </div>
 </div>
 
+<!-- ✏️ v719: تعديل بند كشف الرواتب -->
+<div class="overlay" id="m-pr-edit" style="z-index:10013">
+  <div class="modal" style="max-width:640px">
+    <div class="mhd"><h3 style="margin:0">✏️ تعديل بنود <span id="pre-title" style="color:var(--accent)"></span></h3>
+      <button class="xbtn" onclick="closeM('m-pr-edit')">✕</button></div>
+    <div class="mbd" id="pre-body" style="max-height:68vh;overflow:auto"></div>
+    <div class="mft">
+      <button class="btn btn-ghost btn-sm" onclick="closeM('m-pr-edit')">إلغاء</button>
+      <button class="btn btn-primary btn-sm" onclick="prEditSave(this)">✅ حفظ</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== ATTENDANCE PAGE (v717) ===== -->
 <div class="page" id="page-hr-attendance">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
@@ -9738,10 +9758,17 @@ tr:hover td{background:#fafbff}
   </div>
 </div>
 
-<div id="m-hr-payroll-detail" class="modal-overlay" style="display:none">
-  <div class="modal" style="max-width:1200px">
-    <div class="modal-header"><h3 id="pr-detail-title" style="margin:0">كشف الرواتب</h3><button class="modal-close" onclick="closeM('m-hr-payroll-detail')">×</button></div>
-    <div class="modal-body" style="max-height:78vh;overflow-y:auto">
+<div id="m-hr-payroll-detail" class="modal-overlay full" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="pr-detail-title" style="margin:0">كشف الرواتب</h3>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-ghost btn-sm" id="pr-size-btn" onclick="prToggleSize()"
+                title="تكبير / تصغير النافذة">🗗 تصغير</button>
+        <button class="modal-close" onclick="closeM('m-hr-payroll-detail')">×</button>
+      </div>
+    </div>
+    <div class="modal-body">
       <div id="pr-detail-content"></div>
     </div>
   </div>
@@ -48603,6 +48630,205 @@ async function dhUndo(id){
   }catch(e){ toast('❌ ' + e.message); }
 }
 
+// 🖥️ v720: الكشف بيفتح بحجم الصفحة كلها (الأعمدة كتير والأسماء كانت بتتقطّع)
+//   والاختيار بيتحفظ في المتصفح.
+function prToggleSize(){
+  const ov = document.getElementById('m-hr-payroll-detail');
+  if(!ov) return;
+  const full = ov.classList.toggle('full');
+  try{ localStorage.setItem('pr_full', full ? '1' : '0'); }catch(e){}
+  prSyncSizeBtn();
+}
+function prSyncSizeBtn(){
+  const ov = document.getElementById('m-hr-payroll-detail');
+  const b = document.getElementById('pr-size-btn');
+  if(!ov || !b) return;
+  const full = ov.classList.contains('full');
+  b.textContent = full ? '🗗 تصغير' : '🗖 ملء الشاشة';
+  const m = ov.querySelector('.modal');
+  if(m){
+    // .modal الأساسي width:520px — لازم نغيّرها مش max-width بس
+    if(full){ m.style.width = ''; m.style.maxWidth = ''; m.style.maxHeight = ''; }
+    else { m.style.width = 'min(1200px, 95vw)'; m.style.maxWidth = '95vw'; m.style.maxHeight = '90vh'; }
+  }
+  const body = ov.querySelector('.modal-body');
+  if(body) body.style.maxHeight = full ? '' : '78vh';
+}
+
+// ══════════════════════════════════════════════════════════════
+// ✏️ v719: تعديل أي رقم في كشف الرواتب قبل الطباعة
+// ──────────────────────────────────────────────────────────────
+//   الأعمدة البسيطة بتتعدّل في مكانها، والعمودين اللي مجموع
+//   (البدلات والخصومات الأخرى) بيفتحوا نافذة فيها كل بند لوحده —
+//   عشان تعديل المجموع مش معروف يتوزّع على مين.
+//   التعديل مقفول على الكشف المعتمد أو المدفوع.
+// ══════════════════════════════════════════════════════════════
+const _PR_ALLOW = ['transport_allowance','housing_allowance','meal_allowance','other_allowances'];
+const _PR_ODED  = ['insurance_deduction','tax_deduction','absence_deduction','other_deductions'];
+const _PR_LBL = {
+  base_salary:'الراتب الأساسي', transport_allowance:'بدل انتقال', housing_allowance:'بدل سكن',
+  meal_allowance:'بدل وجبة', other_allowances:'بدلات أخرى', bonuses:'مكافآت',
+  insurance_deduction:'تأمينات', tax_deduction:'ضرائب', advances_deduction:'سلف',
+  penalties_deduction:'جزاءات', absence_deduction:'خصم غياب', purchases_deduction:'مشتريات',
+  other_deductions:'خصومات أخرى',
+};
+const _prNum = v => Number(v) || 0;
+const _prSum = (it, keys) => keys.reduce((a,k) => a + _prNum(it[k]), 0);
+
+function prCell(it, field, editable, color){
+  const v = _prNum(it[field]);
+  if(!editable) return `<td style="text-align:right;${color?'color:'+color:''}">${fmtMoney(v)}</td>`;
+  // محاذاة لليمين زي باقي الأعمدة — الأرقام تحت عناوينها بالظبط
+  return `<td style="text-align:right;padding:2px 6px">
+    <input type="number" step="0.01" min="0" value="${v}" data-f="${field}"
+      onchange="prSave(${it.id},'${field}',this)" onfocus="this.select()"
+      style="width:104px;text-align:right;font-family:Roboto,sans-serif;font-size:12px;
+             border:1px solid transparent;border-radius:6px;padding:4px 6px;background:transparent;
+             ${color?'color:'+color+';':''}font-weight:600"
+      onmouseover="this.style.borderColor='var(--border)';this.style.background='var(--bg)'"
+      onmouseout="if(document.activeElement!==this){this.style.borderColor='transparent';this.style.background='transparent'}"
+      onfocusin="this.style.borderColor='var(--accent)';this.style.background='var(--card)'"
+      onblur="this.style.borderColor='transparent';this.style.background='transparent'"></td>`;
+}
+
+function prSumCell(it, keys, editable, label){
+  const v = _prSum(it, keys);
+  const f = keys === _PR_ALLOW ? 'allow' : 'oded';
+  if(!editable) return `<td style="text-align:right" data-f="${f}">${fmtMoney(v)}</td>`;
+  return `<td style="text-align:right" data-f="${f}">
+    <span onclick="prEditRow(${it.id})" title="${label} — مجموع، دوس للتفصيل"
+      style="cursor:pointer;border-bottom:1px dashed var(--muted)">${fmtMoney(v)}</span></td>`;
+}
+
+// تحديث الصف والإجماليات من رد السيرفر — من غير إعادة تحميل الكشف كله
+function prApply(item, run){
+  if(!_lastPayroll) return;
+  const i = _lastPayroll.items.findIndex(x => x.id === item.id);
+  if(i >= 0) _lastPayroll.items[i] = { ..._lastPayroll.items[i], ...item };
+  if(run) _lastPayroll.run = { ..._lastPayroll.run, ...run };
+  const tr = document.querySelector(`tr[data-prid="${item.id}"]`);
+  if(tr){
+    const g = tr.querySelector('[data-f="gross"]'); if(g) g.textContent = fmtMoney(item.gross_salary);
+    const n = tr.querySelector('[data-f="net"]');   if(n) n.textContent = fmtMoney(item.net_salary);
+    const a = tr.querySelector('[data-f="allow"]');
+    if(a){ const sp = a.querySelector('span'); const t = fmtMoney(_prSum(item,_PR_ALLOW));
+           if(sp) sp.textContent = t; else a.textContent = t; }
+    const o = tr.querySelector('[data-f="oded"]');
+    if(o){ const sp = o.querySelector('span'); const t = fmtMoney(_prSum(item,_PR_ODED));
+           if(sp) sp.textContent = t; else o.textContent = t; }
+    for(const inp of tr.querySelectorAll('input[data-f]')){
+      const f = inp.getAttribute('data-f');
+      if(item[f] !== undefined && document.activeElement !== inp) inp.value = _prNum(item[f]);
+    }
+  }
+  if(run){
+    const box = document.getElementById('pr-detail-content');
+    if(box){
+      const st = box.querySelectorAll('strong');
+      // 👥 موظفين · 💰 إجمالي · 📉 خصومات · 💵 صافي
+      if(st[1]) st[1].textContent = fmtMoney(run.total_gross);
+      if(st[2]) st[2].textContent = fmtMoney(run.total_deductions);
+      if(st[3]) st[3].textContent = fmtMoney(run.total_net);
+    }
+  }
+}
+
+async function prSave(itemId, field, el){
+  const raw = el.value === '' ? 0 : Number(el.value);
+  if(!Number.isFinite(raw) || raw < 0){
+    toast('❌ رقم مش مظبوط');
+    const it = _lastPayroll?.items.find(x => x.id === itemId);
+    el.value = _prNum(it?.[field]); return;
+  }
+  el.disabled = true;
+  try{
+    const r = await apiFetch(`/api/hr/payroll-items/${itemId}`, 'PUT', { [field]: raw });
+    if(r?.error) throw new Error(r.error);
+    if(r?.item) prApply(r.item, r.run);
+    toast('✅ اتحفظ');
+  }catch(e){
+    toast('❌ ' + e.message);
+    const it = _lastPayroll?.items.find(x => x.id === itemId);
+    el.value = _prNum(it?.[field]);
+  }finally{ el.disabled = false; }
+}
+
+// نافذة كل البنود
+function prEditRow(itemId){
+  const it = _lastPayroll?.items.find(x => x.id === itemId);
+  if(!it) return;
+  const row = (f) => `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+    <label style="flex:1;font-size:12.5px">${_PR_LBL[f]}</label>
+    <input type="number" step="0.01" min="0" id="pre-${f}" value="${_prNum(it[f])}"
+      class="form-input" style="width:120px;font-family:Roboto,sans-serif;font-size:12.5px;text-align:left"
+      oninput="prEditPreview()"></div>`;
+  document.getElementById('pre-title').textContent = it.employee_name || '';
+  document.getElementById('pre-body').innerHTML = `
+    <input type="hidden" id="pre-id" value="${it.id}">
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:230px">
+        <div style="font-weight:800;color:#15803d;margin-bottom:5px;font-size:13px">المستحقات</div>
+        ${['base_salary','transport_allowance','housing_allowance','meal_allowance','other_allowances','bonuses'].map(row).join('')}
+      </div>
+      <div style="flex:1;min-width:230px">
+        <div style="font-weight:800;color:#b91c1c;margin-bottom:5px;font-size:13px">الخصومات</div>
+        ${['advances_deduction','purchases_deduction','penalties_deduction','absence_deduction','insurance_deduction','tax_deduction','other_deductions'].map(row).join('')}
+      </div>
+    </div>
+    <div style="margin-top:10px"><label style="font-size:12.5px;font-weight:700">ملاحظة على القسيمة</label>
+      <input id="pre-notes" class="form-input" style="width:100%;font-size:12.5px;margin-top:4px"
+        value="${escapeAttr(it.notes||'')}"></div>
+    <div id="pre-sum" style="display:flex;gap:16px;justify-content:space-between;background:var(--bg);
+      border-radius:9px;padding:10px 14px;margin-top:12px;font-size:13px"></div>`;
+  prEditPreview();
+  openM('m-pr-edit');
+}
+
+function prEditPreview(){
+  const g = id => Number(document.getElementById('pre-'+id)?.value) || 0;
+  const gross = g('base_salary')+g('transport_allowance')+g('housing_allowance')
+              + g('meal_allowance')+g('other_allowances')+g('bonuses');
+  const ded = g('advances_deduction')+g('purchases_deduction')+g('penalties_deduction')
+            + g('absence_deduction')+g('insurance_deduction')+g('tax_deduction')+g('other_deductions');
+  const el = document.getElementById('pre-sum');
+  if(el) el.innerHTML = `<span>الإجمالي <b>${fmtMoney(gross)}</b></span>
+    <span style="color:var(--danger)">الخصومات <b>${fmtMoney(ded)}</b></span>
+    <span style="color:var(--accent);font-size:15px">الصافي <b>${fmtMoney(gross-ded)}</b></span>`;
+}
+
+async function prEditSave(btn){
+  const id = Number(document.getElementById('pre-id').value);
+  const body = { notes: document.getElementById('pre-notes').value };
+  for(const f of Object.keys(_PR_LBL)){
+    const el = document.getElementById('pre-'+f);
+    if(el) body[f] = el.value === '' ? 0 : Number(el.value);
+  }
+  for(const [k,v] of Object.entries(body)){
+    if(k === 'notes') continue;
+    if(!Number.isFinite(v) || v < 0) return toast(`❌ ${_PR_LBL[k]}: رقم مش مظبوط`);
+  }
+  if(btn){ btn.disabled = true; btn.textContent = '⏳'; }
+  try{
+    const r = await apiFetch(`/api/hr/payroll-items/${id}`, 'PUT', body);
+    if(r?.error) throw new Error(r.error);
+    if(r?.item) prApply(r.item, r.run);
+    toast('✅ اتحفظ');
+    closeM('m-pr-edit');
+  }catch(e){ toast('❌ ' + e.message); }
+  finally{ if(btn){ btn.disabled = false; btn.textContent = '✅ حفظ'; } }
+}
+
+async function prRecalc(runId){
+  if(!confirm('يعيد حساب الإجمالي والخصومات والصافي لكل الموظفين من البنود؟\n(بيصلّح أي كشف اتعدّل قبل كده والمشتريات ضاعت من خصوماته)')) return;
+  try{
+    const r = await apiFetch(`/api/hr/payroll-runs/${runId}/recalc`, 'POST', {});
+    if(r?.error) throw new Error(r.error);
+    const d = (r.netBefore || 0) - (r.netAfter || 0);
+    toast(d ? `✅ اتظبط — الصافي اتغيّر ${fmtMoney(Math.abs(d))}` : '✅ الأرقام كانت مظبوطة');
+    viewPayroll(runId);
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
 // ══════════════════════════════════════════════════════════════
 // 🧾 v718: قسيمة المرتب — صفحة لكل موظف مع ملخص حضوره
 // ──────────────────────────────────────────────────────────────
@@ -50443,20 +50669,23 @@ async function viewPayroll(id){
     
     document.getElementById('pr-detail-title').textContent = `${run.title} - ${payrollStatusLabel(run.status).replace(/<[^>]+>/g,'')}`;
     
+    // ✏️ v719: أي رقم قابل للتعديل قبل الطباعة (الكشف لسه draft بس)
     const itemsHtml = items.map(it => `
-      <tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:6px 8px"><strong>${escapeHtml(it.employee_name)}</strong><div style="font-size:10px;color:var(--muted)">${escapeHtml(it.employee_code||'')}</div></td>
-        <td style="text-align:right">${fmtMoney(it.base_salary)}</td>
-        <td style="text-align:right">${fmtMoney((parseFloat(it.transport_allowance)||0)+(parseFloat(it.housing_allowance)||0)+(parseFloat(it.meal_allowance)||0)+(parseFloat(it.other_allowances)||0))}</td>
-        <td style="text-align:right;color:var(--success)">${fmtMoney(it.bonuses)}</td>
-        <td style="text-align:right;font-weight:700">${fmtMoney(it.gross_salary)}</td>
-        <td style="text-align:right;color:var(--danger)">${fmtMoney(it.advances_deduction)}</td>
-        <td style="text-align:right;color:var(--danger)">${fmtMoney(it.penalties_deduction)}</td>
-        <td style="text-align:right;color:var(--danger)">${fmtMoney(it.purchases_deduction || 0)}</td>
-        <td style="text-align:right;color:var(--danger)">${fmtMoney((parseFloat(it.insurance_deduction)||0)+(parseFloat(it.tax_deduction)||0)+(parseFloat(it.other_deductions)||0)+(parseFloat(it.absence_deduction)||0))}</td>
-        <td style="text-align:right;font-weight:800;color:var(--accent)">${fmtMoney(it.net_salary)}</td>
-        <td style="text-align:center"><button class="btn btn-ghost btn-xs" title="اطبع قسيمة الموظف ده"
-          onclick="printPayslips(${it.employee_id})">🧾</button></td>
+      <tr style="border-bottom:1px solid var(--border)" data-prid="${it.id}">
+        <td style="padding:6px 10px;white-space:nowrap"><strong>${escapeHtml(it.employee_name)}</strong><div style="font-size:10.5px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(it.employee_code||'')}</div></td>
+        ${prCell(it,'base_salary',isDraft)}
+        ${prSumCell(it, _PR_ALLOW, isDraft, 'البدلات')}
+        ${prCell(it,'bonuses',isDraft,'var(--success)')}
+        <td style="text-align:right;font-weight:700" data-f="gross">${fmtMoney(it.gross_salary)}</td>
+        ${prCell(it,'advances_deduction',isDraft,'var(--danger)')}
+        ${prCell(it,'penalties_deduction',isDraft,'var(--danger)')}
+        ${prCell(it,'purchases_deduction',isDraft,'var(--danger)')}
+        ${prSumCell(it, _PR_ODED, isDraft, 'خصومات أخرى')}
+        <td style="text-align:right;font-weight:800;color:var(--accent)" data-f="net">${fmtMoney(it.net_salary)}</td>
+        <td style="text-align:center;white-space:nowrap">
+          ${isDraft?`<button class="btn btn-ghost btn-xs" title="تعديل كل البنود" onclick="prEditRow(${it.id})">✏️</button>`:''}
+          <button class="btn btn-ghost btn-xs" title="اطبع قسيمة الموظف ده"
+            onclick="printPayslips(${it.employee_id})">🧾</button></td>
       </tr>
     `).join('');
     
@@ -50483,30 +50712,42 @@ async function viewPayroll(id){
         <button class="btn btn-success" onclick="approvePayroll(${run.id})">✅ اعتماد ودفع (خصم من الخزنة)</button>
         <button class="btn btn-ghost" onclick="printPayroll()">🖨️ طباعة الكشف</button>
         <button class="btn btn-ghost" onclick="printPayslips()">🧾 قسايم المرتبات</button>
+        <button class="btn btn-ghost" onclick="prRecalc(${run.id})" title="يعيد حساب الإجمالي والخصومات والصافي من البنود">🔄 إعادة حساب</button>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px">
+        ✏️ دوس على أي رقم عشان تعدّله — بيتحفظ لوحده والصافي بيتحسب على طول.
       </div>` : `<div style="margin-bottom:14px;display:flex;gap:8px">
         <button class="btn btn-ghost" onclick="printPayroll()">🖨️ طباعة الكشف</button>
         <button class="btn btn-ghost" onclick="printPayslips()">🧾 قسايم المرتبات</button></div>`}
       
-      <table style="width:100%;border-collapse:collapse;font-size:11px">
-        <thead style="background:var(--bg);position:sticky;top:0">
+      <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:980px">
+        <thead style="background:var(--bg);position:sticky;top:0;z-index:2;box-shadow:0 1px 0 var(--border)">
           <tr>
-            <th style="text-align:right;padding:8px">الموظف</th>
-            <th style="text-align:right;padding:8px">الأساسي</th>
-            <th style="text-align:right;padding:8px">البدلات</th>
-            <th style="text-align:right;padding:8px">مكافآت</th>
-            <th style="text-align:right;padding:8px">الإجمالي</th>
-            <th style="text-align:right;padding:8px">سلف</th>
-            <th style="text-align:right;padding:8px">جزاءات</th>
-            <th style="text-align:right;padding:8px">🛒 مشتريات</th>
-            <th style="text-align:right;padding:8px">خصومات</th>
+            <th style="text-align:right;padding:8px;min-width:190px">الموظف</th>
+            <th style="text-align:right;padding:8px;white-space:nowrap">الأساسي</th>
+            <th style="text-align:right;padding:8px;white-space:nowrap">البدلات</th>
+            <th style="text-align:right;padding:8px;white-space:nowrap">مكافآت</th>
+            <th style="text-align:right;padding:8px;white-space:nowrap">الإجمالي</th>
+            <th style="text-align:right;padding:8px;white-space:nowrap">سلف</th>
+            <th style="text-align:right;padding:8px;white-space:nowrap">جزاءات</th>
+            <th style="text-align:right;padding:8px;white-space:nowrap">🛒 مشتريات</th>
+            <th style="text-align:right;padding:8px;white-space:nowrap">خصومات أخرى</th>
             <th style="text-align:right;padding:8px;background:var(--accent);color:#fff">الصافي</th>
             <th style="padding:8px;width:40px"></th>
           </tr>
         </thead>
         <tbody>${itemsHtml}</tbody>
       </table>
+      </div>
     `;
     
+    try{
+      const ov = document.getElementById('m-hr-payroll-detail');
+      if(localStorage.getItem('pr_full') === '0') ov.classList.remove('full');
+      else ov.classList.add('full');
+    }catch(e){}
+    prSyncSizeBtn();
     document.getElementById('m-hr-payroll-detail').style.display = 'flex';
   }catch(e){
     toast('❌ ' + e.message);
