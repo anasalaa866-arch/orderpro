@@ -2018,6 +2018,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="expiry" onclick="goPage(this,'expiry')"><span class="ni-icon">⏳</span><span class="ni-label">تواريخ الصلاحية</span><span class="nbadge" id="nb-expiry" style="background:var(--danger)"></span></div>
         <div class="ni" data-p="near-expiry-offers" onclick="goPage(this,'near-expiry-offers')"><span class="ni-icon">🏷️</span><span class="ni-label">عروض قرب الانتهاء</span><span class="nbadge" id="nb-neo" style="background:#ea580c"></span></div>
         <div class="ni" data-p="store-batches" onclick="goPage(this,'store-batches')"><span class="ni-icon">🏪</span><span class="ni-label">صلاحيات المحلات</span><span class="nbadge" id="nb-sb" style="background:var(--danger)"></span></div>
+        <div class="ni" data-p="vendor-batches" onclick="goPage(this,'vendor-batches')"><span class="ni-icon">🏭</span><span class="ni-label">صلاحيات الموردين</span><span class="nbadge" id="nb-vb" style="background:var(--warn)"></span></div>
       </div>
     </div>
 
@@ -9317,6 +9318,59 @@ tr:hover td{background:#fafbff}
   </div>
 </div>
 
+<!-- ===== VENDOR BATCHES PAGE (v713) ===== -->
+<div class="page" id="page-vendor-batches">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+    <div>
+      <h2 style="margin:0">🏭 صلاحيات الموردين</h2>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px">
+        كل مورد وباتشاته اللي وردها هو — النسب جاي من أمر الشراء، مش من ربط الصنف بالمورد.
+      </div>
+    </div>
+    <div style="display:flex;gap:7px">
+      <button class="btn btn-ghost btn-sm" onclick="vbLoadSuppliers(true)">🔄 تحديث</button>
+    </div>
+  </div>
+
+  <div class="card" style="padding:10px 12px;margin-bottom:12px">
+    <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center">
+      <select id="vb-sup" class="form-input" style="font-size:12px;width:auto;min-width:230px" onchange="vbPickSupplier()">
+        <option value="">⏳ بيحمّل الموردين...</option>
+      </select>
+      <select id="vb-days" class="form-input" style="font-size:12px;width:auto" onchange="vbLoad()">
+        <option value="">كل الباتشات</option>
+        <option value="30">ينتهي خلال ٣٠ يوم</option>
+        <option value="60">ينتهي خلال ٦٠ يوم</option>
+        <option value="90">ينتهي خلال ٩٠ يوم</option>
+        <option value="180" selected>ينتهي خلال ١٨٠ يوم</option>
+      </select>
+      <input id="vb-q" class="form-input" style="font-size:12px;width:200px" placeholder="🔎 اسم الصنف / SKU / باركود / رقم الأمر" oninput="vbRender()">
+      <span id="vb-unassigned-wrap" style="margin-inline-start:auto;display:none">
+        <button class="btn btn-ghost btn-sm" id="vb-unassigned-btn" onclick="vbOpenUnassigned()"></button>
+      </span>
+    </div>
+  </div>
+
+  <div id="vb-kpi" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:9px;margin-bottom:12px"></div>
+
+  <div class="card"><div id="vb-body" style="overflow-x:auto;padding:22px;text-align:center;color:var(--muted)">اختار مورد من فوق</div></div>
+</div>
+
+<!-- مودال الباتشات اللي مالهاش مورد -->
+<div class="overlay" id="m-vb-un" style="z-index:10010">
+  <div class="modal" style="max-width:900px">
+    <div class="modal-header"><h3 style="margin:0">🧩 باتشات من غير مورد</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeM('m-vb-un')">✕</button></div>
+    <div class="mbd" style="max-height:66vh;overflow:auto">
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:9px">
+        دي باتشات مالهاش أمر شراء (اتعملت يدوي أو قديمة). <b>مابتظهرش لأي مورد</b> — لا هنا ولا في البوابة — لحد ما تنسبها.
+        اللي جنبه 💡 يعني الصنف مربوط بمورد واحد بس، فدي ترشيحة.
+      </div>
+      <div id="vb-un-body" style="overflow-x:auto">⏳ بيحمّل...</div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== COLLECTION SORT PAGE (v700) ===== -->
 <div class="page" id="page-collection-sort">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
@@ -9941,6 +9995,35 @@ tr:hover td{background:#fafbff}
     <div class="mft">
       <button class="btn btn-ghost" onclick="closeM('m-add-user')">إلغاء</button>
       <button class="btn btn-primary" onclick="saveUser()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- 📦 v714: تسليم مباشر -->
+<div class="overlay" id="m-dh" style="z-index:10012">
+  <div class="modal" style="max-width:480px">
+    <div class="mhd"><h3>📦 اتسلّم مباشرة <span id="dh-oid" style="color:var(--accent);font-size:13px"></span></h3>
+      <button class="xbtn" onclick="closeM('m-dh')">✕</button></div>
+    <div class="mbd">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:11px">
+        هيتقفل هنا كـ«مكتمل» ويخرج من التوزيع، ويتعمله Fulfil على شوبيفاي في نفس اللحظة.
+      </div>
+      <label style="display:block;font-size:12px;font-weight:700;margin-bottom:5px">السبب</label>
+      <select id="dh-kind" class="form-input" style="width:100%;font-size:12.5px" onchange="dhKind()">
+        <option value="pickup">🏭 العميل استلم من المخزن</option>
+        <option value="uber">🚗 اتبعت مع أوبر</option>
+        <option value="other">✍️ سبب تاني</option>
+      </select>
+      <input id="dh-note" class="form-input" style="width:100%;font-size:12.5px;margin-top:9px;display:none"
+             placeholder="اكتب السبب">
+      <div style="font-size:11.5px;color:#b45309;background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:8px 10px;margin-top:11px">
+        ⚠️ مفيش تحصيل هيتسجل على أي مندوب. لو الطلب COD اتأكد إنك خدت الفلوس.
+      </div>
+      <div id="dh-paid" style="font-size:11.5px;margin-top:7px"></div>
+    </div>
+    <div class="mft">
+      <button class="btn btn-ghost btn-sm" onclick="closeM('m-dh')">إلغاء</button>
+      <button class="btn btn-primary btn-sm" id="dh-go" onclick="dhSave(this)">✅ اقفله واعمله Fulfil</button>
     </div>
   </div>
 </div>
@@ -10825,7 +10908,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -12316,6 +12399,11 @@ function renderOrders(){
       ? `<span style="font-size:9px;background:var(--success);color:#fff;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700" title="الطلب مسوّى — مقفول">🔒 مسوّى</span>`
       : '';
 
+    // 📦 v669: شارة التسليم المباشر
+    const dhBadge = o.directHandover
+      ? `<span style="font-size:9px;background:#ede9fe;color:#5b21b6;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700" title="${escapeAttr((o.handoverReason||'تسليم مباشر') + (o.handoverBy?' · '+o.handoverBy:''))}">📦 اتسلّم مباشرة</span>`
+      : '';
+
     // الأزرار: لو مسوّى، نحط 🔒 بدل الأزرار (إلا للأدمن اللي يقدر يعدل بحذر)
     let actionsHtml;
     if(settled && !canEditSettled()){
@@ -12334,13 +12422,15 @@ function renderOrders(){
         <button class="btn btn-ghost btn-xs" style="color:#6366f1;border-color:#6366f1" onclick="printPackingSlip('${o.id}')" title="طباعة فاتورة">🧾</button>
         ${o.src==='shopify'&&o.shopifyId?`<button class="btn btn-ghost btn-xs" style="color:#96bf48;border-color:#96bf48;font-size:10px" onclick="openInShopify('${o.shopifyId}')" title="افتح في Shopify">🛍️</button>`:''}
         ${(!o.courierId&&o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-primary btn-xs" onclick="openAssign('${o.id}')">📍 تعيين</button>`:''}
+        ${(!o.courierId&&!o.isBosta&&o.status==='جديد')?`<button class="btn btn-ghost btn-xs" style="color:#7c3aed;border-color:#7c3aed" onclick="dhOpen('${o.id}')" title="العميل خدها بنفسه أو اتبعتت مع أوبر">📦 اتسلّم مباشرة</button>`:''}
+        ${o.directHandover?`<button class="btn btn-ghost btn-xs" style="color:#b45309;border-color:#b45309;font-size:10px" onclick="dhUndo('${o.id}')" title="رجوع عن التسليم المباشر">↩️ رجوع</button>`:''}
         ${o.status!=='ملغي'?`<button class="btn btn-xs" style="background:${o.paid?'var(--warn-light)':'var(--success-light)'};color:${o.paid?'#92400e':'#065f46'};border:1px solid ${o.paid?'#fcd34d':'#86efac'}" onclick="togglePaid('${o.id}')">${o.paid?'↩️ COD':'💳 مدفوع'}</button>`:''}
         ${o.status==='جاري التوصيل'?`<button class="btn btn-success btn-xs" onclick="markDone('${o.id}')">✓ تم</button>`:''}
         ${(o.status!=='مكتمل'&&o.status!=='ملغي')?`<button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="cancelOrder('${o.id}')">إلغاء</button>`:''}
       </div>`;
     }
 
-    return `<tr${settled?' style="background:#f0fdf4"':''}><td style="text-align:center" data-label=""><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"${settled && !canEditSettled()?' disabled':''}></td><td data-label="رقم الطلب"><strong>${o.id}</strong>${settledBadge}${prepBadge(o)}${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td data-label="المصدر">${srcBadge(o.src)}</td><td data-label="العميل">${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px" data-label="الهاتف">${o.phone}</td><td data-label="المنطقة">📍 ${o.area}</td><td data-label="نوع التوصيل">${deliveryBadge(o)}</td><td data-label="COD"><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn" data-label="الشحن">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td data-label="المندوب">${cName(o.courierId)}</td><td data-label="الحالة">${sBadge(o.status)}</td><td data-label="إجراءات">${actionsHtml}</td></tr>`;
+    return `<tr${settled?' style="background:#f0fdf4"':''}><td style="text-align:center" data-label=""><input type="checkbox" class="ord-chk" value="${o.id}" onchange="updateOrdersBulk()"${settled && !canEditSettled()?' disabled':''}></td><td data-label="رقم الطلب"><strong>${o.id}</strong>${settledBadge}${dhBadge}${prepBadge(o)}${o.batchCode?'<span style="font-size:9px;background:#e0e7ff;color:#4338ca;padding:1px 5px;border-radius:4px;margin-right:3px;font-weight:700">'+o.batchCode+'</span>':''}</td><td data-label="المصدر">${srcBadge(o.src)}</td><td data-label="العميل">${o.name}</td><td style="direction:ltr;text-align:right;font-size:11px" data-label="الهاتف">${o.phone}</td><td data-label="المنطقة">📍 ${o.area}</td><td data-label="نوع التوصيل">${deliveryBadge(o)}</td><td data-label="COD"><strong>${o.total.toLocaleString()} ج</strong> ${paidBadge(o)}</td><td class="mwarn" data-label="الشحن">${o.paid?'<span style="color:var(--success);font-size:11px">لا تحصيل</span>':o.ship||50+' ج'}</td><td data-label="المندوب">${cName(o.courierId)}</td><td data-label="الحالة">${sBadge(o.status)}</td><td data-label="إجراءات">${actionsHtml}</td></tr>`;
   }).join('');
 
   // ارسم شريط pagination
@@ -25150,8 +25240,13 @@ function chkSetFilter(f,btn){
 
 // 🆕 v300: handler للـ period/search/date filters - يحترم الـ chip filter النشط
 function chkOnFilterChange(){
-  // لو إنت في weekly أو suppliers، الـ period/search مالهومش معنى - رجعنا للـ regular view
-  if(chkStatusFilter === 'weekly' || chkStatusFilter === 'monthly' || chkStatusFilter === 'suppliers'){
+  // 🔎 v716: الشهري والأسبوعي بقى ليهم بحث وفلاتر، فمابنطردش منهم
+  if(chkStatusFilter === 'weekly' || chkStatusFilter === 'monthly'){
+    renderWeeklyReport(_chkWkView || undefined);
+    return;
+  }
+  // تقرير الموردين لسه مالوش بحث - رجعنا للـ regular view
+  if(chkStatusFilter === 'suppliers'){
     chkStatusFilter = 'all';
     document.querySelectorAll('#chk-status-chips .chip').forEach(c=>{
       c.classList.remove('on');
@@ -31318,6 +31413,74 @@ function _chkWkYears(){
   return [...set].sort((a,b) => b - a);
 }
 
+// 🐞 v716: حساب مدى الأسبوع كان متكرر في مكانين (الجدول والمودال)،
+//   والمودال كان بيستعمل السنة الحالية بالكود بدل السنة المختارة — فكان
+//   بيحسب أسابيع سنة تانية ويقول «مفيش شيكات». دالة واحدة دلوقتي.
+function _chkWeekRange(year, weekNum){
+  const yearStart = new Date(year, 0, 1);
+  const daysToFirstFriday = (5 - yearStart.getDay() + 7) % 7;
+  const firstFriday = new Date(year, 0, 1 + daysToFirstFriday - 7);
+  const start = new Date(firstFriday);
+  start.setDate(firstFriday.getDate() + (weekNum - 1) * 7);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+// 🔎 v716: بحث وفلاتر جوّه التقرير نفسه.
+//   الشِرايط اللي فوق كلها متغيّر واحد (chkStatusFilter)، و«تقرير شهري»
+//   واحد منهم — فمينفعش تبقى «شهري + لم يُصرف» في نفس الوقت. عشان كده
+//   التقرير بقى ليه فلاتره الخاصة.
+let _chkRepStatus = 'all';
+let _chkRepYear = '';
+
+function chkRepSet(kind, v){
+  if(kind === 'status') _chkRepStatus = v;
+  else _chkRepYear = v;
+  renderWeeklyReport(_chkWkView || undefined);
+}
+
+// القايمة اللي التقرير بيتبني منها — البحث من الخانة اللي فوق
+function _chkRepList(){
+  let list = [...(chkList || [])];
+  if(_chkRepStatus === 'pending') list = list.filter(c => c.status === 'pending');
+  else if(_chkRepStatus === 'done') list = list.filter(c => c.status === 'done');
+  else if(_chkRepStatus === 'overdue') list = list.filter(c => chkIsOverdue(c));
+  else if(_chkRepStatus === 'void') list = list.filter(c => c.status === 'void' || c.status === 'void_requested');
+  if(_chkRepYear) list = list.filter(c => new Date(c.date).getFullYear() === +_chkRepYear);
+  const q = ($('chk-search')?.value || '').trim().toLowerCase();
+  if(q) list = list.filter(c =>
+    ((c.num||'') + (c.payee||'') + (c.invoice||'') + (c.notes||'')).toLowerCase().includes(q));
+  return list;
+}
+
+function _chkRepBar(){
+  const chip = (v, lbl) => `<button class="chip${_chkRepStatus===v?' on':''}" style="font-size:11.5px;padding:3px 9px"
+      onclick="chkRepSet('status','${v}')">${lbl}</button>`;
+  const q = ($('chk-search')?.value || '').trim();
+  return `<tr><td colspan="7" style="padding:9px 12px;background:var(--bg);border-bottom:1px solid var(--border)">
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+      ${chip('all','الكل')}${chip('pending','⏳ لم يُصرف')}${chip('done','✅ تم صرفه')}${chip('overdue','⚠️ متأخر')}${chip('void','⛔ هالك')}
+      <span style="width:1px;height:18px;background:var(--border)"></span>
+      <select onchange="chkRepSet('year',this.value)" style="font-size:11.5px;font-family:Roboto,sans-serif;
+              border:1px solid var(--border);border-radius:6px;padding:3px 7px;cursor:pointer">
+        <option value="">كل السنين</option>
+        ${_chkWkYears().map(y=>`<option value="${y}" ${String(y)===String(_chkRepYear)?'selected':''}>${y}</option>`).join('')}
+      </select>
+      ${q ? `<span style="font-size:11.5px;color:var(--accent)">🔎 بحث: <b>${escapeHtml(q)}</b></span>` : ''}
+      ${(_chkRepStatus!=='all'||_chkRepYear||q)
+        ? `<button class="btn btn-ghost btn-xs" style="margin-inline-start:auto" onclick="chkRepClear()">✕ امسح الفلاتر</button>` : ''}
+    </div></td></tr>`;
+}
+
+function chkRepClear(){
+  _chkRepStatus = 'all'; _chkRepYear = '';
+  const sb = $('chk-search'); if(sb) sb.value = '';
+  renderWeeklyReport(_chkWkView || undefined);
+}
+
 function renderWeeklyReport(view){
   const container=$('chk-tbody');
   if(!container)return;
@@ -31349,20 +31512,16 @@ function renderWeeklyReport(view){
   // لو لأ، نبدأ من الجمعة الفايتة عشان نشمل الأيام اللي قبل أول جمعة كاملة
   let firstFriday = new Date(year, 0, 1 + daysToFirstFriday - 7); // الجمعة قبل أول يوم في السنة
   
+  const _repList = _chkRepList();   // 🔎 v716: التقرير بيتبني من المفلترة
   const weeks=[];
   // 53 أسبوع لتغطية كل السنة
   for(let w=1;w<=53;w++){
-    const start = new Date(firstFriday);
-    start.setDate(firstFriday.getDate() + (w-1)*7);
-    start.setHours(0,0,0,0);
-    const end = new Date(start);
-    end.setDate(start.getDate()+6); // الخميس بعدها
-    end.setHours(23,59,59,999);
+    const { start, end } = _chkWeekRange(year, w);   // 🐞 v716: دالة واحدة مشتركة
     
     // وقف لو خرجنا من السنة
     if(start.getFullYear() > year) break;
     
-    const weekChecks=chkList.filter(c=>{
+    const weekChecks=_repList.filter(c=>{
       const d=new Date(c.date);
       return d>=start&&d<=end;
     });
@@ -31401,7 +31560,7 @@ function renderWeeklyReport(view){
   // 🆕 v360: ملخص شهري - كل شهر مع سنته (يناير 2025 + يناير 2026 = صفّين)
   // الـ key = "YYYY-MM" - بـ يفصل السنين
   const months={};
-  chkList.forEach(c=>{
+  _repList.forEach(c=>{
     const d=new Date(c.date);
     const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
     if(!months[key]) months[key] = {checks:[], total:0, year:d.getFullYear(), month:d.getMonth()+1};
@@ -31412,10 +31571,11 @@ function renderWeeklyReport(view){
   const monthNames=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 
   container.innerHTML=
+    _chkRepBar() +
     (!showM ? '' :
     `<tr><td colspan="7" style="padding:10px;background:var(--accent-light);font-weight:700;color:var(--accent);font-size:13px">📆 ملخص شهري — كل الشهور</td></tr>`+
     Object.entries(months)
-      .sort((a,b) => b[0].localeCompare(a[0])) // ترتيب من الأحدث للأقدم
+      .sort((a,b) => a[0].localeCompare(b[0])) // 🔁 v716: من الأقدم للأحدث — الأقرب استحقاقاً فوق
       .map(([key, d])=>{
         const pending=d.checks.filter(c=>c.status==='pending').reduce((s,c)=>s+Number(c.amount),0);
         const done=d.checks.filter(c=>c.status==='done').reduce((s,c)=>s+Number(c.amount),0);
@@ -31432,7 +31592,8 @@ function renderWeeklyReport(view){
         </tr>`;
       }).join('')
       + (Object.keys(months).length ? '' :
-         '<tr><td colspan="7" style="text-align:center;padding:26px;color:var(--muted)">مفيش شيكات مسجّلة</td></tr>'))
+         `<tr><td colspan="7" style="text-align:center;padding:26px;color:var(--muted)">${
+           (chkList||[]).length ? 'مفيش شيكات مطابقة للفلتر' : 'مفيش شيكات مسجّلة'}</td></tr>`))
     + (!showW ? '' :
     `<tr><td colspan="7" style="padding:10px;background:var(--accent-light);font-weight:700;color:var(--accent);font-size:13px">
       📅 تفاصيل أسبوعية —
@@ -31482,23 +31643,13 @@ async function chkMonthAction(id, action, monthNum, yearNum){
 }
 
 function openWeekChecksModal(weekNum){
-  const year = new Date().getFullYear();
+  // 🐞 v716: كانت new Date().getFullYear() — يعني لو مختار ٢٠٢٧ في
+  //   الجدول، المودال يحسب أسابيع ٢٠٢٦ ويقول «مفيش شيكات».
+  const year = _chkWkYear || new Date().getFullYear();
+  const { start, end } = _chkWeekRange(year, weekNum);
   
-  // اعد حساب نطاق الأسبوع (نفس الـ logic بتاع renderWeeklyReport)
-  const yearStart = new Date(year, 0, 1);
-  const yearStartDay = yearStart.getDay();
-  const daysToFirstFriday = (5 - yearStartDay + 7) % 7;
-  const firstFriday = new Date(year, 0, 1 + daysToFirstFriday - 7);
-  
-  const start = new Date(firstFriday);
-  start.setDate(firstFriday.getDate() + (weekNum - 1) * 7);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  end.setHours(23, 59, 59, 999);
-  
-  // فلتر الشيكات
-  const weekChecks = chkList.filter(c => {
+  // 🔎 v716: نفس فلاتر التقرير عشان المودال يطابق الصف اللي ضغط عليه
+  const weekChecks = _chkRepList().filter(c => {
     const d = new Date(c.date);
     return d >= start && d <= end;
   });
@@ -31572,7 +31723,7 @@ function openWeekChecksModal(weekNum){
           <div style="flex:1">
             <h3 style="margin:0;color:var(--accent);font-size:18px;font-weight:900">📅 شيكات أسبوع ${weekNum}</h3>
             <div style="font-size:12px;color:var(--muted);margin-top:4px">
-              ${start.toLocaleDateString('ar-EG', {weekday:'long', day:'numeric', month:'long'})} 
+              ${start.toLocaleDateString('ar-EG', {weekday:'long', day:'numeric', month:'long', year:'numeric'})} 
               → 
               ${end.toLocaleDateString('ar-EG', {weekday:'long', day:'numeric', month:'long', year:'numeric'})}
             </div>
@@ -47526,6 +47677,10 @@ function renderHrEmployeesTable(){
       <td style="white-space:nowrap">
         <button class="btn btn-ghost btn-xs" onclick="openEmployee(${e.id})" title="عرض">👁️</button>
         <button class="btn btn-ghost btn-xs" onclick="editEmployee(${e.id})" title="تعديل">✏️</button>
+        ${e.active
+          ? `<button class="btn btn-ghost btn-xs" style="color:#b45309;border-color:#b45309" onclick="hrTerminate(${e.id},'${escapeAttr(e.name_ar||'')}')" title="تعطيل — ساب الشغل">🚫</button>`
+          : `<button class="btn btn-ghost btn-xs" style="color:#166534;border-color:#166534" onclick="hrReactivate(${e.id},'${escapeAttr(e.name_ar||'')}')" title="إعادة تفعيل">✅</button>`}
+        <button class="btn btn-ghost btn-xs" style="color:#dc2626;border-color:#dc2626" onclick="hrDelete(${e.id},'${escapeAttr(e.name_ar||'')}')" title="حذف نهائي">🗑️</button>
       </td>
     </tr>`;
   }).join('');
@@ -48270,6 +48425,364 @@ async function sbaSweep(btn){
     sbaLoad();
   }catch(e){ toast('❌ ' + e.message); }
   finally{ if(btn){ btn.disabled = false; btn.textContent = '⚙️ خصم الآن'; } }
+}
+
+// ══════════════════════════════════════════════════════════════
+// 👥 v715: تعطيل / إعادة تفعيل / حذف موظف
+// ──────────────────────────────────────────────────────────────
+//   التعطيل هو الصح للموظف اللي ساب الشغل — بيحتفظ بكل تاريخه في
+//   الرواتب والسلف. الحذف للصفوف الغلط بس (دوبليكيت/إدخال خاطئ):
+//   السيرفر بيرفضه لو الموظف دخل كشف رواتب، وبيطلب تأكيد صريح لو
+//   عليه سلف أو جزاءات أو إجازات أو مشتريات لأنها بتتمسح معاه.
+// ══════════════════════════════════════════════════════════════
+async function hrTerminate(id, name){
+  const reason = prompt(`تعطيل «${name}» — السبب؟\n(الموظف هيختفي من القوايم بس تاريخه كله هيفضل محفوظ)`, 'ساب الشغل');
+  if(reason === null) return;
+  try{
+    const r = await apiFetch(`/api/hr/employees/${id}/terminate`, 'POST',
+      { reason: reason.trim() || 'ساب الشغل', date: null });
+    if(r?.error) throw new Error(r.error);
+    toast('🚫 اتعطّل');
+    loadHrEmployees();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function hrReactivate(id, name){
+  if(!confirm(`ترجّع «${name}» نشط تاني؟`)) return;
+  try{
+    const r = await apiFetch(`/api/hr/employees/${id}/reactivate`, 'POST', {});
+    if(r?.error) throw new Error(r.error);
+    toast('✅ رجع نشط');
+    loadHrEmployees();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+const _HR_DEL_LBL = {
+  payroll:'بند كشف رواتب', advances:'سلفة', penalties:'جزاء',
+  leaves:'إجازة', purchases:'مشترى', salary:'هيكل راتب',
+};
+
+async function hrDelete(id, name){
+  let chk;
+  try{
+    chk = await apiFetch(`/api/hr/employees/${id}/delete-check`, 'GET');
+    if(!chk?.ok) throw new Error(chk?.error || 'فشل الفحص');
+  }catch(e){ return toast('❌ ' + e.message); }
+
+  if(chk.blocked){
+    alert('⛔ ' + chk.blockedReason);
+    return;
+  }
+
+  const n = v => Number(v||0).toLocaleString('ar-EG');
+  // هيكل الراتب مش «فقد بيانات» — بيروح مع الموظف طبيعي، والسيرفر
+  // مابيعدّهوش في needsConfirm، فمانعدّهوش هنا كمان
+  const attached = Object.entries(chk.counts)
+    .filter(([k,v]) => v > 0 && k !== 'payroll' && k !== 'salary')
+    .map(([k,v]) => `• ${n(v)} ${_HR_DEL_LBL[k] || k}`);
+
+  let msg = `حذف نهائي لـ «${name}»؟\n\n`;
+  if(attached.length){
+    msg += 'هيتمسح معاه:\n' + attached.join('\n')
+         + '\n\n⚠️ دي بتروح خالص ومش هترجع. لو الموظف ساب الشغل بس، استعمل التعطيل 🚫 بدل الحذف.';
+  } else {
+    msg += 'مفيش أي سجلات مرتبطة بيه — الحذف آمن.';
+  }
+  if(!confirm(msg)) return;
+  if(attached.length && !confirm('متأكد؟ آخر تأكيد قبل الحذف النهائي.')) return;
+
+  try{
+    const r = await apiFetch(`/api/hr/employees/${id}?force=true`, 'DELETE');
+    if(r?.error) throw new Error(r.error);
+    toast('🗑️ اتمسح');
+    loadHrEmployees();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// ══════════════════════════════════════════════════════════════
+// 📦 v714: «اتسلّم مباشرة» — العميل خدها بنفسه أو اتبعتت مع أوبر
+// ──────────────────────────────────────────────────────────────
+//   بيقفل الطلب هنا كـ«مكتمل» (مش حالة جديدة — مكتمل بتشيله من طابور
+//   التوزيع من غير ما نلمس باقي الكود) ويعمله Fulfil على شوبيفاي.
+//   والسيرفر كمان بيمسك الـ Fulfil اليدوي اللي بيتعمل من أدمن شوبيفاي:
+//   أي طلب يتعمله Fulfil وهو لسه «جديد» ومن غير مندوب بيتقفل لوحده.
+// ══════════════════════════════════════════════════════════════
+let _dhId = null;
+
+function dhOpen(id){
+  _dhId = id;
+  const o = orders.find(x => x.id === id);
+  $('dh-oid').textContent = id;
+  $('dh-kind').value = 'pickup';
+  $('dh-note').value = '';
+  $('dh-note').style.display = 'none';
+  $('dh-paid').innerHTML = o && !o.paid
+    ? `<b style="color:#b45309">الطلب ده COD بـ ${Number(o.total||0).toLocaleString('ar-EG')} ج</b>`
+    : (o ? '<span style="color:var(--success)">✅ مدفوع أونلاين</span>' : '');
+  openM('m-dh');
+}
+
+function dhKind(){
+  $('dh-note').style.display = $('dh-kind').value === 'other' ? '' : 'none';
+}
+
+async function dhSave(btn){
+  if(!_dhId) return;
+  const kind = $('dh-kind').value;
+  const reason = kind === 'other' ? ($('dh-note').value || '').trim() : '';
+  if(kind === 'other' && !reason) return toast('❌ اكتب السبب');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ بيقفل...'; }
+  try{
+    const r = await apiFetch(`/api/orders/${encodeURIComponent(_dhId)}/direct-handover`, 'POST', { kind, reason });
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    toast(r.shopify ? '✅ اتقفل واتعمله Fulfil على شوبيفاي'
+                    : '⚠️ اتقفل هنا بس الـ Fulfil فشل: ' + (r.shopifyError || ''));
+    closeM('m-dh');
+    if(typeof loadOrders === 'function') loadOrders();
+  }catch(e){ toast('❌ ' + e.message); }
+  finally{ if(btn){ btn.disabled = false; btn.textContent = '✅ اقفله واعمله Fulfil'; } }
+}
+
+async function dhUndo(id){
+  if(!confirm('ترجّع الطلب ده لـ«جديد» ويدخل التوزيع تاني؟\n(الـ Fulfil على شوبيفاي مش هيترجع)')) return;
+  try{
+    const r = await apiFetch(`/api/orders/${encodeURIComponent(id)}/undo-handover`, 'POST', {});
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    toast('↩️ رجع «جديد»');
+    if(typeof loadOrders === 'function') loadOrders();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// ══════════════════════════════════════════════════════════════
+// 🏭 v713: صلاحيات الموردين — كل مورد وباتشاته اللي وردها هو
+// ──────────────────────────────────────────────────────────────
+//   النسب متجمّد على الباتش نفسه (product_batches.supplier_id) جاي من
+//   أمر الشراء. ده مختلف عن ربط الصنف بالمورد (supplier_products):
+//   لو مورّدين بيوردوا نفس الصنف، كل واحد بيشوف الباتش اللي هو وردّه بس.
+//   الباتش اللي مالوش أمر شراء مايظهرش لأي مورد — بيتجمّع في قايمة النسب.
+// ══════════════════════════════════════════════════════════════
+let _vbSups = [], _vbRows = [], _vbUn = [], _vbSup = null, _vbSupsLoaded = false;
+
+async function vbOnOpen(){
+  if(!_vbSupsLoaded) await vbLoadSuppliers();
+  else if(_vbSup) vbLoad();
+}
+
+async function vbLoadSuppliers(force){
+  const sel = $('vb-sup'); if(!sel) return;
+  try{
+    const r = await apiFetch('/api/vendor-batches/suppliers', 'GET');
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    _vbSups = r.suppliers || [];
+    _vbSupsLoaded = true;
+    const n = v => Number(v||0).toLocaleString('ar-EG');
+    const keep = _vbSup ? String(_vbSup) : '';
+    sel.innerHTML = '<option value="">🏭 اختار مورد…</option>' + _vbSups.map(s =>
+      `<option value="${s.id}">${escapeHtml(s.name)} — ${n(s.batches)} باتش${
+        s.expired ? ` · ${n(s.expired)} منتهي` : ''}${
+        !s.expired && s.soon ? ` · ${n(s.soon)} قرب` : ''}</option>`).join('');
+    if(keep && _vbSups.some(s => String(s.id) === keep)) sel.value = keep;
+
+    // زرار الباتشات اللي مالهاش مورد
+    const wrap = $('vb-unassigned-wrap'), btn = $('vb-unassigned-btn');
+    if(r.unassigned > 0){
+      wrap.style.display = '';
+      btn.textContent = `🧩 ${n(r.unassigned)} باتش من غير مورد`;
+    } else wrap.style.display = 'none';
+
+    const bdg = $('nb-vb');
+    if(bdg){
+      const c = _vbSups.reduce((a,s) => a + (s.expired||0), 0) + (r.unassigned||0);
+      bdg.textContent = c ? n(c) : '';
+      bdg.style.display = c ? '' : 'none';
+    }
+    if(force && _vbSup) vbLoad();
+  }catch(e){
+    sel.innerHTML = '<option value="">❌ ' + escapeHtml(e.message) + '</option>';
+    $('vb-body').innerHTML = `<div style="padding:22px;text-align:center;color:#dc2626">❌ ${escapeHtml(e.message)}<br>
+      <span style="font-size:11.5px;color:var(--muted)">لو ٤٠٤ يبقى الباك إند لسه مش v668.</span></div>`;
+  }
+}
+
+function vbPickSupplier(){
+  _vbSup = $('vb-sup')?.value || null;
+  if(!_vbSup){
+    _vbRows = []; $('vb-kpi').innerHTML = '';
+    $('vb-body').innerHTML = '<div style="padding:22px;text-align:center;color:var(--muted)">اختار مورد من فوق</div>';
+    return;
+  }
+  vbLoad();
+}
+
+async function vbLoad(){
+  if(!_vbSup) return;
+  const body = $('vb-body');
+  body.innerHTML = '<div style="padding:22px;text-align:center;color:var(--muted)">⏳ بيحمّل...</div>';
+  try{
+    const qs = new URLSearchParams({ supplierId: _vbSup });
+    const d = $('vb-days')?.value; if(d) qs.set('days', d);
+    const r = await apiFetch('/api/vendor-batches?' + qs.toString(), 'GET');
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    _vbRows = r.rows || [];
+    vbKpi(r.summary || {}, r.supplier);
+    vbRender();
+  }catch(e){
+    $('vb-kpi').innerHTML = '';
+    body.innerHTML = `<div style="padding:22px;text-align:center;color:#dc2626">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function vbKpi(s, sup){
+  const el = $('vb-kpi'); if(!el) return;
+  const n = v => Number(v||0).toLocaleString('ar-EG');
+  const box = (lbl, val, color) => `<div class="card" style="padding:10px 12px">
+    <div style="font-size:11px;color:var(--muted)">${lbl}</div>
+    <div style="font-size:20px;font-weight:800;color:${color};font-family:Roboto,sans-serif">${n(val)}</div></div>`;
+  el.innerHTML =
+      box('باتشات', s.total, 'var(--text)')
+    + box('إجمالي القطع', s.qty, 'var(--text)')
+    + box('☠️ منتهي', s.expired, '#991b1b')
+    + box('🔴 خلال ٣٠ يوم', s.soon30, '#b45309')
+    + box('🟡 ٣١–٦٠ يوم', s.soon60, '#854d0e');
+}
+
+function _vbChip(d){
+  return d < 0  ? ['☠️ منتهي', '#991b1b', '#fef2f2']
+       : d <= 30 ? ['🔴 قرب',   '#b45309', '#fff7ed']
+       : d <= 60 ? ['🟡 راقبه', '#854d0e', '#fefce8']
+       :           ['✅ بدري',  '#166534', '#dcfce7'];
+}
+
+function vbRender(){
+  const body = $('vb-body'); if(!body) return;
+  const n = v => Number(v||0).toLocaleString('ar-EG');
+  const terms = _arKey($('vb-q')?.value || '').split(' ').filter(Boolean);
+  let rows = _vbRows;
+  if(terms.length) rows = rows.filter(r => {
+    const hay = _arKey([r.product_title, r.variant_title, r.sku, r.barcode, r.po_number].join(' '));
+    const hayNS = hay.replace(/ /g, '');
+    return terms.every(t => hay.includes(t) || hayNS.includes(t));
+  });
+  if(!rows.length){
+    body.innerHTML = '<div style="padding:26px;text-align:center;color:var(--muted)">مفيش باتشات للمورد ده بالفلتر ده</div>';
+    return;
+  }
+  body.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:880px">
+    <thead style="background:var(--bg)"><tr>
+      <th style="text-align:right;padding:9px">المنتج</th>
+      <th style="padding:9px;width:150px">SKU / باركود</th>
+      <th style="padding:9px;width:110px">تاريخ الانتهاء</th>
+      <th style="padding:9px;width:92px">باقي</th>
+      <th style="padding:9px;width:92px">الكمية</th>
+      <th style="padding:9px;width:140px">أمر الشراء</th>
+      <th style="padding:9px;width:70px"></th>
+    </tr></thead><tbody>
+    ${rows.map(r => {
+      const c = _vbChip(r.days_left);
+      return `<tr style="border-bottom:1px solid var(--border);${r.days_left<0?'background:#fef2f2':''}">
+        <td style="padding:8px 10px">
+          <div style="font-weight:600">${escapeHtml(r.product_title||'—')}${r.variant_title?` <span style="color:var(--muted);font-weight:400">· ${escapeHtml(r.variant_title)}</span>`:''}</div>
+          ${r.notes?`<div style="font-size:10.5px;color:var(--muted)">📝 ${escapeHtml(r.notes)}</div>`:''}
+        </td>
+        <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif;font-size:11px;color:var(--muted)">
+          ${escapeHtml(r.sku||'—')}${r.barcode?`<div>${escapeHtml(r.barcode)}</div>`:''}</td>
+        <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif">${escapeHtml(r.exp_date||'—')}</td>
+        <td style="padding:8px;text-align:center">
+          <span class="badge" title="${c[0]}" style="background:${c[2]};color:${c[1]}">${c[0].split(' ')[0]} ${
+            r.days_left < 0 ? `عدّى ${n(-r.days_left)} يوم` : `${n(r.days_left)} يوم`}</span></td>
+        <td style="padding:8px;text-align:center">
+          <b style="font-family:Roboto,sans-serif">${n(r.current_quantity)}</b>
+          <div style="font-size:10px;color:var(--muted)">من ${n(r.original_quantity)}</div></td>
+        <td style="padding:8px;text-align:center;font-size:11px">
+          ${r.po_number
+            ? `<a href="#" onclick="vbGoPO(${r.po_id});return false" style="font-family:Roboto,sans-serif">#${escapeHtml(r.po_number)}</a>
+               ${r.order_date?`<div style="color:var(--muted)">${escapeHtml(String(r.order_date).slice(0,10))}</div>`:''}`
+            : `<span style="color:var(--muted)">نسب يدوي</span>`}</td>
+        <td style="padding:8px;text-align:center">
+          <button class="btn btn-ghost btn-xs" title="غيّر المورد" onclick="vbReassign(${r.id})">🔁</button></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+function vbGoPO(poId){
+  if(!poId) return;
+  try{ goPage(document.querySelector('[data-p="purchase-orders"]'), 'purchase-orders'); }catch(e){}
+  if(typeof viewPO === 'function') setTimeout(() => viewPO(poId), 350);
+}
+
+async function vbReassign(batchId){
+  if(!_vbSups.length) return toast('❌ مفيش موردين');
+  const list = _vbSups.map((s,i) => `${i+1}) ${s.name}`).join('\n');
+  const a = prompt('نسب الباتش لمورد — اكتب الرقم (أو 0 لشيل النسب):\n' + list);
+  if(a === null) return;
+  const i = parseInt(a, 10);
+  if(i === 0) return vbAssign(batchId, null);
+  if(!(i >= 1 && i <= _vbSups.length)) return toast('❌ رقم مش مظبوط');
+  vbAssign(batchId, _vbSups[i-1].id);
+}
+
+async function vbAssign(batchId, supplierId){
+  try{
+    const r = await apiFetch(`/api/vendor-batches/${batchId}/assign`, 'POST', { supplierId });
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    toast(supplierId === null ? '✅ اتشال النسب' : '✅ اتنسب');
+    await vbLoadSuppliers();
+    if(_vbSup) vbLoad();
+    if($('m-vb-un')?.classList.contains('on')) vbOpenUnassigned();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function vbOpenUnassigned(){
+  openM('m-vb-un');
+  const body = $('vb-un-body');
+  body.innerHTML = '<div style="padding:18px;text-align:center;color:var(--muted)">⏳ بيحمّل...</div>';
+  try{
+    const r = await apiFetch('/api/vendor-batches/unassigned', 'GET');
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    _vbUn = r.rows || [];
+    if(!_vbUn.length){
+      body.innerHTML = '<div style="padding:18px;text-align:center;color:var(--muted)">✅ كل الباتشات منسوبة</div>';
+      return;
+    }
+    const n = v => Number(v||0).toLocaleString('ar-EG');
+    const opts = _vbSups.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    body.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:700px">
+      <thead style="background:var(--bg)"><tr>
+        <th style="text-align:right;padding:8px">المنتج</th>
+        <th style="padding:8px;width:100px">ينتهي</th>
+        <th style="padding:8px;width:70px">الكمية</th>
+        <th style="padding:8px;width:260px">المورد</th>
+      </tr></thead><tbody>
+      ${_vbUn.map(r => `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:8px">
+          <div style="font-weight:600">${escapeHtml(r.product_title||'—')}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(r.sku||'')}</div>
+          ${r.notes?`<div style="font-size:10.5px;color:var(--muted)">📝 ${escapeHtml(r.notes)}</div>`:''}
+        </td>
+        <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif">${escapeHtml(r.exp_date||'—')}
+          <div style="font-size:10px;color:${r.days_left<0?'#991b1b':'var(--muted)'}">${
+            r.days_left < 0 ? `عدّى ${n(-r.days_left)}` : `${n(r.days_left)} يوم`}</div></td>
+        <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif;font-weight:700">${n(r.current_quantity)}</td>
+        <td style="padding:8px">
+          <div style="display:flex;gap:5px;align-items:center">
+            <select class="form-input" id="vb-un-s-${r.id}" style="font-size:11.5px;flex:1">
+              <option value="">— اختار —</option>${opts}
+            </select>
+            <button class="btn btn-primary btn-xs" onclick="vbAssignFromRow(${r.id})">نسب</button>
+          </div>
+          ${r.hint?`<div style="font-size:10.5px;color:#1e40af;margin-top:3px;cursor:pointer"
+              onclick="vbAssign(${r.id},${r.hint.id})">💡 الصنف مربوط بـ ${escapeHtml(r.hint.name)} بس — اضغط لنسبه</div>`:''}
+        </td>
+      </tr>`).join('')}</tbody></table>`;
+  }catch(e){
+    body.innerHTML = `<div style="padding:18px;text-align:center;color:#dc2626">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function vbAssignFromRow(batchId){
+  const v = $('vb-un-s-' + batchId)?.value;
+  if(!v) return toast('❌ اختار مورد الأول');
+  vbAssign(batchId, parseInt(v, 10));
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -52311,6 +52824,7 @@ function goPage(el,page){
   if(page==='collection-sort')csList();
   if(page==='temp-price')tpLoad();
   if(page==='store-batches')sbaOnOpen();
+  if(page==='vendor-batches')vbOnOpen();
   if(page==='sync-failures')loadSyncFailures();
   if(page==='payables')loadPayables();
   if(page==='settlements-receipts')loadSettlementsReceipts();
