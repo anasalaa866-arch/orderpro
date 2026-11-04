@@ -48630,6 +48630,152 @@ async function dhUndo(id){
   }catch(e){ toast('❌ ' + e.message); }
 }
 
+// صف واحد في كشف الرواتب — مصدر واحد للقالب
+function prRowHtml(it, isDraft){
+  const ed = isDraft && !it.locked;
+  return `<tr style="border-bottom:1px solid var(--border);${it.locked?'background:#f0fdf4':''}"
+      data-prid="${it.id}" data-locked="${it.locked?1:0}">
+    <td style="text-align:center;padding:6px 4px">
+      ${isDraft?`<input type="checkbox" class="pr-lock" ${it.locked?'checked':''}
+        title="${it.locked?'خلصت منه — شيل العلامة عشان تعدّله':'علّم لما تخلص منه'}"
+        onchange="prLock(${it.id}, this.checked, this)"
+        style="width:17px;height:17px;cursor:pointer;accent-color:#16a34a">`
+       :(it.locked?'<span style="color:#16a34a">✅</span>':'')}
+    </td>
+    <td style="padding:6px 10px;white-space:nowrap"><strong>${escapeHtml(it.employee_name)}</strong>${
+      it.locked?'<span style="font-size:10px;color:#16a34a;margin-inline-start:5px">🔒</span>':''
+      }<div style="font-size:10.5px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(it.employee_code||'')}</div></td>
+    ${prCell(it,'base_salary',ed)}
+    ${prSumCell(it, _PR_ALLOW, ed, 'البدلات')}
+    ${prCell(it,'bonuses',ed,'var(--success)')}
+    <td style="text-align:right;font-weight:700" data-f="gross">${fmtMoney(it.gross_salary)}</td>
+    ${prCell(it,'advances_deduction',ed,'var(--danger)')}
+    ${prCell(it,'penalties_deduction',ed,'var(--danger)')}
+    ${prCell(it,'purchases_deduction',ed,'var(--danger)')}
+    ${prSumCell(it, _PR_ODED, ed, 'خصومات أخرى')}
+    <td style="text-align:right;font-weight:800;color:${_prNum(it.net_salary)<0?'var(--danger)':'var(--accent)'}" data-f="net">${fmtMoney(it.net_salary)}</td>
+    <td style="text-align:center;white-space:nowrap">
+      ${ed?`<button class="btn btn-ghost btn-xs" title="تعديل كل البنود" onclick="prEditRow(${it.id})">✏️</button>`:''}
+      <button class="btn btn-ghost btn-xs" title="اطبع قسيمة الموظف ده"
+        onclick="printPayslips(${it.employee_id})">🧾</button></td>
+  </tr>`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 🔒 v722: «خلصت منه» — قفل الموظف + بحث وفلاتر في الكشف
+// ──────────────────────────────────────────────────────────────
+//   علّم ✅ على الموظف لما تخلص مراجعته فيتقفل عن التعديل. شيل
+//   العلامة لو عايز تعدّل تاني (بتأكيد). المنع حقيقي من السيرفر
+//   مش إخفاء في الواجهة بس.
+// ══════════════════════════════════════════════════════════════
+let _prQ = '', _prFilter = 'all';
+
+function prBar(items){
+  const done = items.filter(x => x.locked).length;
+  const neg  = items.filter(x => _prNum(x.net_salary) < 0).length;
+  const pct  = items.length ? Math.round(done / items.length * 100) : 0;
+  const chip = (v, lbl, n) => `<button class="chip${_prFilter===v?' on':''}"
+    style="font-size:11.5px;padding:3px 10px" onclick="prSetFilter('${v}')">${lbl}${
+    n!=null?` <b style="font-family:Roboto,sans-serif">${n}</b>`:''}</button>`;
+  return `<div style="display:flex;gap:9px;flex-wrap:wrap;align-items:center;
+      background:var(--bg);border-radius:9px;padding:9px 12px;margin-bottom:12px">
+    <input id="pr-q" class="form-input" style="font-size:12px;width:200px"
+      placeholder="🔎 اسم الموظف أو الكود" value="${escapeAttr(_prQ)}" oninput="prSearch(this.value)">
+    ${chip('all','الكل', items.length)}
+    ${chip('todo','⏳ لسه', items.length - done)}
+    ${chip('done','✅ خلصت', done)}
+    ${neg?chip('neg','⚠️ صافي بالسالب', neg):''}
+    <span style="margin-inline-start:auto;display:flex;align-items:center;gap:8px">
+      <span style="font-size:11.5px;color:var(--muted)">خلصت <b style="font-family:Roboto,sans-serif;color:${pct===100?'#16a34a':'var(--text)'}">${done}</b> من ${items.length}</span>
+      <span style="width:110px;height:7px;background:var(--border);border-radius:4px;overflow:hidden">
+        <span style="display:block;height:100%;width:${pct}%;background:${pct===100?'#16a34a':'var(--accent)'}"></span></span>
+    </span>
+  </div>`;
+}
+
+function prSearch(v){ _prQ = v; prFilterRows(); }
+function prSetFilter(v){
+  _prFilter = v;
+  const bar = document.querySelector('#pr-detail-content .chip')?.parentElement;
+  if(bar) for(const c of bar.querySelectorAll('.chip'))
+    c.classList.toggle('on', (c.getAttribute('onclick')||'').includes(`'${v}'`));
+  prFilterRows();
+}
+
+// الفلترة على الصفوف الموجودة — من غير إعادة رسم (عشان مانضيّعش خانة مفتوحة)
+function prFilterRows(){
+  const terms = _arKey(_prQ || '').split(' ').filter(Boolean);
+  let shown = 0;
+  for(const tr of document.querySelectorAll('#pr-detail-content tr[data-prid]')){
+    const it = _lastPayroll?.items.find(x => String(x.id) === tr.getAttribute('data-prid'));
+    if(!it) continue;
+    let okF = _prFilter === 'done' ? !!it.locked
+            : _prFilter === 'todo' ? !it.locked
+            : _prFilter === 'neg'  ? _prNum(it.net_salary) < 0
+            : true;
+    if(okF && terms.length){
+      const hay = _arKey([it.employee_name, it.employee_code].join(' '));
+      okF = terms.every(t => hay.includes(t) || hay.replace(/ /g,'').includes(t));
+    }
+    tr.style.display = okF ? '' : 'none';
+    if(okF) shown++;
+  }
+  const tb = document.querySelector('#pr-detail-content tbody');
+  if(tb){
+    let empty = tb.querySelector('tr[data-prempty]');
+    if(!shown){
+      if(!empty){
+        empty = document.createElement('tr');
+        empty.setAttribute('data-prempty','1');
+        empty.innerHTML = '<td colspan="12" style="text-align:center;padding:24px;color:var(--muted)">مفيش نتايج</td>';
+        tb.appendChild(empty);
+      }
+      empty.style.display = '';
+    } else if(empty) empty.style.display = 'none';
+  }
+}
+
+async function prLock(itemId, on, el){
+  if(!on && !confirm('تفتح الموظف ده للتعديل تاني؟')){ if(el) el.checked = true; return; }
+  if(el) el.disabled = true;
+  try{
+    const r = await apiFetch(`/api/hr/payroll-items/${itemId}/lock`, 'POST', { locked: !!on });
+    if(r?.error) throw new Error(r.error);
+    const i = _lastPayroll.items.findIndex(x => x.id === itemId);
+    if(i >= 0) _lastPayroll.items[i] = { ..._lastPayroll.items[i], ...(r.item || { locked: !!on }) };
+    toast(on ? '🔒 اتقفل' : '✏️ اتفتح للتعديل');
+    prRedrawRow(itemId);
+    prRefreshBar();
+    prFilterRows();
+  }catch(e){
+    toast('❌ ' + e.message);
+    if(el){ el.checked = !on; }
+  }finally{ if(el) el.disabled = false; }
+}
+
+// نعيد رسم صف واحد بس — الباقي مايتلمسش (عشان مانضيّعش خانة مفتوحة)
+function prRedrawRow(itemId){
+  const it = _lastPayroll?.items.find(x => x.id === itemId);
+  const tr = document.querySelector(`tr[data-prid="${itemId}"]`);
+  if(!it || !tr) return;
+  const vis = tr.style.display;
+  tr.outerHTML = prRowHtml(it, _lastPayroll.run?.status === 'draft');
+  const fresh = document.querySelector(`tr[data-prid="${itemId}"]`);
+  if(fresh) fresh.style.display = vis;
+}
+
+function prRefreshBar(){
+  const old = document.querySelector('#pr-detail-content #pr-q')?.closest('div');
+  if(!old || !_lastPayroll) return;
+  const focused = document.activeElement?.id === 'pr-q';
+  const pos = focused ? document.getElementById('pr-q').selectionStart : null;
+  old.outerHTML = prBar(_lastPayroll.items);
+  if(focused){
+    const q = document.getElementById('pr-q');
+    if(q){ q.focus(); try{ q.setSelectionRange(pos,pos); }catch(e){} }
+  }
+}
+
 // 🖥️ v720: الكشف بيفتح بحجم الصفحة كلها (الأعمدة كتير والأسماء كانت بتتقطّع)
 //   والاختيار بيتحفظ في المتصفح.
 function prToggleSize(){
@@ -48730,6 +48876,7 @@ function prApply(item, run){
       if(st[2]) st[2].textContent = fmtMoney(run.total_deductions);
       if(st[3]) st[3].textContent = fmtMoney(run.total_net);
     }
+    if(typeof prRefreshBar === 'function') prRefreshBar();   // 🔒 v722: عدّاد «بالسالب»
   }
 }
 
@@ -48741,16 +48888,20 @@ async function prSave(itemId, field, el){
     el.value = _prNum(it?.[field]); return;
   }
   el.disabled = true;
-  try{
-    const r = await apiFetch(`/api/hr/payroll-items/${itemId}`, 'PUT', { [field]: raw });
-    if(r?.error) throw new Error(r.error);
-    if(r?.item) prApply(r.item, r.run);
-    toast('✅ اتحفظ');
-  }catch(e){
-    toast('❌ ' + e.message);
-    const it = _lastPayroll?.items.find(x => x.id === itemId);
-    el.value = _prNum(it?.[field]);
-  }finally{ el.disabled = false; }
+  // 🖨️ v721: نسجّل الحفظ عشان الطباعة تستناه ومتطلعش برقم قديم
+  _prPending = (async () => {
+    try{
+      const r = await apiFetch(`/api/hr/payroll-items/${itemId}`, 'PUT', { [field]: raw });
+      if(r?.error) throw new Error(r.error);
+      if(r?.item) prApply(r.item, r.run);
+      toast('✅ اتحفظ');
+    }catch(e){
+      toast('❌ ' + e.message);
+      const it = _lastPayroll?.items.find(x => x.id === itemId);
+      el.value = _prNum(it?.[field]);
+    }finally{ el.disabled = false; }
+  })();
+  await _prPending;
 }
 
 // نافذة كل البنود
@@ -48808,14 +48959,17 @@ async function prEditSave(btn){
     if(!Number.isFinite(v) || v < 0) return toast(`❌ ${_PR_LBL[k]}: رقم مش مظبوط`);
   }
   if(btn){ btn.disabled = true; btn.textContent = '⏳'; }
-  try{
-    const r = await apiFetch(`/api/hr/payroll-items/${id}`, 'PUT', body);
-    if(r?.error) throw new Error(r.error);
-    if(r?.item) prApply(r.item, r.run);
-    toast('✅ اتحفظ');
-    closeM('m-pr-edit');
-  }catch(e){ toast('❌ ' + e.message); }
-  finally{ if(btn){ btn.disabled = false; btn.textContent = '✅ حفظ'; } }
+  _prPending = (async () => {
+    try{
+      const r = await apiFetch(`/api/hr/payroll-items/${id}`, 'PUT', body);
+      if(r?.error) throw new Error(r.error);
+      if(r?.item) prApply(r.item, r.run);
+      toast('✅ اتحفظ');
+      closeM('m-pr-edit');
+    }catch(e){ toast('❌ ' + e.message); }
+    finally{ if(btn){ btn.disabled = false; btn.textContent = '✅ حفظ'; } }
+  })();
+  await _prPending;
 }
 
 async function prRecalc(runId){
@@ -48842,12 +48996,24 @@ const _PS_MON = ['يناير','فبراير','مارس','أبريل','مايو',
 const _psHM = v => { const n = Math.max(0, Math.round(Number(v)||0));
   return `${Math.floor(n/60)}:${String(n%60).padStart(2,'0')}`; };
 
-function printPayslips(onlyId){
+async function printPayslips(onlyId){
   if(!_lastPayroll){ toast('افتح الكشف الأول'); return; }
+  // 🖨️ v721: لو لسه واقف في خانة اتعدّلت، نخرج منها عشان الحفظ يبدأ،
+  //   وبعدين نستنى أي حفظ جاري — عشان القسيمة تطلع بالأرقام الجديدة.
+  //   النافذة بتتفتح قبل الـ await عشان المتصفح مايحسبهاش popup.
+  const w = window.open('', '_blank');
+  if(!w){ toast('❌ المتصفح منع النافذة — اسمح بالـ popups'); return; }
+  w.document.open();
+  w.document.write('<!doctype html><html dir="rtl"><head><meta charset="utf-8">'
+    + '<title>بيحضّر…</title></head><body style="font-family:system-ui;text-align:center;'
+    + 'padding:60px;color:#6b7280">⏳ بيحضّر القسيمة…</body></html>');
+  try{ document.activeElement?.blur(); }catch(e){}
+  if(_prPending){ try{ await _prPending; }catch(e){} }
+
   const { run, items, attendance } = _lastPayroll;
   const att = attendance || {};
   const list = onlyId ? items.filter(x => String(x.employee_id) === String(onlyId)) : items;
-  if(!list.length){ toast('مفيش موظفين في الكشف'); return; }
+  if(!list.length){ toast('مفيش موظفين في الكشف'); try{ w.close(); }catch(e){} return; }
 
   const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const m = n => (Number(n)||0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -48985,8 +49151,6 @@ function printPayslips(onlyId){
   @media print { .pg{ padding:0; } }
 </style></head><body>${pages}</body></html>`;
 
-  const w = window.open('', '_blank');
-  if(!w){ toast('❌ المتصفح منع النافذة — اسمح بالـ popups'); return; }
   w.document.open(); w.document.write(html); w.document.close();
   setTimeout(() => { w.focus(); w.print(); }, 700);
 }
@@ -48999,6 +49163,7 @@ function printPayslips(onlyId){
 //   🤝 متفق عليه: اللي مابصمش ولا مرة = غياب عادي · واليوم اللي
 //   فيه دخول من غير خروج = خانة لوحده مش حضور كامل ولا غياب.
 // ══════════════════════════════════════════════════════════════
+let _prPending = null;   // 🖨️ v721: آخر حفظ جاري — الطباعة بتستناه
 let _attRows = [], _attSum = {}, _attFilter = 'all', _attPending = null, _attEmps = [];
 
 // الجهاز بيكتب المدة كـ "HH:MM" — نحوّلها دقايق
@@ -50665,29 +50830,13 @@ async function viewPayroll(id){
     const run = r.run;
     const items = r.items || [];
     _lastPayroll = { run, items, attendance: r.attendance || {}, attPeriod: r.attPeriod || null };
+    _prQ = ''; _prFilter = 'all';   // 🔒 v722
     const isDraft = run.status === 'draft';
     
     document.getElementById('pr-detail-title').textContent = `${run.title} - ${payrollStatusLabel(run.status).replace(/<[^>]+>/g,'')}`;
     
-    // ✏️ v719: أي رقم قابل للتعديل قبل الطباعة (الكشف لسه draft بس)
-    const itemsHtml = items.map(it => `
-      <tr style="border-bottom:1px solid var(--border)" data-prid="${it.id}">
-        <td style="padding:6px 10px;white-space:nowrap"><strong>${escapeHtml(it.employee_name)}</strong><div style="font-size:10.5px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(it.employee_code||'')}</div></td>
-        ${prCell(it,'base_salary',isDraft)}
-        ${prSumCell(it, _PR_ALLOW, isDraft, 'البدلات')}
-        ${prCell(it,'bonuses',isDraft,'var(--success)')}
-        <td style="text-align:right;font-weight:700" data-f="gross">${fmtMoney(it.gross_salary)}</td>
-        ${prCell(it,'advances_deduction',isDraft,'var(--danger)')}
-        ${prCell(it,'penalties_deduction',isDraft,'var(--danger)')}
-        ${prCell(it,'purchases_deduction',isDraft,'var(--danger)')}
-        ${prSumCell(it, _PR_ODED, isDraft, 'خصومات أخرى')}
-        <td style="text-align:right;font-weight:800;color:var(--accent)" data-f="net">${fmtMoney(it.net_salary)}</td>
-        <td style="text-align:center;white-space:nowrap">
-          ${isDraft?`<button class="btn btn-ghost btn-xs" title="تعديل كل البنود" onclick="prEditRow(${it.id})">✏️</button>`:''}
-          <button class="btn btn-ghost btn-xs" title="اطبع قسيمة الموظف ده"
-            onclick="printPayslips(${it.employee_id})">🧾</button></td>
-      </tr>
-    `).join('');
+    // ✏️ v719 · 🔒 v722: القالب في دالة واحدة — viewPayroll و prRedrawRow بيستعملوها
+    const itemsHtml = items.map(it => prRowHtml(it, isDraft)).join('');
     
     document.getElementById('pr-detail-content').innerHTML = `
       <div style="background:var(--bg);padding:14px;border-radius:10px;margin-bottom:14px">
@@ -50716,7 +50865,9 @@ async function viewPayroll(id){
       </div>
       <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px">
         ✏️ دوس على أي رقم عشان تعدّله — بيتحفظ لوحده والصافي بيتحسب على طول.
-      </div>` : `<div style="margin-bottom:14px;display:flex;gap:8px">
+        وعلّم ✅ على الموظف لما تخلص منه عشان يتقفل.
+      </div>
+      ${prBar(items)}` : `<div style="margin-bottom:14px;display:flex;gap:8px">
         <button class="btn btn-ghost" onclick="printPayroll()">🖨️ طباعة الكشف</button>
         <button class="btn btn-ghost" onclick="printPayslips()">🧾 قسايم المرتبات</button></div>`}
       
@@ -50724,6 +50875,7 @@ async function viewPayroll(id){
       <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:980px">
         <thead style="background:var(--bg);position:sticky;top:0;z-index:2;box-shadow:0 1px 0 var(--border)">
           <tr>
+            <th style="padding:8px;width:34px" title="علّم لما تخلص من الموظف">✅</th>
             <th style="text-align:right;padding:8px;min-width:190px">الموظف</th>
             <th style="text-align:right;padding:8px;white-space:nowrap">الأساسي</th>
             <th style="text-align:right;padding:8px;white-space:nowrap">البدلات</th>
