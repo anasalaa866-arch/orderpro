@@ -4871,6 +4871,26 @@ tr:hover td{background:#fafbff}
 
   <!-- SETTINGS -->
   <div class="page" id="page-settings">
+    <!-- 🔒 v731: الصفحات المقفولة بالباسورد -->
+    <div class="card" id="lk-settings" style="margin-bottom:16px;display:none">
+      <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-weight:900">🔒 صفحات تطلب الباسورد</span>
+        <span style="font-size:11.5px;color:var(--muted)">لو حد ساب الجهاز مفتوح، الصفحات دي تطلب باسورد المستخدم تاني</span>
+        <button class="btn btn-sm btn-ghost" style="margin-inline-start:auto" onclick="lkSetOpen()">🔄</button>
+      </div>
+      <div style="padding:14px 16px">
+        <div style="font-size:12px;color:var(--muted);line-height:1.9;margin-bottom:12px">
+          الفتحة بتدوم <b>٥ دقايق</b> وبتتلغي أول ما يسيب التاب. <b>المدير مستثنى.</b><br>
+          <span style="color:#166534;font-weight:700">🛡️ محمية على السيرفر</span> = حتى لو حد فتح F12 مش هيجيب البيانات ·
+          <span style="color:#92400e;font-weight:700">👁️ الواجهة بس</span> = بتمنع العرض، بس الـ API مكشوف لحد يعرف يستخدمه
+        </div>
+        <input id="lk-q" class="form-input" placeholder="دوّر على صفحة..." oninput="lkSetRender()" style="width:100%;margin-bottom:10px">
+        <div id="lk-count" style="font-size:12px;font-weight:800;margin-bottom:8px"></div>
+        <div id="lk-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:7px;max-height:430px;overflow-y:auto"></div>
+        <button class="btn btn-primary btn-sm" onclick="lkSetSave()" style="margin-top:13px;font-weight:800">💾 احفظ</button>
+      </div>
+    </div>
+
     <!-- 🚚 v659: إعداد بوسطة — كان في صفحة بوسطة، مكانه هنا -->
     <!-- إعداد بوسطة -->
     <div id="bosta-setup-banner2" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -9432,7 +9452,34 @@ tr:hover td{background:#fafbff}
 </div>
 
 <!-- ===== VENDOR BATCHES PAGE (v713) ===== -->
+<!-- 🔒 v731: بوابة الباسورد -->
+<div id="m-lock" class="modal-overlay" style="display:none">
+  <div class="modal" style="width:min(400px,94vw)">
+    <div class="modal-body" style="text-align:center;padding:26px 22px">
+      <div style="font-size:40px;margin-bottom:8px">🔒</div>
+      <div style="font-weight:900;font-size:16px;margin-bottom:4px" id="lk-title"></div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.7">
+        الصفحة دي مقفولة — اكتب باسوردك عشان تفتحها</div>
+      <input id="lk-pw" type="password" autocomplete="current-password" placeholder="الباسورد"
+        onkeydown="if(event.key==='Enter')lkUnlock()"
+        style="width:100%;padding:12px;text-align:center;border:1.5px solid var(--border);border-radius:10px;
+               background:var(--bg);color:var(--text);font-size:15px;letter-spacing:2px">
+      <div id="lk-err" style="display:none;color:var(--danger);font-size:12px;margin-top:8px;font-weight:700"></div>
+      <button id="lk-btn" onclick="lkUnlock()" class="btn btn-primary"
+        style="width:100%;margin-top:14px;padding:12px;font-weight:800">🔓 افتح</button>
+      <button onclick="closeM('m-lock')" class="btn btn-secondary btn-sm"
+        style="width:100%;margin-top:8px">إلغاء</button>
+      <div style="font-size:11px;color:var(--muted);margin-top:12px;line-height:1.6">
+        هتفضل مفتوحة ٥ دقايق، وبتتقفل لوحدها أول ما تسيب الصفحة</div>
+    </div>
+  </div>
+</div>
+
 <!-- 🤝 v730: بضاعة تحت البيع -->
+<div id="lk-bar" style="display:none;position:fixed;bottom:14px;inset-inline-start:14px;z-index:900;
+  background:#166534;color:#fff;border-radius:999px;padding:7px 14px;font-size:11.5px;font-weight:700;
+  gap:10px;align-items:center;box-shadow:0 4px 14px rgba(0,0,0,.25)"></div>
+
 <div class="page" id="page-consignment">
   <div class="card" style="padding:14px;margin-bottom:14px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
@@ -11933,6 +11980,170 @@ function _authHeaders(extra){
   const h = Object.assign({'Content-Type':'application/json'}, extra||{});
   if(window._adminToken) h['Authorization'] = 'Bearer ' + window._adminToken;
   return h;
+}
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║ 🔒 v731: قفل الصفحات الحساسة بالباسورد                           ║
+// ╚══════════════════════════════════════════════════════════════════╝
+// لو حد ساب أوردر برو مفتوح وقام، الصفحات دي تطلب باسورده تاني.
+// الفتحة بتدوم ٥ دقايق، وبتتلغي فوراً أول ما يسيب التاب — لأن ده
+// بالظبط السيناريو اللي بنحمي منه.
+let _lkPages = [], _lkUntil = 0, _lkExempt = false, _lkServer = [], _lkMins = 5;
+let _lkPending = null, _lkHidden = 0;
+
+async function lkLoad(){
+  try{
+    const r = await apiFetch('/api/security/locked-pages');
+    if(r?.error) return;
+    _lkPages  = r.pages || [];
+    _lkExempt = !!r.exempt;
+    _lkServer = r.serverEnforced || [];
+    _lkMins   = r.minutes || 5;
+    _lkUntil  = r.unlockedUntil || 0;
+    _lkPaint();
+  }catch(e){}
+}
+
+function _lkNeeds(page){
+  if(_lkExempt) return false;
+  if(!_lkPages.includes(page)) return false;
+  return !(_lkUntil > Date.now());
+}
+
+// 🔑 بوابة الباسورد
+function _lkAsk(page, after){
+  _lkPending = after || null;
+  const ttl = PAGE_T[page] || page;
+  document.getElementById('lk-title').textContent = ttl;
+  document.getElementById('lk-pw').value = '';
+  document.getElementById('lk-err').style.display = 'none';
+  openM('m-lock');
+  setTimeout(() => document.getElementById('lk-pw')?.focus(), 120);
+}
+
+async function lkUnlock(){
+  const el = document.getElementById('lk-pw');
+  const pw = el?.value || '';
+  const err = document.getElementById('lk-err');
+  if(!pw) return;
+  const btn = document.getElementById('lk-btn');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳'; }
+  try{
+    const passHash = await _sha256Hash(pw);
+    const r = await apiFetch('/api/auth/step-up', 'POST', { passHash });
+    if(r?.error || !r?.ok){
+      err.textContent = '❌ ' + (r?.error || 'الباسورد غلط');
+      err.style.display = 'block';
+      el.value = ''; el.focus();
+      return;
+    }
+    _lkUntil = r.until || (Date.now() + _lkMins * 60000);
+    closeM('m-lock');
+    _lkPaint();
+    const go = _lkPending; _lkPending = null;
+    if(go) go();
+  }catch(e){
+    err.textContent = '❌ ' + e.message; err.style.display = 'block';
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '🔓 افتح'; }
+  }
+}
+
+// قفل فوري — بنندهه لما يسيب التاب
+async function lkLock(silent){
+  _lkUntil = 0; _lkPaint();
+  try{ await apiFetch('/api/auth/lock', 'POST', {}); }catch(e){}
+  if(!silent && _lkPages.includes(currentPage) && !_lkExempt){
+    // كان واقف على صفحة مقفولة — رجّعه للوحة التحكم
+    const el = document.querySelector('.ni[data-p="dashboard"]');
+    if(el) goPage(el, 'dashboard');
+  }
+}
+
+// قفل أوتوماتيك: ساب التاب أكتر من دقيقة
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden){ _lkHidden = Date.now(); return; }
+  if(_lkHidden && Date.now() - _lkHidden > 60000 && _lkUntil > Date.now()) lkLock();
+  _lkHidden = 0;
+});
+
+// علامة قفل جنب الصفحات المقفولة + عدّاد الوقت الفاضل
+function _lkPaint(){
+  const open = _lkUntil > Date.now();
+  document.querySelectorAll('.ni[data-p]').forEach(n => {
+    const pg = n.dataset.p;
+    const lbl = n.querySelector('.ni-label');
+    if(!lbl) return;
+    const has = lbl.querySelector('.lk-ic');
+    if(_lkPages.includes(pg) && !_lkExempt){
+      if(!has){ const i = document.createElement('span');
+        i.className = 'lk-ic'; i.style.cssText = 'margin-inline-start:5px;font-size:10px'; lbl.appendChild(i); }
+      lbl.querySelector('.lk-ic').textContent = open ? '🔓' : '🔒';
+    } else if(has) has.remove();
+  });
+  const b = document.getElementById('lk-bar');
+  if(b){
+    if(open && !_lkExempt){
+      b.style.display = 'flex';
+      const left = Math.ceil((_lkUntil - Date.now()) / 60000);
+      b.innerHTML = `<span>🔓 الصفحات الحساسة مفتوحة · فاضل ${left} دقيقة</span>
+        <button onclick="lkLock(true)" style="background:none;border:1px solid currentColor;color:inherit;
+          border-radius:7px;padding:2px 9px;cursor:pointer;font-family:Cairo,sans-serif;font-size:11px">اقفل دلوقتي</button>`;
+    } else b.style.display = 'none';
+  }
+}
+setInterval(() => { if(_lkUntil){ if(_lkUntil <= Date.now()) lkLock(); else _lkPaint(); } }, 20000);
+
+// ───────────── إعدادات القفل (المدير بس) ─────────────
+let _lkSet = null;
+
+async function lkSetOpen(){
+  const box = document.getElementById('lk-settings');
+  if(!box) return;
+  if(currentUser?.username !== 'admin' && currentUser?.role !== 'admin'){ box.style.display = 'none'; return; }
+  box.style.display = '';
+  try{
+    const r = await apiFetch('/api/security/locked-pages');
+    if(r?.error) return;
+    _lkSet = new Set(r.pages || []);
+    _lkServer = r.serverEnforced || [];
+    lkSetRender();
+  }catch(e){}
+}
+
+function lkSetRender(){
+  if(!_lkSet) return;
+  const q = (document.getElementById('lk-q')?.value || '').trim().toLowerCase();
+  const all = Object.entries(PAGE_T)
+    .filter(([k,v]) => !q || v.toLowerCase().includes(q) || k.includes(q))
+    .sort((a,b) => {
+      const sa = _lkSet.has(a[0]) ? 0 : 1, sb = _lkSet.has(b[0]) ? 0 : 1;
+      return sa - sb || a[1].localeCompare(b[1], 'ar');
+    });
+  document.getElementById('lk-count').textContent =
+    `${_lkSet.size} صفحة مقفولة من ${Object.keys(PAGE_T).length}`;
+  document.getElementById('lk-grid').innerHTML = all.map(([k,v]) => {
+    const on = _lkSet.has(k), srv = _lkServer.includes(k);
+    return `<label style="display:flex;gap:8px;align-items:center;padding:7px 10px;border-radius:8px;cursor:pointer;
+      border:1px solid ${on?'#6366f1':'var(--border)'};background:${on?'rgba(99,102,241,.08)':'transparent'}">
+      <input type="checkbox" ${on?'checked':''} onchange="lkSetToggle('${k}',this.checked)" style="cursor:pointer">
+      <span style="flex:1;font-size:12px;font-weight:${on?700:400}">${escapeHtml(v)}</span>
+      ${on ? (srv
+        ? '<span title="محمية على السيرفر كمان" style="font-size:10px">🛡️</span>'
+        : '<span title="الواجهة بس — الـ API مش محمي لها" style="font-size:10px">👁️</span>') : ''}
+    </label>`;
+  }).join('');
+}
+
+function lkSetToggle(k, on){ if(on) _lkSet.add(k); else _lkSet.delete(k); lkSetRender(); }
+
+async function lkSetSave(){
+  try{
+    const r = await apiFetch('/api/security/locked-pages', 'PUT', { pages: [..._lkSet] });
+    if(r?.error) return toast('❌ ' + r.error);
+    toast(`✅ اتحفظت — ${r.pages.length} صفحة مقفولة`, 'success');
+    lkLoad();
+  }catch(e){ toast('❌ ' + e.message); }
 }
 
 async function apiFetch(path, method='GET', body=null){
@@ -26794,6 +27005,7 @@ async function doLogin(){
   document.getElementById('main-app').style.display = '';
 
   applyPermissions(user.role, user.pages||null);
+  lkLoad();        // 🔒 v731: هات الصفحات المقفولة وعلّم عليها
 
   const userBadge = document.getElementById('user-badge');
   if(userBadge) userBadge.textContent = '👤 '+user.name;
@@ -54857,6 +55069,8 @@ function toggleSidebar(forceState){
 }
 
 function goPage(el,page){
+  // 🔒 v731: الصفحة المقفولة تطلب الباسورد قبل ما تتفتح
+  if(_lkNeeds(page)){ _lkAsk(page, () => goPage(el, page)); return; }
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));el.classList.add('active');
   // 🆕 v290: تأكد إن الـ group اللي فيه الـ active item مفتوح
   try {
@@ -54867,6 +55081,7 @@ function goPage(el,page){
   currentPage=page;$('ptitle').textContent=PAGE_T[page]||'';
   // 🆕 v202: اقفل الـ sidebar على الموبايل لما تختار صفحة
   if(window.innerWidth <= 1024) toggleSidebar(false);
+  if(page==='settings')lkSetOpen();            // 🔒 v731
   if(page==='sku-audit')skuAuditLoad(true);
   if(page==='zoho-sync'){zhLoadSettings();cnStatus();drStatus();apiFetch('/api/zoho/delete-items-status','GET').then(st=>{if(st&&st.job&&st.job.running)zhDelWatch();}).catch(()=>{});}
   if(page==='profit'&&_gp===null){/* أول فتحة — سيبه يدوس احسب */}
