@@ -7798,6 +7798,7 @@ tr:hover td{background:#fafbff}
       </div>
       
       <!-- 🆕 v620: المنتج مش موجود؟ اعمله — أو ضيف باركود لمنتج موجود -->
+      <style>.np-l3{font-size:10.5px;font-weight:700;margin-bottom:3px}</style>
       <datalist id="np-vendors"></datalist>
       <datalist id="np-types"></datalist>
       <div style="margin:-6px 0 12px;display:flex;gap:6px;flex-wrap:wrap">
@@ -7820,10 +7821,34 @@ tr:hover td{background:#fafbff}
           <div><label class="np-l2">Vendor *</label><input id="pnp-vendor" class="form-input" list="np-vendors"></div>
           <div><label class="np-l2">Product type</label><input id="pnp-type" class="form-input" list="np-types"></div>
         </div>
+        <!-- 🏷️ v732: التاجز الرئيسية تلاتة + زيادة اختيارية -->
         <div style="margin-top:8px">
           <label class="np-l2">Tags *</label>
-          <input id="pnp-tags" class="form-input" placeholder="sauce, new">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px">
+            <div>
+              <div class="np-l3">البراند *</div>
+              <input id="pnp-t-brand" class="form-input" list="np-t-brand" oninput="pnpTagPrev()" placeholder="Manutti">
+              <datalist id="np-t-brand"></datalist>
+            </div>
+            <div>
+              <div class="np-l3">الكاتيجوري *</div>
+              <input id="pnp-t-cat" class="form-input" list="np-t-cat" oninput="pnpTagPrev()" placeholder="Snacks">
+              <datalist id="np-t-cat"></datalist>
+            </div>
+            <div>
+              <div class="np-l3">الساب كاتيجوري *</div>
+              <input id="pnp-t-sub" class="form-input" list="np-t-sub" oninput="pnpTagPrev()" placeholder="Chips">
+              <datalist id="np-t-sub"></datalist>
+            </div>
+            <div>
+              <div class="np-l3" style="color:var(--muted)">تاجز زيادة (اختياري)</div>
+              <input id="pnp-t-extra" class="form-input" list="np-t-all" oninput="pnpTagPrev()" placeholder="clearance, gift">
+              <datalist id="np-t-all"></datalist>
+            </div>
+          </div>
+          <div id="pnp-tag-prev" style="margin-top:7px;font-size:11px"></div>
           <div id="pnp-tag-sugg" style="margin-top:5px;display:flex;flex-wrap:wrap;gap:4px"></div>
+          <input id="pnp-tags" type="hidden">
         </div>
         <!-- 🖼️ v634: صورة المنتج -->
         <div style="margin-top:10px">
@@ -61456,17 +61481,84 @@ async function npInit(){
     const dv = $('np-vendors'), dt = $('np-types');   // المورد بييجي من الأمر نفسه
     if(dv) dv.innerHTML = (_npMeta.vendors || []).map(v => `<option value="${escapeHtml(v)}">`).join('');
     if(dt) dt.innerHTML = (_npMeta.product_types || []).map(v => `<option value="${escapeHtml(v)}">`).join('');
+    pnpFillTagLists();
     const tg = $('pnp-tag-sugg');
     if(tg) tg.innerHTML = (_npMeta.tags || []).slice(0, 12).map(t =>
       `<span onclick="pnpAddTag('${escapeHtml(t).replace(/'/g,'&#39;')}')" style="cursor:pointer;font-size:10px;padding:2px 7px;border:1px solid var(--border);border-radius:10px;background:var(--card)">${escapeHtml(t)}</span>`).join('');
   }catch(e){ console.warn('[v620] meta:', e.message); }
 }
 
+// 🏷️ v732: كل خانة بتقترح اللي اتحط فيها قبل كده الأول، وبعدين باقي
+//   التاجز — لأن تاجز Shopify مسطّحة ومفيش فيها نوع يفرّق البراند عن
+//   الكاتيجوري. النظام بيتعلّم من اختياراتك.
+function pnpFillTagLists(){
+  const all = _npMeta?.tags || [];
+  const slots = _npMeta?.tag_slots || {};
+  const fill = (listId, key) => {
+    const dl = $(listId); if(!dl) return;
+    const learned = Object.entries(slots[key] || {}).sort((a,b) => b[1]-a[1]).map(x => x[0]);
+    const seen = new Set(learned.map(x => x.toLowerCase()));
+    const rest = all.filter(t => !seen.has(String(t).toLowerCase()));
+    dl.innerHTML = [...learned, ...rest].map(t => `<option value="${escapeHtml(t)}">`).join('');
+  };
+  fill('np-t-brand', 'brand');
+  fill('np-t-cat',   'category');
+  fill('np-t-sub',   'sub');
+  const dl = $('np-t-all');
+  if(dl) dl.innerHTML = all.map(t => `<option value="${escapeHtml(t)}">`).join('');
+  pnpTagPrev();
+}
+
+// كل التاجز النهائية — التلاتة + الزيادة + new
+function pnpTagList(){
+  const g = id => ($(id)?.value || '').trim();
+  const out = [];
+  const push = t => {
+    const v = String(t || '').trim();
+    if(v && !out.some(x => x.toLowerCase() === v.toLowerCase())) out.push(v);
+  };
+  push(g('pnp-t-brand')); push(g('pnp-t-cat')); push(g('pnp-t-sub'));
+  g('pnp-t-extra').split(',').forEach(push);
+  push('new');                 // كل منتج جديد بياخد new — بيتشال تلقائي بعد ٦٠ يوم
+  return out;
+}
+
+function pnpTagPrev(){
+  const el = $('pnp-tag-prev'); if(!el) return;
+  const miss = [];
+  if(!($('pnp-t-brand')?.value || '').trim()) miss.push('البراند');
+  if(!($('pnp-t-cat')?.value || '').trim())   miss.push('الكاتيجوري');
+  if(!($('pnp-t-sub')?.value || '').trim())   miss.push('الساب كاتيجوري');
+  const tags = pnpTagList();
+  if($('pnp-tags')) $('pnp-tags').value = tags.join(', ');
+  el.innerHTML = `<span style="color:var(--muted)">هيتبعت: </span>`
+    + tags.map(t => `<span style="display:inline-block;background:${t==='new'?'#dcfce7':'var(--elev)'};
+        color:${t==='new'?'#166534':'var(--text)'};border-radius:10px;padding:1px 8px;margin:2px 2px 0 0;
+        font-size:10.5px;font-weight:700">${escapeHtml(t)}</span>`).join('')
+    + (miss.length ? `<div style="color:#dc2626;font-weight:700;margin-top:4px">⚠️ ناقص: ${miss.join(' · ')}</div>` : '');
+}
+
+// بنسجّل اللي اتحط في كل خانة عشان الاقتراح يتحسّن المرة الجاية.
+// بيتندهي بعد النجاح بس، وفشله مايأثرش على أي حاجة.
+function pnpLearnTags(){
+  const g = id => ($(id)?.value || '').trim();
+  const body = { brand: g('pnp-t-brand'), category: g('pnp-t-cat'), sub: g('pnp-t-sub') };
+  if(!body.brand && !body.category && !body.sub) return;
+  apiFetch('/api/products/new/tag-slots', 'POST', body)
+    .then(r => { if(r?.slots && _npMeta) _npMeta.tag_slots = r.slots; })
+    .catch(() => {});
+}
+
+// الشيبس بتروح لأول خانة فاضية من التلاتة، وإلا للزيادة
 function pnpAddTag(t){
-  const el = $('pnp-tags'); if(!el) return;
-  const cur = el.value.split(',').map(x => x.trim()).filter(Boolean);
+  for(const id of ['pnp-t-brand','pnp-t-cat','pnp-t-sub']){
+    const e = $(id);
+    if(e && !e.value.trim()){ e.value = t; pnpTagPrev(); return; }
+  }
+  const ex = $('pnp-t-extra'); if(!ex) return;
+  const cur = ex.value.split(',').map(x => x.trim()).filter(Boolean);
   if(cur.some(x => x.toLowerCase() === t.toLowerCase())) return;
-  cur.push(t); el.value = cur.join(', ');
+  cur.push(t); ex.value = cur.join(', '); pnpTagPrev();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -61645,7 +61737,9 @@ function openNewProductSolo(){
   np.style.marginBottom = '0';
 
   // فورم نضيف
-  ['pnp-title','pnp-tags','pnp-type','pnp-optname'].forEach(k => { const e = $(k); if(e) e.value = ''; });
+  ['pnp-title','pnp-tags','pnp-type','pnp-optname',
+     'pnp-t-brand','pnp-t-cat','pnp-t-sub','pnp-t-extra'].forEach(k => { const e = $(k); if(e) e.value = ''; });
+    pnpTagPrev();
   const mu = $('pnp-multi'); if(mu) mu.checked = false;
   const rows = $('pnp-rows'); if(rows) rows.innerHTML = '';
   _pnpRows = 0;
@@ -61675,7 +61769,7 @@ function pnpCancel(){ _pnpSolo ? closeNpSolo() : pnpMode(null); }
 async function pnpCreate(){
   const g = id => ($(id)?.value || '').trim();
   const title = g('pnp-title'), vendor = g('pnp-vendor');
-  const tags = g('pnp-tags').split(',').map(x => x.trim()).filter(Boolean);
+  const tags = pnpTagList();                       // 🏷️ v732
   const multi = $('pnp-multi')?.checked;
   const rows = [...document.querySelectorAll('#pnp-rows .pnp-row')].map(r => ({
     option_value: r.querySelector('.pnp-ov')?.value.trim() || '',
@@ -61689,7 +61783,15 @@ async function pnpCreate(){
 
   if(!title)        return pnpMsg('اسم المنتج مطلوب', 'err');
   if(!vendor)       return pnpMsg('Vendor مطلوب', 'err');
-  if(!tags.length)  return pnpMsg('لازم تاج واحد على الأقل', 'err');
+  // 🏷️ v732: التلاتة إجباريين
+  {
+    const gt = id => ($(id)?.value || '').trim();
+    const miss = [];
+    if(!gt('pnp-t-brand')) miss.push('البراند');
+    if(!gt('pnp-t-cat'))   miss.push('الكاتيجوري');
+    if(!gt('pnp-t-sub'))   miss.push('الساب كاتيجوري');
+    if(miss.length) return pnpMsg('التاجز الرئيسية مطلوبة: ' + miss.join(' · '), 'err');
+  }
   if(!rows.length)  return pnpMsg('لازم صنف واحد على الأقل', 'err');
   for(const [i, v] of rows.entries()){
     const n = multi ? `«${v.option_value || '#' + (i+1)}»` : 'الصنف';
@@ -61719,11 +61821,14 @@ async function pnpCreate(){
     if(!made.length) throw new Error('Shopify ما رجعش أي فاريانت');
 
     if(_pnpSolo){
+      pnpLearnTags();      // 🏷️ v732
       // 🆕 v634: مش مربوط بأمر شراء — خلاص، المنتج اتعمل Draft على Shopify
       toast(`✅ ${r.product.title} اتعمل على Shopify (Draft) — ${made.length} صنف`);
       closeNpSolo();
       return;
     }
+
+    pnpLearnTags();      // 🏷️ v732
 
     if(made.length === 1){
       // فاريانت واحد → حطّه كمنتج الأمر المختار، هو يكمّل الكمية
@@ -61754,7 +61859,9 @@ async function pnpCreate(){
       closeM('m-po-add-item');
     }
     $('pnp-rows').innerHTML = ''; _pnpRows = 0;
-    ['pnp-title','pnp-tags','pnp-type','pnp-optname'].forEach(k => { const e = $(k); if(e) e.value = ''; });
+    ['pnp-title','pnp-tags','pnp-type','pnp-optname',
+     'pnp-t-brand','pnp-t-cat','pnp-t-sub','pnp-t-extra'].forEach(k => { const e = $(k); if(e) e.value = ''; });
+    pnpTagPrev();
     const mu = $('pnp-multi'); if(mu) mu.checked = false;
     pnpToggleMulti(); pnpAddRow(); pnpHandlePrev();
     $('pnp-msg').innerHTML = '';
