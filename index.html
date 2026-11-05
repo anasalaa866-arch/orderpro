@@ -7361,6 +7361,32 @@ tr:hover td{background:#fafbff}
       <button class="btn btn-sm" onclick="syncAllPOTransfers()" style="background:#6366f1;color:#fff;font-weight:700" title="اقرا المستلم من Transfers شوبيفاي لكل الأوامر المفتوحة">🔄 زامن الاستلام من Shopify</button>
     </div>
   </div>
+  <!-- 📡 v727: استلام التحويلات أوتوماتيك بدل الزرار اليدوي -->
+  <div class="card" id="itw-card" style="margin-bottom:14px;border:2px solid #6366f1">
+    <div style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap;cursor:pointer" onclick="itwToggle()">
+      <span style="font-weight:900">📡 استلام تلقائي من شوبيفاي</span>
+      <span id="itw-badge" style="display:none;font-size:11px;font-weight:800;border-radius:999px;padding:2px 9px"></span>
+      <span id="itw-state" style="font-size:11.5px;color:var(--muted)"></span>
+      <span id="itw-arrow" style="margin-inline-start:auto;font-size:13px">▼</span>
+    </div>
+    <div id="itw-body" style="display:none;padding:12px 14px">
+      <div style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:11px">
+        أول ما حد يستلم على الـ Transfer في شوبيفاي، الإشعار بيوصل هنا والأمر بيتحدّث لوحده —
+        من غير ما تدوس «🔄 زامن الاستلام». الزرار اليدوي فاضل موجود، وفي كنس كل نص ساعة
+        للأوامر المفتوحة عشان أي إشعار ضايع يتصلّح من غير تدخّل.
+      </div>
+      <div style="display:flex;gap:9px;align-items:end;flex-wrap:wrap;padding:10px;background:var(--elev);border-radius:9px;margin-bottom:12px">
+        <div style="flex:1;min-width:230px">
+          <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">عنوان السيرفر</label>
+          <input id="itw-base" class="form-input" style="width:100%;font-family:Roboto,sans-serif" placeholder="https://xxx.up.railway.app">
+        </div>
+        <button class="btn btn-sm" style="background:#6366f1;color:#fff;font-weight:700" onclick="itwRegister()">📡 سجّل الويب هوكس</button>
+        <button class="btn btn-ghost btn-sm" onclick="itwLoad()">🔄 تحديث</button>
+      </div>
+      <div id="itw-out"></div>
+    </div>
+  </div>
+
   <!-- 💰 v633: تحديث التكلفة تلقائياً على آخر سعر شراء -->
   <div class="card" id="cu-card" style="margin-bottom:14px;border:2px solid #b45309">
     <div style="padding:11px 14px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap;cursor:pointer" onclick="cuToggle()">
@@ -37211,7 +37237,8 @@ function pretRender(){
     ${(!locked && !ed && items.length && items.every(i => !(parseFloat(i.unit_cost) > 0))) ? `
       <div style="background:#fff7ed;border:1px solid #f59e0b;border-radius:8px;padding:10px 12px;margin-bottom:11px;font-size:12px;color:#92400e">
         ⚠️ كل الأسعار صفر، عشان كده المرتجع طالع <b>0.00 ج</b>.
-        دوس <b>✏️ عدّل الأسعار</b> فوق واكتب سعر الوحدة لكل صنف.
+        الأسعار <b>اختيارية</b> — التسعير النهائي بيتعمل من قسم الحسابات.
+        لو عايز تحطها استرشادية، دوس <b>✏️ عدّل الأسعار</b> فوق.
       </div>` : ''}
     <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:12px">
       <table style="width:100%;min-width:520px;border-collapse:collapse;font-size:12px">
@@ -37328,6 +37355,8 @@ function pretPrint(){
   .sku{font-family:Roboto,Arial,sans-serif;font-size:9px;color:#777}
   tfoot td{background:#fef2f2;font-weight:800;font-size:14px}
   .notes{margin-top:12px;font-size:11px;border:1px solid #cbd5e1;border-radius:6px;padding:8px}
+  .disc{margin-top:12px;font-size:11.5px;border:1.5px solid #dc2626;border-radius:6px;
+        padding:9px 11px;background:#fef2f2;color:#7f1d1d;font-weight:700;line-height:1.7}
   .sig{margin-top:34px;display:grid;grid-template-columns:1fr 1fr;gap:40px;font-size:11px}
   .sig div{border-top:1px solid #333;padding-top:5px;text-align:center}
   .ft{margin-top:16px;font-size:9px;color:#888;text-align:center}
@@ -37351,6 +37380,8 @@ function pretPrint(){
       <td class="c n">${x.total_qty}</td><td class="c">الإجمالي</td>
       <td class="c n">${_pretTotal().toFixed(2)}</td></tr></tfoot>
   </table>
+  <div class="disc">⚠️ تنويه: الأسعار الموضّحة في هذا المرتجع استرشادية وغير مُلزِمة،
+    وتتم إعادة التسعير النهائي من خلال قسم الحسابات.</div>
   ${x.notes ? `<div class="notes">📝 ${esc(x.notes)}</div>` : ''}
   ${x.zoho_vendor_credit_number ? `<div class="notes">🧾 Vendor Credit: <b class="n">${esc(x.zoho_vendor_credit_number)}</b></div>` : ''}
   <div class="sig"><div>توقيع المورد / المندوب</div><div>توقيع أمين المخزن</div></div>
@@ -37703,6 +37734,26 @@ function _poStockHtml(item){
       </div>` : ''}`;
 }
 
+// 🏷️ v728: شارة عرض الصلاحية في صف التسعير
+//   من غيرها الصف كان بيوري سعر العرض على إنه سعر البيع — وأي تعديل
+//   يكسر العرض دلوقتي ويتمسح لما العرض يخلص.
+function _poOfferChip(off){
+  if(!off) return '';
+  const real  = Number(off.real_price) || 0;
+  const price = Number(off.offer_price) || 0;
+  const cut   = real > 0 ? Math.round((1 - price / real) * 100) : 0;
+  const exp   = off.exp_date ? new Date(off.exp_date).toLocaleDateString('ar-EG',{day:'numeric',month:'short'}) : null;
+  const left  = (off.qty_limit != null) ? Math.max(0, (+off.qty_limit||0) - (+off.sold_qty||0)) : null;
+  return `<div title="سعر الموقع دلوقتي ${price} ج. الخانة تحت فيها السعر الحقيقي — عدّله عادي، هيستنى لحد ما العرض يخلص وبعدين يشتغل."
+    style="margin-top:4px;display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;background:#fff7ed;
+           border:1px solid #f59e0b;border-radius:7px;padding:3px 7px;font-size:10px;color:#92400e;line-height:1.5">
+    <b>🏷️ عرض صلاحية</b>
+    <span style="font-family:Roboto,sans-serif">على الموقع <b>${price.toFixed(2)}</b> بدل <b>${real.toFixed(2)}</b>${cut>0?` (−${cut}%)`:''}</span>
+    ${exp ? `<span>· ينتهي ${exp}</span>` : ''}
+    ${left != null ? `<span>· فاضل ${left}</span>` : ''}
+  </div>`;
+}
+
 function _renderPOPricingRow(poId, item){
   const list = parseFloat(item.list_price != null ? item.list_price : item.purchase_price) || 0;
   const disc = parseFloat(item.discount_pct) || 0;
@@ -37729,6 +37780,7 @@ function _renderPOPricingRow(poId, item){
           <div style="font-weight:700;font-size:12px">${escapeHtml((item.product_title || '').slice(0, 60))}</div>
           ${item.variant_title && item.variant_title !== 'Default Title' ? `<div style="font-size:10px;color:var(--muted)">${escapeHtml(item.variant_title)}</div>` : ''}
           ${item.sku ? `<div style="font-size:9px;color:var(--muted);font-family:Roboto,sans-serif">SKU: ${escapeHtml(item.sku)}</div>` : ''}
+          ${_poOfferChip(item.offer)}
         </div>
 
         <!-- 🧮 v599: الربح بيتحدّث لايف -->
@@ -37755,7 +37807,10 @@ function _renderPOPricingRow(poId, item){
           <div data-net-label style="font-size:9px;color:var(--muted);margin-top:2px;text-align:center">${(disc || tax) ? `معلن <b style="font-family:Roboto,sans-serif">${list.toFixed(2)}</b>${disc ? ` − ${disc}%` : ''}${tax ? ` + ضريبة ${tax}%` : ''}` : ''}</div>
         </div>
         <div>
-          <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px">🏷️ بيع (Shopify)</label>
+          <label style="display:block;font-size:10px;margin-bottom:2px;${item.offer
+            ? 'color:#b45309;font-weight:800' : 'color:var(--muted)'}"
+            ${item.offer ? `title="الصنف عليه عرض صلاحية — الرقم ده هو السعر الحقيقي، وبيرجع تلقائي أول ما العرض يخلص"` : ''}
+            >${item.offer ? '🏷️ السعر الحقيقي ⏸️' : '🏷️ بيع (Shopify)'}</label>
           <input type="number" step="0.01" min="0"
             value="${sale.toFixed(2)}"
             data-original="${sale.toFixed(2)}"
@@ -37994,7 +38049,8 @@ async function savePOPricesBulk(poId, forceAll){
   const runId = `po${poId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
   const agg = { purchase_updated: 0, sale_updated: 0, compare_updated: 0,
-                cost_confirmed: 0, cost_pushed: 0, resumed: 0, errors: [], skipped: [] };
+                cost_confirmed: 0, cost_pushed: 0, resumed: 0, errors: [], skipped: [],
+                offer_deferred: [] };   // 🏷️ v728
   let doneItems = 0, lastPoTotal = null;
   const sentIds = [];           // اللي اتبعت بنجاح — يتشال من المسوّدة
   let   pending = chunks.map((items, i) => ({ items, no: i + 1 }));
@@ -38024,6 +38080,7 @@ async function savePOPricesBulk(poId, forceAll){
         agg.resumed          += (r.resumed_sale || 0) + (r.resumed_cost || 0);   // 🔁 v611
         if(Array.isArray(r.errors))  agg.errors.push(...r.errors);
         if(Array.isArray(r.skipped)) agg.skipped.push(...r.skipped);
+        if(Array.isArray(r.offer_deferred)) agg.offer_deferred.push(...r.offer_deferred);   // 🏷️ v728
         if(r.po_total != null) lastPoTotal = r.po_total;
         doneItems += ch.items.length;
         ch.items.forEach(it => sentIds.push(it.itemId));
@@ -38074,7 +38131,22 @@ async function savePOPricesBulk(poId, forceAll){
       if(agg.cost_pushed)     msg += ` · تكلفة ${agg.cost_pushed}`;
       if(agg.resumed)         msg += ` · ${agg.resumed} كانوا خلصوا قبل القطع`;   // 🔁 v611
       if(agg.skipped.length)  msg += ` · اتعدّى ${agg.skipped.length}`;
+      if(agg.offer_deferred.length) msg += ` · ${agg.offer_deferred.length} مستنيين عرض`;   // 🏷️ v728
       toast(msg, 'success');
+
+      // 🏷️ v728: الأصناف اللي عليها عرض — سعر الموقع ما اتغيّرش عن قصد.
+      //   لازم أنس يعرف، وإلا هيفتكر إن التعديل مامشيش.
+      if(agg.offer_deferred.length){
+        alert('🏷️ ' + agg.offer_deferred.length + ' صنف عليهم عرض صلاحية شغّال\n\n'
+          + 'سعر الموقع ما اتغيّرش عشان مانكسرش العرض. السعر الحقيقي اتحفظ، '
+          + 'وهيشتغل لوحده أول ما العرض يخلص:\n\n'
+          + agg.offer_deferred.slice(0, 12).map(d =>
+              `• ${d.sku || d.product_title || ''}: ${Number(d.was).toFixed(2)} ← ${Number(d.now).toFixed(2)}`
+              + `  (الموقع لسه ${Number(d.offer_price).toFixed(2)}`
+              + (d.exp_date ? ` لحد ${new Date(d.exp_date).toLocaleDateString('ar-EG',{day:'numeric',month:'short'})}` : '') + ')'
+            ).join('\n')
+          + (agg.offer_deferred.length > 12 ? `\n… و${agg.offer_deferred.length - 12} كمان` : ''));
+      }
       _poDraftClear(poId);      // 💾 v609: اتحفظ كله — المسوّدة مابقاش ليها لزمة
     }
 
@@ -61409,6 +61481,148 @@ async function rqImpact(){
 // 💰 v633: تحديث التكلفة تلقائياً على آخر سعر شراء
 // ══════════════════════════════════════════════════════════════════
 let _cuOpen = false;
+// ╔══════════════════════════════════════════════════════════════╗
+// ║ 📡 v727: متابعة ويب هوكس الاستلام                            ║
+// ╚══════════════════════════════════════════════════════════════╝
+let _itwOpen = false;
+function itwToggle(){
+  _itwOpen = !_itwOpen;
+  const b = document.getElementById('itw-body'), a = document.getElementById('itw-arrow');
+  if(b) b.style.display = _itwOpen ? 'block' : 'none';
+  if(a) a.textContent = _itwOpen ? '▲' : '▼';
+  if(_itwOpen) itwLoad();
+}
+
+const _ITW_ST = {
+  done:          ['#dcfce7','#166534','✅ اتزامن'],
+  degraded:      ['#fef3c7','#92400e','⚠️ ناقص صلاحية'],
+  failed:        ['#fee2e2','#991b1b','❌ فشل'],
+  not_ours:      ['#f1f5f9','#475569','— مش بتاعنا'],
+  no_transfer_id:['#fef3c7','#92400e','⚠️ مفيش رقم تحويل'],
+  queued:        ['#e0e7ff','#3730a3','⏳ في الطابور'],
+};
+function _itwChip(st){
+  const [bg,fg,lbl] = _ITW_ST[st] || ['#f1f5f9','#475569', st || '—'];
+  return `<span style="background:${bg};color:${fg};border-radius:99px;padding:2px 9px;font-size:11px;font-weight:800">${lbl}</span>`;
+}
+
+async function itwLoad(){
+  const out = document.getElementById('itw-out');
+  if(!out) return;
+  out.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">⏳ جاري التحميل...</div>';
+  try{
+    const r = await apiFetch('/api/webhooks/transfers/status');
+    if(r?.error){ out.innerHTML = `<div style="color:var(--danger);font-size:12px;padding:10px">❌ ${escapeHtml(r.error)}</div>`; return; }
+    _itwRender(r);
+  }catch(e){ out.innerHTML = `<div style="color:var(--danger);font-size:12px;padding:10px">❌ ${escapeHtml(e.message)}</div>`; }
+}
+
+function _itwRender(r){
+  const subs = r.subscriptions || [], topics = r.topics || [], events = r.events || [];
+  const byTopic = {};
+  for(const w of subs) byTopic[w.topic] = w;
+  const live = topics.filter(t => byTopic[t.en]).length;
+
+  // الشارة فوق
+  const badge = document.getElementById('itw-badge'), state = document.getElementById('itw-state');
+  if(badge){
+    badge.style.display = 'inline-block';
+    const allOn = live === topics.length;
+    badge.style.background = allOn ? '#dcfce7' : (live ? '#fef3c7' : '#fee2e2');
+    badge.style.color      = allOn ? '#166534' : (live ? '#92400e' : '#991b1b');
+    badge.textContent      = allOn ? '🟢 شغّال' : (live ? `🟡 ${live} من ${topics.length}` : '🔴 مش مسجّل');
+  }
+  if(state){
+    const last = r.stats?.last_at ? new Date(r.stats.last_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'}) : null;
+    state.textContent = last ? `آخر إشعار ${last} · ${r.open_transfers} تحويل مفتوح`
+                             : `${r.open_transfers} تحويل مفتوح · لسه مجاش إشعار`;
+  }
+
+  // تحذير نسخة الـ Event version
+  const vers = [...new Set(subs.map(w => w.apiVersion?.handle).filter(Boolean))];
+  const old  = vers.filter(v => v < '2026-07');
+
+  const rows = topics.map(t => {
+    const w = byTopic[t.en];
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:7px;font-size:12px;font-weight:700">${escapeHtml(t.ar)}</td>
+      <td style="padding:7px;font-size:10.5px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(t.topic)}</td>
+      <td style="padding:7px;text-align:center">${w
+        ? `<span style="background:#dcfce7;color:#166534;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:800">🟢 مسجّل</span>`
+        : `<span style="background:#fee2e2;color:#991b1b;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:800">🔴 ناقص</span>`}</td>
+      <td style="padding:7px;text-align:center;font-size:11px;font-family:Roboto,sans-serif;${
+        w && w.apiVersion?.handle < '2026-07' ? 'color:#dc2626;font-weight:800' : 'color:var(--muted)'}">${
+        escapeHtml(w?.apiVersion?.handle || '—')}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('itw-out').innerHTML = `
+    ${old.length ? `<div style="background:#fef2f2;border:1px solid #ef4444;border-radius:9px;padding:10px 12px;margin-bottom:11px;font-size:12px;color:#991b1b;line-height:1.8">
+      ⚠️ نسخة الويب هوكس في الكاستوم آب <b>${escapeHtml(old.join('/'))}</b> — التوبيكس دي محتاجة <b>2026-07</b> أو أحدث.
+      غيّرها من إعدادات الآب → <b>Webhook subscriptions → Event version</b>، وإلا الإشعارات مش هتوصل.
+    </div>` : ''}
+    ${r.subsError ? `<div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:9px;padding:9px 12px;margin-bottom:11px;font-size:11.5px;color:#92400e">
+      ⚠️ مقدرناش نقرا الاشتراكات من شوبيفاي: ${escapeHtml(r.subsError)}</div>` : ''}
+
+    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:9px;margin-bottom:12px">
+      <table style="width:100%;min-width:480px;border-collapse:collapse">
+        <thead><tr style="background:var(--bg);border-bottom:2px solid var(--border)">
+          <th style="padding:7px;text-align:right;font-size:11px">الحدث</th>
+          <th style="padding:7px;text-align:right;font-size:11px">التوبيك</th>
+          <th style="padding:7px;text-align:center;font-size:11px;width:90px">الحالة</th>
+          <th style="padding:7px;text-align:center;font-size:11px;width:80px">النسخة</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+
+    <div style="font-weight:800;font-size:12.5px;margin-bottom:7px">📥 آخر الإشعارات${
+      r.stats?.total ? ` <span style="font-weight:400;color:var(--muted);font-size:11px">(${r.stats.total} في ٣٠ يوم · ${r.stats.failed||0} فشل)</span>` : ''}</div>
+    ${events.length ? `<div style="overflow-x:auto;border:1px solid var(--border);border-radius:9px">
+      <table style="width:100%;min-width:520px;border-collapse:collapse">
+        <thead><tr style="background:var(--bg);border-bottom:2px solid var(--border)">
+          <th style="padding:6px;text-align:right;font-size:11px">الوقت</th>
+          <th style="padding:6px;text-align:right;font-size:11px">أمر الشراء</th>
+          <th style="padding:6px;text-align:right;font-size:11px">الحدث</th>
+          <th style="padding:6px;text-align:center;font-size:11px">الحالة</th>
+        </tr></thead>
+        <tbody>${events.map(e => `
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:6px;font-size:11px;white-space:nowrap">${new Date(e.received_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'})}</td>
+            <td style="padding:6px;font-size:11.5px;font-weight:700;font-family:Roboto,sans-serif">${escapeHtml(e.po_number || '—')}</td>
+            <td style="padding:6px;font-size:10.5px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(String(e.topic||'').split('/').pop())}</td>
+            <td style="padding:6px;text-align:center" title="${escapeHtml(e.error||'')}">${_itwChip(e.status)}</td>
+          </tr>`).join('')}</tbody>
+      </table></div>`
+    : `<div style="color:var(--muted);font-size:12px;padding:14px;text-align:center;border:1px dashed var(--border);border-radius:9px">
+        لسه مجاش أي إشعار. سجّل الويب هوكس فوق، وبعدين استلم على transfer في شوبيفاي عشان تتأكد.</div>`}`;
+
+  // عنوان السيرفر — من آخر مرة، أو من عنوان الصفحة لو الواجهة متستضافة على نفس السيرفر
+  const bi = document.getElementById('itw-base');
+  if(bi && !bi.value){
+    let saved = ''; try{ saved = localStorage.getItem('itw_base') || ''; }catch(e){}
+    const fromSub = (subs[0]?.uri || '').replace(/\/api\/webhooks\/shopify\/inventory-transfers$/, '');
+    bi.value = fromSub || saved || (typeof API_URL !== 'undefined' ? String(API_URL).replace(/\/+$/,'') : '');
+  }
+}
+
+async function itwRegister(){
+  const bi = document.getElementById('itw-base');
+  const base = (bi?.value || '').trim().replace(/\/+$/, '');
+  if(!/^https:\/\/.+/.test(base)){ toast('❌ اكتب عنوان السيرفر كامل بـ https'); bi?.focus(); return; }
+  try{ localStorage.setItem('itw_base', base); }catch(e){}
+  const out = document.getElementById('itw-out');
+  if(out) out.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">⏳ بيسجّل...</div>';
+  try{
+    const r = await apiFetch('/api/webhooks/register-transfers', 'POST', { baseUrl: base });
+    if(r?.error){ toast('❌ ' + r.error); itwLoad(); return; }
+    const bad = (r.results || []).filter(x => !x.ok);
+    toast(bad.length ? `⚠️ ${bad.length} فشل: ${bad[0].error || ''}`.slice(0,120) : '✅ الويب هوكس اتسجّلت', bad.length ? undefined : 'success');
+    if(r.warning) toast('⚠️ ' + r.warning);
+    itwLoad();
+  }catch(e){ toast('❌ ' + e.message); itwLoad(); }
+}
+
 function cuToggle(){
   _cuOpen = !_cuOpen;
   document.getElementById('cu-body').style.display  = _cuOpen ? 'block' : 'none';
