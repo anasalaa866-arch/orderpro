@@ -7816,9 +7816,9 @@ tr:hover td{background:#fafbff}
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
           <div style="grid-column:1/-1">
             <label class="np-l2">اسم المنتج *</label>
-            <input id="pnp-title" class="form-input" oninput="pnpHandlePrev()" placeholder="DRZZLR Condensed Milk Sauce 650ml">
+            <input id="pnp-title" class="form-input" oninput="pnpHandlePrev()" onblur="tcFix(this)" placeholder="DRZZLR Condensed Milk Sauce 650ml">
           </div>
-          <div><label class="np-l2">Vendor *</label><input id="pnp-vendor" class="form-input" list="np-vendors"></div>
+          <div><label class="np-l2">Vendor *</label><input id="pnp-vendor" class="form-input" list="np-vendors" onblur="tcFix(this,'vendor')"></div>
           <div><label class="np-l2">Product type</label><input id="pnp-type" class="form-input" list="np-types"></div>
         </div>
         <!-- 🏷️ v732: التاجز الرئيسية تلاتة + زيادة اختيارية -->
@@ -7827,22 +7827,22 @@ tr:hover td{background:#fafbff}
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px">
             <div>
               <div class="np-l3">البراند *</div>
-              <input id="pnp-t-brand" class="form-input" list="np-t-brand" oninput="pnpTagPrev()" placeholder="Manutti">
+              <input id="pnp-t-brand" class="form-input" list="np-t-brand" oninput="pnpTagPrev()" onblur="tcFix(this,'tags')" placeholder="Manutti">
               <datalist id="np-t-brand"></datalist>
             </div>
             <div>
               <div class="np-l3">الكاتيجوري *</div>
-              <input id="pnp-t-cat" class="form-input" list="np-t-cat" oninput="pnpTagPrev()" placeholder="Snacks">
+              <input id="pnp-t-cat" class="form-input" list="np-t-cat" oninput="pnpTagPrev()" onblur="tcFix(this,'tags')" placeholder="Snacks">
               <datalist id="np-t-cat"></datalist>
             </div>
             <div>
               <div class="np-l3">الساب كاتيجوري *</div>
-              <input id="pnp-t-sub" class="form-input" list="np-t-sub" oninput="pnpTagPrev()" placeholder="Chips">
+              <input id="pnp-t-sub" class="form-input" list="np-t-sub" oninput="pnpTagPrev()" onblur="tcFix(this,'tags')" placeholder="Chips">
               <datalist id="np-t-sub"></datalist>
             </div>
             <div>
               <div class="np-l3" style="color:var(--muted)">تاجز زيادة (اختياري)</div>
-              <input id="pnp-t-extra" class="form-input" list="np-t-all" oninput="pnpTagPrev()" placeholder="clearance, gift">
+              <input id="pnp-t-extra" class="form-input" list="np-t-all" oninput="pnpTagPrev()" onblur="tcFix(this,'tags')" placeholder="clearance, gift">
               <datalist id="np-t-all"></datalist>
             </div>
           </div>
@@ -61488,6 +61488,49 @@ async function npInit(){
   }catch(e){ console.warn('[v620] meta:', e.message); }
 }
 
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║ 🔤 v733: أول حرف كابيتال في الاسم والفيندور والتاجز              ║
+// ╚══════════════════════════════════════════════════════════════════╝
+// التحويل الساذج بيبوّظ بيانات حقيقية:
+//   DRZZLR → Drzzlr · 650ml → 650Ml · 2x → 2X · C&D → C&d
+// فالكلمة اللي كلها كابيتال أو فيها رقم بتتساب زي ما هي، والباقي أول
+// حرف بس بيتغيّر (مش بنصغّر الباقي عشان McVitie's ما تبقاش Mcvitie's).
+function _tcWord(w){
+  if(!w) return w;
+  if(/\d/.test(w)) return w;                    // 650ml · 2x · 13% · 180gm
+  if(w === w.toUpperCase() && w !== w.toLowerCase()) return w;   // DRZZLR · C&D
+  // أول حرف في الكلمة وبعد الشرطة والسلاش (sugar-free → Sugar-Free)
+  return w.replace(/(^|[-\/])([^\s-\/])/g, (m, sep, ch) => sep + ch.toUpperCase());
+}
+function _titleCase(v){
+  return String(v == null ? '' : v).split(/(\s+)/).map(p => /^\s+$/.test(p) ? p : _tcWord(p)).join('');
+}
+
+// ⚠️ الأهم: لو القيمة موجودة قبل كده على Shopify بأي صيغة، نرجّعها
+//    لصيغتها الموجودة بدل ما نعمل تاج/فيندور جديد بحرف كابيتال.
+//    من غير ده «clearance» تبقى «Clearance» ويفضل الاتنين في الكتالوج.
+function _tcSnap(v, list){
+  const t = String(v || '').trim();
+  if(!t) return t;
+  const hit = (list || []).find(x => String(x).toLowerCase() === t.toLowerCase());
+  return hit || _titleCase(t);
+}
+
+// بيتندهي لما يسيب الخانة — مش وهو بيكتب عشان المؤشر مايقفزش
+function tcFix(el, kind){
+  if(!el) return;
+  const before = el.value;
+  if(kind === 'tags'){
+    el.value = before.split(',').map(x => x.trim()).filter(Boolean)
+      .map(x => _tcSnap(x, _npMeta?.tags)).join(', ');
+  } else if(kind === 'vendor'){
+    el.value = _tcSnap(before, _npMeta?.vendors);
+  } else {
+    el.value = _titleCase(before.trim());
+  }
+  if(el.value !== before && typeof pnpTagPrev === 'function') pnpTagPrev();
+}
+
 // 🏷️ v732: كل خانة بتقترح اللي اتحط فيها قبل كده الأول، وبعدين باقي
 //   التاجز — لأن تاجز Shopify مسطّحة ومفيش فيها نوع يفرّق البراند عن
 //   الكاتيجوري. النظام بيتعلّم من اختياراتك.
@@ -61768,6 +61811,10 @@ function pnpCancel(){ _pnpSolo ? closeNpSolo() : pnpMode(null); }
 
 async function pnpCreate(){
   const g = id => ($(id)?.value || '').trim();
+  // 🔤 v733: الإصلاح قبل القراءة — لو حد لصق قيمة ودوس حفظ من غير ما
+  //   يسيب الخانة، الـ blur مابيحصلش فالقيمة بتروح زي ما اتكتبت
+  ['pnp-title','pnp-vendor','pnp-t-brand','pnp-t-cat','pnp-t-sub','pnp-t-extra']
+    .forEach(id => tcFix($(id), id === 'pnp-title' ? '' : (id === 'pnp-vendor' ? 'vendor' : 'tags')));
   const title = g('pnp-title'), vendor = g('pnp-vendor');
   const tags = pnpTagList();                       // 🏷️ v732
   const multi = $('pnp-multi')?.checked;
