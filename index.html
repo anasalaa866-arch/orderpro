@@ -7879,6 +7879,21 @@ tr:hover td{background:#fafbff}
   </div>
 </div>
 
+<!-- ↩️ v724: تفاصيل مرتجع المشتريات — فتح + تعديل + طباعة -->
+<div id="m-pr-detail" class="modal-overlay" style="display:none">
+  <div class="modal" style="width:min(980px,96vw);max-width:96vw">
+    <div class="modal-header">
+      <h3 style="margin:0" id="pret-title">↩️ تفاصيل المرتجع</h3>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-sm" id="pret-print-btn" onclick="pretPrint()"
+          style="background:#475569;border-color:#475569;color:#fff;font-weight:700">🖨️ طباعة</button>
+        <button class="modal-close" onclick="closeM('m-pr-detail')">×</button>
+      </div>
+    </div>
+    <div class="modal-body" id="pret-body"></div>
+  </div>
+</div>
+
 <!-- Receive Modal -->
 <div id="m-po-receive" class="modal-overlay" style="display:none">
   <div class="modal" style="max-width:800px">
@@ -31533,6 +31548,14 @@ function _chkRepList(){
   return list;
 }
 
+// 🆕 v724: هل فيه فلتر شغّال؟ — لو أيوة، الأسابيع الفاضية بتتشال
+//   عشان «لم يُصرف» تورّي الأسابيع اللي فيها مستحق بس، مش ٥٣ صف فاضي.
+//   من غير فلتر بيفضل عارض السنة كاملة زي التقويم.
+function _chkRepActive(){
+  return _chkRepStatus !== 'all' || !!_chkRepYear
+      || !!($('chk-search')?.value || '').trim();
+}
+
 function _chkRepBar(){
   const chip = (v, lbl) => `<button class="chip${_chkRepStatus===v?' on':''}" style="font-size:11.5px;padding:3px 9px"
       onclick="chkRepSet('status','${v}')">${lbl}</button>`;
@@ -31684,9 +31707,15 @@ function renderWeeklyReport(view){
         : ''}
     </td></tr>`+
     (emptyYear
-      ? `<tr><td colspan="7" style="text-align:center;padding:26px;color:var(--muted)">مفيش شيكات مسجّلة في ${year}</td></tr>`
+      ? `<tr><td colspan="7" style="text-align:center;padding:26px;color:var(--muted)">${
+          _chkRepActive() ? 'مفيش شيكات مطابقة للفلتر في ' + year : 'مفيش شيكات مسجّلة في ' + year}</td></tr>`
       : '')+
-    (emptyYear ? [] : weeks).map(w=>{
+    // 🆕 v724: مع أي فلتر → الأسابيع اللي فيها شيكات بس
+    ((!emptyYear && _chkRepActive() && activeWeeks.length < weeks.length)
+      ? `<tr><td colspan="7" style="padding:7px 12px;background:var(--bg);font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">
+          🫥 اتشال ${weeks.length - activeWeeks.length} أسبوع فاضي — ${activeWeeks.length} أسبوع فيه شيكات مطابقة</td></tr>`
+      : '')+
+    (emptyYear ? [] : (_chkRepActive() ? activeWeeks : weeks)).map(w=>{
       const isNow=new Date()>=w.start&&new Date()<=w.end;
       const hasPast=w.end<new Date();
       const bg=isNow?'#fff8e1':hasPast&&w.pending.length>0?'#fff5f5':'';
@@ -37053,7 +37082,8 @@ async function loadPurchaseReturnsPage(){
         ? `<span style="background:#dcfce7;color:#166534;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:800">${okTxt}</span>`
         : `<span title="${escapeHtml(err||'')}" style="background:#fee2e2;color:#991b1b;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:800">${badTxt}</span>`;
       return `
-      <div class="card" style="padding:13px;margin-bottom:10px;border-right:4px solid ${shOk && zhOk ? '#16a34a' : '#dc2626'}">
+      <div class="card" onclick="pretOpen(${x.id})" title="اضغط عشان تفتح المرتجع"
+           style="padding:13px;margin-bottom:10px;cursor:pointer;border-right:4px solid ${shOk && zhOk ? '#16a34a' : '#dc2626'}">
         <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
           <div style="flex:1;min-width:210px">
             <div style="font-weight:800;font-size:14px;font-family:Roboto,sans-serif">${escapeHtml(x.return_number)}</div>
@@ -37071,8 +37101,8 @@ async function loadPurchaseReturnsPage(){
         </div>
         ${(!shOk || !zhOk) ? `
           <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
-            ${!shOk ? `<button class="btn btn-sm" onclick="prRetry(${x.id},'shopify')" style="background:#3b82f6;border-color:#3b82f6;color:#fff;font-weight:700">🔄 أعد الخصم على Shopify</button>` : ''}
-            ${!zhOk ? `<button class="btn btn-sm" onclick="prRetry(${x.id},'zoho')" style="background:#0ea5e9;border-color:#0ea5e9;color:#fff;font-weight:700">🔄 أعد الإرسال لـ Zoho</button>` : ''}
+            ${!shOk ? `<button class="btn btn-sm" onclick="event.stopPropagation();prRetry(${x.id},'shopify')" style="background:#3b82f6;border-color:#3b82f6;color:#fff;font-weight:700">🔄 أعد الخصم على Shopify</button>` : ''}
+            ${!zhOk ? `<button class="btn btn-sm" onclick="event.stopPropagation();prRetry(${x.id},'zoho')" style="background:#0ea5e9;border-color:#0ea5e9;color:#fff;font-weight:700">🔄 أعد الإرسال لـ Zoho</button>` : ''}
           </div>
           ${x.shopify_error && !shOk ? `<div style="margin-top:7px;background:#fef2f2;border:1px solid #ef4444;border-radius:6px;padding:6px 9px;font-size:11px;color:#991b1b">📦 ${escapeHtml(x.shopify_error)}</div>` : ''}
           ${x.zoho_error && !zhOk ? `<div style="margin-top:7px;background:#fef2f2;border:1px solid #ef4444;border-radius:6px;padding:6px 9px;font-size:11px;color:#991b1b">🧾 ${escapeHtml(x.zoho_error)}</div>` : ''}
@@ -37080,6 +37110,242 @@ async function loadPurchaseReturnsPage(){
       </div>`;
     }).join('');
   }catch(e){ box.innerHTML = `<div style="color:var(--danger);padding:14px;text-align:center">❌ ${escapeHtml(e.message)}</div>`; }
+}
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  ↩️ v724: فتح المرتجع · تعديل الأسعار · طباعة                    ║
+// ╚══════════════════════════════════════════════════════════════════╝
+// الكارت كان مجرد عرض — مفيش طريقة تشوف البنود ولا تظبّط سعر اتنسي
+// وقت الإدخال، فالمرتجع كان بيطلع بصفر جنيه ومفيش حاجة تعمل بيها.
+//   • الكميات مقفولة عن قصد: المرتجع بيخصم من شوبيفاي أول ما يتسجّل.
+//   • الأسعار بتتعدّل لحد ما الـ Vendor Credit يتعمل في Zoho، وبعدها تتقفل.
+let _pretCur = null;      // { return, items }
+let _pretEdit = false;
+
+async function pretOpen(id){
+  const body = document.getElementById('pret-body');
+  if(!body) return;
+  _pretEdit = false;
+  body.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</div>';
+  openM('m-pr-detail');
+  try{
+    const r = await apiFetch('/api/purchase-returns/' + id);
+    if(r?.error){ body.innerHTML = `<div style="color:var(--danger);padding:16px;text-align:center">❌ ${escapeHtml(r.error)}</div>`; return; }
+    _pretCur = { return: r.return, items: r.items || [] };
+    pretRender();
+  }catch(e){
+    body.innerHTML = `<div style="color:var(--danger);padding:16px;text-align:center">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function _pretTotal(){
+  return (_pretCur?.items || []).reduce((a,it)=> a + (parseFloat(it.line_total)||0), 0);
+}
+
+function pretRender(){
+  const body = document.getElementById('pret-body');
+  if(!body || !_pretCur) return;
+  const x = _pretCur.return, items = _pretCur.items;
+  const shOk = !!x.shopify_adjusted, zhOk = !!x.zoho_vendor_credit_id;
+  const locked = zhOk;                       // بعد Zoho مفيش تعديل
+  const ed = _pretEdit && !locked;
+  const ttl = document.getElementById('pret-title');
+  if(ttl) ttl.textContent = '↩️ ' + (x.return_number || 'المرتجع');
+
+  const chip = (ok, okTxt, badTxt) => ok
+    ? `<span style="background:#dcfce7;color:#166534;border-radius:99px;padding:3px 10px;font-size:11px;font-weight:800">${okTxt}</span>`
+    : `<span style="background:#fee2e2;color:#991b1b;border-radius:99px;padding:3px 10px;font-size:11px;font-weight:800">${badTxt}</span>`;
+
+  const rows = items.map(it => {
+    const cost = parseFloat(it.unit_cost) || 0;
+    const line = parseFloat(it.line_total) || 0;
+    return `
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:7px">
+        <div style="font-weight:700;font-size:12px">${escapeHtml(it.product_title || '')}${it.variant_title ? ' — ' + escapeHtml(it.variant_title) : ''}</div>
+        ${it.sku ? `<div style="font-size:10px;color:var(--muted);font-family:monospace">${escapeHtml(it.sku)}</div>` : ''}
+      </td>
+      <td style="padding:7px;text-align:center;font-weight:800;font-family:Roboto,sans-serif">${it.qty}</td>
+      <td style="padding:7px;text-align:center">
+        ${ed
+          ? `<input type="number" step="0.01" min="0" value="${cost}" data-pret-item="${it.id}" data-pret-qty="${it.qty}"
+                    oninput="pretCalc(this)" style="width:92px;padding:5px 7px;text-align:center;border:1px solid var(--accent);
+                    border-radius:6px;background:var(--bg);color:var(--text);font-family:Roboto,sans-serif;font-weight:700">`
+          : `<span style="font-family:Roboto,sans-serif;font-weight:700;${cost<=0?'color:#dc2626':''}">${cost.toFixed(2)}${cost<=0?' ⚠️':''}</span>`}
+      </td>
+      <td style="padding:7px;text-align:center;font-weight:800;font-family:Roboto,sans-serif" id="pret-line-${it.id}">${line.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px">
+      ${chip(shOk, '📦 اتخصم من شوبيفاي', '📦 فشل الخصم')}
+      ${chip(zhOk, '🧾 ' + escapeHtml(x.zoho_vendor_credit_number || 'في Zoho'), '🧾 فشل Zoho')}
+    </div>
+    ${x.shopify_error && !shOk ? `<div style="background:#fef2f2;border:1px solid #ef4444;border-radius:8px;padding:8px 11px;margin-bottom:10px;font-size:11px;color:#991b1b">📦 ${escapeHtml(x.shopify_error)}</div>` : ''}
+    ${x.zoho_error && !zhOk ? `<div style="background:#fef2f2;border:1px solid #ef4444;border-radius:8px;padding:8px 11px;margin-bottom:10px;font-size:11px;color:#991b1b">🧾 ${escapeHtml(x.zoho_error)}</div>` : ''}
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;font-size:13px">
+      <div><div style="color:var(--muted);font-size:11px">المورد</div><div style="font-weight:700">🏭 ${escapeHtml(x.supplier_name || '-')}</div></div>
+      <div><div style="color:var(--muted);font-size:11px">المخزن</div><div style="font-weight:700">🏬 ${escapeHtml(x.warehouse_name || '-')}</div></div>
+      <div><div style="color:var(--muted);font-size:11px">التاريخ</div><div style="font-weight:700">${new Date(x.created_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'})}</div></div>
+      <div><div style="color:var(--muted);font-size:11px">سجّله</div><div style="font-weight:700">👤 ${escapeHtml(x.created_by || '-')}</div></div>
+    </div>
+
+    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:12px">
+      <table style="width:100%;min-width:520px;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:var(--bg);border-bottom:2px solid var(--border)">
+          <th style="padding:8px;text-align:right">المنتج</th>
+          <th style="padding:8px;text-align:center;width:70px">الكمية 🔒</th>
+          <th style="padding:8px;text-align:center;width:120px">سعر الوحدة</th>
+          <th style="padding:8px;text-align:center;width:110px">الإجمالي</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr style="background:var(--bg);border-top:2px solid var(--border)">
+          <td style="padding:9px;font-weight:800">${items.length} صنف · ${x.total_qty} قطعة</td>
+          <td></td>
+          <td style="padding:9px;text-align:center;font-weight:800">الإجمالي</td>
+          <td style="padding:9px;text-align:center;font-weight:900;font-size:15px;color:#dc2626;font-family:Roboto,sans-serif" id="pret-total">${_pretTotal().toFixed(2)} ج</td>
+        </tr></tfoot>
+      </table>
+    </div>
+
+    <div style="margin-bottom:12px">
+      <div style="color:var(--muted);font-size:11px;margin-bottom:4px">📝 ملاحظات</div>
+      ${ed
+        ? `<textarea id="pret-notes" rows="2" maxlength="500" style="width:100%;padding:8px;border:1px solid var(--accent);border-radius:8px;background:var(--bg);color:var(--text);font-size:12px">${escapeHtml(x.notes || '')}</textarea>`
+        : `<div style="font-size:12px;color:${x.notes?'var(--text)':'var(--muted)'}">${x.notes ? escapeHtml(x.notes) : '—'}</div>`}
+    </div>
+
+    ${locked ? `
+      <div style="background:#f0fdf4;border:1px solid #16a34a;border-radius:8px;padding:9px 12px;font-size:11px;color:#166534">
+        🔒 المرتجع اتسجّل في Zoho (${escapeHtml(x.zoho_vendor_credit_number || '')}) — الأسعار مقفولة عشان مايبقاش فيه رقمين مختلفين لنفس المرتجع.
+      </div>` : `
+      <div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:9px 12px;font-size:11px;color:#92400e;margin-bottom:10px">
+        🔒 الكميات مش بتتعدّل: المرتجع خصم من شوبيفاي خلاص، فتغيير الكمية هنا معناه إن المخزون والورق يبقوا مختلفين.
+        لو الكمية غلط، اعمل مرتجع جديد بالفرق.
+      </div>`}
+
+    ${!locked ? `<div style="display:flex;gap:7px;flex-wrap:wrap">
+      ${ed
+        ? `<button class="btn btn-primary btn-sm" onclick="pretSave()" style="font-weight:700">💾 احفظ الأسعار</button>
+           <button class="btn btn-secondary btn-sm" onclick="_pretEdit=false;pretRender()">إلغاء</button>`
+        : `<button class="btn btn-sm" onclick="_pretEdit=true;pretRender()" style="background:#f59e0b;border-color:#f59e0b;color:#fff;font-weight:700">✏️ عدّل الأسعار</button>`}
+    </div>` : ''}
+  `;
+}
+
+// حساب فوري للسطر والإجمالي وإنت بتكتب
+function pretCalc(inp){
+  const qty = parseFloat(inp.dataset.pretQty) || 0;
+  const id  = inp.dataset.pretItem;
+  const c   = parseFloat(inp.value);
+  const line = (Number.isFinite(c) && c >= 0) ? c * qty : 0;
+  const cell = document.getElementById('pret-line-' + id);
+  if(cell) cell.textContent = line.toFixed(2);
+  let sum = 0;
+  document.querySelectorAll('[data-pret-item]').forEach(e => {
+    const q = parseFloat(e.dataset.pretQty) || 0;
+    const v = parseFloat(e.value);
+    if(Number.isFinite(v) && v >= 0) sum += v * q;
+  });
+  const t = document.getElementById('pret-total');
+  if(t) t.textContent = sum.toFixed(2) + ' ج';
+}
+
+async function pretSave(){
+  if(!_pretCur) return;
+  const costs = {};
+  let bad = null;
+  document.querySelectorAll('[data-pret-item]').forEach(e => {
+    const v = parseFloat(e.value);
+    if(!Number.isFinite(v) || v < 0){ bad = bad || e; return; }
+    costs[e.dataset.pretItem] = v;
+  });
+  if(bad){ toast('❌ فيه سعر مش مظبوط'); bad.focus(); return; }
+  const notesEl = document.getElementById('pret-notes');
+  try{
+    const r = await apiFetch('/api/purchase-returns/' + _pretCur.return.id, 'PUT', {
+      costs, notes: notesEl ? notesEl.value : undefined
+    });
+    if(r?.error){ toast('❌ ' + r.error); return; }
+    _pretCur = { return: r.return, items: r.items || [] };
+    _pretEdit = false;
+    pretRender();
+    toast('✅ اتحفظت', 'success');
+    loadPurchaseReturnsPage();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// 🖨️ إذن مرتجع A4 — يتوقّع عليه المورد
+function pretPrint(){
+  if(!_pretCur){ toast('❌ افتح مرتجع الأول'); return; }
+  if(_pretEdit){ toast('💡 احفظ الأسعار الأول قبل الطباعة'); return; }
+  const x = _pretCur.return, items = _pretCur.items;
+  const esc = v => String(v==null?'':v).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const rows = items.map((it,i) => `
+    <tr>
+      <td class="c">${i+1}</td>
+      <td>${esc(it.product_title)}${it.variant_title ? ' — ' + esc(it.variant_title) : ''}
+        ${it.sku ? `<div class="sku">${esc(it.sku)}</div>` : ''}</td>
+      <td class="c n">${it.qty}</td>
+      <td class="c n">${(parseFloat(it.unit_cost)||0).toFixed(2)}</td>
+      <td class="c n">${(parseFloat(it.line_total)||0).toFixed(2)}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
+<title>${esc(x.return_number)}</title><style>
+  @page{size:A4;margin:14mm}
+  *{box-sizing:border-box}
+  body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;color:#111;margin:0;font-size:12px}
+  .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #dc2626;padding-bottom:10px;margin-bottom:14px}
+  .hd h1{margin:0;font-size:21px;color:#dc2626}
+  .hd .num{font-family:Roboto,Arial,sans-serif;font-weight:800;font-size:15px;letter-spacing:.5px}
+  .meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-bottom:14px}
+  .meta div span{display:block;font-size:10px;color:#666}
+  .meta div b{font-size:13px}
+  table{width:100%;border-collapse:collapse}
+  th,td{border:1px solid #cbd5e1;padding:6px 7px;vertical-align:top}
+  th{background:#f1f5f9;font-size:11px}
+  .c{text-align:center}
+  .n{font-family:Roboto,Arial,sans-serif;font-weight:700}
+  .sku{font-family:Roboto,Arial,sans-serif;font-size:9px;color:#777}
+  tfoot td{background:#fef2f2;font-weight:800;font-size:14px}
+  .notes{margin-top:12px;font-size:11px;border:1px solid #cbd5e1;border-radius:6px;padding:8px}
+  .sig{margin-top:34px;display:grid;grid-template-columns:1fr 1fr;gap:40px;font-size:11px}
+  .sig div{border-top:1px solid #333;padding-top:5px;text-align:center}
+  .ft{margin-top:16px;font-size:9px;color:#888;text-align:center}
+  tr{page-break-inside:avoid}
+</style></head><body>
+  <div class="hd">
+    <div><h1>إذن مرتجع مشتريات</h1><div class="num">${esc(x.return_number)}</div></div>
+    <div style="text-align:left"><div style="font-weight:800;font-size:16px">CAFELAX</div>
+      <div style="font-size:10px;color:#666">${new Date(x.created_at).toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'})}</div></div>
+  </div>
+  <div class="meta">
+    <div><span>المورد</span><b>${esc(x.supplier_name || '-')}</b></div>
+    <div><span>المخزن</span><b>${esc(x.warehouse_name || '-')}</b></div>
+    <div><span>سجّله</span><b>${esc(x.created_by || '-')}</b></div>
+  </div>
+  <table>
+    <thead><tr><th style="width:32px">#</th><th>المنتج</th><th style="width:60px">الكمية</th>
+      <th style="width:80px">سعر الوحدة</th><th style="width:90px">الإجمالي</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td colspan="2">${items.length} صنف · ${x.total_qty} قطعة</td>
+      <td class="c n">${x.total_qty}</td><td class="c">الإجمالي</td>
+      <td class="c n">${_pretTotal().toFixed(2)}</td></tr></tfoot>
+  </table>
+  ${x.notes ? `<div class="notes">📝 ${esc(x.notes)}</div>` : ''}
+  ${x.zoho_vendor_credit_number ? `<div class="notes">🧾 Vendor Credit: <b class="n">${esc(x.zoho_vendor_credit_number)}</b></div>` : ''}
+  <div class="sig"><div>توقيع المورد / المندوب</div><div>توقيع أمين المخزن</div></div>
+  <div class="ft">OrderPro · CAFELAX — الأسعار بالجنيه المصري</div>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  if(!w){ toast('❌ المتصفح منع النافذة — اسمح للـ popups'); return; }
+  w.document.write(html);
+  w.document.close();
+  setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} }, 700);
 }
 
 async function prRetry(id, what){
