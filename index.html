@@ -2026,6 +2026,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="near-expiry-offers" onclick="goPage(this,'near-expiry-offers')"><span class="ni-icon">🏷️</span><span class="ni-label">عروض قرب الانتهاء</span><span class="nbadge" id="nb-neo" style="background:#ea580c"></span></div>
         <div class="ni" data-p="store-batches" onclick="goPage(this,'store-batches')"><span class="ni-icon">🏪</span><span class="ni-label">صلاحيات المحلات</span><span class="nbadge" id="nb-sb" style="background:var(--danger)"></span></div>
         <div class="ni" data-p="vendor-batches" onclick="goPage(this,'vendor-batches')"><span class="ni-icon">🏭</span><span class="ni-label">صلاحيات الموردين</span><span class="nbadge" id="nb-vb" style="background:var(--warn)"></span></div>
+        <div class="ni" data-p="consignment" onclick="goPage(this,'consignment')"><span class="ni-icon">🤝</span><span class="ni-label">بضاعة تحت البيع</span><span class="nbadge" id="nb-cg" style="background:var(--warn)"></span></div>
       </div>
     </div>
 
@@ -9431,6 +9432,72 @@ tr:hover td{background:#fafbff}
 </div>
 
 <!-- ===== VENDOR BATCHES PAGE (v713) ===== -->
+<!-- 🤝 v730: بضاعة تحت البيع -->
+<div class="page" id="page-consignment">
+  <div class="card" style="padding:14px;margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <h2 style="margin:0">🤝 بضاعة تحت البيع</h2>
+      <div style="display:flex;gap:7px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-ghost" onclick="cgAddSupplier()">➕ ضيف مورد</button>
+        <button class="btn btn-sm btn-ghost" onclick="cgOnOpen()">🔄</button>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);line-height:1.8">
+      المورد بيورّد من غير فاتورة، والبضاعة في عهدتك لحد ما تتباع. أوامر الشراء بتاعته بتروح زوهو
+      <b>Inventory Adjustment</b> بدل Purchase Order، وفي أي وقت تعمل <b>قطع</b> وتتحاسب على اللي اتباع بس.
+    </div>
+    <div id="cg-sups" style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px"></div>
+  </div>
+
+  <div id="cg-tabs" style="display:none;gap:7px;flex-wrap:wrap;margin-bottom:12px">
+    <button class="btn btn-sm" id="cg-tab-report"  onclick="cgTab('report')">📊 التقرير</button>
+    <button class="btn btn-sm" id="cg-tab-items"   onclick="cgTab('items')">📦 الأصناف ورصيد أول مدة</button>
+    <button class="btn btn-sm" id="cg-tab-history" onclick="cgTab('history')">✂️ القطوعات</button>
+  </div>
+
+  <div id="cg-body"></div>
+</div>
+
+<!-- اختيار مورد يتحوّل لـ «تحت البيع» -->
+<div id="m-cg-sup" class="modal-overlay" style="display:none">
+  <div class="modal" style="width:min(520px,95vw)">
+    <div class="modal-header"><h3 style="margin:0">➕ مورد بضاعة تحت البيع</h3>
+      <button class="modal-close" onclick="closeM('m-cg-sup')">×</button></div>
+    <div class="modal-body">
+      <input id="cg-sup-q" class="form-input" placeholder="دوّر على المورد..." oninput="cgSupSearch()" style="width:100%;margin-bottom:10px">
+      <div id="cg-sup-list" style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:9px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- إضافة أصناف -->
+<div id="m-cg-add" class="modal-overlay" style="display:none">
+  <div class="modal" style="width:min(640px,95vw)">
+    <div class="modal-header"><h3 style="margin:0">📦 ضيف أصناف</h3>
+      <button class="modal-close" onclick="closeM('m-cg-add')">×</button></div>
+    <div class="modal-body">
+      <input id="cg-add-q" class="form-input" placeholder="دوّر بالاسم أو الباركود..." oninput="cgAddSearch()" style="width:100%;margin-bottom:10px">
+      <div id="cg-add-results" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:9px;margin-bottom:12px"></div>
+      <div id="cg-add-picked"></div>
+    </div>
+  </div>
+</div>
+
+<!-- القطع -->
+<div id="m-cg-stl" class="modal-overlay" style="display:none">
+  <div class="modal" style="width:min(1100px,96vw);max-width:96vw">
+    <div class="modal-header">
+      <h3 style="margin:0" id="cg-stl-title">✂️ القطع</h3>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span id="cg-stl-actions" style="display:flex;gap:6px"></span>
+        <button class="btn btn-sm" onclick="cgStlPrint()" style="background:#475569;border-color:#475569;color:#fff;font-weight:700">🖨️ طباعة</button>
+        <button class="modal-close" onclick="closeM('m-cg-stl')">×</button>
+      </div>
+    </div>
+    <div class="modal-body" id="cg-stl-body"></div>
+  </div>
+</div>
+
 <div class="page" id="page-vendor-batches">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
     <div>
@@ -11030,7 +11097,7 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 let currentPage='dashboard',assignOrderId=null,selectedCourierId=null,settlingCourierId=null;
@@ -37143,6 +37210,558 @@ async function loadPurchaseReturnsPage(){
 }
 
 // ╔══════════════════════════════════════════════════════════════════╗
+// ║  🤝 v730: بضاعة تحت البيع                                        ║
+// ╚══════════════════════════════════════════════════════════════════╝
+// الشاشة بتعيد إنتاج الشيت اللي أنس بيعمله بإيده، بس الأعمدة بتتولّد
+// لوحدها والرصيد الحالي بييجي من شوبيفاي:
+//    مبيعات الفترة = رصيد أولها + توريداتها − الرصيد الحالي
+// وجنبها «مبيعات النظام» للمقارنة بس — الحساب بالاستنتاج زي ما اتفقنا.
+let _cgSup = null, _cgTab = 'report', _cgRep = null, _cgItems = null, _cgPick = [];
+
+const _cgN  = v => (Number(v) || 0).toLocaleString('ar-EG');
+const _cgM  = v => (Number(v) || 0).toLocaleString('ar-EG', { minimumFractionDigits:2, maximumFractionDigits:2 });
+
+async function cgOnOpen(){
+  const box = document.getElementById('cg-sups');
+  if(!box) return;
+  box.innerHTML = '<span style="color:var(--muted);font-size:12px">⏳ ...</span>';
+  try{
+    const r = await apiFetch('/api/consignment/suppliers');
+    if(r?.error) throw new Error(r.error);
+    const sups = r.suppliers || [];
+    if(!sups.length){
+      box.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:8px 0">
+        مفيش موردين متعلّمين «تحت البيع» لسه — دوس <b>➕ ضيف مورد</b>.</div>`;
+      document.getElementById('cg-tabs').style.display = 'none';
+      document.getElementById('cg-body').innerHTML = '';
+      return;
+    }
+    if(!_cgSup || !sups.find(x => x.id === _cgSup)) _cgSup = sups[0].id;
+    box.innerHTML = sups.map(x => {
+      const on = x.id === _cgSup;
+      return `<button onclick="cgPick(${x.id})" style="padding:7px 13px;border-radius:999px;cursor:pointer;
+        font-family:Cairo,sans-serif;font-size:12.5px;font-weight:${on?800:600};
+        border:1.5px solid ${on?'#6366f1':'var(--border)'};background:${on?'#6366f1':'var(--elev)'};
+        color:${on?'#fff':'var(--text)'}">🏭 ${escapeHtml(x.name)}
+        <span style="opacity:.75;font-size:11px">· ${x.items_count} صنف</span></button>`;
+    }).join('');
+    document.getElementById('cg-tabs').style.display = 'flex';
+    cgTab(_cgTab);
+  }catch(e){ box.innerHTML = `<div style="color:var(--danger);font-size:12px">❌ ${escapeHtml(e.message)}</div>`; }
+}
+
+function cgPick(id){ _cgSup = id; cgOnOpen(); }
+
+function cgTab(t){
+  _cgTab = t;
+  for(const k of ['report','items','history']){
+    const b = document.getElementById('cg-tab-' + k);
+    if(!b) continue;
+    const on = k === t;
+    b.style.background = on ? '#6366f1' : '';
+    b.style.borderColor = on ? '#6366f1' : '';
+    b.style.color = on ? '#fff' : '';
+    b.style.fontWeight = on ? '800' : '';
+  }
+  if(t === 'report')  cgLoadReport();
+  if(t === 'items')   cgLoadItems();
+  if(t === 'history') cgLoadHistory();
+}
+
+// ───────────── التقرير ─────────────
+async function cgLoadReport(){
+  const b = document.getElementById('cg-body');
+  b.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">⏳ بيحسب...</div>';
+  try{
+    const r = await apiFetch(`/api/consignment/${_cgSup}/report`);
+    if(r?.error) throw new Error(r.error);
+    _cgRep = r;
+    cgRenderReport();
+  }catch(e){ b.innerHTML = `<div style="color:var(--danger);padding:16px">❌ ${escapeHtml(e.message)}</div>`; }
+}
+
+function cgRenderReport(){
+  const r = _cgRep, items = r.items || [];
+  if(!items.length){
+    document.getElementById('cg-body').innerHTML = `
+      <div class="card" style="padding:26px;text-align:center;color:var(--muted)">
+        مفيش أصناف متسجّلة للمورد ده — روح تاب <b>📦 الأصناف</b> وضيفهم برصيد أول مدة.</div>`;
+    return;
+  }
+  const t = r.totals || {};
+  const from = r.period_from
+    ? new Date(r.period_from).toLocaleDateString('ar-EG',{day:'numeric',month:'short',year:'numeric'})
+    : 'البداية';
+
+  const rows = items.map(x => {
+    const warn = x.negative;
+    const diff = x.system_sold != null && x.system_sold !== x.sold_qty;
+    return `<tr style="border-bottom:1px solid var(--border);${warn?'background:#fef2f2':''}">
+      <td style="padding:7px">
+        <div style="font-weight:700;font-size:12px">${escapeHtml(x.product_title || '')}</div>
+        ${x.sku ? `<div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(x.sku)}</div>` : ''}
+      </td>
+      <td class="cgn">${_cgN(x.opening_qty)}</td>
+      <td class="cgn">${_cgN(x.delivered_qty)}</td>
+      <td class="cgn" style="font-weight:800">${_cgN(x.closing_qty)}</td>
+      <td class="cgn" style="font-weight:900;color:${warn?'#dc2626':'#166534'}">${_cgN(x.sold_qty)}${warn?' ⚠️':''}</td>
+      <td class="cgn" style="color:${diff?'#b45309':'var(--muted)'};font-weight:${diff?800:400}"
+          title="${diff?'الفرق '+(x.sold_qty-(x.system_sold||0)):''}">${x.system_sold == null ? '—' : _cgN(x.system_sold)}</td>
+      <td class="cgn">${_cgM(x.sale_price)}${x.had_offer?' <span title="عليه عرض صلاحية — ده السعر الحقيقي">🏷️</span>':''}</td>
+      <td class="cgn">${_cgM(x.unit_price)}</td>
+      <td class="cgn" style="font-weight:800">${x.sold_qty > 0 ? _cgM(x.line_total) : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('cg-body').innerHTML = `
+    <style>#cg-body .cgn{padding:7px;text-align:center;font-family:Roboto,sans-serif;font-size:12px}</style>
+    <div class="card" style="padding:13px;margin-bottom:12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+      <div><div style="font-size:11px;color:var(--muted)">الفترة من</div>
+           <div style="font-weight:800;font-size:13px">${escapeHtml(from)} → دلوقتي</div></div>
+      <div><div style="font-size:11px;color:var(--muted)">توريدات الفترة</div>
+           <div style="font-weight:800;font-size:13px">${_cgN((r.deliveries||[]).length)} ${
+             (r.deliveries||[]).length === 1 ? 'أمر شراء' : 'أوامر شراء'}</div></div>
+      <div style="display:flex;align-items:end;gap:6px">
+        <div><div style="font-size:11px;color:var(--muted)">خصم من سعر البيع</div>
+          <input id="cg-pct" type="number" min="0" max="100" step="0.5" value="${items[0]?.discount_pct ?? 0}"
+            style="width:88px;padding:7px;text-align:center;border:1px solid var(--accent);border-radius:7px;
+                   background:var(--bg);color:var(--text);font-family:Roboto,sans-serif;font-weight:800"></div>
+        <button class="btn btn-sm btn-ghost" onclick="cgSavePct()">حفظ</button>
+      </div>
+      <div style="margin-inline-start:auto;text-align:center">
+        <div style="font-size:11px;color:var(--muted)">المستحق للمورد</div>
+        <div style="font-weight:900;font-size:21px;color:#dc2626;font-family:Roboto,sans-serif">${_cgM(t.amount)} ج</div>
+        <div style="font-size:11px;color:var(--muted)">${_cgN(t.sold)} قطعة</div>
+      </div>
+      <button class="btn btn-sm" onclick="cgCut()" style="background:#dc2626;border-color:#dc2626;color:#fff;font-weight:800">✂️ اقفل الفترة واتحاسب</button>
+    </div>
+
+    ${t.negatives ? `<div style="background:#fef2f2;border:1px solid #ef4444;border-radius:9px;padding:10px 13px;margin-bottom:11px;font-size:12px;color:#991b1b;line-height:1.8">
+      ⚠️ <b>${t.negatives}</b> صنف رصيده الحالي أكبر من المتوقع — يعني في توريد مش متسجّل أو رصيد أول مدة غلط.
+      الأصناف دي مش داخلة في المبلغ. راجعها قبل ما تقفل.</div>` : ''}
+    ${t.mismatch ? `<div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:9px;padding:10px 13px;margin-bottom:11px;font-size:12px;color:#92400e;line-height:1.8">
+      📊 <b>${t.mismatch}</b> صنف المستنتج فيه مختلف عن مبيعات النظام. الحساب بالمستنتج زي ما اتفقنا،
+      بس الفرق ده معناه تالف أو فاقد أو جرد — شوفه قبل ما تدفع.</div>` : ''}
+
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table style="width:100%;min-width:900px;border-collapse:collapse">
+        <thead><tr style="background:var(--bg);border-bottom:2px solid var(--border);font-size:11px">
+          <th style="padding:8px;text-align:right">الصنف</th>
+          <th style="padding:8px;width:80px">أول الفترة</th>
+          <th style="padding:8px;width:80px">توريدات</th>
+          <th style="padding:8px;width:90px">الرصيد الحالي</th>
+          <th style="padding:8px;width:80px">باع</th>
+          <th style="padding:8px;width:90px">مبيعات النظام</th>
+          <th style="padding:8px;width:90px">سعر البيع</th>
+          <th style="padding:8px;width:90px">التكلفة</th>
+          <th style="padding:8px;width:100px">الإجمالي</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr style="background:var(--bg);border-top:2px solid var(--border);font-weight:900">
+          <td style="padding:9px">${items.length} صنف</td>
+          <td colspan="3"></td>
+          <td class="cgn" style="font-weight:900">${_cgN(t.sold)}</td>
+          <td colspan="3"></td>
+          <td class="cgn" style="font-weight:900;font-size:14px;color:#dc2626">${_cgM(t.amount)}</td>
+        </tr></tfoot>
+      </table>
+    </div>`;
+}
+
+async function cgSavePct(){
+  const pct = Number(document.getElementById('cg-pct')?.value);
+  if(!(pct >= 0 && pct <= 100)) return toast('❌ النسبة لازم بين 0 و 100');
+  try{
+    const r = await apiFetch(`/api/consignment/${_cgSup}/discount`, 'PATCH', { pct });
+    if(r?.error) return toast('❌ ' + r.error);
+    toast('✅ اتحفظت', 'success'); cgLoadReport();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// ───────────── الأصناف ورصيد أول مدة ─────────────
+async function cgLoadItems(){
+  const b = document.getElementById('cg-body');
+  b.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">⏳ ...</div>';
+  try{
+    const r = await apiFetch(`/api/consignment/${_cgSup}/items`);
+    if(r?.error) throw new Error(r.error);
+    _cgItems = r.items || [];
+    b.innerHTML = `
+      <div class="card" style="padding:13px;margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div style="font-size:12px;color:var(--muted);flex:1;min-width:240px;line-height:1.8">
+          رصيد أول مدة = اللي كان عندك من الصنف ده وقت ما بدأت تستخدم النظام.
+          بعد أول قطع، النظام بياخد رصيد الإقفال أوتوماتيك ومش بيبص للرقم ده تاني.
+        </div>
+        <button class="btn btn-sm" onclick="cgOpenAdd()" style="background:#6366f1;border-color:#6366f1;color:#fff;font-weight:700">➕ ضيف أصناف</button>
+      </div>
+      ${!_cgItems.length ? `<div class="card" style="padding:26px;text-align:center;color:var(--muted)">مفيش أصناف لسه</div>` : `
+      <div class="card" style="padding:0;overflow-x:auto">
+        <table style="width:100%;min-width:620px;border-collapse:collapse">
+          <thead><tr style="background:var(--bg);border-bottom:2px solid var(--border);font-size:11px">
+            <th style="padding:8px;text-align:right">الصنف</th>
+            <th style="padding:8px;width:120px">رصيد أول مدة</th>
+            <th style="padding:8px;width:120px">سعر تقديري</th>
+            <th style="padding:8px;width:90px"></th>
+          </tr></thead>
+          <tbody>${_cgItems.map(x => `
+            <tr style="border-bottom:1px solid var(--border);${x.active?'':'opacity:.5'}">
+              <td style="padding:7px">
+                <div style="font-weight:700;font-size:12px">${escapeHtml(x.product_title || '')}</div>
+                ${x.sku ? `<div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(x.sku)}</div>` : ''}
+              </td>
+              <td style="padding:7px;text-align:center">
+                <input type="number" min="0" value="${x.opening_qty}" data-cgi="${x.id}" data-cgf="openingQty"
+                  onchange="cgSaveItem(this)" style="width:86px;padding:6px;text-align:center;border:1px solid var(--border);
+                  border-radius:6px;background:var(--bg);color:var(--text);font-family:Roboto,sans-serif;font-weight:700"></td>
+              <td style="padding:7px;text-align:center">
+                <input type="number" min="0" step="0.01" value="${Number(x.est_price)||0}" data-cgi="${x.id}" data-cgf="estPrice"
+                  onchange="cgSaveItem(this)" style="width:96px;padding:6px;text-align:center;border:1px solid var(--border);
+                  border-radius:6px;background:var(--bg);color:var(--text);font-family:Roboto,sans-serif"></td>
+              <td style="padding:7px;text-align:center">
+                <button class="btn btn-sm btn-ghost" onclick="cgDelItem(${x.id})" title="شيله">🗑️</button></td>
+            </tr>`).join('')}</tbody>
+        </table></div>`}`;
+  }catch(e){ b.innerHTML = `<div style="color:var(--danger);padding:16px">❌ ${escapeHtml(e.message)}</div>`; }
+}
+
+async function cgSaveItem(inp){
+  const body = {}; body[inp.dataset.cgf] = inp.value;
+  inp.style.borderColor = 'var(--border)';
+  try{
+    const r = await apiFetch(`/api/consignment/items/${inp.dataset.cgi}`, 'PATCH', body);
+    if(r?.error){ inp.style.borderColor = '#ef4444'; return toast('❌ ' + r.error); }
+    inp.style.borderColor = '#16a34a';
+    setTimeout(() => { inp.style.borderColor = 'var(--border)'; }, 900);
+  }catch(e){ inp.style.borderColor = '#ef4444'; toast('❌ ' + e.message); }
+}
+
+async function cgDelItem(id){
+  if(!confirm('تشيل الصنف ده من قايمة المورد؟')) return;
+  try{
+    const r = await apiFetch(`/api/consignment/items/${id}`, 'DELETE');
+    if(r?.error) return toast('❌ ' + r.error);
+    toast('✅ اتشال', 'success'); cgLoadItems();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// ───────────── اختيار المورد ─────────────
+function cgAddSupplier(){
+  _cgPick = [];
+  document.getElementById('cg-sup-q').value = '';
+  document.getElementById('cg-sup-list').innerHTML =
+    '<div style="padding:14px;color:var(--muted);font-size:12px">اكتب اسم المورد</div>';
+  openM('m-cg-sup');
+}
+let _cgSupT = null;
+function cgSupSearch(){
+  clearTimeout(_cgSupT);
+  const q = (document.getElementById('cg-sup-q').value || '').trim();
+  if(q.length < 2) return;
+  _cgSupT = setTimeout(async () => {
+    const el = document.getElementById('cg-sup-list');
+    el.innerHTML = '<div style="padding:12px;color:var(--muted)">⏳...</div>';
+    try{
+      const r = await apiFetch(`/api/suppliers?q=${encodeURIComponent(q)}&limit=30`);
+      const list = r?.suppliers || r?.data || (Array.isArray(r) ? r : []);
+      if(!list.length){ el.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">مفيش نتايج</div>'; return; }
+      el.innerHTML = list.map(x => `<div onclick="cgMakeConsignment(${x.id})"
+        style="padding:9px 11px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;gap:8px"
+        onmouseover="this.style.background='var(--hover,#f1f5f9)'" onmouseout="this.style.background=''">
+        <span style="font-weight:600;font-size:13px">🏭 ${escapeHtml(x.name)}</span>
+        ${x.consignment ? '<span style="font-size:11px;color:#16a34a;font-weight:700">✅ متعلّم</span>' : ''}</div>`).join('');
+    }catch(e){ el.innerHTML = `<div style="padding:12px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`; }
+  }, 300);
+}
+async function cgMakeConsignment(id){
+  try{
+    const r = await apiFetch(`/api/suppliers/${id}/consignment`, 'PATCH', { on: true });
+    if(r?.error) return toast('❌ ' + r.error);
+    closeM('m-cg-sup'); _cgSup = id; toast('✅ اتعلّم «تحت البيع»', 'success');
+    _cgTab = 'items'; cgOnOpen();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// ───────────── إضافة أصناف ─────────────
+function cgOpenAdd(){
+  _cgPick = [];
+  document.getElementById('cg-add-q').value = '';
+  document.getElementById('cg-add-results').innerHTML = '';
+  cgRenderPicked();
+  openM('m-cg-add');
+}
+let _cgAddT = null;
+function cgAddSearch(){
+  clearTimeout(_cgAddT);
+  const q = (document.getElementById('cg-add-q').value || '').trim();
+  if(q.length < 2) return;
+  _cgAddT = setTimeout(async () => {
+    const el = document.getElementById('cg-add-results');
+    el.innerHTML = '<div style="padding:12px;color:var(--muted)">⏳...</div>';
+    try{
+      const r = await apiFetch(`/api/inventory/search?q=${encodeURIComponent(q)}&limit=25`);
+      const res = (r && r.results) || [];
+      const have = new Set((_cgItems || []).map(x => String(x.variant_id)));
+      if(!res.length){ el.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">مفيش نتايج</div>'; return; }
+      el.innerHTML = res.map(x => {
+        const dup = have.has(String(x.variant_id)) || _cgPick.some(p => p.variant_id === String(x.variant_id));
+        return `<div ${dup ? '' : `onclick='cgPickItem(${JSON.stringify({
+            variant_id:String(x.variant_id), sku:x.sku||'', title:x.product_title||'',
+            variantTitle:x.variant_title||'', price:Number(x.price)||0 }).replace(/'/g,"&apos;")})'`}
+          style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;
+                 ${dup ? 'opacity:.45' : 'cursor:pointer'}">
+          <div><div style="font-weight:600;font-size:12.5px">${escapeHtml(x.product_title || '')}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(x.sku || x.barcode || '')}</div></div>
+          ${dup ? '<span style="font-size:11px;color:var(--muted)">متضاف</span>' : ''}</div>`;
+      }).join('');
+    }catch(e){ el.innerHTML = `<div style="padding:12px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`; }
+  }, 300);
+}
+function cgPickItem(x){ if(!_cgPick.some(p => p.variant_id === x.variant_id)){ _cgPick.push({ ...x, openingQty: 0 }); } cgRenderPicked(); cgAddSearch(); }
+function cgUnpick(v){ _cgPick = _cgPick.filter(p => p.variant_id !== v); cgRenderPicked(); }
+function cgRenderPicked(){
+  const el = document.getElementById('cg-add-picked');
+  if(!_cgPick.length){ el.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:10px">اختار أصناف من فوق</div>'; return; }
+  el.innerHTML = `
+    <div style="font-weight:800;font-size:12.5px;margin-bottom:7px">${_cgPick.length} صنف · اكتب رصيد أول مدة</div>
+    ${_cgPick.map(x => `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;font-size:12px;font-weight:600">${escapeHtml(x.title)}</div>
+      <input type="number" min="0" value="${x.openingQty}" placeholder="0"
+        oninput="(_cgPick.find(p=>p.variant_id==='${x.variant_id}')||{}).openingQty=this.value"
+        style="width:78px;padding:6px;text-align:center;border:1px solid var(--accent);border-radius:6px;
+               background:var(--bg);color:var(--text);font-family:Roboto,sans-serif;font-weight:700">
+      <button class="btn btn-sm btn-ghost" onclick="cgUnpick('${x.variant_id}')">×</button>
+    </div>`).join('')}
+    <button class="btn btn-primary btn-sm" onclick="cgSaveAdd()" style="width:100%;margin-top:12px;font-weight:700">💾 احفظ</button>`;
+}
+async function cgSaveAdd(){
+  if(!_cgPick.length) return;
+  try{
+    const r = await apiFetch(`/api/consignment/${_cgSup}/items`, 'POST', {
+      items: _cgPick.map(x => ({ variantId: x.variant_id, sku: x.sku, title: x.title,
+                                 variantTitle: x.variantTitle, openingQty: parseInt(x.openingQty||0,10) || 0,
+                                 estPrice: x.price })) });
+    if(r?.error) return toast('❌ ' + r.error);
+    closeM('m-cg-add'); toast(`✅ اتضاف ${r.count} صنف`, 'success'); cgLoadItems();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// ───────────── القطع ─────────────
+let _cgStl = null;
+
+async function cgCut(){
+  const t = _cgRep?.totals || {};
+  let msg = 'هتقفل الفترة وتعمل محاسبة بـ ' + _cgM(t.amount) + ' ج على ' + _cgN(t.sold) + ' قطعة.';
+  if(t.negatives) msg += `\n\n⚠️ ${t.negatives} صنف رصيده أكبر من المتوقع ومش داخل في الحساب.`;
+  if(t.mismatch)  msg += `\n📊 ${t.mismatch} صنف مختلف عن مبيعات النظام.`;
+  msg += '\n\nهتقدر تعدّل الأسعار والكميات قبل التأكيد النهائي. تكمّل؟';
+  if(!confirm(msg)) return;
+  try{
+    const r = await apiFetch(`/api/consignment/${_cgSup}/settlements`, 'POST', {});
+    if(r?.error){
+      if(r.settlement_id){ toast('في قطع مفتوح — بيفتحه'); return cgOpenStl(r.settlement_id); }
+      return toast('❌ ' + r.error);
+    }
+    cgOpenStl(r.settlement.id);
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function cgOpenStl(id){
+  const b = document.getElementById('cg-stl-body');
+  b.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">⏳ ...</div>';
+  openM('m-cg-stl');
+  try{
+    const r = await apiFetch(`/api/consignment/settlements/${id}`);
+    if(r?.error) throw new Error(r.error);
+    _cgStl = r;
+    cgRenderStl();
+  }catch(e){ b.innerHTML = `<div style="color:var(--danger);padding:16px">❌ ${escapeHtml(e.message)}</div>`; }
+}
+
+function cgRenderStl(){
+  const st = _cgStl.settlement, items = (_cgStl.items || []).filter(x => x.sold_qty > 0);
+  const draft = st.status === 'draft';
+  document.getElementById('cg-stl-title').textContent = '✂️ ' + st.settlement_number;
+  document.getElementById('cg-stl-actions').innerHTML = draft
+    ? `<button class="btn btn-sm" onclick="cgConfirmStl()" style="background:#16a34a;border-color:#16a34a;color:#fff;font-weight:800">✅ أكّد واعمل أمر الشراء</button>`
+    : `<span style="background:#dcfce7;color:#166534;border-radius:99px;padding:3px 10px;font-size:11px;font-weight:800">✅ متأكّد</span>`;
+
+  const rows = items.map(x => `
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:7px">
+        <div style="font-weight:700;font-size:12px">${escapeHtml(x.product_title || '')}</div>
+        ${x.sku ? `<div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(x.sku)}</div>` : ''}
+      </td>
+      <td style="padding:7px;text-align:center">${draft
+        ? `<input type="number" min="0" value="${x.sold_qty}" data-cgs="${x.id}" data-cgk="soldQty"
+             onchange="cgStlEdit(this)" style="width:70px;padding:5px;text-align:center;border:1px solid var(--border);
+             border-radius:6px;background:var(--bg);color:var(--text);font-family:Roboto,sans-serif;font-weight:800">`
+        : `<b style="font-family:Roboto,sans-serif">${_cgN(x.sold_qty)}</b>`}</td>
+      <td class="cgn2">${_cgM(x.sale_price)}${x.had_offer?' 🏷️':''}</td>
+      <td style="padding:7px;text-align:center">${draft
+        ? `<input type="number" min="0" max="100" step="0.5" value="${Number(x.discount_pct)||0}" data-cgs="${x.id}" data-cgk="pct"
+             onchange="cgStlEdit(this)" style="width:66px;padding:5px;text-align:center;border:1px solid var(--border);
+             border-radius:6px;background:var(--bg);color:var(--text);font-family:Roboto,sans-serif">`
+        : _cgM(x.discount_pct)}</td>
+      <td style="padding:7px;text-align:center">${draft
+        ? `<input type="number" min="0" step="0.01" value="${Number(x.unit_price)||0}" data-cgs="${x.id}" data-cgk="unitPrice"
+             onchange="cgStlEdit(this)" title="اكتب رقم هنا والبند يخرج من المعادلة"
+             style="width:92px;padding:5px;text-align:center;border:1px solid ${x.price_manual?'#f59e0b':'var(--border)'};
+             border-radius:6px;background:var(--bg);color:var(--text);font-family:Roboto,sans-serif;font-weight:700">`
+        : _cgM(x.unit_price)}${x.price_manual ? ' <span title="تكليف حر">✍️</span>' : ''}</td>
+      <td class="cgn2" style="font-weight:800">${_cgM(x.line_total)}</td>
+    </tr>`).join('');
+
+  document.getElementById('cg-stl-body').innerHTML = `
+    <style>#cg-stl-body .cgn2{padding:7px;text-align:center;font-family:Roboto,sans-serif;font-size:12px}</style>
+    ${draft ? `<div style="background:#eef2ff;border:1px solid #6366f1;border-radius:9px;padding:9px 12px;margin-bottom:11px;font-size:11.5px;color:#3730a3;line-height:1.8">
+      غيّر <b>النسبة</b> فالتكلفة تتحسب لوحدها، أو اكتب <b>التكلفة</b> مباشرة والبند يخرج من المعادلة (✍️).
+      الكميات تتعدّل كمان لو الجرد طلع مختلف.</div>` : ''}
+    <div style="display:flex;gap:9px;align-items:end;flex-wrap:wrap;margin-bottom:11px">
+      ${draft ? `<div><div style="font-size:11px;color:var(--muted);margin-bottom:3px">غيّر النسبة للكل</div>
+        <div style="display:flex;gap:6px">
+          <input id="cg-stl-pct" type="number" min="0" max="100" step="0.5" value="${Number(items[0]?.discount_pct)||0}"
+            style="width:86px;padding:7px;text-align:center;border:1px solid var(--accent);border-radius:7px;
+                   background:var(--bg);color:var(--text);font-family:Roboto,sans-serif;font-weight:800">
+          <button class="btn btn-sm btn-ghost" onclick="cgStlAllPct()">طبّق</button></div></div>` : ''}
+      <div style="margin-inline-start:auto;text-align:center">
+        <div style="font-size:11px;color:var(--muted)">الإجمالي</div>
+        <div id="cg-stl-total" style="font-weight:900;font-size:20px;color:#dc2626;font-family:Roboto,sans-serif">${_cgM(st.subtotal)} ج</div>
+      </div>
+    </div>
+    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">
+      <table style="width:100%;min-width:680px;border-collapse:collapse">
+        <thead><tr style="background:var(--bg);border-bottom:2px solid var(--border);font-size:11px">
+          <th style="padding:8px;text-align:right">الصنف</th>
+          <th style="padding:8px;width:80px">باع</th>
+          <th style="padding:8px;width:90px">سعر البيع</th>
+          <th style="padding:8px;width:76px">خصم %</th>
+          <th style="padding:8px;width:100px">التكلفة</th>
+          <th style="padding:8px;width:100px">الإجمالي</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    ${st.po_id ? `<div style="background:#f0fdf4;border:1px solid #16a34a;border-radius:9px;padding:10px 13px;margin-top:11px;font-size:12px;color:#166534">
+      ✅ اتعمل أمر شراء بالقطع ده — روح <b>📋 أوامر الشراء</b> وابعته لزوهو عشان الفاتورة.</div>` : ''}`;
+}
+
+async function cgStlEdit(inp){
+  const ln = { id: parseInt(inp.dataset.cgs, 10) };
+  ln[inp.dataset.cgk] = inp.value;
+  try{
+    const r = await apiFetch(`/api/consignment/settlements/${_cgStl.settlement.id}`, 'PUT', { lines: [ln] });
+    if(r?.error){ inp.style.borderColor = '#ef4444'; return toast('❌ ' + r.error); }
+    _cgStl = r; cgRenderStl();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function cgStlAllPct(){
+  const pct = Number(document.getElementById('cg-stl-pct')?.value);
+  if(!(pct >= 0 && pct <= 100)) return toast('❌ النسبة لازم بين 0 و 100');
+  try{
+    const r = await apiFetch(`/api/consignment/settlements/${_cgStl.settlement.id}`, 'PUT', { pct });
+    if(r?.error) return toast('❌ ' + r.error);
+    _cgStl = r; cgRenderStl(); toast('✅ اتطبّقت واتحفظت على المورد', 'success');
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function cgConfirmStl(){
+  const st = _cgStl.settlement;
+  if(!confirm(`هتأكّد ${st.settlement_number} بـ ${_cgM(st.subtotal)} ج.\n\n`
+    + 'هيتعمل أمر شراء بالكميات والأسعار دي، والفترة هتقفل — '
+    + 'والفترة الجاية هتبدأ من الرصيد الحالي. بعد كده مفيش تعديل. تأكّد؟')) return;
+  try{
+    const r = await apiFetch(`/api/consignment/settlements/${st.id}/confirm`, 'POST', {});
+    if(r?.error) return toast('❌ ' + r.error);
+    toast('✅ ' + (r.message || 'اتأكّد'), 'success');
+    await cgOpenStl(st.id);
+    cgLoadReport();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+async function cgLoadHistory(){
+  const b = document.getElementById('cg-body');
+  b.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">⏳ ...</div>';
+  try{
+    const r = await apiFetch(`/api/consignment/${_cgSup}/settlements`);
+    if(r?.error) throw new Error(r.error);
+    const list = r.settlements || [];
+    if(!list.length){ b.innerHTML = '<div class="card" style="padding:26px;text-align:center;color:var(--muted)">مفيش قطوعات لسه</div>'; return; }
+    b.innerHTML = `<div class="card" style="padding:0;overflow-x:auto">
+      <table style="width:100%;min-width:640px;border-collapse:collapse">
+        <thead><tr style="background:var(--bg);border-bottom:2px solid var(--border);font-size:11px">
+          <th style="padding:8px;text-align:right">الرقم</th><th style="padding:8px">التاريخ</th>
+          <th style="padding:8px">أصناف</th><th style="padding:8px">قطع</th>
+          <th style="padding:8px">الإجمالي</th><th style="padding:8px">الحالة</th>
+        </tr></thead>
+        <tbody>${list.map(x => `
+          <tr onclick="cgOpenStl(${x.id})" style="border-bottom:1px solid var(--border);cursor:pointer"
+              onmouseover="this.style.background='var(--hover,#f1f5f9)'" onmouseout="this.style.background=''">
+            <td style="padding:8px;font-weight:800;font-family:Roboto,sans-serif;font-size:12px">${escapeHtml(x.settlement_number)}</td>
+            <td style="padding:8px;text-align:center;font-size:11.5px">${new Date(x.period_to).toLocaleDateString('ar-EG',{dateStyle:'medium'})}</td>
+            <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif">${x.items_count}</td>
+            <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif">${_cgN(x.total_qty)}</td>
+            <td style="padding:8px;text-align:center;font-weight:800;font-family:Roboto,sans-serif">${_cgM(x.subtotal)}</td>
+            <td style="padding:8px;text-align:center">${x.status === 'confirmed'
+              ? '<span style="background:#dcfce7;color:#166534;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:800">✅ متأكّد</span>'
+              : '<span style="background:#fef3c7;color:#92400e;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:800">✏️ مسودة</span>'}</td>
+          </tr>`).join('')}</tbody></table></div>`;
+  }catch(e){ b.innerHTML = `<div style="color:var(--danger);padding:16px">❌ ${escapeHtml(e.message)}</div>`; }
+}
+
+// 🖨️ كشف المحاسبة
+function cgStlPrint(){
+  if(!_cgStl) return toast('❌ افتح قطع الأول');
+  const st = _cgStl.settlement, items = (_cgStl.items || []).filter(x => x.sold_qty > 0);
+  const esc = v => String(v==null?'':v).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
+<title>${esc(st.settlement_number)}</title><style>
+  @page{size:A4;margin:14mm} *{box-sizing:border-box}
+  body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;color:#111;margin:0;font-size:12px}
+  .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #6366f1;padding-bottom:10px;margin-bottom:14px}
+  .hd h1{margin:0;font-size:20px;color:#6366f1}
+  .num{font-family:Roboto,Arial,sans-serif;font-weight:800;font-size:15px}
+  .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:14px}
+  .meta span{display:block;font-size:10px;color:#666} .meta b{font-size:13px}
+  table{width:100%;border-collapse:collapse}
+  th,td{border:1px solid #cbd5e1;padding:6px 7px} th{background:#f1f5f9;font-size:11px}
+  .c{text-align:center} .n{font-family:Roboto,Arial,sans-serif;font-weight:700}
+  .sku{font-family:Roboto,Arial,sans-serif;font-size:9px;color:#777}
+  tfoot td{background:#eef2ff;font-weight:800;font-size:14px}
+  .sig{margin-top:34px;display:grid;grid-template-columns:1fr 1fr;gap:40px;font-size:11px}
+  .sig div{border-top:1px solid #333;padding-top:5px;text-align:center}
+  .ft{margin-top:14px;font-size:9px;color:#888;text-align:center} tr{page-break-inside:avoid}
+</style></head><body>
+  <div class="hd"><div><h1>كشف محاسبة بضاعة تحت البيع</h1><div class="num">${esc(st.settlement_number)}</div></div>
+    <div style="text-align:left"><div style="font-weight:800;font-size:16px">CAFELAX</div>
+      <div style="font-size:10px;color:#666">${new Date(st.period_to).toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'})}</div></div></div>
+  <div class="meta">
+    <div><span>المورد</span><b>${esc(st.supplier_name || '-')}</b></div>
+    <div><span>الفترة من</span><b>${st.period_from ? new Date(st.period_from).toLocaleDateString('ar-EG',{dateStyle:'medium'}) : 'البداية'}</b></div>
+    <div><span>سجّله</span><b>${esc(st.created_by || '-')}</b></div></div>
+  <table><thead><tr><th style="width:30px">#</th><th>الصنف</th><th style="width:60px">باع</th>
+    <th style="width:76px">سعر البيع</th><th style="width:56px">خصم</th>
+    <th style="width:80px">التكلفة</th><th style="width:92px">الإجمالي</th></tr></thead>
+    <tbody>${items.map((x,i) => `<tr><td class="c">${i+1}</td>
+      <td>${esc(x.product_title)}${x.sku ? `<div class="sku">${esc(x.sku)}</div>` : ''}</td>
+      <td class="c n">${x.sold_qty}</td><td class="c n">${(+x.sale_price).toFixed(2)}</td>
+      <td class="c n">${(+x.discount_pct).toFixed(1)}%</td>
+      <td class="c n">${(+x.unit_price).toFixed(2)}</td>
+      <td class="c n">${(+x.line_total).toFixed(2)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="2">${items.length} صنف</td>
+      <td class="c n">${items.reduce((a,x)=>a+x.sold_qty,0)}</td><td colspan="2"></td>
+      <td class="c">الإجمالي</td><td class="c n">${(+st.subtotal).toFixed(2)}</td></tr></tfoot></table>
+  ${st.notes ? `<div style="margin-top:12px;font-size:11px;border:1px solid #cbd5e1;border-radius:6px;padding:8px">📝 ${esc(st.notes)}</div>` : ''}
+  <div class="sig"><div>توقيع المورد</div><div>توقيع CAFELAX</div></div>
+  <div class="ft">OrderPro · CAFELAX — الأسعار بالجنيه المصري</div>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if(!w){ toast('❌ المتصفح منع النافذة'); return; }
+  w.document.write(html); w.document.close();
+  setTimeout(() => { try{ w.focus(); w.print(); }catch(e){} }, 700);
+}
+
+// ╔══════════════════════════════════════════════════════════════════╗
 // ║  ↩️ v724: فتح المرتجع · تعديل الأسعار · طباعة                    ║
 // ╚══════════════════════════════════════════════════════════════════╝
 // الكارت كان مجرد عرض — مفيش طريقة تشوف البنود ولا تظبّط سعر اتنسي
@@ -54280,6 +54899,7 @@ function goPage(el,page){
   if(page==='temp-price')tpLoad();
   if(page==='store-batches')sbaOnOpen();
   if(page==='vendor-batches')vbOnOpen();
+  if(page==='consignment')cgOnOpen();
   if(page==='sync-failures')loadSyncFailures();
   if(page==='payables')loadPayables();
   if(page==='settlements-receipts')loadSettlementsReceipts();
@@ -62010,4 +62630,4 @@ async function supUserToggle(id){
 </div>
 
 </body>
-</html>
+</html>
