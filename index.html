@@ -4892,6 +4892,26 @@ tr:hover td{background:#fafbff}
     </div>
 
     <!-- 🖥️ v735: شاشة فحص السعر — مفيش إدارة، الشاشة بتظبّط نفسها -->
+    <!-- 🏷️ v744: أقسام حركات الخزنة -->
+    <div class="card" id="tc-settings" style="margin-bottom:16px;display:none">
+      <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-weight:900">🏷️ أقسام حركات الخزنة</span>
+        <span style="font-size:11.5px;color:var(--muted)">القسم إجباري عند تسجيل أي حركة</span>
+        <button class="btn btn-sm btn-ghost" style="margin-inline-start:auto" onclick="tcLoad()">🔄</button>
+      </div>
+      <div style="padding:14px 16px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          <input id="tc-name" class="form-input" placeholder="اسم القسم الجديد" style="flex:1;min-width:200px">
+          <select id="tc-kind" class="form-input" style="width:130px">
+            <option value="out">📤 منصرف</option>
+            <option value="in">📥 وارد</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="tcAdd()" style="font-weight:800">➕ ضيف</button>
+        </div>
+        <div id="tc-list"></div>
+      </div>
+    </div>
+
     <!-- 🤖 v739: تنبيهات تيليجرام -->
     <div class="card" id="tg-settings" style="margin-bottom:16px;display:none">
       <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -10810,7 +10830,11 @@ tr:hover td{background:#fafbff}
   <div class="mhd"><h3 id="treasury-tx-title">حركة جديدة</h3><button class="xbtn" onclick="closeM('m-treasury-tx')">✕</button></div>
   <div class="mbody">
     <div class="fg"><label>المبلغ *</label><input id="tx-amount" type="number" placeholder="أدخل المبلغ" min="1"></div>
-    <div class="fg"><label>السبب / البيان *</label><input id="tx-reason" placeholder="مثال: مصاريف شحن، استلام من مبيعات..."></div>
+    <div class="fg"><label>السبب / البيان *</label><input id="tx-reason" placeholder="مثال: مصاريف شحن، استلام من مبيعات..." oninput="txSuggest()"></div>
+    <div class="fg"><label>القسم *</label>
+      <select id="tx-cat"><option value="">— اختار القسم —</option></select>
+      <div id="tx-cat-hint" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+    </div>
     <div class="fg"><label>التاريخ</label><input id="tx-date" type="date"></div>
   </div>
   <div class="mft"><button class="btn btn-ghost" onclick="closeM('m-treasury-tx')">إلغاء</button><button class="btn btn-success" id="tx-confirm-btn" onclick="saveTreasuryTx()">✅ حفظ</button></div>
@@ -28734,7 +28758,59 @@ function openTreasuryTx(type){
   $('tx-amount')&&($('tx-amount').value='');
   $('tx-reason')&&($('tx-reason').value='');
   $('tx-date')&&($('tx-date').value=new Date().toISOString().split('T')[0]);
+  $('tx-cat')&&($('tx-cat').value='');
+  $('tx-cat-hint')&&($('tx-cat-hint').textContent='');
+  txFillCats();                                   // 🏷️ v744
   openM('m-treasury-tx');
+}
+
+// ╔════════════════════════════════════════════════════════════════════╗
+// ║ 🏷️ v744: أقسام حركات الخزنة                                       ║
+// ╚════════════════════════════════════════════════════════════════════╝
+// القسم إجباري، والقايمة من الداتابيز — المدير بس اللي بيزوّد فيها
+// من الإعدادات. السيستم بيقترح قسم من البيان والمستخدم يأكّد أو يغيّر.
+let _TXCATS = null;
+
+async function txCatsLoad(force){
+  if(_TXCATS && !force) return _TXCATS;
+  try{
+    const d = await apiFetch('/api/treasury/category-list');
+    _TXCATS = d?.categories || [];
+  }catch(e){ _TXCATS = []; }
+  return _TXCATS;
+}
+
+async function txFillCats(){
+  const sel = $('tx-cat'); if(!sel) return;
+  const cats = await txCatsLoad();
+  const kind = (_txType === 'in' || _txType === 'deposit') ? 'in' : 'out';
+  const list = cats.filter(c => c.kind === kind && c.active !== false);
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— اختار القسم —</option>' +
+    list.map(c => `<option value="${escapeAttr(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+  if(cur && list.some(c => c.name === cur)) sel.value = cur;
+  if(!list.length)
+    $('tx-cat-hint').innerHTML = '<span style="color:#d97706">⚠️ مفيش أقسام — ضيفها من الإعدادات</span>';
+}
+
+// اقتراح القسم من البيان — المستخدم يقدر يغيّره
+let _txSugT = null;
+function txSuggest(){
+  clearTimeout(_txSugT);
+  _txSugT = setTimeout(async () => {
+    const reason = $('tx-reason')?.value.trim();
+    const sel = $('tx-cat');
+    if(!reason || !sel || sel.value) return;      // ماتدوسش على اختياره
+    try{
+      const d = await apiFetch('/api/treasury/suggest-category?reason=' + encodeURIComponent(reason) +
+        '&type=' + encodeURIComponent(_txType) + '&treasuryId=' + encodeURIComponent(_activeTreasuryId || ''));
+      const c = d?.category;
+      if(c && [...sel.options].some(o => o.value === c)){
+        sel.value = c;
+        $('tx-cat-hint').innerHTML = '💡 اتقترح تلقائياً — غيّره لو مش مظبوط';
+      }
+    }catch(e){}
+  }, 400);
 }
 
 function saveTreasuryTx(){
@@ -28743,16 +28819,23 @@ function saveTreasuryTx(){
   const date = $('tx-date')?.value || new Date().toISOString().split('T')[0];
   if(!amount||amount<=0){ toast('❗ أدخل مبلغ صحيح'); return; }
   if(!reason){ toast('❗ أدخل السبب'); return; }
+  const category = $('tx-cat')?.value || '';
+  if(!category){ toast('❗ اختار القسم'); $('tx-cat')?.focus(); return; }   // 🏷️ v744
   if(_editingTxId){
     const tx = _treasuryTx.find(x=>x.id===_editingTxId);
-    if(tx){ tx.amount=amount; tx.reason=reason; tx.date=date; tx.type=_txType; }
-    if(API_URL) apiFetch('/api/treasury-tx/'+_editingTxId,'PATCH',{amount,reason,date,type:_txType}).catch(()=>{});
+    if(tx){ tx.amount=amount; tx.reason=reason; tx.date=date; tx.type=_txType; tx.category=category; }
+    if(API_URL){
+      apiFetch('/api/treasury-tx/'+_editingTxId,'PATCH',{amount,reason,date,type:_txType}).catch(()=>{});
+      apiFetch('/api/treasury-tx/'+_editingTxId+'/category','PATCH',{category}).catch(()=>{});
+    }
     _editingTxId = null;
     toast('✅ تم تعديل الحركة');
   } else {
-    const tx = {id:Date.now()+'_tx', treasuryId:_activeTreasuryId, type:_txType, amount, reason, date};
+    const tx = {id:Date.now()+'_tx', treasuryId:_activeTreasuryId, type:_txType, amount, reason, date, category};
     _treasuryTx.push(tx);
-    if(API_URL) apiFetch('/api/treasury-tx','POST',tx).catch(()=>{});
+    if(API_URL) apiFetch('/api/treasury-tx','POST',tx).then(r=>{
+      if(r?.error) toast('❌ ' + escapeHtml(r.error));
+    }).catch(()=>{});
     toast('✅ تم تسجيل الحركة');
   }
   closeM('m-treasury-tx');
@@ -28773,6 +28856,8 @@ function editTreasuryTx(txId){
   $('tx-amount')&&($('tx-amount').value = tx.amount);
   $('tx-reason')&&($('tx-reason').value = tx.reason);
   $('tx-date')&&($('tx-date').value = tx.date||new Date().toISOString().split('T')[0]);
+  $('tx-cat-hint')&&($('tx-cat-hint').textContent='');
+  txFillCats().then(() => { if($('tx-cat')) $('tx-cat').value = tx.category || ''; });   // 🏷️ v744
   openM('m-treasury-tx');
 }
 
@@ -55296,6 +55381,7 @@ function goPage(el,page){
   if(page==='settings')pcOpen();               // 🖥️ v735
   if(page==='settings')chOpen();               // 📡 v738
   if(page==='settings')tgOpen();               // 🤖 v739
+  if(page==='settings')tcOpen();               // 🏷️ v744
   if(page==='sku-audit')skuAuditLoad(true);
   if(page==='zoho-sync'){zhLoadSettings();cnStatus();drStatus();apiFetch('/api/zoho/delete-items-status','GET').then(st=>{if(st&&st.job&&st.job.running)zhDelWatch();}).catch(()=>{});}
   if(page==='profit'&&_gp===null){/* أول فتحة — سيبه يدوس احسب */}
@@ -61675,6 +61761,93 @@ async function npInit(){
     if(tg) tg.innerHTML = (_npMeta.tags || []).slice(0, 12).map(t =>
       `<span onclick="pnpAddTag('${escapeHtml(t).replace(/'/g,'&#39;')}')" style="cursor:pointer;font-size:10px;padding:2px 7px;border:1px solid var(--border);border-radius:10px;background:var(--card)">${escapeHtml(t)}</span>`).join('');
   }catch(e){ console.warn('[v620] meta:', e.message); }
+}
+
+// ╔════════════════════════════════════════════════════════════════════╗
+// ║ 🏷️ v744: إدارة أقسام الخزنة — المدير بس                          ║
+// ╚════════════════════════════════════════════════════════════════════╝
+let _TC = [];
+
+function tcOpen(){
+  const box = document.getElementById('tc-settings');
+  if(!box) return;
+  if(currentUser?.username !== 'admin' && currentUser?.role !== 'admin'){ box.style.display = 'none'; return; }
+  box.style.display = '';
+  tcLoad();
+}
+
+async function tcLoad(){
+  const box = document.getElementById('tc-list');
+  box.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12.5px">⏳ ...</div>';
+  try{
+    const d = await apiFetch('/api/treasury/category-list');
+    if(d?.error) throw new Error(d.error);
+    _TC = d.categories || [];
+    _TXCATS = _TC;                       // القايمة في المودال تتحدّث هي كمان
+    tcRender();
+  }catch(e){
+    box.innerHTML = '<div style="padding:12px;color:#dc2626;font-size:12.5px">❌ ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function tcRender(){
+  const box = document.getElementById('tc-list');
+  if(!_TC.length){ box.innerHTML = '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12.5px">مفيش أقسام</div>'; return; }
+  const grp = k => _TC.filter(c => c.kind === k);
+  const chip = c => `
+    <div style="display:flex;gap:8px;align-items:center;padding:7px 10px;border:1px solid var(--border);
+                border-radius:9px;background:${c.active===false?'rgba(127,127,127,.07)':'transparent'};
+                opacity:${c.active===false?.55:1}">
+      <span style="font-size:12.5px;font-weight:600">${escapeHtml(c.name)}</span>
+      ${c.created_by==='system' ? '<span style="font-size:10px;color:var(--muted)">أساسي</span>' : ''}
+      <span style="margin-inline-start:auto;display:flex;gap:4px">
+        <button class="btn btn-sm btn-ghost" style="padding:2px 7px;font-size:11px"
+                onclick="tcToggle(${c.id},${c.active===false})">${c.active===false?'✅':'⛔'}</button>
+        <button class="btn btn-sm btn-ghost" style="padding:2px 7px;font-size:11px;color:#dc2626"
+                onclick="tcDel(${c.id})">🗑️</button>
+      </span>
+    </div>`;
+  box.innerHTML = ['out','in'].map(k => `
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;font-weight:800;margin-bottom:7px">${k==='out'?'📤 منصرف':'📥 وارد'}
+        <span style="color:var(--muted);font-weight:500">· ${grp(k).length}</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px">
+        ${grp(k).map(chip).join('')}
+      </div>
+    </div>`).join('');
+}
+
+async function tcAdd(){
+  const el = document.getElementById('tc-name');
+  const name = el.value.trim();
+  if(!name) return toast('⚠️ اكتب اسم القسم');
+  try{
+    const d = await apiFetch('/api/treasury/category-list', 'POST',
+      { name, kind: document.getElementById('tc-kind').value });
+    if(d?.error) throw new Error(d.error);
+    el.value = '';
+    toast('✅ اتضاف');
+    tcLoad();
+  }catch(e){ toast('❌ ' + escapeHtml(e.message)); }
+}
+
+async function tcToggle(id, active){
+  try{
+    const d = await apiFetch('/api/treasury/category-list/' + id, 'PATCH', { active });
+    if(d?.error) throw new Error(d.error);
+    tcLoad();
+  }catch(e){ toast('❌ ' + escapeHtml(e.message)); }
+}
+
+async function tcDel(id){
+  const c = _TC.find(x => x.id === id);
+  if(!confirm('تمسح «' + (c?.name || '') + '»؟')) return;
+  try{
+    const d = await apiFetch('/api/treasury/category-list/' + id, 'DELETE');
+    if(d?.error) throw new Error(d.error);   // القسم اللي عليه حركات مابيتمسحش
+    toast('🗑️ اتمسح');
+    tcLoad();
+  }catch(e){ toast('❌ ' + escapeHtml(e.message)); }
 }
 
 // ╔════════════════════════════════════════════════════════════════════╗
