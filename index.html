@@ -4891,6 +4891,27 @@ tr:hover td{background:#fafbff}
       </div>
     </div>
 
+    <!-- 🖥️ v734: شاشات فحص السعر في المحلات -->
+    <div class="card" id="pc-settings" style="margin-bottom:16px;display:none">
+      <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-weight:900">🖥️ شاشات فحص السعر</span>
+        <span style="font-size:11.5px;color:var(--muted)">العميل يمسح الباركود ويشوف السعر بنفسه</span>
+        <button class="btn btn-sm btn-ghost" style="margin-inline-start:auto" onclick="pcLoad()">🔄</button>
+      </div>
+      <div style="padding:14px 16px">
+        <div style="font-size:12px;color:var(--muted);line-height:1.9;margin-bottom:12px">
+          كل شاشة ليها <b>توكن خاص</b> صلاحيته <b>قراءة السعر بالباركود بس</b> — مابيفتحش أي حاجة تانية في السيستم.
+          لو الجهاز ضاع أو اتسرق، <b>أوقفه من هنا</b> والشاشة تبطل تشتغل فوراً.
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          <input id="pc-name" class="form-input" placeholder="اسم الشاشة (مثلاً: شاشة الزمالك)" style="flex:1;min-width:200px">
+          <select id="pc-store" class="form-input" style="width:180px"><option value="">— من غير محل —</option></select>
+          <button class="btn btn-primary btn-sm" onclick="pcAdd()" style="font-weight:800">➕ شاشة جديدة</button>
+        </div>
+        <div id="pc-list"></div>
+      </div>
+    </div>
+
     <!-- 🚚 v659: إعداد بوسطة — كان في صفحة بوسطة، مكانه هنا -->
     <!-- إعداد بوسطة -->
     <div id="bosta-setup-banner2" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -6400,7 +6421,7 @@ tr:hover td{background:#fafbff}
         <div>
           <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">المورد *</label>
           <input id="pr-sup-search" class="form-input" placeholder="🔎 ابحث..." oninput="prFillSuppliers(this.value)" autocomplete="off" style="width:100%;margin-bottom:6px">
-          <select id="pr-supplier" class="form-input" style="width:100%"></select>
+          <select id="pr-supplier" class="form-input" style="width:100%" onchange="prSupplierChanged()"></select>
         </div>
         <div>
           <label style="display:block;font-size:12px;font-weight:700;margin-bottom:4px">المخزن اللي هيتخصم منه *</label>
@@ -38334,12 +38355,60 @@ function prPick(key){
   const si = document.getElementById('pr-prod-search'); if(si) si.value = '';
   const rs = document.getElementById('pr-prod-results'); if(rs) rs.style.display = 'none';
   prRenderItems();
+  prLastCost([vid]);                     // 💰 v686
   setTimeout(() => si?.focus(), 60);
+}
+
+// ╔════════════════════════════════════════════════════════════════════╗
+// ║ 💰 v686: السعر بيتملّى بآخر سعر شراء من نفس المورد                ║
+// ╚════════════════════════════════════════════════════════════════════╝
+// مابنكتبش فوق سعر المستخدم غيّره بإيده — بنملّي الفاضي بس.
+async function prLastCost(vids){
+  const sid = document.getElementById('pr-supplier')?.value;
+  if(!sid || !vids?.length) return;
+  // الأصناف اللي لسه بصفر بس — اللي المستخدم كتبه مايتلمسش
+  const need = vids.filter(v => {
+    const it = _prItems.find(x => String(x.variantId) === String(v));
+    return it && !(parseFloat(it.unitCost) > 0);
+  });
+  if(!need.length) return;
+  try{
+    const r = await apiFetch('/api/purchase-returns/last-cost?supplierId=' + encodeURIComponent(sid)
+                             + '&variantIds=' + encodeURIComponent(need.join(',')));
+    const costs = r?.costs || {};
+    let hit = 0;
+    for(const it of _prItems){
+      const c = costs[String(it.variantId)];
+      if(!c || parseFloat(it.unitCost) > 0) continue;
+      it.unitCost  = c.cost;
+      it.costFrom  = c.po_number;
+      it.costDate  = c.po_date;
+      hit++;
+    }
+    if(hit){ prRenderItems(); toast('💰 ' + hit + ' صنف اتسعّر بآخر سعر شراء من المورد'); }
+    const miss = need.length - hit;
+    if(miss && need.length === 1) toast('ℹ️ الصنف ده مااتشترش من المورد ده قبل كده');
+  }catch(e){}
+}
+
+// غيّرت المورد؟ كل الأسعار اللي السيستم حطها تتعاد — واللي إنت كتبته يفضل
+function prSupplierChanged(){
+  const again = [];
+  for(const it of _prItems){
+    if(it.costFrom){ it.unitCost = 0; it.costFrom = null; it.costDate = null; again.push(it.variantId); }
+    else if(!(parseFloat(it.unitCost) > 0)) again.push(it.variantId);
+  }
+  if(again.length){ prRenderItems(); prLastCost(again); }
 }
 
 function prSetField(i, field, val){
   if(!_prItems[i]) return;
   _prItems[i][field] = field === 'qty' ? (parseInt(val) || 0) : (parseFloat(val) || 0);
+  // عدّل السعر بإيده؟ الباچ بتختفي — بقى سعره هو مش سعر الأمر
+  if(field === 'unitCost' && _prItems[i].costFrom){
+    _prItems[i].costFrom = null; _prItems[i].costDate = null;
+    document.getElementById('pr-src-' + i)?.remove();
+  }
   prTotals();
 }
 
@@ -38367,7 +38436,7 @@ function prRenderItems(){
         <div style="display:grid;grid-template-columns:1fr 78px 104px 96px 30px;gap:8px;align-items:center;padding:9px 11px;border-bottom:1px solid var(--border);font-size:12px">
           <div style="min-width:0">
             <div style="font-weight:700">${escapeHtml(it.productTitle)}${it.variantTitle ? ' · ' + escapeHtml(it.variantTitle) : ''}</div>
-            <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(it.sku || '')}</div>
+            <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(it.sku || '')}${it.costFrom ? ` · <span id="pr-src-${i}" style="color:#166534;font-weight:700">💰 ${escapeHtml(it.costFrom)}${it.costDate ? ' · ' + escapeHtml(it.costDate) : ''}</span>` : ''}</div>
           </div>
           <input type="number" min="1" value="${it.qty}" oninput="prSetField(${i},'qty',this.value)" class="form-input" style="padding:5px;text-align:center;font-family:Roboto,sans-serif" title="الكمية">
           <input type="number" min="0" step="0.01" value="${it.unitCost}" oninput="prSetField(${i},'unitCost',this.value)" class="form-input" style="padding:5px;text-align:center;font-family:Roboto,sans-serif" title="سعر الشراء للقطعة">
@@ -55107,6 +55176,7 @@ function goPage(el,page){
   // 🆕 v202: اقفل الـ sidebar على الموبايل لما تختار صفحة
   if(window.innerWidth <= 1024) toggleSidebar(false);
   if(page==='settings')lkSetOpen();            // 🔒 v731
+  if(page==='settings')pcOpen();               // 🖥️ v734
   if(page==='sku-audit')skuAuditLoad(true);
   if(page==='zoho-sync'){zhLoadSettings();cnStatus();drStatus();apiFetch('/api/zoho/delete-items-status','GET').then(st=>{if(st&&st.job&&st.job.running)zhDelWatch();}).catch(()=>{});}
   if(page==='profit'&&_gp===null){/* أول فتحة — سيبه يدوس احسب */}
@@ -61486,6 +61556,140 @@ async function npInit(){
     if(tg) tg.innerHTML = (_npMeta.tags || []).slice(0, 12).map(t =>
       `<span onclick="pnpAddTag('${escapeHtml(t).replace(/'/g,'&#39;')}')" style="cursor:pointer;font-size:10px;padding:2px 7px;border:1px solid var(--border);border-radius:10px;background:var(--card)">${escapeHtml(t)}</span>`).join('');
   }catch(e){ console.warn('[v620] meta:', e.message); }
+}
+
+// ╔════════════════════════════════════════════════════════════════════╗
+// ║ 🖥️ v734: شاشات فحص السعر — إدارة أجهزة الـ Price Checker          ║
+// ╚════════════════════════════════════════════════════════════════════╝
+// رابط الشاشة: <صفحة الـ kiosk>?api=<السيرفر>&t=<التوكن>
+// بيتفتح مرة واحدة على جهاز الشاشة، والصفحة بتخزّن التوكن وبتنضّف الرابط
+// عشان التوكن ما يفضلش باين في شريط العنوان قدام الزباين.
+const PC_PAGE = 'https://anasalaa866-arch.github.io/price-checker/';
+let _PC = [], _pcStores = null;
+
+async function pcOpen(){
+  const box = document.getElementById('pc-settings');
+  if(!box) return;
+  // زي قفل الصفحات — الإدارة دي للمدير بس
+  if(currentUser?.username !== 'admin' && currentUser?.role !== 'admin'){ box.style.display = 'none'; return; }
+  box.style.display = '';
+  if(_pcStores === null){
+    _pcStores = [];
+    try{
+      const r = await apiFetch('/api/pos/stores');
+      _pcStores = r?.stores || [];
+      const sel = document.getElementById('pc-store');
+      if(sel) for(const st of _pcStores){
+        const o = document.createElement('option');
+        o.value = st.id; o.textContent = st.name;
+        sel.appendChild(o);
+      }
+    }catch(e){}
+  }
+  pcLoad();
+}
+
+async function pcLoad(){
+  const box = document.getElementById('pc-list');
+  if(!box) return;
+  box.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:12.5px">⏳ بيحمّل...</div>';
+  try{
+    const d = await apiFetch('/api/price-check/devices');
+    if(d?.error) throw new Error(d.error);
+    _PC = d?.devices || [];
+    pcRender();
+  }catch(e){
+    box.innerHTML = '<div style="padding:14px;color:#dc2626;font-size:12.5px">❌ ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function pcRender(){
+  const box = document.getElementById('pc-list');
+  if(!box) return;
+  if(!_PC.length){
+    box.innerHTML = '<div style="padding:18px;text-align:center;color:var(--muted);font-size:12.5px">مفيش شاشات لسه — اعمل واحدة من فوق</div>';
+    return;
+  }
+  box.innerHTML = _PC.map(d => {
+    const on   = d.active === true;
+    const seen = d.last_seen
+      ? new Date(d.last_seen).toLocaleString('ar-EG', { timeZone:'Africa/Cairo', dateStyle:'short', timeStyle:'short' })
+      : 'لسه مافتحتش';
+    return `
+      <div style="border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:8px;
+                  background:${on ? 'transparent' : 'rgba(127,127,127,.06)'};opacity:${on ? 1 : .62}">
+        <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:7px">
+          <span style="font-weight:800;font-size:13.5px">${escapeHtml(d.name)}</span>
+          ${d.store_name ? `<span style="font-size:11px;color:var(--muted)">🏬 ${escapeHtml(d.store_name)}</span>` : ''}
+          <span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:999px;
+                       background:${on ? '#dcfce7' : '#fee2e2'};color:${on ? '#166534' : '#991b1b'}">
+            ${on ? '🟢 شغّالة' : '⛔ موقوفة'}
+          </span>
+          <span style="margin-inline-start:auto;display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-sm btn-ghost" onclick="pcCopy(${d.id})">📋 انسخ الرابط</button>
+            <button class="btn btn-sm btn-ghost" onclick="pcToggle(${d.id},${!on})">${on ? '⛔ أوقف' : '✅ شغّل'}</button>
+            <button class="btn btn-sm btn-ghost" onclick="pcDel(${d.id})" style="color:#dc2626">🗑️</button>
+          </span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap">
+          <span>📊 ${Number(d.scans||0).toLocaleString('ar-EG')} مسحة</span>
+          <span>🕐 آخر ظهور: ${seen}</span>
+          <span style="font-family:monospace;direction:ltr">${escapeHtml(String(d.token||'').slice(0,14))}…</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function pcUrl(d){
+  const base = (API_URL || BACKEND_URL || '').replace(/\/$/, '');
+  return PC_PAGE + '?api=' + encodeURIComponent(base) + '&t=' + encodeURIComponent(d.token);
+}
+
+async function pcAdd(){
+  const el = document.getElementById('pc-name');
+  const name = el.value.trim();
+  if(!name) return toast('⚠️ اكتب اسم للشاشة');
+  const storeId = document.getElementById('pc-store').value;
+  try{
+    const d = await apiFetch('/api/price-check/devices', 'POST',
+      { name, storeId: storeId ? parseInt(storeId, 10) : null });
+    if(d?.error) throw new Error(d.error);
+    el.value = '';
+    await pcLoad();
+    pcCopyText(pcUrl(d.device), '📋 الرابط اتنسخ — افتحه مرة واحدة على جهاز الشاشة');
+  }catch(e){ toast('❌ ' + escapeHtml(e.message)); }
+}
+
+function pcCopy(id){
+  const d = _PC.find(x => x.id === id);
+  if(d) pcCopyText(pcUrl(d));
+}
+
+function pcCopyText(t, msg){
+  const done = () => toast(msg || '📋 الرابط اتنسخ');
+  if(navigator.clipboard?.writeText){
+    navigator.clipboard.writeText(t).then(done, () => prompt('انسخ الرابط:', t));
+  }else prompt('انسخ الرابط:', t);
+}
+
+async function pcToggle(id, active){
+  try{
+    const r = await apiFetch('/api/price-check/devices/' + id, 'PATCH', { active });
+    if(r?.error) throw new Error(r.error);
+    toast(active ? '✅ اتشغّلت' : '⛔ اتوقفت');
+    pcLoad();
+  }catch(e){ toast('❌ ' + escapeHtml(e.message)); }
+}
+
+async function pcDel(id){
+  const d = _PC.find(x => x.id === id);
+  if(!confirm('تمسح "' + (d?.name || '') + '"؟ الشاشة هتبطل تشتغل فوراً.')) return;
+  try{
+    const r = await apiFetch('/api/price-check/devices/' + id, 'DELETE');
+    if(r?.error) throw new Error(r.error);
+    toast('🗑️ اتمسحت');
+    pcLoad();
+  }catch(e){ toast('❌ ' + escapeHtml(e.message)); }
 }
 
 // ╔══════════════════════════════════════════════════════════════════╗
