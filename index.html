@@ -4891,24 +4891,26 @@ tr:hover td{background:#fafbff}
       </div>
     </div>
 
-    <!-- 🖥️ v734: شاشات فحص السعر في المحلات -->
+    <!-- 🖥️ v735: شاشة فحص السعر — مفيش إدارة، الشاشة بتظبّط نفسها -->
     <div class="card" id="pc-settings" style="margin-bottom:16px;display:none">
       <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <span style="font-weight:900">🖥️ شاشات فحص السعر</span>
+        <span style="font-weight:900">🖥️ شاشة فحص السعر</span>
         <span style="font-size:11.5px;color:var(--muted)">العميل يمسح الباركود ويشوف السعر بنفسه</span>
-        <button class="btn btn-sm btn-ghost" style="margin-inline-start:auto" onclick="pcLoad()">🔄</button>
       </div>
-      <div style="padding:14px 16px">
-        <div style="font-size:12px;color:var(--muted);line-height:1.9;margin-bottom:12px">
-          كل شاشة ليها <b>توكن خاص</b> صلاحيته <b>قراءة السعر بالباركود بس</b> — مابيفتحش أي حاجة تانية في السيستم.
-          لو الجهاز ضاع أو اتسرق، <b>أوقفه من هنا</b> والشاشة تبطل تشتغل فوراً.
+      <div style="padding:14px 16px;font-size:12px;color:var(--muted);line-height:1.95">
+        افتح الرابط ده على جهاز الشاشة، اختار المحل، وحدد كود خروج من ٤ أرقام — وخلاص.<br>
+        الشاشة بتنزّل الأسعار مرة وتشتغل منها، وبتحدّثها في الخلفية كل ٥ دقايق.
+        <b>لو النت قطع بتفضل شغّالة بآخر أسعار وصلتها.</b>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="pc-url" readonly onclick="this.select()"
+                 style="flex:1;min-width:240px;direction:ltr;font-family:monospace;font-size:11px;
+                        padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
+          <button class="btn btn-sm btn-ghost" onclick="pcCopyUrl()">📋 انسخ</button>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
-          <input id="pc-name" class="form-input" placeholder="اسم الشاشة (مثلاً: شاشة الزمالك)" style="flex:1;min-width:200px">
-          <select id="pc-store" class="form-input" style="width:180px"><option value="">— من غير محل —</option></select>
-          <button class="btn btn-primary btn-sm" onclick="pcAdd()" style="font-weight:800">➕ شاشة جديدة</button>
+        <div style="margin-top:9px;font-size:11px">
+          🔒 للقفل الكامل شغّل كروم كده:
+          <code style="direction:ltr;display:inline-block;background:var(--bg);padding:2px 6px;border-radius:5px">chrome.exe --kiosk --app=الرابط</code>
         </div>
-        <div id="pc-list"></div>
       </div>
     </div>
 
@@ -55176,7 +55178,7 @@ function goPage(el,page){
   // 🆕 v202: اقفل الـ sidebar على الموبايل لما تختار صفحة
   if(window.innerWidth <= 1024) toggleSidebar(false);
   if(page==='settings')lkSetOpen();            // 🔒 v731
-  if(page==='settings')pcOpen();               // 🖥️ v734
+  if(page==='settings')pcOpen();               // 🖥️ v735
   if(page==='sku-audit')skuAuditLoad(true);
   if(page==='zoho-sync'){zhLoadSettings();cnStatus();drStatus();apiFetch('/api/zoho/delete-items-status','GET').then(st=>{if(st&&st.job&&st.job.running)zhDelWatch();}).catch(()=>{});}
   if(page==='profit'&&_gp===null){/* أول فتحة — سيبه يدوس احسب */}
@@ -61559,156 +61561,30 @@ async function npInit(){
 }
 
 // ╔════════════════════════════════════════════════════════════════════╗
-// ║ 🖥️ v734: شاشات فحص السعر — إدارة أجهزة الـ Price Checker          ║
+// ║ 🖥️ v735: شاشة فحص السعر                                          ║
 // ╚════════════════════════════════════════════════════════════════════╝
-// رابط الشاشة: <صفحة الـ kiosk>?api=<السيرفر>&t=<التوكن>
-// بيتفتح مرة واحدة على جهاز الشاشة، والصفحة بتخزّن التوكن وبتنضّف الرابط
-// عشان التوكن ما يفضلش باين في شريط العنوان قدام الزباين.
-const PC_PAGE = 'https://anasalaa866-arch.github.io/orderpro/price-checker/';
-let _PC = [], _pcStores = null;
+// مفيش توكنات ولا أجهزة تتسجّل — اللي بيتعرض هو نفس الأسعار اللي على
+// الرف، فالشاشة لو ضاعت مابتكشفش حاجة. بتظبّط نفسها من أول تشغيل.
+const PC_PAGE = 'https://anasalaa866-arch.github.io/price-checker/';
 
-async function pcOpen(){
+function pcOpen(){
   const box = document.getElementById('pc-settings');
   if(!box) return;
-  // زي قفل الصفحات — الإدارة دي للمدير بس
   if(currentUser?.username !== 'admin' && currentUser?.role !== 'admin'){ box.style.display = 'none'; return; }
   box.style.display = '';
-  if(_pcStores === null){
-    _pcStores = [];
-    try{
-      const r = await apiFetch('/api/pos/stores');
-      _pcStores = r?.stores || [];
-      const sel = document.getElementById('pc-store');
-      if(sel) for(const st of _pcStores){
-        const o = document.createElement('option');
-        o.value = st.id; o.textContent = st.name;
-        sel.appendChild(o);
-      }
-    }catch(e){}
-  }
-  pcLoad();
+  const el = document.getElementById('pc-url');
+  if(el) el.value = PC_PAGE + '?api=' +
+    encodeURIComponent((API_URL || BACKEND_URL || '').replace(/\/$/, ''));
 }
 
-async function pcLoad(){
-  const box = document.getElementById('pc-list');
-  if(!box) return;
-  box.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:12.5px">⏳ بيحمّل...</div>';
-  try{
-    const d = await apiFetch('/api/price-check/devices');
-    if(d?.error) throw new Error(d.error);
-    _PC = d?.devices || [];
-    pcRender();
-  }catch(e){
-    box.innerHTML = '<div style="padding:14px;color:#dc2626;font-size:12.5px">❌ ' + escapeHtml(e.message) + '</div>';
-  }
-}
-
-function pcRender(){
-  const box = document.getElementById('pc-list');
-  if(!box) return;
-  if(!_PC.length){
-    box.innerHTML = '<div style="padding:18px;text-align:center;color:var(--muted);font-size:12.5px">مفيش شاشات لسه — اعمل واحدة من فوق</div>';
-    return;
-  }
-  box.innerHTML = _PC.map(d => {
-    const on   = d.active === true;
-    const seen = d.last_seen
-      ? new Date(d.last_seen).toLocaleString('ar-EG', { timeZone:'Africa/Cairo', dateStyle:'short', timeStyle:'short' })
-      : 'لسه مافتحتش';
-    return `
-      <div style="border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:8px;
-                  background:${on ? 'transparent' : 'rgba(127,127,127,.06)'};opacity:${on ? 1 : .62}">
-        <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:7px">
-          <span style="font-weight:800;font-size:13.5px">${escapeHtml(d.name)}</span>
-          ${d.store_name ? `<span style="font-size:11px;color:var(--muted)">🏬 ${escapeHtml(d.store_name)}</span>` : ''}
-          <span style="font-size:11px;font-weight:800;padding:2px 9px;border-radius:999px;
-                       background:${on ? '#dcfce7' : '#fee2e2'};color:${on ? '#166534' : '#991b1b'}">
-            ${on ? '🟢 شغّالة' : '⛔ موقوفة'}
-          </span>
-          <span style="margin-inline-start:auto;display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn btn-sm btn-ghost" onclick="pcCopy(${d.id})">📋 انسخ الرابط</button>
-            <button class="btn btn-sm btn-ghost" onclick="pcToggle(${d.id},${!on})">${on ? '⛔ أوقف' : '✅ شغّل'}</button>
-            <button class="btn btn-sm btn-ghost" onclick="pcDel(${d.id})" style="color:#dc2626">🗑️</button>
-          </span>
-        </div>
-        <div style="font-size:11px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap;margin-bottom:7px">
-          <span>📊 ${Number(d.scans||0).toLocaleString('ar-EG')} مسحة</span>
-          <span>🕐 آخر ظهور: ${seen}</span>
-        </div>
-        <input readonly onclick="this.select()" value="${escapeAttr(pcUrl(d))}"
-               title="افتح الرابط ده مرة واحدة على جهاز الشاشة"
-               style="width:100%;direction:ltr;font-family:monospace;font-size:10.5px;padding:6px 8px;
-                      border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--muted)">
-      </div>`;
-  }).join('');
-}
-
-function pcUrl(d){
-  const base = (API_URL || BACKEND_URL || '').replace(/\/$/, '');
-  return PC_PAGE + '?api=' + encodeURIComponent(base) + '&t=' + encodeURIComponent(d.token);
-}
-
-async function pcAdd(){
-  const el = document.getElementById('pc-name');
-  const name = el.value.trim();
-  if(!name) return toast('⚠️ اكتب اسم للشاشة');
-  const storeId = document.getElementById('pc-store').value;
-  try{
-    const d = await apiFetch('/api/price-check/devices', 'POST',
-      { name, storeId: storeId ? parseInt(storeId, 10) : null });
-    if(d?.error) throw new Error(d.error);
-    el.value = '';
-    await pcLoad();
-    pcCopyText(pcUrl(d.device), '📋 الرابط اتنسخ — افتحه مرة واحدة على جهاز الشاشة');
-    // ولو النسخ اتبلوك، الرابط موجود في الكارت تحت وممكن يتحدّد بكليك
-  }catch(e){ toast('❌ ' + escapeHtml(e.message)); }
-}
-
-function pcCopy(id){
-  const d = _PC.find(x => x.id === id);
-  if(d) pcCopyText(pcUrl(d));
-}
-
-// الكليب بورد الحديث بيطلب إذن من المتصفح، ولو المستخدم ساب الطلب
-// مفتوح الوعد مابيرجعش خالص والرابط بيضيع. فبنبدأ بالطريقة القديمة
-// اللي بتشتغل فوراً من غير إذن، والحديثة بس كمحاولة إضافية.
-function pcCopyText(t, msg){
+function pcCopyUrl(){
+  const el = document.getElementById('pc-url');
+  if(!el) return;
+  // execCommand بيشتغل فوراً من غير ما يطلب إذن من المتصفح
   let done = false;
-  try{
-    const ta = document.createElement('textarea');
-    ta.value = t;
-    ta.setAttribute('readonly','');
-    ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
-    document.body.appendChild(ta);
-    ta.select(); ta.setSelectionRange(0, t.length);
-    done = document.execCommand('copy');
-    ta.remove();
-  }catch(e){}
-  if(!done && navigator.clipboard?.writeText){
-    navigator.clipboard.writeText(t).catch(()=>{});
-    done = true;   // الرابط باين في الكارت على أي حال
-  }
-  toast(done ? (msg || '📋 الرابط اتنسخ') : '⚠️ انسخ الرابط من الخانة اللي تحت');
-}
-
-async function pcToggle(id, active){
-  try{
-    const r = await apiFetch('/api/price-check/devices/' + id, 'PATCH', { active });
-    if(r?.error) throw new Error(r.error);
-    toast(active ? '✅ اتشغّلت' : '⛔ اتوقفت');
-    pcLoad();
-  }catch(e){ toast('❌ ' + escapeHtml(e.message)); }
-}
-
-async function pcDel(id){
-  const d = _PC.find(x => x.id === id);
-  if(!confirm('تمسح "' + (d?.name || '') + '"؟ الشاشة هتبطل تشتغل فوراً.')) return;
-  try{
-    const r = await apiFetch('/api/price-check/devices/' + id, 'DELETE');
-    if(r?.error) throw new Error(r.error);
-    toast('🗑️ اتمسحت');
-    pcLoad();
-  }catch(e){ toast('❌ ' + escapeHtml(e.message)); }
+  try{ el.select(); el.setSelectionRange(0, el.value.length); done = document.execCommand('copy'); }catch(e){}
+  if(!done && navigator.clipboard?.writeText){ navigator.clipboard.writeText(el.value).catch(()=>{}); done = true; }
+  toast(done ? '📋 الرابط اتنسخ' : '⚠️ حدّد الرابط وانسخه بإيدك');
 }
 
 // ╔══════════════════════════════════════════════════════════════════╗
