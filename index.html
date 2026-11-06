@@ -4919,10 +4919,11 @@ tr:hover td{background:#fafbff}
 
         <div style="border-top:1px solid var(--border);padding-top:12px">
           <div style="font-size:12.5px;font-weight:800;margin-bottom:9px">أبعتلي إمتى</div>
-          <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:9px;cursor:pointer">
+          <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:5px;cursor:pointer">
             <input type="checkbox" id="tg-oos" onchange="tgSave()">
-            <span>📉 منتج خلص من كل المخازن</span>
+            <span>📉 منتج خلص — تنبيه منفصل لكل مخزن</span>
           </label>
+          <div id="tg-wh" style="margin:0 0 11px 26px;display:flex;gap:12px;flex-wrap:wrap"></div>
           <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:9px;flex-wrap:wrap;cursor:pointer">
             <input type="checkbox" id="tg-big" onchange="tgSave()">
             <span>💰 أوردر أكبر من</span>
@@ -61726,8 +61727,31 @@ function tgPaint(){
     sel.innerHTML = `<option value="${escapeAttr(c.chat_id)}">${escapeHtml(c.chat_id)}</option>`;
   }
   sel.value = c.chat_id || '';
+  tgWh();
   document.getElementById('tg-state').textContent =
     c.enabled ? (c.has_token && c.chat_id ? '🟢 شغّالة' : '⚠️ ناقص التوكن أو المحادثة') : '⛔ مقفولة';
+}
+
+// المخازن اللي بنراقبها — مفيش مختار يعني الكل
+let _tgWh = null;
+async function tgWh(){
+  const box = document.getElementById('tg-wh');
+  if(!box) return;
+  if(!_tgWh){
+    try{
+      const d = await apiFetch('/api/telegram/warehouses');
+      _tgWh = d?.warehouses || [];
+    }catch(e){ _tgWh = []; }
+  }
+  const on = (_TG?.oos_warehouses || []).map(String);
+  box.innerHTML = _tgWh.length
+    ? _tgWh.map(w => `
+        <label style="display:flex;gap:5px;align-items:center;font-size:12px;cursor:pointer;color:var(--muted)">
+          <input type="checkbox" class="tg-wh-c" value="${escapeAttr(String(w.id))}"
+                 ${!on.length || on.includes(String(w.id)) ? 'checked' : ''} onchange="tgSave()">
+          <span>${escapeHtml(w.name)}</span>
+        </label>`).join('')
+    : '';
 }
 
 async function tgSave(){
@@ -61741,7 +61765,11 @@ async function tgSave(){
     big_order_min: parseFloat(document.getElementById('tg-big-min').value) || 0,
     hour:     parseInt(document.getElementById('tg-hour').value, 10),
     chat_id:  document.getElementById('tg-chat').value || '',
+    oos_warehouses: [...document.querySelectorAll('.tg-wh-c')]
+      .filter(x => x.checked).map(x => x.value),
   };
+  // كلهم متعلّمين = مفيش فلتر، أنضف من إننا نخزّن القايمة كلها
+  if(_tgWh && body.oos_warehouses.length === _tgWh.length) body.oos_warehouses = [];
   if(tok && !/^[•*]/.test(tok)) body.token = tok;
   try{
     const d = await apiFetch('/api/telegram/settings', 'PUT', body);
