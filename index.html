@@ -61631,11 +61631,14 @@ function pcRender(){
             <button class="btn btn-sm btn-ghost" onclick="pcDel(${d.id})" style="color:#dc2626">🗑️</button>
           </span>
         </div>
-        <div style="font-size:11px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap">
+        <div style="font-size:11px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap;margin-bottom:7px">
           <span>📊 ${Number(d.scans||0).toLocaleString('ar-EG')} مسحة</span>
           <span>🕐 آخر ظهور: ${seen}</span>
-          <span style="font-family:monospace;direction:ltr">${escapeHtml(String(d.token||'').slice(0,14))}…</span>
         </div>
+        <input readonly onclick="this.select()" value="${escapeAttr(pcUrl(d))}"
+               title="افتح الرابط ده مرة واحدة على جهاز الشاشة"
+               style="width:100%;direction:ltr;font-family:monospace;font-size:10.5px;padding:6px 8px;
+                      border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--muted)">
       </div>`;
   }).join('');
 }
@@ -61657,6 +61660,7 @@ async function pcAdd(){
     el.value = '';
     await pcLoad();
     pcCopyText(pcUrl(d.device), '📋 الرابط اتنسخ — افتحه مرة واحدة على جهاز الشاشة');
+    // ولو النسخ اتبلوك، الرابط موجود في الكارت تحت وممكن يتحدّد بكليك
   }catch(e){ toast('❌ ' + escapeHtml(e.message)); }
 }
 
@@ -61665,11 +61669,26 @@ function pcCopy(id){
   if(d) pcCopyText(pcUrl(d));
 }
 
+// الكليب بورد الحديث بيطلب إذن من المتصفح، ولو المستخدم ساب الطلب
+// مفتوح الوعد مابيرجعش خالص والرابط بيضيع. فبنبدأ بالطريقة القديمة
+// اللي بتشتغل فوراً من غير إذن، والحديثة بس كمحاولة إضافية.
 function pcCopyText(t, msg){
-  const done = () => toast(msg || '📋 الرابط اتنسخ');
-  if(navigator.clipboard?.writeText){
-    navigator.clipboard.writeText(t).then(done, () => prompt('انسخ الرابط:', t));
-  }else prompt('انسخ الرابط:', t);
+  let done = false;
+  try{
+    const ta = document.createElement('textarea');
+    ta.value = t;
+    ta.setAttribute('readonly','');
+    ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0, t.length);
+    done = document.execCommand('copy');
+    ta.remove();
+  }catch(e){}
+  if(!done && navigator.clipboard?.writeText){
+    navigator.clipboard.writeText(t).catch(()=>{});
+    done = true;   // الرابط باين في الكارت على أي حال
+  }
+  toast(done ? (msg || '📋 الرابط اتنسخ') : '⚠️ انسخ الرابط من الخانة اللي تحت');
 }
 
 async function pcToggle(id, active){

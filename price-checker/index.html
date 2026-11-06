@@ -154,8 +154,10 @@ input:focus{border-color:#cfcfd6; box-shadow:0 0 0 4px rgba(37,99,235,.08)}
     <img class="logo" id="lg3" alt="CAFELAX" style="width:150px">
     <h1>Setup</h1>
     <p>الشاشة دي محتاجة توكن الجهاز.<br>اعمله من أوردر برو &rarr; الإعدادات &rarr; شاشات الأسعار.</p>
-    <input id="s-api" placeholder="https://…railway.app">
-    <input id="s-tok" placeholder="pcd_…">
+    <input id="s-api" placeholder="https://…railway.app" autocomplete="off"
+           autocorrect="off" autocapitalize="off" spellcheck="false" name="pc-server-url">
+    <input id="s-tok" placeholder="الصق رابط الشاشة أو التوكن" autocomplete="off"
+           autocorrect="off" autocapitalize="off" spellcheck="false" name="pc-device-token">
     <button class="btn" id="s-go">Save</button>
     <div class="err" id="s-err"></div>
   </div>
@@ -189,7 +191,7 @@ var API = '', TOK = '';
 (function boot(){
   var qa = qs('api'), qt = qs('t');
   if(qt){ try{ localStorage.setItem('pc_token', qt); }catch(e){} }
-  if(qa){ try{ localStorage.setItem('pc_api', qa); }catch(e){} }
+  if(qa && !/github\.io|price-checker/i.test(qa)){ try{ localStorage.setItem('pc_api', qa); }catch(e){} }
   if(qt || qa){ try{ history.replaceState(null, '', location.pathname); }catch(e){} }
   try{
     TOK = localStorage.getItem('pc_token') || '';
@@ -207,15 +209,30 @@ function show(id){
 
 // ── الإعداد اليدوي ──
 $('s-api').value = API;
+// لو لصق الرابط كله بدل التوكن، نطلّع منه التوكن والسيرفر
+function pcParse(v){
+  v = String(v || '').trim();
+  var m = /[?&]t=(pcd_[A-Za-z0-9]+)/.exec(v) || /\b(pcd_[A-Za-z0-9]+)\b/.exec(v);
+  var out = { tok: m ? m[1] : '' };
+  var a = /[?&]api=([^&\s]+)/.exec(v);
+  if(a){ try{ out.api = decodeURIComponent(a[1]); }catch(e){ out.api = a[1]; } }
+  return out;
+}
+
 $('s-go').onclick = function(){
-  var a = $('s-api').value.trim().replace(/\/+$/, '');
-  var t = $('s-tok').value.trim();
-  if(!/^pcd_/.test(t)){ $('s-err').textContent = 'التوكن لازم يبدأ بـ pcd_'; return; }
+  var raw = $('s-tok').value;
+  var p   = pcParse(raw);
+  var t   = p.tok;
+  // الرابط الملصوق بيجيب السيرفر معاه — ولا نحط عنوان الصفحة نفسها بالغلط
+  var a = (p.api || $('s-api').value || '').trim().replace(/\/+$/, '');
+  if(/github\.io|price-checker/i.test(a)) a = '';
+  if(!t){ $('s-err').textContent = 'الصق رابط الشاشة من أوردر برو، أو التوكن اللي بيبدأ بـ pcd_'; return; }
   try{
     localStorage.setItem('pc_token', t);
     localStorage.setItem('pc_api', a || DEFAULT_API);
   }catch(e){ $('s-err').textContent = 'الجهاز مش بيحفظ — افتح الصفحة من غير وضع التصفح الخفي'; return; }
   TOK = t; API = a || DEFAULT_API;
+  $('s-api').value = API;
   $('s-err').textContent = '';
   show('scan');
 };
