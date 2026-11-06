@@ -28505,6 +28505,7 @@ function renderTreasuryTx(tId){
     + '<th style="padding:8px 6px;text-align:center;width:40px;font-weight:700">#</th>'
     + '<th style="padding:8px 6px;text-align:right;width:90px;font-weight:700">التاريخ</th>'
     + '<th style="padding:8px 6px;text-align:right;font-weight:700">البيان</th>'
+    + '<th style="padding:8px 6px;text-align:center;width:130px;font-weight:700">القسم</th>'
     + '<th style="padding:8px 6px;text-align:center;width:80px;font-weight:700">النوع</th>'
     + '<th style="padding:8px 6px;text-align:center;width:90px;font-weight:700;color:#16a34a">وارد</th>'
     + '<th style="padding:8px 6px;text-align:center;width:90px;font-weight:700;color:#dc2626">منصرف</th>'
@@ -28521,6 +28522,12 @@ function renderTreasuryTx(tId){
       + '<td style="padding:6px;text-align:center;color:var(--muted)">'+num+'</td>'
       + '<td style="padding:6px;font-size:11px">'+fmtDate(tx.date)+'</td>'
       + '<td style="padding:6px"><span style="font-weight:500">'+escapeHtml(tx.reason||'—')+'</span></td>'
+      // 🏷️ v745: القسم — المش مصنّف بيبان أصفر عشان يشدّ العين
+      + '<td style="padding:6px;text-align:center">'
+        + (tx.category
+            ? '<span style="font-size:10.5px;padding:2px 8px;border-radius:999px;background:rgba(37,99,235,.09);color:#2563eb;font-weight:600;white-space:nowrap">'+escapeHtml(tx.category)+'</span>'
+            : '<span style="font-size:10.5px;padding:2px 8px;border-radius:999px;background:#fef3c7;color:#92400e;font-weight:600;cursor:pointer" onclick="editTreasuryTx(\''+tx.id+'\')">غير مصنّف</span>')
+      + '</td>'
       + '<td style="padding:6px;text-align:center">'
       + '<span style="background:'+(isIn?'#dcfce7':'#fee2e2')+';color:'+(isIn?'#166534':'#991b1b')+';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">'
       + (isIn?'📥 وارد':'📤 منصرف')+'</span></td>'
@@ -61819,6 +61826,7 @@ function tcRender(){
 
 async function tcAdd(){
   const el = document.getElementById('tc-name');
+  if(!el) return;
   const name = el.value.trim();
   if(!name) return toast('⚠️ اكتب اسم القسم');
   try{
@@ -61908,8 +61916,14 @@ function tgPaint(){
   }
   sel.value = c.chat_id || '';
   tgWh();
-  document.getElementById('tg-state').textContent =
-    c.enabled ? (c.has_token && c.chat_id ? '🟢 شغّالة' : '⚠️ ناقص التوكن أو المحادثة') : '⛔ مقفولة';
+  const st = document.getElementById('tg-state');
+  if(c.enabled && c.has_token && c.chat_id){
+    st.textContent = '🟢 شغّالة'; st.style.color = '#166534'; st.style.fontWeight = '800';
+  }else if(c.enabled){
+    st.textContent = '⚠️ ناقص التوكن أو المحادثة'; st.style.color = '#d97706'; st.style.fontWeight = '800';
+  }else{
+    st.textContent = '⛔ مقفولة — شغّل المفتاح'; st.style.color = '#dc2626'; st.style.fontWeight = '800';
+  }
 }
 
 // المخازن اللي بنراقبها — مفيش مختار يعني الكل
@@ -61935,6 +61949,11 @@ async function tgWh(){
 }
 
 async function tgSave(){
+  // ⚠️ كل المربعات بتنادي الدالة دي، وهي بتقرا **كلهم** وتحفظهم.
+  //   لو الإعدادات لسه بتحمّل من السيرفر، المربعات بتكون على قيمتها
+  //   الافتراضية (فاضية) — فأول ضغطة كانت بتكتب enabled:false فوق
+  //   كل حاجة وتقفل التنبيهات من غير ما حد ياخد باله. ده اللي حصل.
+  if(!_TG){ toast('⏳ استنى الإعدادات تحمّل'); return; }
   const tok = document.getElementById('tg-token').value.trim();
   const body = {
     enabled:  document.getElementById('tg-enabled').checked,
