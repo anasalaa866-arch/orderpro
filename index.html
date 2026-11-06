@@ -12194,6 +12194,33 @@ async function lkSetSave(){
   }catch(e){ toast('❌ ' + e.message); }
 }
 
+// ╔════════════════════════════════════════════════════════════════════╗
+// ║ 🛡️ v736: طبقة تانية ضد الـ XSS                                    ║
+// ╚════════════════════════════════════════════════════════════════════╝
+// السيرفر بينضّف عند الإدخال (v689)، وده خط دفاع تاني على كل رد
+// بيوصل من الـ API. فايدته إن أي صفحة جديدة تتكتب بكرة بـ innerHTML
+// تبقى محمية من غير ما حد يفتكر — ومفيش حقل من دول محتاج < أو >.
+const _XSS_KEYS = new Set(['name','phone','area','addr','addr2','note','notes',
+  'customer_note','order_note','customerNote','orderNote','province','city',
+  'customer_name','supplier_name','display_name','contact_person','address',
+  'product_title','variant_title','vendor','title','label','reason','comment']);
+function _xssClean(v, depth){
+  if(depth > 6 || v == null) return v;
+  if(typeof v === 'string') return v;
+  if(Array.isArray(v)){ for(let i=0;i<v.length;i++) v[i] = _xssClean(v[i], depth+1); return v; }
+  if(typeof v === 'object'){
+    for(const k in v){
+      if(!Object.prototype.hasOwnProperty.call(v, k)) continue;
+      const x = v[k];
+      if(typeof x === 'string'){
+        if(_XSS_KEYS.has(k) && (x.indexOf('<') >= 0 || x.indexOf('>') >= 0))
+          v[k] = x.replace(/[<>]/g, '');
+      }else v[k] = _xssClean(x, depth+1);
+    }
+  }
+  return v;
+}
+
 async function apiFetch(path, method='GET', body=null){
   const baseUrl = API_URL || BACKEND_URL;
   if(!baseUrl) return null;
@@ -12262,7 +12289,7 @@ async function apiFetch(path, method='GET', body=null){
       }
       throw new Error(errMsg);
     }
-    const data = await r.json();
+    const data = _xssClean(await r.json(), 0);   // 🛡️ v736
 
     // 🆕 v203: cache الـ Last-Modified للـ GET requests
     if(method === 'GET'){
