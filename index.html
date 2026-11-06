@@ -4892,6 +4892,66 @@ tr:hover td{background:#fafbff}
     </div>
 
     <!-- 🖥️ v735: شاشة فحص السعر — مفيش إدارة، الشاشة بتظبّط نفسها -->
+    <!-- 🤖 v739: تنبيهات تيليجرام -->
+    <div class="card" id="tg-settings" style="margin-bottom:16px;display:none">
+      <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-weight:900">🤖 تنبيهات تيليجرام</span>
+        <span style="font-size:11.5px;color:var(--muted)" id="tg-state"></span>
+        <label style="margin-inline-start:auto;display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:800;cursor:pointer">
+          <input type="checkbox" id="tg-enabled" onchange="tgSave()"> مفعّل
+        </label>
+      </div>
+      <div style="padding:14px 16px">
+        <div style="font-size:12px;color:var(--muted);line-height:1.9;margin-bottom:12px">
+          اعمل بوت من <b>@BotFather</b> على تيليجرام، الصق التوكن، دوس <b>Start</b> على البوت، وبعدين <b>اكتشف</b>.
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <input id="tg-token" class="form-input" placeholder="توكن البوت" autocomplete="off"
+                 style="flex:1;min-width:230px;direction:ltr;font-family:monospace;font-size:12px">
+          <button class="btn btn-sm btn-ghost" onclick="tgDiscover()">🔍 اكتشف</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          <select id="tg-chat" class="form-input" style="flex:1;min-width:230px;direction:ltr"></select>
+          <button class="btn btn-sm btn-ghost" onclick="tgTest()">📨 جرّب</button>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:12px">
+          <div style="font-size:12.5px;font-weight:800;margin-bottom:9px">أبعتلي إمتى</div>
+          <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:9px;cursor:pointer">
+            <input type="checkbox" id="tg-oos" onchange="tgSave()">
+            <span>📉 منتج خلص من كل المخازن</span>
+          </label>
+          <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:9px;flex-wrap:wrap;cursor:pointer">
+            <input type="checkbox" id="tg-big" onchange="tgSave()">
+            <span>💰 أوردر أكبر من</span>
+            <input id="tg-big-min" type="number" min="0" step="100" onchange="tgSave()" class="form-input"
+                   style="width:100px;padding:4px 8px;font-family:Roboto,sans-serif">
+            <span>ج</span>
+          </label>
+          <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:9px;cursor:pointer">
+            <input type="checkbox" id="tg-daily" onchange="tgSave()">
+            <span>📊 تقرير يومي — مبيعات ومشتريات</span>
+          </label>
+          <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:9px;cursor:pointer">
+            <input type="checkbox" id="tg-monthly" onchange="tgSave()">
+            <span>📈 تقرير شهري — أول يوم في الشهر</span>
+          </label>
+          <div style="display:flex;gap:8px;align-items:center;font-size:12.5px;flex-wrap:wrap">
+            <span>🕘 التقارير الساعة</span>
+            <input id="tg-hour" type="number" min="0" max="23" onchange="tgSave()" class="form-input"
+                   style="width:70px;padding:4px 8px;font-family:Roboto,sans-serif">
+            <span style="color:var(--muted);font-size:11.5px">بتوقيت القاهرة</span>
+            <span style="margin-inline-start:auto;display:flex;gap:6px">
+              <button class="btn btn-sm btn-ghost" onclick="tgNow('daily')">ابعت اليومي دلوقتي</button>
+              <button class="btn btn-sm btn-ghost" onclick="tgNow('monthly')">الشهري</button>
+            </span>
+          </div>
+        </div>
+        <div id="tg-err" style="margin-top:10px;font-size:12px"></div>
+      </div>
+    </div>
+
     <!-- 📡 v738: فحص قنوات البيع -->
     <div class="card" id="ch-settings" style="margin-bottom:16px;display:none">
       <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -55228,6 +55288,7 @@ function goPage(el,page){
   if(page==='settings')lkSetOpen();            // 🔒 v731
   if(page==='settings')pcOpen();               // 🖥️ v735
   if(page==='settings')chOpen();               // 📡 v738
+  if(page==='settings')tgOpen();               // 🤖 v739
   if(page==='sku-audit')skuAuditLoad(true);
   if(page==='zoho-sync'){zhLoadSettings();cnStatus();drStatus();apiFetch('/api/zoho/delete-items-status','GET').then(st=>{if(st&&st.job&&st.job.running)zhDelWatch();}).catch(()=>{});}
   if(page==='profit'&&_gp===null){/* أول فتحة — سيبه يدوس احسب */}
@@ -61607,6 +61668,111 @@ async function npInit(){
     if(tg) tg.innerHTML = (_npMeta.tags || []).slice(0, 12).map(t =>
       `<span onclick="pnpAddTag('${escapeHtml(t).replace(/'/g,'&#39;')}')" style="cursor:pointer;font-size:10px;padding:2px 7px;border:1px solid var(--border);border-radius:10px;background:var(--card)">${escapeHtml(t)}</span>`).join('');
   }catch(e){ console.warn('[v620] meta:', e.message); }
+}
+
+// ╔════════════════════════════════════════════════════════════════════╗
+// ║ 🤖 v739: تنبيهات تيليجرام                                         ║
+// ╚════════════════════════════════════════════════════════════════════╝
+// التوكن مابيرجعش كامل من السيرفر — بيرجع آخر ٦ حروف بس. فلو
+// المستخدم ماغيّرهوش مابنبعتهوش تاني، والسيرفر بيتجاهل أي قيمة
+// بتبدأ بنجوم.
+let _TG = null;
+
+async function tgOpen(){
+  const box = document.getElementById('tg-settings');
+  if(!box) return;
+  if(currentUser?.username !== 'admin' && currentUser?.role !== 'admin'){ box.style.display = 'none'; return; }
+  box.style.display = '';
+  try{
+    const d = await apiFetch('/api/telegram/settings');
+    if(d?.error) throw new Error(d.error);
+    _TG = d.settings;
+    tgPaint();
+  }catch(e){ document.getElementById('tg-err').innerHTML =
+    '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+function tgPaint(){
+  const c = _TG; if(!c) return;
+  document.getElementById('tg-enabled').checked  = !!c.enabled;
+  document.getElementById('tg-oos').checked      = !!c.oos;
+  document.getElementById('tg-big').checked      = !!c.big_order;
+  document.getElementById('tg-daily').checked    = !!c.daily;
+  document.getElementById('tg-monthly').checked  = !!c.monthly;
+  document.getElementById('tg-big-min').value    = c.big_order_min ?? 5000;
+  document.getElementById('tg-hour').value       = c.hour ?? 9;
+  document.getElementById('tg-token').value      = c.token || '';
+  const sel = document.getElementById('tg-chat');
+  if(c.chat_id && !sel.options.length){
+    sel.innerHTML = `<option value="${escapeAttr(c.chat_id)}">${escapeHtml(c.chat_id)}</option>`;
+  }
+  sel.value = c.chat_id || '';
+  document.getElementById('tg-state').textContent =
+    c.enabled ? (c.has_token && c.chat_id ? '🟢 شغّالة' : '⚠️ ناقص التوكن أو المحادثة') : '⛔ مقفولة';
+}
+
+async function tgSave(){
+  const tok = document.getElementById('tg-token').value.trim();
+  const body = {
+    enabled:  document.getElementById('tg-enabled').checked,
+    oos:      document.getElementById('tg-oos').checked,
+    big_order:document.getElementById('tg-big').checked,
+    daily:    document.getElementById('tg-daily').checked,
+    monthly:  document.getElementById('tg-monthly').checked,
+    big_order_min: parseFloat(document.getElementById('tg-big-min').value) || 0,
+    hour:     parseInt(document.getElementById('tg-hour').value, 10),
+    chat_id:  document.getElementById('tg-chat').value || '',
+  };
+  if(tok && !/^[•*]/.test(tok)) body.token = tok;
+  try{
+    const d = await apiFetch('/api/telegram/settings', 'PUT', body);
+    if(d?.error) throw new Error(d.error);
+    toast('💾 اتحفظ');
+    tgOpen();
+  }catch(e){ toast('❌ ' + escapeHtml(e.message)); }
+}
+
+async function tgDiscover(){
+  const err = document.getElementById('tg-err');
+  err.innerHTML = '<span style="color:var(--muted)">⏳ بيدوّر...</span>';
+  try{
+    const tok = document.getElementById('tg-token').value.trim();
+    const d = await apiFetch('/api/telegram/discover', 'POST',
+      (tok && !/^[•*]/.test(tok)) ? { token: tok } : {});
+    if(d?.error) throw new Error(d.error);
+    const sel = document.getElementById('tg-chat');
+    if(!d.chats?.length){
+      err.innerHTML = '<span style="color:#d97706">⚠️ مالقيتش محادثات — افتح البوت على تيليجرام ودوس Start وجرّب تاني</span>';
+      return;
+    }
+    sel.innerHTML = d.chats.map(c =>
+      `<option value="${escapeAttr(c.id)}">${escapeHtml(c.name)} — ${escapeHtml(c.id)}</option>`).join('');
+    err.innerHTML = `<span style="color:#166534">✅ لقى ${d.chats.length} — اختار وادوس جرّب</span>`;
+    tgSave();
+  }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+async function tgTest(){
+  const err = document.getElementById('tg-err');
+  err.innerHTML = '<span style="color:var(--muted)">⏳ بيبعت...</span>';
+  try{
+    const tok = document.getElementById('tg-token').value.trim();
+    const body = { chat_id: document.getElementById('tg-chat').value };
+    if(tok && !/^[•*]/.test(tok)) body.token = tok;
+    const d = await apiFetch('/api/telegram/test', 'POST', body);
+    if(d?.error) throw new Error(d.error);
+    err.innerHTML = '<span style="color:#166534">✅ اتبعتت — بصّ على تيليجرام</span>';
+  }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+async function tgNow(kind){
+  const err = document.getElementById('tg-err');
+  err.innerHTML = '<span style="color:var(--muted)">⏳ بيحضّر التقرير...</span>';
+  try{
+    const d = await apiFetch('/api/telegram/send-report', 'POST', { kind });
+    if(d?.error) throw new Error(d.error);
+    err.innerHTML = '<span style="color:#166534">✅ اتبعت</span>';
+  }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
 }
 
 // ╔════════════════════════════════════════════════════════════════════╗
