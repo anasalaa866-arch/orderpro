@@ -4892,6 +4892,27 @@ tr:hover td{background:#fafbff}
     </div>
 
     <!-- 🖥️ v735: شاشة فحص السعر — مفيش إدارة، الشاشة بتظبّط نفسها -->
+    <!-- 📡 v738: فحص قنوات البيع -->
+    <div class="card" id="ch-settings" style="margin-bottom:16px;display:none">
+      <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-weight:900">📡 قنوات البيع</span>
+        <span style="font-size:11.5px;color:var(--muted)">المنتجات اللي ناقصة قناة أو أكتر</span>
+        <button class="btn btn-sm btn-ghost" style="margin-inline-start:auto" onclick="chAudit()">🔄 افحص</button>
+      </div>
+      <div style="padding:14px 16px">
+        <div id="ch-sum"></div>
+        <div id="ch-bars" style="margin-top:12px"></div>
+        <div id="ch-actions" style="margin-top:12px;display:none">
+          <button class="btn btn-primary btn-sm" id="ch-fix-btn" onclick="chFixAll()" style="font-weight:800">
+            🔧 انشرهم كلهم على كل القنوات
+          </button>
+          <button class="btn btn-sm btn-ghost" onclick="chList()" style="margin-inline-start:6px">📋 وريني المنتجات</button>
+        </div>
+        <div id="ch-prog" style="margin-top:12px;display:none"></div>
+        <div id="ch-list" style="margin-top:12px"></div>
+      </div>
+    </div>
+
     <div class="card" id="pc-settings" style="margin-bottom:16px;display:none">
       <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <span style="font-weight:900">🖥️ شاشة فحص السعر</span>
@@ -55206,6 +55227,7 @@ function goPage(el,page){
   if(window.innerWidth <= 1024) toggleSidebar(false);
   if(page==='settings')lkSetOpen();            // 🔒 v731
   if(page==='settings')pcOpen();               // 🖥️ v735
+  if(page==='settings')chOpen();               // 📡 v738
   if(page==='sku-audit')skuAuditLoad(true);
   if(page==='zoho-sync'){zhLoadSettings();cnStatus();drStatus();apiFetch('/api/zoho/delete-items-status','GET').then(st=>{if(st&&st.job&&st.job.running)zhDelWatch();}).catch(()=>{});}
   if(page==='profit'&&_gp===null){/* أول فتحة — سيبه يدوس احسب */}
@@ -61585,6 +61607,137 @@ async function npInit(){
     if(tg) tg.innerHTML = (_npMeta.tags || []).slice(0, 12).map(t =>
       `<span onclick="pnpAddTag('${escapeHtml(t).replace(/'/g,'&#39;')}')" style="cursor:pointer;font-size:10px;padding:2px 7px;border:1px solid var(--border);border-radius:10px;background:var(--card)">${escapeHtml(t)}</span>`).join('');
   }catch(e){ console.warn('[v620] meta:', e.message); }
+}
+
+// ╔════════════════════════════════════════════════════════════════════╗
+// ║ 📡 v738: فحص قنوات البيع                                          ║
+// ╚════════════════════════════════════════════════════════════════════╝
+// الفحص على المنتجات الـ Active بس — الـ Draft مش ظاهر لحد أصلاً،
+// وشوبيفاي بيرجّع صفر قنوات لأي Draft حتى لو مسجّل على الكل.
+let _CH = null, _chPoll = null, _chAfter = null;
+
+function chOpen(){
+  const box = document.getElementById('ch-settings');
+  if(!box) return;
+  if(currentUser?.username !== 'admin' && currentUser?.role !== 'admin'){ box.style.display = 'none'; return; }
+  box.style.display = '';
+  if(!_CH) chAudit();
+  chPollStatus();
+}
+
+async function chAudit(){
+  const sum = document.getElementById('ch-sum');
+  sum.innerHTML = '<div style="color:var(--muted);font-size:12.5px">⏳ بيفحص الكتالوج...</div>';
+  document.getElementById('ch-bars').innerHTML = '';
+  document.getElementById('ch-actions').style.display = 'none';
+  document.getElementById('ch-list').innerHTML = '';
+  _chAfter = null;
+  try{
+    const d = await apiFetch('/api/channels/audit');
+    if(d?.error) throw new Error(d.error);
+    _CH = d;
+    chRender();
+  }catch(e){
+    sum.innerHTML = '<div style="color:#dc2626;font-size:12.5px">❌ ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function chRender(){
+  const d = _CH; if(!d) return;
+  const bad = d.missing_any || 0;
+  document.getElementById('ch-sum').innerHTML = bad
+    ? `<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
+         <span style="font-size:27px;font-weight:900;color:#d97706">${bad.toLocaleString('ar-EG')}</span>
+         <span style="font-size:12.5px;color:var(--muted)">منتج Active ناقصهم قناة أو أكتر، من إجمالي
+           ${Number(d.total||0).toLocaleString('ar-EG')}</span>
+       </div>`
+    : `<div style="color:#166534;font-weight:800;font-size:13.5px">✅ كل المنتجات على كل القنوات</div>`;
+
+  document.getElementById('ch-bars').innerHTML = (d.channels||[]).map(c => {
+    const pct = d.total ? Math.round(c.published / d.total * 100) : 100;
+    const col = c.missing === 0 ? '#16a34a' : (c.missing > 100 ? '#dc2626' : '#d97706');
+    return `
+      <div style="display:flex;gap:9px;align-items:center;margin-bottom:6px;font-size:12px">
+        <span style="width:145px;flex:none">${escapeHtml(c.name)}</span>
+        <span style="flex:1;height:7px;border-radius:99px;background:var(--border);overflow:hidden">
+          <span style="display:block;height:100%;width:${pct}%;background:${col}"></span>
+        </span>
+        <span style="width:92px;flex:none;text-align:left;color:${col};font-weight:${c.missing?800:500}">
+          ${c.missing ? 'ناقص ' + c.missing.toLocaleString('ar-EG') : 'تمام'}
+        </span>
+      </div>`;
+  }).join('');
+
+  document.getElementById('ch-actions').style.display = bad ? '' : 'none';
+}
+
+async function chList(){
+  const box = document.getElementById('ch-list');
+  box.innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:8px">⏳ ...</div>';
+  try{
+    const d = await apiFetch('/api/channels/missing' + (_chAfter ? '?after=' + encodeURIComponent(_chAfter) : ''));
+    if(d?.error) throw new Error(d.error);
+    const rows = (d.products||[]).map(p => `
+      <tr>
+        <td style="font-size:12px">${escapeHtml(p.title)}</td>
+        <td style="font-size:11px;color:var(--muted);white-space:nowrap">${p.on}/${p.total}</td>
+        <td style="font-size:11px;color:#d97706">${p.missing.map(escapeHtml).join('، ')}</td>
+      </tr>`).join('');
+    box.innerHTML = `
+      <div style="max-height:380px;overflow:auto;border:1px solid var(--border);border-radius:10px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="position:sticky;top:0;background:var(--card)">
+            <th style="text-align:right;font-size:11px;padding:7px">المنتج</th>
+            <th style="text-align:right;font-size:11px;padding:7px">على</th>
+            <th style="text-align:right;font-size:11px;padding:7px">ناقص</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      ${d.has_more ? `<button class="btn btn-sm btn-ghost" style="margin-top:8px"
+          onclick="_chAfter='${d.next}';chList()">⬇️ كمان ٥٠</button>` : ''}`;
+  }catch(e){
+    box.innerHTML = '<div style="color:#dc2626;font-size:12.5px">❌ ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+async function chFixAll(){
+  const n = _CH?.missing_any || 0;
+  if(!confirm(`هننشر ${n} منتج على كل القنوات.\n\nالعملية دي بتاخد وقت وبتكمل في الخلفية — تقدر تقفل الصفحة عادي.\n\nنبدأ؟`)) return;
+  try{
+    const d = await apiFetch('/api/channels/fix', 'POST', {});
+    if(d?.error) throw new Error(d.error);
+    toast('🔧 بدأ — بيشتغل في الخلفية');
+    chPollStatus();
+  }catch(e){ toast('❌ ' + escapeHtml(e.message)); }
+}
+
+async function chPollStatus(){
+  clearInterval(_chPoll);
+  const paint = async () => {
+    try{
+      const d = await apiFetch('/api/channels/fix/status');
+      const j = d?.job;
+      const box = document.getElementById('ch-prog');
+      if(!box) return;
+      if(!j){ box.style.display = 'none'; return; }
+      box.style.display = '';
+      const pct = j.total ? Math.round(j.done / j.total * 100) : 0;
+      box.innerHTML = `
+        <div style="font-size:12px;margin-bottom:5px">
+          ${j.running ? '⏳ بينشر' : '✅ خلص'} — ${j.done.toLocaleString('ar-EG')} من ${(j.total||0).toLocaleString('ar-EG')}
+          ${j.failed?.length ? ` · <span style="color:#dc2626">${j.failed.length} فشل</span>` : ''}
+          ${j.error ? ` · <span style="color:#dc2626">${escapeHtml(j.error)}</span>` : ''}
+        </div>
+        <span style="display:block;height:7px;border-radius:99px;background:var(--border);overflow:hidden">
+          <span style="display:block;height:100%;width:${pct}%;background:${j.running?'#2563eb':'#16a34a'}"></span>
+        </span>`;
+      document.getElementById('ch-fix-btn').disabled = !!j.running;
+      if(!j.running){ clearInterval(_chPoll); _chPoll = null; if(j.done) chAudit(); }
+    }catch(e){}
+  };
+  await paint();
+  _chPoll = setInterval(paint, 3000);
 }
 
 // ╔════════════════════════════════════════════════════════════════════╗
