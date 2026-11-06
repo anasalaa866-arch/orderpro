@@ -61993,10 +61993,19 @@ async function pnpCreate(){
     const made = r.product.variants || [];
     if(!made.length) throw new Error('Shopify ما رجعش أي فاريانت');
 
+    // 📡 v737: قناة واحدة لو فشلت، المنتج بيفضل مخفي عليها من غير ما
+    //   حد ياخد باله — فبنقولها بصوت عالي بدل ما تعدّي في صمت.
+    const ch = r.channels;
+    if(ch && ch.total && ch.published < ch.total){
+      toast(`⚠️ اتنشر على ${ch.published} من ${ch.total} قناة بس — راجعه على Shopify`);
+      console.warn('[v737] قنوات فشلت:', ch.failed);
+    }
+
     if(_pnpSolo){
       pnpLearnTags();      // 🏷️ v732
       // 🆕 v634: مش مربوط بأمر شراء — خلاص، المنتج اتعمل Draft على Shopify
-      toast(`✅ ${r.product.title} اتعمل على Shopify (Draft) — ${made.length} صنف`);
+      toast(`✅ ${r.product.title} اتعمل على Shopify (Draft) — ${made.length} صنف · ` +
+            `📡 ${ch?.published ?? 0} قناة`);
       closeNpSolo();
       return;
     }
