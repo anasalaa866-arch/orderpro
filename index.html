@@ -62523,6 +62523,9 @@ async function bkLoad(page){
               ${x.status==='posted'
                 ? `<span style="color:#166534;font-weight:700">✅ ${escapeHtml(x.zoho_type||'')}</span>
                    <div style="font-size:10px;color:var(--muted)">${escapeHtml(x.posted_by||'')}</div>`
+                : x.status==='manual'
+                ? `<span style="color:#1d4ed8;font-weight:700">✍️ يدوي</span>
+                   <div style="font-size:10px;color:var(--muted)">${escapeHtml(x.skip_reason||'')}</div>`
                 : x.status==='skipped'
                 ? `<span style="color:var(--muted)">🚫 ${escapeHtml(x.skip_reason||'')}</span>`
                 : `<button class="btn btn-sm btn-ghost" onclick="bkRow(${x.id})">📝 راجع</button>
@@ -62539,9 +62542,48 @@ async function bkLoad(page){
 function bkFilter(k, v){ _BK.filter[k] = v; _BK.page = 0; bkLoad(); }
 
 // مراجعة حركة واحدة — الترشيحات والتنفيذ
+// 🆕 v771: لو مفيش اقتراح مظبوط — اكتب رقم الأوردر من شوبيفاي بإيدك
+function bkManualBox(){
+  return `<div style="margin-top:8px;padding:9px;border:1px dashed var(--border);border-radius:8px">
+    <label style="display:flex;gap:8px;align-items:center;cursor:pointer;font-size:12px">
+      <input type="radio" name="bk-pick" value="__manual__" onchange="document.getElementById('bk-manual').focus()">
+      <span>مش في القايمة — هكتب رقم الأوردر</span>
+    </label>
+    <input id="bk-manual" class="form-input" inputmode="numeric" autocomplete="off"
+           placeholder="رقم الأوردر زي ما هو على شوبيفاي — مثال 190068"
+           oninput="document.querySelector('input[name=bk-pick][value=__manual__]').checked=true;bkManualCheck(this.value)"
+           style="width:100%;margin-top:6px;direction:ltr;text-align:left">
+    <div id="bk-manual-info" style="font-size:11px;margin-top:5px;color:var(--muted)"></div>
+  </div>`;
+}
+
+// بيدوّر على الأوردر وانت بتكتب — عشان ماتربطش برقم غلط
+let _bkManualT = null;
+function bkManualCheck(v){
+  const box = document.getElementById('bk-manual-info');
+  const q = String(v || '').trim();
+  clearTimeout(_bkManualT);
+  if(q.length < 3){ box.textContent = ''; box.dataset.ok = ''; return; }
+  box.textContent = '⏳ بيدوّر...';
+  _bkManualT = setTimeout(async () => {
+    try{
+      const r = apiNN(await apiFetch('/api/bank/find-order?q=' + encodeURIComponent(q)), 'البحث');
+      if(!r.order){ box.innerHTML = '<span style="color:#dc2626">❌ مفيش أوردر بالرقم ده</span>'; box.dataset.ok=''; return; }
+      const o = r.order, t = _BK.tx || {};
+      const diff = Math.abs(Number(o.total) - Number(t.amount || 0));
+      box.innerHTML = `✅ <b>${escapeHtml(o.name || '')}</b> · ${Number(o.total).toLocaleString('ar-EG')} ج
+        · ${escapeHtml(o.at || '')}${diff > 0.01
+          ? ` <span style="color:#92400e">· فرق ${diff.toFixed(2)} ج عن الحركة</span>` : ''}`;
+      box.dataset.ok = o.id;
+    }catch(e){ box.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; box.dataset.ok=''; }
+  }, 350);
+}
+
 async function bkRow(id){
-  const d = await apiFetch('/api/bank/tx/' + id + '/suggest').catch(e => ({ error: e.message }));
-  if(d?.error){ toast('❌ ' + d.error); return; }
+  let d;
+  try{ d = apiNN(await apiFetch('/api/bank/tx/' + id + '/suggest'), 'الحركة'); }
+  catch(e){ toast('❌ ' + (e.message || e)); return; }
+  _BK.tx = d.tx;
   const t = d.tx, n = v => Number(v||0).toLocaleString('ar-EG');
   const kinds = _BK.kinds || {};
 
@@ -62561,17 +62603,27 @@ async function bkRow(id){
   }
   if(d.type === 'order'){
     pick = d.items.length
-      ? `<div style="font-size:12px;font-weight:800;margin:10px 0 5px">أوردرات بنفس المبلغ</div>
+      // 🆕 v771: الترشيح بقى بالاسم كمان — والسبب مكتوب جنب كل أوردر
+      ? `<div style="font-size:12px;font-weight:800;margin:10px 0 5px">
+           أوردرات مرشّحة${t.counterparty ? ` لـ <span style="color:var(--primary)">${escapeHtml(t.counterparty)}</span>` : ''}</div>
          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">
-           الكشف مفيهوش اسم المُرسِل — الترشيح بالمبلغ والتاريخ، فاختار بنفسك.</div>
+           ${t.counterparty ? 'الترتيب بالاسم ثم المبلغ (±٥ ج) ثم التوقيت.'
+                            : 'الحركة دي مفيهاش اسم مُرسِل — الترشيح بالمبلغ والتاريخ بس.'}</div>
          ${d.items.map(o => `<label style="display:flex;gap:8px;align-items:center;padding:8px;
-            border:1px solid var(--border);border-radius:8px;margin-bottom:5px;cursor:pointer">
-           <input type="radio" name="bk-pick" value="${escapeHtml(o.id)}">
+            border:1px solid ${o.name_score>=0.99?'#86efac':o.name_score>=0.6?'#fde68a':'var(--border)'};
+            background:${o.confident?'#f0fdf4':'transparent'};
+            border-radius:8px;margin-bottom:5px;cursor:pointer">
+           <input type="radio" name="bk-pick" value="${escapeHtml(o.id)}" ${o.confident?'checked':''}>
            <span style="flex:1"><b>${escapeHtml(o.name||'')}</b> · ${escapeHtml(o.id)}
              <div style="font-size:11px;color:var(--muted)">${n(o.total)} ج · ${escapeHtml(o.at||'')}
-               · ${escapeHtml(o.status||'')} ${o.same_day?'· <span style="color:#166534">نفس اليوم</span>':''}</div></span>
-         </label>`).join('')}`
-      : `<div style="color:#92400e;font-size:12px;margin:10px 0">⚠️ مفيش أوردر بنفس المبلغ في النافذة — نفّذه كتحصيل عام.</div>`;
+               · ${escapeHtml(o.status||'')}</div>
+             <div style="font-size:10.5px;margin-top:2px;color:${o.name_score>=0.6?'#166534':'var(--muted)'}">
+               ${(o.why||[]).map(escapeHtml).join(' · ')}</div></span>
+         </label>`).join('')}
+         ${bkManualBox()}`
+      : `<div style="color:#92400e;font-size:12px;margin:10px 0">
+           ⚠️ مفيش أوردر قريب من المبلغ في النافذة${t.counterparty?' ولا اسم مطابق':''}.</div>
+         ${bkManualBox()}`;
   }
 
   const html = `
@@ -62599,6 +62651,8 @@ async function bkRow(id){
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="btn" style="background:var(--primary);color:#fff;flex:1;min-width:150px"
                 onclick="bkPost(${t.id})">⚡ نفّذ في Zoho</button>
+        <button class="btn btn-ghost" onclick="bkManual(${t.id})"
+                title="اتسجّلت في Zoho بإيدك — بتتشال من المتبقي ومابتتنفّذش تاني">✍️ عملتها يدوي</button>
         <button class="btn btn-ghost" onclick="bkSkip(${t.id})">🚫 تجاهل</button>
       </div>
     </div>`;
@@ -62621,11 +62675,29 @@ async function bkPost(id){
     }
     const body = { description: desc };
     if(kind === 'cheque') body.cheque_id = picked;
-    if(kind === 'instapay_in' && picked) body.order_id = picked;
+    // 🆕 v771: «هكتب رقم الأوردر» — بناخد الـ id اللي البحث أكّده
+    let orderId = picked;
+    if(picked === '__manual__'){
+      orderId = document.getElementById('bk-manual-info')?.dataset.ok || '';
+      if(!orderId) throw new Error('اكتب رقم أوردر صحيح — لسه مالقيناهوش');
+    }
+    if(kind === 'instapay_in' && orderId) body.order_id = orderId;
     const r = await apiFetch('/api/bank/tx/' + id + '/post', 'POST', body);
     if(r?.error) throw new Error(r.error);
     closeM('m-bank-tx'); toast('✅ اتنفّذت في Zoho'); bkLoad();
   }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message||String(e)) + '</span>'; }
+}
+
+// 🆕 v771: «عملتها يدوي» — اتسجّلت في Zoho بإيده، فتتشال من المتبقي
+//   بس تفضل متعلّمة إنها اتعملت يدوي مش إنها اتتجاهلت.
+async function bkManual(id){
+  const note = prompt('عملتها يدوي في Zoho — تحب تكتب ملاحظة؟ (اختياري)', '');
+  if(note === null) return;
+  try{
+    apiNN(await apiFetch('/api/bank/tx/' + id + '/manual', 'POST',
+      { note: String(note || '').trim() }), 'التسجيل اليدوي');
+    closeM('m-bank-tx'); toast('✍️ اتعلّمت إنها اتعملت يدوي'); bkLoad();
+  }catch(e){ toast('❌ ' + (e.message || e)); }
 }
 
 async function bkSkip(id){
