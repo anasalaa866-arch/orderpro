@@ -21041,7 +21041,12 @@ async function openReceiveCash(id){
         <div style="font-size:22px;font-weight:900;color:#16a34a">${cashAmt.toLocaleString()} ج</div>
       </div>
     </div>
+    <div id="rc-visa" style="margin-top:10px;font-size:12.5px;color:var(--muted)">
+      ⏳ بيراجع الفيزا على Paymob...</div>
   `;
+
+  // 🧾 v761: المحاسب يشوف حالة الفيزا قبل ما يستلم — مش بعدين
+  vcBadge('rc-visa', s.period_start || s.settled_at, s.store_id);
 
   // dropdown للخزن
   const treasurySelect = $('receive-cash-treasury');
@@ -62221,6 +62226,46 @@ async function tgTrePdf(){
     if(d?.error) throw new Error(d.error);
     err.innerHTML = '<span style="color:#166534">✅ اتبعت</span>';
   }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+// 🧾 v761: شارة حالة الفيزا — بتتحط في أي مكان فيه تصفية
+//   الفكرة إن اللي بيستلم التصفية يشوف الحكم قدامه، مش يروح
+//   يدوّر عليه في شاشة تانية.
+async function vcBadge(elId, whenISO, storeId){
+  const el = document.getElementById(elId);
+  if(!el) return;
+  try{
+    const day = String(whenISO || '').slice(0, 10) ||
+                new Date(Date.now() + 2*3600000).toISOString().slice(0, 10);
+    const d = await apiFetch('/api/pos/visa-check?date=' + day +
+                             (storeId ? '&store_id=' + storeId : ''));
+    if(d?.error) throw new Error(d.error);
+    const n = x => Number(x||0).toLocaleString('ar-EG');
+    if(!d.cashier.count){
+      el.innerHTML = '<span style="color:var(--muted)">💳 مفيش بيعات فيزا في اليوم ده</span>';
+      return;
+    }
+    if(d.clean){
+      el.innerHTML = `<span style="color:#166534;font-weight:800">
+        ✅ الفيزا مظبوطة — ${d.matched.count} عملية بـ ${n(d.matched.total)} ج، كلها متأكدة من Paymob</span>`;
+      return;
+    }
+    const bits = [];
+    if(d.sales_without_event.count)
+      bits.push(`${d.sales_without_event.count} بيعة مالهاش عملية (${n(d.sales_without_event.total)} ج)`);
+    if(d.events_without_sale.count)
+      bits.push(`${d.events_without_sale.count} عملية مالهاش بيعة (${n(d.events_without_sale.total)} ج)`);
+    el.innerHTML = `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;
+        padding:9px 11px;color:#1a1a1a">
+        <b style="color:#991b1b">⚠️ الفيزا فيها فرق</b> — ${escapeHtml(bits.join(' · '))}
+        <div style="font-size:11.5px;color:#7f1d1d;margin-top:3px">
+          راجعها من الإعدادات ← 🧾 مراجعة فيزا الكاشير قبل ما تستلم.</div>
+      </div>`;
+  }catch(e){
+    // 🚨 مانقولش «مظبوطة» لو مانعرفش — ده أسوأ من ما نقول حاجة
+    el.innerHTML = '<span style="color:#92400e">⚠️ ماقدرناش نراجع الفيزا: ' +
+                   escapeHtml(e.message || String(e)) + '</span>';
+  }
 }
 
 // 🧾 v760: مراجعة فيزا الكاشير
