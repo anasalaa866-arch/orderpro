@@ -1663,7 +1663,7 @@ tr:hover td{background:#fafbff}
   #nb-problems,#nb-checks,#nb-expiry,#nb-notifs,#nb-bosta,
   #ai-fab,#ai-panel,
   #shopify-queue-badge,#assign-failures-badge,
-  #batch-indicator,#lk-bar,
+  #batch-indicator,
   [id^="toast-"]{display:none!important}
   .main-area{overflow:visible!important;height:auto!important}
   .content{padding:0!important;overflow:visible!important;height:auto!important}
@@ -4903,6 +4903,21 @@ tr:hover td{background:#fafbff}
         </span>
       </div>
       <div style="padding:14px 16px"><div id="cr-body"></div></div>
+    </div>
+
+    <!-- 🔑 v755: تشخيص Paymob API -->
+    <div class="card" id="pm-settings" style="margin-bottom:16px;display:none">
+      <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-weight:900">🔑 Paymob API — تشخيص</span>
+        <span style="color:var(--muted);font-size:12px">يجيب معاملة من Paymob ويورّي الرد الخام</span>
+        <span style="margin-inline-start:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input id="pm-txn" class="form-input" placeholder="رقم المعاملة (اختياري)" style="width:190px;padding:4px 8px" autocomplete="off">
+          <button class="btn btn-sm btn-ghost" onclick="pmProbe()">🔍 افحص</button>
+        </span>
+      </div>
+      <div style="padding:14px 16px"><div id="pm-body" style="color:var(--muted);font-size:12.5px">
+        سيبه فاضي عشان ياخد آخر معاملة في سجلك، أو اكتب رقم معاملة بعينه.
+      </div></div>
     </div>
 
     <!-- 🏷️ v744: أقسام حركات الخزنة -->
@@ -55455,6 +55470,7 @@ function goPage(el,page){
   if(window.innerWidth <= 1024) toggleSidebar(false);
   if(page==='settings')lkSetOpen();            // 🔒 v731
   if(page==='settings')pcOpen();               // 🖥️ v735
+  if(page==='settings' && isAdmin()) document.getElementById('pm-settings').style.display='';   // 🔑 v755
   if(page==='settings')chOpen();               // 📡 v738
   if(page==='settings')tgOpen();               // 🤖 v739
   if(page==='settings')tcOpen();               // 🏷️ v744
@@ -61501,7 +61517,7 @@ function dsOrderRow(o, cls){
     : '';
   return `<tr class="${cls}${isNew?' ds-new-row':''}">
     <td style="text-align:center;color:var(--muted);font-size:10px">${dsRowNum}</td>
-    <td style="white-space:nowrap"><strong style="font-size:11px">${newBadge}${String(o.id).replace(/^SH-/,'')}</strong></td>
+    <td><strong style="font-size:11px">${newBadge}${o.id}</strong></td>
     <td style="font-weight:700;font-size:12px">${o.name||''}</td>
     <td style="direction:ltr;font-size:12px;font-weight:700;white-space:nowrap">${o.phone||''}</td>
     <td style="font-size:11px;color:var(--accent)">${zone}</td>
@@ -62188,6 +62204,47 @@ async function tgTrePdf(){
     if(d?.error) throw new Error(d.error);
     err.innerHTML = '<span style="color:#166534">✅ اتبعت</span>';
   }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+// 🔑 v755: تشخيص Paymob — بيورّي الرد الخام زي ما هو
+async function pmProbe(){
+  const box = document.getElementById('pm-body');
+  const txn = document.getElementById('pm-txn').value.trim();
+  box.innerHTML = '<span style="color:var(--muted)">⏳ بينادي Paymob...</span>';
+  try{
+    const d = await apiFetch('/api/paymob/probe' + (txn ? '?txn=' + encodeURIComponent(txn) : ''));
+    if(d?.error) throw new Error(d.error);
+    const v = d.verdict || {};
+    const yes = v.has_commission;
+    const row = (k, x) => `<tr><td style="padding:3px 8px;color:var(--muted)">${escapeHtml(k)}</td>
+      <td style="padding:3px 8px;font-weight:700">${x === null || x === undefined ? '<span style="color:#dc2626">null</span>' : escapeHtml(String(x))}</td></tr>`;
+    box.innerHTML = `
+      <div style="padding:10px 12px;border-radius:9px;margin-bottom:12px;background:${yes ? '#dcfce7' : '#fef3c7'};
+                  border:1px solid ${yes ? '#86efac' : '#fde68a'};font-weight:700;font-size:13px;color:#1a1a1a">
+        ${yes
+          ? `✅ العمولة موجودة في الـ API — ${v.merchant_commission_egp} ج` +
+            (v.commission_pct != null ? ` (${v.commission_pct}% من المعاملة)` : '') +
+            `<div style="font-weight:400;font-size:12px;margin-top:4px">يبقى نقدر نطابق العمولة على العقد لكل معاملة.</div>`
+          : `⚠️ <code>merchant_commission</code> رجع فاضي — العمولة مش متاحة من الـ API
+             <div style="font-weight:400;font-size:12px;margin-top:4px">تفضل من الكشف الشهري زي ما هي.</div>`}
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">
+        معاملة <b>${escapeHtml(d.txn)}</b> · ${escapeHtml(d.source)} · HTTP ${d.http} · ${d.ms}ms
+        · HMAC ${d.hmac_configured ? 'متظبط ✅' : 'مش متظبط'}
+      </div>
+      <table style="font-size:12px;border-collapse:collapse;margin-bottom:12px">
+        ${row('نجحت', v.success)}${row('معلّقة', v.pending)}
+        ${row('المبلغ (قرش)', v.amount_cents)}
+        ${row('العمولة (قرش)', v.merchant_commission)}
+        ${row('مرتجعة', v.is_refunded)}${row('المرتجع (قرش)', v.refunded_amount_cents)}
+        ${row('متلغية', v.is_voided)}${row('اتحصّلت', v.is_captured)}
+        ${row('رقم أوردر Paymob', v.order_id)}${row('رقم الأوردر عندك', v.merchant_order_id)}
+      </table>
+      <details><summary style="cursor:pointer;font-size:12px;font-weight:700">الرد الخام (${(d.keys||[]).length} حقل)</summary>
+        <pre style="background:var(--bg);padding:10px;border-radius:8px;font-size:11px;overflow:auto;max-height:420px;
+                    direction:ltr;text-align:left;margin-top:8px">${escapeHtml(JSON.stringify(d.raw, null, 2))}</pre>
+      </details>`;
+  }catch(e){ box.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
 }
 
 // 📑 v752: PDF الشيكات دلوقتي
