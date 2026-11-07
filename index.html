@@ -2236,7 +2236,11 @@ tr:hover td{background:#fafbff}
           <input type="file" id="tal-file" accept=".xlsx,.xls" style="display:none" onchange="talabatUpload(this.files[0])">
           <button class="btn btn-ghost" onclick="document.getElementById('tal-file').click()">📤 رفع شيت منتجات طلبات (.xlsx)</button>
           <button class="btn" id="tal-export" onclick="talabatExport()" style="background:#f5a623;color:#fff;display:none">⬇️ توليد شيت التحديث (CSV)</button>
+          <!-- 📤 v764 -->
+          <button class="btn btn-ghost" onclick="talUpDry()">🔬 قارن قبل الرفع</button>
+          <button class="btn" onclick="talUpNow()" style="background:#16a34a;color:#fff">📤 ارفع دلوقتي</button>
         </div>
+        <div id="tal-up" style="margin-top:12px"></div>
         <div id="tal-report" style="margin-top:10px;font-size:13px"></div>
         <!-- 🆕 v525: حالة الأسعار المنشورة على طلبات -->
         <div id="tal-pub" style="margin-top:12px"></div>
@@ -45989,6 +45993,7 @@ async function talabatMarginSave(){
 
 async function loadTalabat(){
   talPubStatus();   // 🐞 v670: talNeedsClose بقت جواها بعد الرسم
+  talUpStatus();    // 📤 v764: حالة الرفع التلقائي
   apiFetch('/api/talabat/new-products','GET').then(r=>{ const b=$('tal-new-badge'); if(b&&r&&!r.error){ b.textContent=r.not_linked||''; b.style.display=r.not_linked?'inline-block':'none'; } }).catch(()=>{});
   await talabatLoadMargin();
   tproLoad().catch(()=>{});               // ⭐ v628
@@ -46146,6 +46151,103 @@ async function talabatSetPrice(id, val){
     talabatRender();
   }catch(e){ toast('❌ '+e.message); }
 }
+// ══════════════════════════════════════════════════════════════
+// 📤 v764: الرفع التلقائي لشيت طلبات
+// ══════════════════════════════════════════════════════════════
+async function talUpStatus(){
+  const box = document.getElementById('tal-up');
+  if(!box) return;
+  try{
+    const d = await apiFetch('/api/talabat/uploads');
+    if(d?.error) throw new Error(d.error);
+    const last = (d.rows || [])[0];
+    const okLast = last && last.ok;
+    box.innerHTML = `
+      <div style="border:1px solid var(--border);border-radius:10px;padding:11px;font-size:12.5px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <label style="display:flex;gap:7px;align-items:center;cursor:pointer;font-weight:800">
+            <input type="checkbox" ${d.auto?'checked':''} onchange="talUpToggle(this.checked)">
+            <span>⚡ رفع تلقائي</span>
+          </label>
+          ${!d.sftp_configured ? '<span style="color:#dc2626;font-weight:700">⚠️ بيانات SFTP ناقصة في Railway</span>' : ''}
+          <span style="margin-inline-start:auto">
+            ${!last ? '<span style="color:var(--muted)">مفيش رفعات لسه</span>'
+              : `<span style="color:${okLast?'#166534':'#dc2626'};font-weight:800">
+                   ${okLast?'✅ آخر رفع نجح':'❌ آخر رفع فشل'}</span>
+                 <span style="color:var(--muted)"> · ${escapeHtml(last.started)}
+                 ${last.rows?` · ${last.rows} صف`:''}${last.published?` · نشر ${last.published} سعر`:''}</span>`}
+          </span>
+        </div>
+        ${last && !last.ok ? `<div style="color:#dc2626;margin-top:6px">${escapeHtml(last.error||'')}</div>` : ''}
+        ${d.rows.length>1 ? `<details style="margin-top:8px">
+          <summary style="cursor:pointer;color:var(--muted)">آخر ${d.rows.length} رفعة</summary>
+          <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-top:6px">
+            ${d.rows.map(r=>`<tr style="border-top:1px solid var(--border)">
+              <td style="padding:4px">${r.ok?'✅':'❌'}</td>
+              <td style="padding:4px;direction:ltr">${escapeHtml(r.started)}</td>
+              <td style="padding:4px">${escapeHtml({auto:'مجدول',manual:'يدوي',trigger:'زناد'}[r.source]||r.source)}</td>
+              <td style="padding:4px">${r.rows||''}</td>
+              <td style="padding:4px;color:#dc2626">${escapeHtml((r.error||'').slice(0,60))}</td>
+            </tr>`).join('')}
+          </table></details>` : ''}
+      </div>`;
+  }catch(e){ box.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+async function talUpToggle(on){
+  try{
+    const r = await apiFetch('/api/talabat/autoupload', 'POST', { on });
+    if(r?.error) throw new Error(r.error);
+    toast(on ? '⚡ الرفع التلقائي اتشغّل' : '⏸️ اتوقف');
+    talUpStatus();
+  }catch(e){ toast('❌ ' + (e.message||e)); talUpStatus(); }
+}
+
+// 🔬 بيبني الشيت ويورّي بصمته من غير ما يرفع — تقارنه بالملف اليدوي
+async function talUpDry(){
+  const box = document.getElementById('tal-up');
+  box.innerHTML = '⏳ بيبني الشيت...';
+  try{
+    const d = await apiFetch('/api/talabat/sheet/dry-run');
+    if(d?.error) throw new Error(d.error);
+    box.innerHTML = `
+      <div style="border:1px solid var(--border);border-radius:10px;padding:12px;font-size:12.5px">
+        <div style="font-weight:800;margin-bottom:6px">🔬 الشيت من السيرفر — من غير رفع</div>
+        <div>الاسم: <b>${escapeHtml(d.name)}</b> · الصفوف: <b>${d.rows}</b> · الحجم: <b>${d.bytes}</b> بايت</div>
+        <div style="direction:ltr;font-family:monospace;font-size:11px;margin-top:4px;word-break:break-all">
+          sha256: ${escapeHtml(d.sha256)}</div>
+        ${!d.guard.ok ? `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;
+          padding:9px;margin-top:8px;color:#991b1b">⚠️ ${escapeHtml(d.guard.message)}</div>` : ''}
+        ${!d.sftp_configured ? '<div style="color:#dc2626;margin-top:6px">⚠️ بيانات SFTP ناقصة في Railway</div>' : ''}
+        <pre style="background:var(--bg);padding:9px;border-radius:8px;font-size:11px;overflow:auto;
+             direction:ltr;text-align:left;margin-top:8px">${escapeHtml(d.preview.join('\n'))}</pre>
+        <div style="color:var(--muted);font-size:11.5px;margin-top:6px">
+          نزّل الشيت من الزرار البرتقالي وقارن الـ sha256 — لازم يطابق قبل أي رفع.</div>
+        <button class="btn btn-sm btn-ghost" style="margin-top:8px" onclick="talUpStatus()">← رجوع</button>
+      </div>`;
+  }catch(e){ box.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+async function talUpNow(force){
+  if(!confirm(force ? 'ارفع بالتأكيد رغم نقص الصفوف؟' : 'ارفع الشيت دلوقتي على SFTP طلبات؟')) return;
+  const box = document.getElementById('tal-up');
+  box.innerHTML = '⏳ بيرفع...';
+  try{
+    const d = await apiFetch('/api/talabat/upload-now', 'POST', force ? { force:'1' } : {});
+    if(d?.error) throw new Error(d.error);
+    toast(`✅ اترفع — ${d.rows} صف${d.published?` · نشر ${d.published} سعر`:''}`);
+    talUpStatus(); talPubStatus();
+  }catch(e){
+    const msg = e.message || String(e);
+    box.innerHTML = `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;
+      padding:11px;color:#991b1b;font-size:12.5px">❌ ${escapeHtml(msg)}
+      ${/نقصت/.test(msg) ? `<div style="margin-top:8px">
+        <button class="btn btn-sm" style="background:#dc2626;color:#fff" onclick="talUpNow(true)">
+          أنا متأكد — ارفع</button></div>` : ''}
+      <div style="margin-top:8px"><button class="btn btn-sm btn-ghost" onclick="talUpStatus()">← رجوع</button></div></div>`;
+  }
+}
+
 function talabatExport(){
   if(!_talLinks.length){ toast('مفيش منتجات'); return; }
   const header=['SKU','Barcode','reason','start_date','end_date','Campaing_status','discounted_price','maximum_sales_quantity','original_Price','active'];
