@@ -4905,6 +4905,36 @@ tr:hover td{background:#fafbff}
       <div style="padding:14px 16px"><div id="cr-body"></div></div>
     </div>
 
+    <!-- 🏦 v763: كشف البنك -->
+    <div class="card" id="bk-settings" style="margin-bottom:16px;display:none">
+      <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-weight:900">🏦 كشف البنك</span>
+        <span style="color:var(--muted);font-size:12px">ارفع MT940 → راجع → نفّذ في Zoho</span>
+        <span style="margin-inline-start:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <label class="btn btn-sm" style="background:var(--primary);color:#fff;cursor:pointer;margin:0">
+            📤 ارفع كشف
+            <input type="file" accept=".txt,.sta,.mt940,text/plain" style="display:none" onchange="bkUpload(this)">
+          </label>
+          <button class="btn btn-sm btn-ghost" onclick="bkMapOpen()">🗺️ خريطة الحسابات</button>
+          <button class="btn btn-sm btn-ghost" onclick="bkLoad(0)">🔄 حدّث</button>
+        </span>
+      </div>
+      <div style="padding:14px 16px">
+        <div id="bk-status" style="margin-bottom:10px"></div>
+        <div id="bk-body" style="color:var(--muted);font-size:12.5px">دوس 🔄 حدّث أو ارفع كشف جديد.</div>
+      </div>
+    </div>
+
+    <div id="m-bank-tx" class="modal-overlay" style="display:none">
+      <div class="modal" style="max-width:520px">
+        <div class="modal-header">
+          <span style="font-weight:900">🏦 مراجعة حركة بنك</span>
+          <button class="modal-close" onclick="closeM('m-bank-tx')">×</button>
+        </div>
+        <div class="modal-body"><div id="bk-modal-body"></div></div>
+      </div>
+    </div>
+
     <!-- 🧾 v760: مطابقة فيزا الكاشير بـ Paymob -->
     <div class="card" id="vc-settings" style="margin-bottom:16px;display:none">
       <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -55503,6 +55533,7 @@ function goPage(el,page){
   if(page==='settings')pcOpen();               // 🖥️ v735
   if(page==='settings')pmOpen();               // 🔑 v755
   if(page==='settings')vcOpen();               // 🧾 v760
+  if(page==='settings')bkOpen();               // 🏦 v763
   if(page==='settings')chOpen();               // 📡 v738
   if(page==='settings')tgOpen();               // 🤖 v739
   if(page==='settings')tcOpen();               // 🏷️ v744
@@ -62237,6 +62268,259 @@ async function tgTrePdf(){
     err.innerHTML = '<span style="color:#166534">✅ اتبعت</span>';
   }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
 }
+
+// ══════════════════════════════════════════════════════════════════
+// 🏦 v763: كشف البنك — ترفع، تراجع، وتنفّذ في Zoho حركة حركة
+// ══════════════════════════════════════════════════════════════════
+let _BK = { rows: [], filter: { status:'new', kind:'', q:'' }, page: 0, map: null };
+
+function bkOpen(){
+  const box = document.getElementById('bk-settings');
+  if(!box) return;
+  if(currentUser?.username !== 'admin' && currentUser?.role !== 'admin'){ box.style.display='none'; return; }
+  box.style.display = '';
+}
+
+async function bkUpload(input){
+  const f = input.files?.[0];
+  if(!f) return;
+  const st = document.getElementById('bk-status');
+  st.innerHTML = '⏳ بيقرا الملف...';
+  try{
+    const text = await f.text();
+    const d = await apiFetch('/api/bank/import', 'POST', { text });
+    if(d?.error) throw new Error(d.error);
+    const b = d.balance;
+    st.innerHTML = `
+      <div style="background:${b && !b.ok ? '#fef3c7' : '#dcfce7'};
+           border:1px solid ${b && !b.ok ? '#fde68a' : '#86efac'};
+           border-radius:10px;padding:11px;color:#1a1a1a;font-size:13px">
+        <b>✅ اتقرا ${d.parsed} حركة</b> — ${d.added} جديدة
+        ${d.duplicates ? ` · ${d.duplicates} كانت متسجّلة قبل كده` : ''}
+        ${d.late ? ` · <span style="color:#92400e;font-weight:800">${d.late} ظهرت متأخرة ⏰</span>` : ''}
+        ${b ? `<div style="font-size:11.5px;margin-top:4px;color:${b.ok ? '#166534' : '#92400e'}">
+          ${b.ok ? '✅ الرصيد مظبوط: ' : '⚠️ الرصيد مش مظبوط — الملف ناقص؟ '}
+          ${Number(b.open).toLocaleString('ar-EG')} ← ${Number(b.computed).toLocaleString('ar-EG')}
+          (الكشف بيقول ${Number(b.close).toLocaleString('ar-EG')})</div>` : ''}
+      </div>`;
+    bkLoad();
+  }catch(e){ st.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+  input.value = '';
+}
+
+async function bkLoad(page){
+  if(page !== undefined) _BK.page = page;
+  const box = document.getElementById('bk-body');
+  box.innerHTML = '<span style="color:var(--muted)">⏳ ...</span>';
+  try{
+    const f = _BK.filter;
+    const d = await apiFetch(`/api/bank/tx?status=${encodeURIComponent(f.status)}`
+      + `&kind=${encodeURIComponent(f.kind)}&q=${encodeURIComponent(f.q)}&page=${_BK.page}`);
+    if(d?.error) throw new Error(d.error);
+    _BK.rows = d.rows; _BK.kinds = d.kinds;
+    const n = v => Number(v||0).toLocaleString('ar-EG');
+    const tot = {}; for(const t of d.totals) tot[t.status] = t;
+    const tabs = [['new','🆕 محتاجة مراجعة'],['posted','✅ اتنفّذت'],
+                  ['skipped','🚫 متجاهلة'],['failed','❌ فشلت'],['','الكل']];
+
+    box.innerHTML = `
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+        ${tabs.map(([k,l]) => `<button onclick="bkFilter('status','${k}')"
+          style="padding:7px 11px;border-radius:8px;border:1px solid var(--border);cursor:pointer;
+          font-family:Cairo,sans-serif;font-size:12px;font-weight:700;
+          background:${f.status===k?'var(--primary)':'transparent'};
+          color:${f.status===k?'#fff':'var(--text)'}">${l}${tot[k]?` (${tot[k].n})`:''}</button>`).join('')}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+        <select onchange="bkFilter('kind', this.value)" class="form-input" style="width:190px;padding:5px 8px">
+          <option value="">كل الأنواع</option>
+          ${Object.entries(d.kinds).map(([k,l]) =>
+            `<option value="${k}" ${f.kind===k?'selected':''}>${escapeHtml(l)}</option>`).join('')}
+        </select>
+        <input value="${escapeHtml(f.q)}" placeholder="رقم شيك / مرجع / مبلغ" class="form-input"
+               style="width:200px;padding:5px 8px" onchange="bkFilter('q', this.value)">
+      </div>
+      ${d.pending_by_kind.length ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">
+        المحتاج مراجعة: ${d.pending_by_kind.map(x =>
+          `${escapeHtml(d.kinds[x.kind]||x.kind)} <b>${x.n}</b>`).join(' · ')}</div>` : ''}
+      ${!d.rows.length ? '<div style="padding:20px;text-align:center;color:var(--muted)">مفيش حركات</div>' : `
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:var(--bg)">
+          <th style="padding:7px">التاريخ</th><th style="padding:7px">المبلغ</th>
+          <th style="padding:7px">النوع</th><th style="padding:7px">المرجع</th>
+          <th style="padding:7px"></th></tr></thead>
+        <tbody>${d.rows.map(x => `
+          <tr style="border-top:1px solid var(--border)">
+            <td style="padding:7px;text-align:center;direction:ltr;white-space:nowrap">
+              ${escapeHtml(x.value_date)}
+              ${x.late ? '<div style="font-size:9.5px;color:#92400e" title="ظهرت في كشف أحدث من تاريخها">⏰ متأخرة</div>' : ''}</td>
+            <td style="padding:7px;text-align:center;font-weight:800;
+                color:${x.dc==='C'?'#16a34a':'#dc2626'};white-space:nowrap">
+              ${x.dc==='C'?'+':'−'}${n(x.amount)}</td>
+            <td style="padding:7px;text-align:center">${escapeHtml(d.kinds[x.kind]||x.kind||'')}
+              ${x.note?`<div style="font-size:10px;color:var(--muted)">${escapeHtml(x.note)}</div>`:''}
+              ${x.cheque_no?`<div style="font-size:10px;direction:ltr;color:var(--muted)">${escapeHtml(x.cheque_no)}</div>`:''}</td>
+            <td style="padding:7px;text-align:center;direction:ltr;font-size:10.5px;color:var(--muted)">
+              ${escapeHtml(x.bank_ref||x.cust_ref||'')}</td>
+            <td style="padding:7px;text-align:center;white-space:nowrap">
+              ${x.status==='posted'
+                ? `<span style="color:#166534;font-weight:700">✅ ${escapeHtml(x.zoho_type||'')}</span>
+                   <div style="font-size:10px;color:var(--muted)">${escapeHtml(x.posted_by||'')}</div>`
+                : x.status==='skipped'
+                ? `<span style="color:var(--muted)">🚫 ${escapeHtml(x.skip_reason||'')}</span>`
+                : `<button class="btn btn-sm btn-ghost" onclick="bkRow(${x.id})">📝 راجع</button>
+                   ${x.status==='failed'?`<div style="font-size:10px;color:#dc2626;max-width:170px">${escapeHtml(x.skip_reason||'')}</div>`:''}`}
+            </td>
+          </tr>`).join('')}</tbody></table></div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
+        ${_BK.page>0?`<button class="btn btn-sm btn-ghost" onclick="bkLoad(${_BK.page-1})">السابق</button>`:''}
+        ${d.rows.length===60?`<button class="btn btn-sm btn-ghost" onclick="bkLoad(${_BK.page+1})">التالي</button>`:''}
+      </div>`}`;
+  }catch(e){ box.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+function bkFilter(k, v){ _BK.filter[k] = v; _BK.page = 0; bkLoad(); }
+
+// مراجعة حركة واحدة — الترشيحات والتنفيذ
+async function bkRow(id){
+  const d = await apiFetch('/api/bank/tx/' + id + '/suggest').catch(e => ({ error: e.message }));
+  if(d?.error){ toast('❌ ' + d.error); return; }
+  const t = d.tx, n = v => Number(v||0).toLocaleString('ar-EG');
+  const kinds = _BK.kinds || {};
+
+  let pick = '';
+  if(d.type === 'cheque'){
+    pick = d.items.length
+      ? `<div style="font-size:12px;font-weight:800;margin:10px 0 5px">الشيك المطابق</div>
+         ${d.items.map(c => `<label style="display:flex;gap:8px;align-items:center;padding:8px;
+            border:1px solid ${c.amount_ok?'#86efac':'var(--border)'};border-radius:8px;margin-bottom:5px;cursor:pointer">
+           <input type="radio" name="bk-pick" value="${escapeHtml(c.id)}" ${c.amount_ok?'checked':''}>
+           <span style="flex:1"><b>${escapeHtml(c.num)}</b> · ${escapeHtml(c.payee||'')}
+             <div style="font-size:11px;color:var(--muted)">${n(c.amount)} ج · ${escapeHtml(c.due||'')}
+               · ${escapeHtml(c.how)} ${c.amount_ok?'· <span style="color:#166534">المبلغ مطابق</span>':'· <span style="color:#dc2626">المبلغ مختلف</span>'}
+               ${c.status==='done'?'· <span style="color:#92400e">متعلّم مصروف قبل كده</span>':''}</div></span>
+         </label>`).join('')}`
+      : `<div style="color:#92400e;font-size:12px;margin:10px 0">⚠️ مفيش شيك بالرقم ده عندك — نفّذ القيد من غير ربط، أو صحّح رقم الشيك في صفحة الشيكات.</div>`;
+  }
+  if(d.type === 'order'){
+    pick = d.items.length
+      ? `<div style="font-size:12px;font-weight:800;margin:10px 0 5px">أوردرات بنفس المبلغ</div>
+         <div style="font-size:11px;color:var(--muted);margin-bottom:6px">
+           الكشف مفيهوش اسم المُرسِل — الترشيح بالمبلغ والتاريخ، فاختار بنفسك.</div>
+         ${d.items.map(o => `<label style="display:flex;gap:8px;align-items:center;padding:8px;
+            border:1px solid var(--border);border-radius:8px;margin-bottom:5px;cursor:pointer">
+           <input type="radio" name="bk-pick" value="${escapeHtml(o.id)}">
+           <span style="flex:1"><b>${escapeHtml(o.name||'')}</b> · ${escapeHtml(o.id)}
+             <div style="font-size:11px;color:var(--muted)">${n(o.total)} ج · ${escapeHtml(o.at||'')}
+               · ${escapeHtml(o.status||'')} ${o.same_day?'· <span style="color:#166534">نفس اليوم</span>':''}</div></span>
+         </label>`).join('')}`
+      : `<div style="color:#92400e;font-size:12px;margin:10px 0">⚠️ مفيش أوردر بنفس المبلغ في النافذة — نفّذه كتحصيل عام.</div>`;
+  }
+
+  const html = `
+    <div style="padding:4px 2px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div><div style="font-size:11px;color:var(--muted)">${escapeHtml(t.value_date)}
+          ${t.late?' · ⏰ ظهرت متأخرة':''}</div>
+          <div style="font-size:11px;color:var(--muted);direction:ltr">${escapeHtml(t.bank_ref||t.cust_ref||'')}</div></div>
+        <div style="font-size:26px;font-weight:900;color:${t.dc==='C'?'#16a34a':'#dc2626'}">
+          ${t.dc==='C'?'+':'−'}${n(t.amount)} ج</div>
+      </div>
+      <div style="margin-top:10px">
+        <label style="font-size:12px;font-weight:700">النوع</label>
+        <select id="bk-kind" class="form-input" style="width:100%;margin-top:4px">
+          ${Object.entries(kinds).map(([k,l]) =>
+            `<option value="${k}" ${t.kind===k?'selected':''}>${escapeHtml(l)}</option>`).join('')}
+        </select>
+      </div>
+      ${pick}
+      <div style="margin-top:10px">
+        <label style="font-size:12px;font-weight:700">ملاحظة (اختياري)</label>
+        <input id="bk-desc" class="form-input" style="width:100%;margin-top:4px" autocomplete="off">
+      </div>
+      <div id="bk-err" style="margin-top:8px;font-size:12px"></div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn" style="background:var(--primary);color:#fff;flex:1;min-width:150px"
+                onclick="bkPost(${t.id})">⚡ نفّذ في Zoho</button>
+        <button class="btn btn-ghost" onclick="bkSkip(${t.id})">🚫 تجاهل</button>
+      </div>
+    </div>`;
+  // op.html بيستخدم openM/closeM على div موجود — مش showModal
+  document.getElementById('bk-modal-body').innerHTML = html;
+  openM('m-bank-tx');
+}
+
+async function bkPost(id){
+  const err = document.getElementById('bk-err');
+  const kind = document.getElementById('bk-kind')?.value;
+  const picked = document.querySelector('input[name="bk-pick"]:checked')?.value || null;
+  const desc = document.getElementById('bk-desc')?.value || '';
+  err.innerHTML = '<span style="color:var(--muted)">⏳ بينفّذ في Zoho...</span>';
+  try{
+    const row = _BK.rows.find(r => r.id === id);
+    if(kind && row && kind !== row.kind){
+      const k = await apiFetch('/api/bank/tx/' + id + '/kind', 'POST', { kind });
+      if(k?.error) throw new Error(k.error);
+    }
+    const body = { description: desc };
+    if(kind === 'cheque') body.cheque_id = picked;
+    if(kind === 'instapay_in' && picked) body.order_id = picked;
+    const r = await apiFetch('/api/bank/tx/' + id + '/post', 'POST', body);
+    if(r?.error) throw new Error(r.error);
+    closeM('m-bank-tx'); toast('✅ اتنفّذت في Zoho'); bkLoad();
+  }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message||String(e)) + '</span>'; }
+}
+
+async function bkSkip(id){
+  const why = prompt('سبب التجاهل:');
+  if(why === null) return;
+  if(!String(why).trim()){ toast('❗ لازم سبب'); return; }
+  try{
+    const r = await apiFetch('/api/bank/tx/' + id + '/skip', 'POST', { reason: why });
+    if(r?.error) throw new Error(r.error);
+    closeM('m-bank-tx'); toast('🚫 اتجاهلت'); bkLoad();
+  }catch(e){ toast('❌ ' + (e.message||e)); }
+}
+
+// خريطة الحسابات — من غيرها مفيش تنفيذ
+async function bkMapOpen(){
+  const body = document.getElementById('bk-body');
+  body.innerHTML = '<span style="color:var(--muted)">⏳ بيجيب شجرة الحسابات من Zoho...</span>';
+  try{
+    const d = await apiFetch('/api/bank/map');
+    if(d?.error) throw new Error(d.error);
+    body.innerHTML = `
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">
+        حدّد لكل بند حسابه في Zoho. من غير التحديد ده التنفيذ هيرفض —
+        وده مقصود: قيد على حساب غلط أوجع من قيد مااتعملش.</div>
+      ${d.zoho_error ? `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;
+         padding:10px;color:#991b1b;font-size:12px;margin-bottom:10px">
+         ⚠️ ماقدرناش نجيب الحسابات من Zoho: ${escapeHtml(d.zoho_error)}</div>` : ''}
+      ${d.slots.map(s => {
+        const cur = d.map[s.slot];
+        return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:7px;flex-wrap:wrap">
+          <span style="flex:1;min-width:190px;font-size:12.5px;font-weight:700">${escapeHtml(s.label)}</span>
+          <select class="form-input" style="width:260px;padding:5px 8px"
+                  onchange="bkMapSet('${s.slot}', this)">
+            <option value="">— مش محدد —</option>
+            ${d.accounts.map(a => `<option value="${escapeHtml(a.id)}"
+              ${cur?.account_id===a.id?'selected':''}>${escapeHtml(a.name)}</option>`).join('')}
+          </select>
+          ${cur?.account_id?'<span style="color:#166534">✅</span>':'<span style="color:#dc2626">مطلوب</span>'}
+        </div>`;}).join('')}
+      <button class="btn btn-sm btn-ghost" style="margin-top:10px" onclick="bkLoad()">← رجوع للحركات</button>`;
+  }catch(e){ body.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+async function bkMapSet(slot, sel){
+  try{
+    const r = await apiFetch('/api/bank/map', 'POST', {
+      slot, account_id: sel.value, account_name: sel.options[sel.selectedIndex]?.text || '' });
+    if(r?.error) throw new Error(r.error);
+    toast('✅ اتحفظ');
+  }catch(e){ toast('❌ ' + (e.message||e)); }
+}
+
 
 // 🧾 v762: شارة صغيرة جوه كارت التصفية في القايمة
 async function vcMini(id, from, to, storeId){
