@@ -4905,6 +4905,21 @@ tr:hover td{background:#fafbff}
       <div style="padding:14px 16px"><div id="cr-body"></div></div>
     </div>
 
+    <!-- 🧾 v760: مطابقة فيزا الكاشير بـ Paymob -->
+    <div class="card" id="vc-settings" style="margin-bottom:16px;display:none">
+      <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-weight:900">🧾 مراجعة فيزا الكاشير</span>
+        <span style="color:var(--muted);font-size:12px">كل بيعة فيزا ليها عملية على الماكينة؟</span>
+        <span style="margin-inline-start:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input id="vc-date" type="date" class="form-input" style="width:150px;padding:4px 8px">
+          <button class="btn btn-sm" style="background:var(--primary);color:#fff" onclick="vcLoad()">🔍 راجع</button>
+        </span>
+      </div>
+      <div style="padding:14px 16px"><div id="vc-body" style="color:var(--muted);font-size:12.5px">
+        اختار اليوم ودوس «راجع».
+      </div></div>
+    </div>
+
     <!-- 🔑 v755: تشخيص Paymob API -->
     <div class="card" id="pm-settings" style="margin-bottom:16px;display:none">
       <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -55472,6 +55487,7 @@ function goPage(el,page){
   if(page==='settings')lkSetOpen();            // 🔒 v731
   if(page==='settings')pcOpen();               // 🖥️ v735
   if(page==='settings')pmOpen();               // 🔑 v755
+  if(page==='settings')vcOpen();               // 🧾 v760
   if(page==='settings')chOpen();               // 📡 v738
   if(page==='settings')tgOpen();               // 🤖 v739
   if(page==='settings')tcOpen();               // 🏷️ v744
@@ -62205,6 +62221,97 @@ async function tgTrePdf(){
     if(d?.error) throw new Error(d.error);
     err.innerHTML = '<span style="color:#166534">✅ اتبعت</span>';
   }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+// 🧾 v760: مراجعة فيزا الكاشير
+function vcOpen(){
+  const box = document.getElementById('vc-settings');
+  if(!box) return;
+  if(currentUser?.username !== 'admin' && currentUser?.role !== 'admin'){ box.style.display = 'none'; return; }
+  box.style.display = '';
+  const d = document.getElementById('vc-date');
+  if(d && !d.value) d.value = new Date(Date.now() + 2*3600000).toISOString().slice(0,10);
+}
+
+async function vcLoad(){
+  const box = document.getElementById('vc-body');
+  const date = document.getElementById('vc-date')?.value || '';
+  box.innerHTML = '<span style="color:var(--muted)">⏳ ...</span>';
+  try{
+    const d = await apiFetch('/api/pos/visa-check' + (date ? '?date=' + date : ''));
+    if(d?.error) throw new Error(d.error);
+    _VC = d;
+    const n = x => Number(x||0).toLocaleString('ar-EG');
+    const head = d.clean
+      ? `<div style="padding:12px;border-radius:9px;background:#dcfce7;border:1px solid #86efac;color:#1a1a1a;font-size:13px">
+           <b>✅ كله مظبوط</b> — ${d.matched.count} بيعة فيزا بـ ${n(d.matched.total)} ج، كلها ليها عملية على الماكينة.</div>`
+      : `<div style="padding:12px;border-radius:9px;background:#fee2e2;border:1px solid #fca5a5;color:#1a1a1a;font-size:13px">
+           <b>⚠️ في فرق</b> — الكاشير سجّل <b>${n(d.cashier.total)} ج</b> وPaymob شايفة <b>${n(d.paymob.total)} ج</b>
+           ${d.paymob.failed ? ` · و${d.paymob.failed} عملية فاشلة على الماكينة` : ''}</div>`;
+
+    // بيعة مالهاش عملية — دي اللي المدير محتاج يشوفها
+    const gaps = d.sales_without_event.rows.map(x => `
+      <tr style="border-top:1px solid var(--border)">
+        <td style="padding:7px;font-weight:700">${n(x.amount)} ج</td>
+        <td style="padding:7px;text-align:center">${escapeHtml(x.shopify_order_name || x.sale_number || '')}</td>
+        <td style="padding:7px;text-align:center;font-size:11.5px">
+          ${x.declined
+            ? `<span style="color:#dc2626;font-weight:700">العملية ${escapeHtml(x.declined.why)}</span>
+               <div style="color:var(--muted)">معاملة ${escapeHtml(String(x.declined.id))}</div>`
+            : '<span style="color:var(--muted)">مفيش أي عملية</span>'}
+        </td>
+        <td style="padding:7px;text-align:center">
+          <button class="btn btn-sm btn-ghost" onclick="vcConfirm(${x.id}, ${JSON.stringify(n(x.amount))})">✍️ أكّد بالريسيت</button>
+        </td>
+      </tr>`).join('');
+
+    const orphans = d.events_without_sale.rows.map(e => `
+      <tr style="border-top:1px solid var(--border)">
+        <td style="padding:7px;font-weight:700">${n(e.amount)} ج</td>
+        <td style="padding:7px;text-align:center;direction:ltr;font-size:11.5px">${escapeHtml(String(e.id))}</td>
+        <td style="padding:7px;text-align:center">${escapeHtml(e.terminal_id || '')}</td>
+        <td style="padding:7px;text-align:center;direction:ltr;font-size:11.5px">${escapeHtml(String(e.txn_at||'').slice(11,19))}</td>
+      </tr>`).join('');
+
+    box.innerHTML = head + `
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin:13px 0;font-size:12.5px">
+        <span>✅ متطابقة: <b>${d.matched.count}</b> · ${n(d.matched.total)} ج</span>
+        ${d.confirmed_manually.count ? `<span style="color:#92400e">✍️ مؤكّدة بالريسيت: <b>${d.confirmed_manually.count}</b> · ${n(d.confirmed_manually.total)} ج</span>` : ''}
+        ${d.sales_without_event.count ? `<span style="color:#dc2626">⚠️ بيعة من غير عملية: <b>${d.sales_without_event.count}</b> · ${n(d.sales_without_event.total)} ج</span>` : ''}
+        ${d.events_without_sale.count ? `<span style="color:#dc2626">⚠️ عملية من غير بيعة: <b>${d.events_without_sale.count}</b> · ${n(d.events_without_sale.total)} ج</span>` : ''}
+      </div>
+      ${d.sales_without_event.count ? `
+        <div style="font-weight:800;font-size:13px;margin:12px 0 5px;color:#991b1b">بيعات فيزا مالهاش عملية على الماكينة</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">
+          يا إما العملية اترفضت، يا إما الريسيت من يوم تاني، يا إما الإشعار ضاع.
+          لو شايف الريسيت قدامك وسليم، أكّده بالرقم المطبوع عليه.</div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:var(--bg)"><th style="padding:7px">المبلغ</th>
+            <th style="padding:7px">الأوردر</th><th style="padding:7px">إيه اللي حصل</th><th style="padding:7px"></th></tr></thead>
+          <tbody>${gaps}</tbody></table></div>` : ''}
+      ${d.events_without_sale.count ? `
+        <div style="font-weight:800;font-size:13px;margin:16px 0 5px;color:#991b1b">عمليات على الماكينة مالهاش بيعة</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">اتدفعت فعلاً بس مش متسجّلة في الكاشير.</div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:var(--bg)"><th style="padding:7px">المبلغ</th>
+            <th style="padding:7px">رقم المعاملة</th><th style="padding:7px">الماكينة</th><th style="padding:7px">الوقت</th></tr></thead>
+          <tbody>${orphans}</tbody></table></div>` : ''}`;
+  }catch(e){ box.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+let _VC = null;
+async function vcConfirm(paymentId, amount){
+  const t = prompt('رقم المعاملة المطبوع على الريسيت (Transaction ID) للبيعة بـ ' + amount + ' ج:');
+  if(t === null) return;
+  const txn = String(t).trim();
+  if(!txn){ toast('❗ اكتب الرقم'); return; }
+  const note = prompt('سبب التأكيد اليدوي (اختياري) — مثلاً: الريسيت سليم والإشعار ماوصلش') || '';
+  try{
+    const r = await apiFetch('/api/pos/visa-check/confirm', 'POST', { payment_id: paymentId, txn_id: txn, note });
+    if(r?.error) throw new Error(r.error);
+    toast('✅ اتأكدت');
+    vcLoad();
+  }catch(e){ toast('❌ ' + (e.message || e)); }
 }
 
 // 🚨 v757: السطر القديم كان بينادي isAdmin() — دالة أنا اخترعتها
