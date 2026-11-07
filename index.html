@@ -4976,6 +4976,20 @@ tr:hover td{background:#fafbff}
             <input type="checkbox" id="tg-trepdf" onchange="tgSave()">
             <span>📄 حركات الخزن — PDF يومي</span>
           </label>
+          <!-- 📦 v747: تنبيه إعادة الطلب -->
+          <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:5px;cursor:pointer">
+            <input type="checkbox" id="tg-reorder" onchange="tgSave()">
+            <span>📦 صنف من أعلى ٣٠٠ بالإيراد فاضل فيه أقل من شهر</span>
+          </label>
+          <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:9px;flex-wrap:wrap;cursor:pointer">
+            <input type="checkbox" id="tg-ro-week" onchange="tgSave()">
+            <span>📋 قايمة الطلب الأسبوعية — كل</span>
+            <select id="tg-ro-day" onchange="tgSave()" class="form-input" style="width:104px;padding:4px 8px">
+              <option value="6">سبت</option><option value="0">حد</option><option value="1">اتنين</option>
+              <option value="2">تلات</option><option value="3">أربع</option><option value="4">خميس</option>
+              <option value="5">جمعة</option>
+            </select>
+          </label>
           <div style="display:flex;gap:8px;align-items:center;font-size:12.5px;flex-wrap:wrap">
             <span>🕘 التقارير الساعة</span>
             <input id="tg-time" type="time" onchange="tgSave()" class="form-input"
@@ -4985,6 +4999,7 @@ tr:hover td{background:#fafbff}
               <button class="btn btn-sm btn-ghost" onclick="tgNow('daily')">ابعت اليومي دلوقتي</button>
               <button class="btn btn-sm btn-ghost" onclick="tgNow('monthly')">الشهري</button>
               <button class="btn btn-sm btn-ghost" onclick="tgTrePdf()">📄 PDF خزنة امبارح</button>
+              <button class="btn btn-sm btn-ghost" onclick="tgReorderNow()">📦 قايمة الطلب</button>
             </span>
           </div>
         </div>
@@ -61976,6 +61991,9 @@ function tgPaint(){
   document.getElementById('tg-daily').checked    = !!c.daily;
   document.getElementById('tg-monthly').checked  = !!c.monthly;
   document.getElementById('tg-trepdf').checked   = !!c.treasury_pdf;
+  document.getElementById('tg-reorder').checked  = !!c.reorder;
+  document.getElementById('tg-ro-week').checked  = !!c.reorder_weekly;
+  document.getElementById('tg-ro-day').value     = String(c.reorder_day ?? 6);
   document.getElementById('tg-big-min').value    = c.big_order_min ?? 5000;
   const _2 = n => String(n).padStart(2, '0');
   document.getElementById('tg-time').value = `${_2(c.hour ?? 9)}:${_2(c.minute ?? 0)}`;
@@ -62050,6 +62068,9 @@ async function tgSave(){
     daily:    document.getElementById('tg-daily').checked,
     monthly:  document.getElementById('tg-monthly').checked,
     treasury_pdf: document.getElementById('tg-trepdf').checked,
+    reorder:        document.getElementById('tg-reorder').checked,
+    reorder_weekly: document.getElementById('tg-ro-week').checked,
+    reorder_day:    parseInt(document.getElementById('tg-ro-day').value, 10) || 0,
     big_order_min: parseFloat(document.getElementById('tg-big-min').value) || 0,
     hour:     parseInt((document.getElementById('tg-time').value || '09:00').split(':')[0], 10),
     minute:   parseInt((document.getElementById('tg-time').value || '09:00').split(':')[1], 10) || 0,
@@ -62108,6 +62129,19 @@ async function tgTrePdf(){
     const d = await apiFetch('/api/telegram/treasury-pdf', 'POST', {});
     if(d?.error) throw new Error(d.error);
     err.innerHTML = '<span style="color:#166534">✅ اتبعت</span>';
+  }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+// 📦 v747: قايمة الطلب دلوقتي — بتاخد وقت، الحساب على الكتالوج كله
+async function tgReorderNow(){
+  const err = document.getElementById('tg-err');
+  err.innerHTML = '<span style="color:var(--muted)">⏳ بيحسب السرعة على ٤٥ يوم... ياخد شوية</span>';
+  try{
+    const d = await apiFetch('/api/telegram/reorder-now', 'POST', {});
+    if(d?.error) throw new Error(d.error);
+    err.innerHTML = d.count
+      ? `<span style="color:#166534">✅ اتبعت — ${d.count} صنف محتاج طلب</span>`
+      : '<span style="color:#166534">✅ مفيش صنف محتاج طلب دلوقتي</span>';
   }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
 }
 
