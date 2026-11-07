@@ -62418,16 +62418,22 @@ async function bkUpload(input){
   st.innerHTML = '⏳ بيقرا الملف...';
   try{
     const text = await f.text();
-    const d = await apiFetch('/api/bank/import', 'POST', { text });
-    if(d?.error) throw new Error(d.error);
+    const d = apiNN(await apiFetch('/api/bank/import', 'POST', { text }), 'رفع الكشف');
     const b = d.balance;
+    const FMT = { activity:'Account Activity', mt940:'MT940', csv5:'CSV (٥ أعمدة)' };
     st.innerHTML = `
       <div style="background:${b && !b.ok ? '#fef3c7' : '#dcfce7'};
            border:1px solid ${b && !b.ok ? '#fde68a' : '#86efac'};
            border-radius:10px;padding:11px;color:#1a1a1a;font-size:13px">
         <b>✅ اتقرا ${d.parsed} حركة</b> — ${d.added} جديدة
-        ${d.duplicates ? ` · ${d.duplicates} كانت متسجّلة قبل كده` : ''}
+        ${d.format ? ` · <span style="color:#52525b">${escapeHtml(FMT[d.format] || d.format)}</span>` : ''}
+        ${d.duplicates ? ` · ${d.duplicates} كانت متسجّلة قبل كده${
+            d.cross_format ? ` (منهم ${d.cross_format} من تصدير تاني)` : ''}` : ''}
         ${d.late ? ` · <span style="color:#92400e;font-weight:800">${d.late} ظهرت متأخرة ⏰</span>` : ''}
+        ${d.named ? `<div style="font-size:11.5px;margin-top:4px;color:#166534">
+          👤 ${d.named} حركة جاية باسم الطرف</div>`
+          : `<div style="font-size:11.5px;margin-top:4px;color:#92400e">
+          ⚠️ التصدير ده مفيهوش أسماء الأطراف — «Account Activity» بيجيبها</div>`}
         ${b ? `<div style="font-size:11.5px;margin-top:4px;color:${b.ok ? '#166534' : '#92400e'}">
           ${b.ok ? '✅ الرصيد مظبوط: ' : '⚠️ الرصيد مش مظبوط — الملف ناقص؟ '}
           ${Number(b.open).toLocaleString('ar-EG')} ← ${Number(b.computed).toLocaleString('ar-EG')}
@@ -62490,8 +62496,10 @@ async function bkLoad(page){
             <td style="padding:7px;text-align:center">${escapeHtml(d.kinds[x.kind]||x.kind||'')}
               ${x.note?`<div style="font-size:10px;color:var(--muted)">${escapeHtml(x.note)}</div>`:''}
               ${x.cheque_no?`<div style="font-size:10px;direction:ltr;color:var(--muted)">${escapeHtml(x.cheque_no)}</div>`:''}</td>
-            <td style="padding:7px;text-align:center;direction:ltr;font-size:10.5px;color:var(--muted)">
-              ${escapeHtml(x.bank_ref||x.cust_ref||'')}</td>
+            <td style="padding:7px;text-align:center;font-size:10.5px;color:var(--muted)">
+              ${x.counterparty
+                ? `<div style="font-weight:700;color:var(--fg);font-size:12px">👤 ${escapeHtml(x.counterparty)}</div>` : ''}
+              <span style="direction:ltr;display:inline-block">${escapeHtml(x.bank_ref||x.cust_ref||'')}</span></td>
             <td style="padding:7px;text-align:center;white-space:nowrap">
               ${x.status==='posted'
                 ? `<span style="color:#166534;font-weight:700">✅ ${escapeHtml(x.zoho_type||'')}</span>
