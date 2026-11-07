@@ -19796,7 +19796,10 @@ function renderSettlementsReceipts(){
               <div style="background:#f3f4f6;border:1px solid var(--border);border-radius:8px;padding:8px">
                 <div style="font-size:10px;color:var(--muted);font-weight:700">💳 فيزا</div>
                 <div style="font-size:16px;font-weight:900">${visaAmt.toLocaleString()} ج</div>
-                <div style="font-size:9px;color:var(--muted)">تلقائياً</div>
+                <!-- 🚨 v762: كان مكتوب «تلقائياً» — وده بيوحي إن مفيش حاجة
+                     تتراجع. دلوقتي بيقول هل العمليات دي موجودة فعلاً على
+                     الماكينة ولا لأ. -->
+                <div id="vz-s-${s.id}" style="font-size:9px;color:var(--muted)">⏳ بيراجع…</div>
               </div>
             ` : ''}
           </div>
@@ -19815,6 +19818,13 @@ function renderSettlementsReceipts(){
   }).join('');
 
   cont.innerHTML = html;
+
+  // 🧾 v762: بعد ما الكروت تترسم، كل واحدة بتراجع الفيزا بتاعتها.
+  //   بعد الرسم عشان الشاشة تظهر فوراً والمراجعة تيجي ورا.
+  for(const s of list){
+    if(parseFloat(s.visa_amount || 0) > 0)
+      vcMini(s.id, s.period_start || s.settled_at, s.period_end, s.store_id);
+  }
 }
 
 function setSettlementsFilter(mode){
@@ -62226,6 +62236,30 @@ async function tgTrePdf(){
     if(d?.error) throw new Error(d.error);
     err.innerHTML = '<span style="color:#166534">✅ اتبعت</span>';
   }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+// 🧾 v762: شارة صغيرة جوه كارت التصفية في القايمة
+async function vcMini(id, from, to, storeId){
+  const el = document.getElementById('vz-s-' + id);
+  if(!el) return;
+  try{
+    const q = (from && to)
+      ? `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+      : `?date=${String(from || '').slice(0,10)}`;
+    const d = await apiFetch('/api/pos/visa-check/summary' + q +
+                             (storeId ? '&store_id=' + storeId : ''));
+    if(d?.error) throw new Error(d.error);
+    const bad = (d.sales_without_event?.count || 0) + (d.events_without_sale?.count || 0);
+    if(d.clean && d.matched.count)
+      el.innerHTML = '<span style="color:#166534;font-weight:800">✅ متأكدة من Paymob</span>';
+    else if(bad)
+      el.innerHTML = `<span style="color:#dc2626;font-weight:800">⚠️ ${bad} عملية فيها فرق</span>`;
+    else
+      el.innerHTML = '<span style="color:var(--muted)">—</span>';
+  }catch(e){
+    // مانقولش «متأكدة» لو مانعرفش
+    el.innerHTML = '<span style="color:#92400e">⚠️ مااتراجعتش</span>';
+  }
 }
 
 // 🧾 v761: شارة حالة الفيزا — بتتحط في أي مكان فيه تصفية
