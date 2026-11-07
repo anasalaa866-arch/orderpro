@@ -12438,6 +12438,12 @@ function _xssClean(v, depth){
   return v;
 }
 
+// 🚑 v766: apiFetch بيرجّع null في **أي** فشل (شبكة، 4xx، 5xx) ومابيرميش أبداً.
+// الكود اللي بيكتب `if(d?.error) throw` وبعدها `d.rows` كان بيدّي للمستخدم
+// "Cannot read properties of null (reading 'rows')" بدل السبب الحقيقي.
+// السبب الحقيقي معروف جوه apiFetch — فنخزّنه هنا وapiNN() ترجّعه.
+let _apiLastErr = null;
+
 async function apiFetch(path, method='GET', body=null){
   const baseUrl = API_URL || BACKEND_URL;
   if(!baseUrl) return null;
@@ -12524,8 +12530,24 @@ async function apiFetch(path, method='GET', body=null){
       addToOfflineQueue(path, method, body);
     }
     console.warn('API:', path, e.message);
+    _apiLastErr = { path, msg: e.message, at: Date.now() };   // 🚑 v766
     return null;
   }
+}
+
+// 🚑 v766: استعملها مكان `if(d?.error) throw` لما الكود بعدها هيقرا من d.
+// null معناه إن النداء نفسه فشل — بترجّع السبب الحقيقي من apiFetch
+// بدل TypeError مالوش معنى.
+function apiNN(d, what){
+  if(d != null){
+    if(d.error) throw new Error(d.error);
+    return d;
+  }
+  const e = _apiLastErr;
+  if(e && Date.now() - e.at < 15000)
+    throw new Error(/^\d+$/.test(e.msg) ? `السيرفر ردّ ${e.msg}` : e.msg);
+  throw new Error('السيرفر مارجّعش رد' + (what ? ' على ' + what : '') +
+    ' — الاتصال قطع أو الباك اند بيعيد التشغيل. جرّب تاني بعد شوية.');
 }
 
 // مراقبة حالة الشبكة
@@ -46158,8 +46180,7 @@ async function talUpStatus(){
   const box = document.getElementById('tal-up');
   if(!box) return;
   try{
-    const d = await apiFetch('/api/talabat/uploads');
-    if(d?.error) throw new Error(d.error);
+    const d = apiNN(await apiFetch('/api/talabat/uploads'), 'سجل الرفعات');
     const last = (d.rows || [])[0];
     const okLast = last && last.ok;
     box.innerHTML = `
@@ -46179,7 +46200,7 @@ async function talUpStatus(){
           </span>
         </div>
         ${last && !last.ok ? `<div style="color:#dc2626;margin-top:6px">${escapeHtml(last.error||'')}</div>` : ''}
-        ${d.rows.length>1 ? `<details style="margin-top:8px">
+        ${(d.rows||[]).length>1 ? `<details style="margin-top:8px">
           <summary style="cursor:pointer;color:var(--muted)">آخر ${d.rows.length} رفعة</summary>
           <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-top:6px">
             ${d.rows.map(r=>`<tr style="border-top:1px solid var(--border)">
@@ -46196,8 +46217,7 @@ async function talUpStatus(){
 
 async function talUpToggle(on){
   try{
-    const r = await apiFetch('/api/talabat/autoupload', 'POST', { on });
-    if(r?.error) throw new Error(r.error);
+    apiNN(await apiFetch('/api/talabat/autoupload', 'POST', { on }), 'تشغيل الرفع التلقائي');
     toast(on ? '⚡ الرفع التلقائي اتشغّل' : '⏸️ اتوقف');
     talUpStatus();
   }catch(e){ toast('❌ ' + (e.message||e)); talUpStatus(); }
@@ -46208,8 +46228,7 @@ async function talUpDry(){
   const box = document.getElementById('tal-up');
   box.innerHTML = '⏳ بيبني الشيت...';
   try{
-    const d = await apiFetch('/api/talabat/sheet/dry-run');
-    if(d?.error) throw new Error(d.error);
+    const d = apiNN(await apiFetch('/api/talabat/sheet/dry-run'), 'بناء الشيت');
     box.innerHTML = `
       <div style="border:1px solid var(--border);border-radius:10px;padding:12px;font-size:12.5px">
         <div style="font-weight:800;margin-bottom:6px">🔬 الشيت من السيرفر — من غير رفع</div>
@@ -46233,8 +46252,7 @@ async function talUpNow(force){
   const box = document.getElementById('tal-up');
   box.innerHTML = '⏳ بيرفع...';
   try{
-    const d = await apiFetch('/api/talabat/upload-now', 'POST', force ? { force:'1' } : {});
-    if(d?.error) throw new Error(d.error);
+    const d = apiNN(await apiFetch('/api/talabat/upload-now', 'POST', force ? { force:'1' } : {}), 'الرفع');
     toast(`✅ اترفع — ${d.rows} صف${d.published?` · نشر ${d.published} سعر`:''}`);
     talUpStatus(); talPubStatus();
   }catch(e){
@@ -64607,4 +64625,4 @@ async function supUserToggle(id){
 </div>
 
 </body>
-</html>
+</html>
