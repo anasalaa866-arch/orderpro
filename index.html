@@ -4913,6 +4913,7 @@ tr:hover td{background:#fafbff}
         <span style="margin-inline-start:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <input id="pm-txn" class="form-input" placeholder="رقم المعاملة (اختياري)" style="width:190px;padding:4px 8px" autocomplete="off">
           <button class="btn btn-sm btn-ghost" onclick="pmProbe()">🔍 افحص</button>
+          <button class="btn btn-sm" style="background:var(--primary);color:#fff" onclick="pmEvents()">📥 الإشعارات الواصلة</button>
         </span>
       </div>
       <div style="padding:14px 16px"><div id="pm-body" style="color:var(--muted);font-size:12.5px">
@@ -62204,6 +62205,56 @@ async function tgTrePdf(){
     if(d?.error) throw new Error(d.error);
     err.innerHTML = '<span style="color:#166534">✅ اتبعت</span>';
   }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+// 🏪 v756: الإشعارات اللي وصلت من الماكينة
+async function pmEvents(){
+  const box = document.getElementById('pm-body');
+  box.innerHTML = '<span style="color:var(--muted)">⏳ ...</span>';
+  try{
+    const d = await apiFetch('/api/paymob/events');
+    if(d?.error) throw new Error(d.error);
+    if(!d.count){
+      box.innerHTML = `<div style="padding:12px;border-radius:9px;background:#fef3c7;border:1px solid #fde68a;color:#1a1a1a;font-size:13px">
+        ⚠️ لسه مفيش ولا إشعار وصل.<br><span style="font-size:12px">
+        يا إما الرابط لسه مااتحفظش، يا إما الماكينة على تكامل تاني،
+        يا إما البصمة اترفضت — شوف لوج Railway هتلاقي السبب مكتوب.</span></div>`;
+      return;
+    }
+    // أنهي ترمينال على أنهي تكامل — ده اللي بنعرفه من أول إشعار
+    const map = {};
+    for(const e of d.events) if(e.terminal_id) map[e.terminal_id] = e.integration_id;
+    const pairs = Object.entries(map);
+    box.innerHTML = `
+      <div style="padding:10px 12px;border-radius:9px;margin-bottom:12px;background:#dcfce7;border:1px solid #86efac;color:#1a1a1a;font-size:13px">
+        <b>✅ وصل ${d.count} إشعار</b> — منهم ${d.success_count} ناجحة بإجمالي
+        <b>${Number(d.success_total).toLocaleString('ar-EG')} ج</b>
+        ${pairs.length ? `<div style="font-size:12px;margin-top:6px">الماكينات: ${
+          pairs.map(([t,i]) => `<b>${escapeHtml(t)}</b> ← تكامل ${escapeHtml(String(i))}`).join(' · ')}</div>` : ''}
+      </div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:var(--bg)">
+          <th style="padding:7px;text-align:center">الحالة</th>
+          <th style="padding:7px;text-align:center">المبلغ</th>
+          <th style="padding:7px;text-align:center">وقت العملية</th>
+          <th style="padding:7px;text-align:center">الماكينة</th>
+          <th style="padding:7px;text-align:center">الكارت</th>
+          <th style="padding:7px;text-align:center">رقم المعاملة</th>
+        </tr></thead><tbody>
+        ${d.events.map(e => {
+          const bad = !e.success || e.is_refunded || e.is_voided;
+          const lbl = e.is_voided ? 'ملغية' : e.is_refunded ? 'مرتجعة'
+                    : e.pending ? 'معلّقة' : e.success ? 'ناجحة' : 'مرفوضة';
+          return `<tr style="border-top:1px solid var(--border)">
+            <td style="padding:6px;text-align:center;font-weight:700;color:${bad ? '#dc2626' : '#16a34a'}">${bad ? '❌' : '✅'} ${lbl}</td>
+            <td style="padding:6px;text-align:center;font-weight:700">${Number(e.amount).toLocaleString('ar-EG')} ج</td>
+            <td style="padding:6px;text-align:center;direction:ltr">${escapeHtml(e.at_cairo || '')}</td>
+            <td style="padding:6px;text-align:center">${escapeHtml(e.terminal_id || '—')}</td>
+            <td style="padding:6px;text-align:center">${escapeHtml(e.source_sub_type || e.source_type || '')} ${e.pan ? '••'+escapeHtml(e.pan) : ''}</td>
+            <td style="padding:6px;text-align:center;direction:ltr;color:var(--muted)">${escapeHtml(String(e.id))}</td>
+          </tr>`;}).join('')}
+        </tbody></table></div>`;
+  }catch(e){ box.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
 }
 
 // 🔑 v755: تشخيص Paymob — بيورّي الرد الخام زي ما هو
