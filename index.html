@@ -4990,6 +4990,17 @@ tr:hover td{background:#fafbff}
               <option value="5">جمعة</option>
             </select>
           </label>
+          <!-- 📑 v752: شيكات لم تُصرف -->
+          <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:9px;flex-wrap:wrap;cursor:pointer">
+            <input type="checkbox" id="tg-checks" onchange="tgSave()">
+            <span>📑 شيكات لم تُصرف — PDF كل</span>
+            <select id="tg-chk-day" onchange="tgSave()" class="form-input" style="width:104px;padding:4px 8px">
+              <option value="6">سبت</option><option value="0">حد</option><option value="1">اتنين</option>
+              <option value="2">تلات</option><option value="3">أربع</option><option value="4">خميس</option>
+              <option value="5">جمعة</option>
+            </select>
+            <span style="color:var(--muted);font-size:11.5px">المتأخر + المستحق لحد الخميس الجاي</span>
+          </label>
           <div style="display:flex;gap:8px;align-items:center;font-size:12.5px;flex-wrap:wrap">
             <span>🕘 التقارير الساعة</span>
             <input id="tg-time" type="time" onchange="tgSave()" class="form-input"
@@ -5000,6 +5011,7 @@ tr:hover td{background:#fafbff}
               <button class="btn btn-sm btn-ghost" onclick="tgNow('monthly')">الشهري</button>
               <button class="btn btn-sm btn-ghost" onclick="tgTrePdf()">📄 PDF خزنة امبارح</button>
               <button class="btn btn-sm btn-ghost" onclick="tgReorderNow()">📦 قايمة الطلب</button>
+              <button class="btn btn-sm btn-ghost" onclick="tgChecksNow()">📑 PDF الشيكات</button>
             </span>
           </div>
         </div>
@@ -28230,14 +28242,28 @@ function openSettleToTreasury(courierName, net, ts){
   document.body.appendChild(div);
 }
 
-function confirmSettleToTreasury(dateStr){
+// 🚨 v754: دي كانت بتبعت من غير category. من v700 القسم بقى إجباري
+//   على /api/treasury-tx، فالسيرفر كان بيرد 400 — و.catch(()=>{})
+//   كان بيبلع الخطأ، والـ toast بيقول «تم» والحركة اتحطّت محلياً بس.
+//   فتصفيات المناديب بطلت تتسجّل من غير ما حد ياخد باله.
+//   دلوقتي: بتبعت القسم، وبتستنى رد السيرفر، وبتقول الحقيقة.
+async function confirmSettleToTreasury(dateStr){
   const tId = document.getElementById('stt-treasury')?.value;
   const amount = parseFloat(document.getElementById('stt-amount')?.value)||0;
   const reason = document.getElementById('stt-reason')?.value.trim()||'تسوية مندوب';
   if(!tId||!amount){ toast('❗ اختر الخزنة والمبلغ'); return; }
-  const tx = {id:Date.now()+'_tx', treasuryId:tId, type:'in', amount, reason, date:dateStr};
+  const tx = {id:Date.now()+'_tx', treasuryId:tId, type:'in', amount, reason,
+              date:dateStr, category:'تحصيل مناديب'};
+  if(API_URL){
+    try{
+      const r = await apiFetch('/api/treasury-tx','POST',tx);
+      if(r?.ok === false || r?.error) throw new Error(r.error || 'السيرفر رفض الحركة');
+    }catch(e){
+      toast('❌ ماتسجّلتش في الخزنة: ' + (e.message || e));
+      return;                      // مانكدبش ومانحطّهاش محلياً
+    }
+  }
   _treasuryTx.push(tx);
-  if(API_URL) apiFetch('/api/treasury-tx','POST',tx).catch(()=>{});
   document.getElementById('settle-treasury-popup')?.remove();
   if(_activeTreasuryId===tId) renderTreasuryTxList(tId);
   toast('✅ تم إضافة '+amount.toLocaleString()+' ج للخزنة');
@@ -28848,7 +28874,7 @@ function txSuggest(){
   }, 400);
 }
 
-function saveTreasuryTx(){
+async function saveTreasuryTx(){
   const amount = parseFloat($('tx-amount')?.value);
   const reason = $('tx-reason')?.value.trim();
   const date = $('tx-date')?.value || new Date().toISOString().split('T')[0];
@@ -28856,21 +28882,31 @@ function saveTreasuryTx(){
   if(!reason){ toast('❗ أدخل السبب'); return; }
   const category = $('tx-cat')?.value || '';
   if(!category){ toast('❗ اختار القسم'); $('tx-cat')?.focus(); return; }   // 🏷️ v744
+  // 🚨 v754: كل نداءات الخزنة بتتفحص. الـ catch الفاضي هنا هو نفس
+  //   اللي خفى بق تصفيات المناديب — السيرفر بيرفض والشاشة بتقول «تم».
   if(_editingTxId){
-    const tx = _treasuryTx.find(x=>x.id===_editingTxId);
-    if(tx){ tx.amount=amount; tx.reason=reason; tx.date=date; tx.type=_txType; tx.category=category; }
+    const id = _editingTxId;
     if(API_URL){
-      apiFetch('/api/treasury-tx/'+_editingTxId,'PATCH',{amount,reason,date,type:_txType}).catch(()=>{});
-      apiFetch('/api/treasury-tx/'+_editingTxId+'/category','PATCH',{category}).catch(()=>{});
+      try{
+        const a = await apiFetch('/api/treasury-tx/'+id,'PATCH',{amount,reason,date,type:_txType});
+        if(a?.ok === false || a?.error) throw new Error(a.error || 'التعديل اترفض');
+        const b = await apiFetch('/api/treasury-tx/'+id+'/category','PATCH',{category});
+        if(b?.ok === false || b?.error) throw new Error(b.error || 'القسم اترفض');
+      }catch(e){ toast('❌ ماتعدّلش: ' + (e.message || e)); return; }
     }
+    const tx = _treasuryTx.find(x=>x.id===id);
+    if(tx){ tx.amount=amount; tx.reason=reason; tx.date=date; tx.type=_txType; tx.category=category; }
     _editingTxId = null;
     toast('✅ تم تعديل الحركة');
   } else {
     const tx = {id:Date.now()+'_tx', treasuryId:_activeTreasuryId, type:_txType, amount, reason, date, category};
+    if(API_URL){
+      try{
+        const r = await apiFetch('/api/treasury-tx','POST',tx);
+        if(r?.ok === false || r?.error) throw new Error(r.error || 'السيرفر رفض الحركة');
+      }catch(e){ toast('❌ ماتسجّلتش: ' + (e.message || e)); return; }
+    }
     _treasuryTx.push(tx);
-    if(API_URL) apiFetch('/api/treasury-tx','POST',tx).then(r=>{
-      if(r?.error) toast('❌ ' + escapeHtml(r.error));
-    }).catch(()=>{});
     toast('✅ تم تسجيل الحركة');
   }
   closeM('m-treasury-tx');
@@ -28896,10 +28932,15 @@ function editTreasuryTx(txId){
   openM('m-treasury-tx');
 }
 
-function deleteTreasuryTx(txId){
+async function deleteTreasuryTx(txId){
   if(!confirm('حذف هذه الحركة؟')) return;
+  if(API_URL){
+    try{
+      const r = await apiFetch('/api/treasury-tx/'+txId,'DELETE');
+      if(r?.ok === false || r?.error) throw new Error(r.error || 'الحذف اترفض');
+    }catch(e){ toast('❌ ماتحذفتش: ' + (e.message || e)); return; }
+  }
   _treasuryTx = _treasuryTx.filter(x=>x.id!==txId);
-  if(API_URL) apiFetch('/api/treasury-tx/'+txId,'DELETE').catch(()=>{});
   if(_activeTreasuryId) selectTreasury(_activeTreasuryId);
 }
 
@@ -62007,6 +62048,8 @@ function tgPaint(){
   document.getElementById('tg-reorder').checked  = !!c.reorder;
   document.getElementById('tg-ro-week').checked  = !!c.reorder_weekly;
   document.getElementById('tg-ro-day').value     = String(c.reorder_day ?? 6);
+  document.getElementById('tg-checks').checked   = !!c.checks_weekly;
+  document.getElementById('tg-chk-day').value    = String(c.checks_day ?? 6);
   document.getElementById('tg-big-min').value    = c.big_order_min ?? 5000;
   const _2 = n => String(n).padStart(2, '0');
   document.getElementById('tg-time').value = `${_2(c.hour ?? 9)}:${_2(c.minute ?? 0)}`;
@@ -62084,6 +62127,8 @@ async function tgSave(){
     reorder:        document.getElementById('tg-reorder').checked,
     reorder_weekly: document.getElementById('tg-ro-week').checked,
     reorder_day:    parseInt(document.getElementById('tg-ro-day').value, 10) || 0,
+    checks_weekly:  document.getElementById('tg-checks').checked,
+    checks_day:     parseInt(document.getElementById('tg-chk-day').value, 10) || 0,
     big_order_min: parseFloat(document.getElementById('tg-big-min').value) || 0,
     hour:     parseInt((document.getElementById('tg-time').value || '09:00').split(':')[0], 10),
     minute:   parseInt((document.getElementById('tg-time').value || '09:00').split(':')[1], 10) || 0,
@@ -62140,6 +62185,17 @@ async function tgTrePdf(){
   err.innerHTML = '<span style="color:var(--muted)">⏳ بيحضّر الـ PDF...</span>';
   try{
     const d = await apiFetch('/api/telegram/treasury-pdf', 'POST', {});
+    if(d?.error) throw new Error(d.error);
+    err.innerHTML = '<span style="color:#166534">✅ اتبعت</span>';
+  }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+// 📑 v752: PDF الشيكات دلوقتي
+async function tgChecksNow(){
+  const err = document.getElementById('tg-err');
+  err.innerHTML = '<span style="color:var(--muted)">⏳ بيحضّر الـ PDF...</span>';
+  try{
+    const d = await apiFetch('/api/telegram/checks-pdf', 'POST', {});
     if(d?.error) throw new Error(d.error);
     err.innerHTML = '<span style="color:#166534">✅ اتبعت</span>';
   }catch(e){ err.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
