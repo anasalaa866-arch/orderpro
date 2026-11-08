@@ -62708,6 +62708,26 @@ async function bkRow(id){
          </label>`).join('')}`
       : `<div style="color:#92400e;font-size:12px;margin:10px 0">⚠️ مفيش شيك بالرقم ده عندك — نفّذ القيد من غير ربط، أو صحّح رقم الشيك في صفحة الشيكات.</div>`;
   }
+  // ↩️ v774: تحويلة رجعت — تختار الأصلية
+  if(d.type === 'return'){
+    pick = d.items.length
+      ? `<div style="font-size:12px;font-weight:800;margin:10px 0 5px">التحويلة الأصلية اللي رجعت</div>
+         <div style="font-size:11px;color:var(--muted);margin-bottom:6px">
+           دي مش إيراد — دي فلوس كانت طالعة ورجعت. اختار الأصلية عشان تتلغي.</div>
+         ${d.items.map((o, i) => `<label style="display:flex;gap:8px;align-items:center;padding:8px;
+            border:1px solid ${i===0?'#86efac':'var(--border)'};border-radius:8px;margin-bottom:5px;cursor:pointer">
+           <input type="radio" name="bk-rev" value="${o.id}" ${i===0?'checked':''}>
+           <span style="flex:1"><b>${escapeHtml(o.counterparty || o.kind_label)}</b>
+             <div style="font-size:11px;color:var(--muted)">${n(o.amount)} ج · ${escapeHtml(o.value_date)}
+               · من ${o.days} يوم · ${escapeHtml(o.kind_label)}
+               ${o.posted ? '· <span style="color:#166534">اتنفّذت في Zoho</span>'
+                          : '· <span style="color:#92400e">لسه ماتنفّذتش</span>'}</div></span>
+         </label>`).join('')}`
+      : `<div style="color:#92400e;font-size:12px;margin:10px 0">
+           ⚠️ مالقيناش تحويلة صادرة بنفس المبلغ في آخر ٤٥ يوم.
+           نفّذها كقيد عادي أو سجّلها يدوي.</div>`;
+  }
+
   if(d.type === 'order'){
     pick = d.items.length
       // 🆕 v771: الترشيح بقى بالاسم كمان — والسبب مكتوب جنب كل أوردر
@@ -62791,6 +62811,8 @@ async function bkPost(id){
       if(!orderId) throw new Error('اكتب رقم أوردر صحيح — لسه مالقيناهوش');
     }
     if(kind === 'instapay_in' && orderId) body.order_id = orderId;
+    if(kind === 'ach_return')
+      body.reverses = document.querySelector('input[name="bk-rev"]:checked')?.value || null;
     // ✂️ v773: لو مقسّمة، السطور بتاخد الأولوية
     if(_BKS.on && _BKS.lines.length)
       body.splits = _BKS.lines.map(l => ({ target:l.target, target_id:String(l.target_id).trim(),
