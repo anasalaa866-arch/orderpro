@@ -46305,11 +46305,43 @@ async function talUpStatus(){
               <td style="padding:4px;direction:ltr">${escapeHtml(r.started)}</td>
               <td style="padding:4px">${escapeHtml({auto:'مجدول',manual:'يدوي',trigger:'زناد',beat:'نبضة'}[r.source]||r.source)}</td>
               <td style="padding:4px">${r.rows||''}</td>
+              <td style="padding:4px">${talUpWhat(r)}</td>
               <td style="padding:4px;color:#dc2626">${escapeHtml((r.error||'').slice(0,60))}</td>
             </tr>`).join('')}
           </table></details>` : ''}
       </div>`;
   }catch(e){ box.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+// 📋 v784: «إيه اللي حصل» جنب كل رفعة. الرفعات كانت كلها سطر واحد
+//   متكرر — نفس الوقت ونفس العدد — ومفيش طريقة تعرف الزناد ضرب ليه.
+//   الباكند بيسجّل الفرق وقت الرفع، وده بيعرضه مع تفاصيله عند الضغط.
+function talUpWhat(r){
+  if(!r.ok) return '';
+  const txt = String(r.summary || '').trim();
+  const none = !r.changed;
+  const body = txt || (none ? 'مفيش تغيير' : `${r.changed} صنف اتغيّر`);
+  const color = none ? 'var(--muted)' : '#166534';
+  let sample = [];
+  try{ sample = typeof r.diff === 'string' ? JSON.parse(r.diff) : (r.diff || []); }catch(e){}
+  if(!Array.isArray(sample) || !sample.length)
+    return `<span style="color:${color}">${escapeHtml(body)}</span>`;
+  const money = v => v == null ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  const line = x => {
+    const bits = [];
+    if(x.op == null && x.oa == null) bits.push('أول نشر — ' + money(x.np) + ' ج');
+    else {
+      if(x.op != null && Number(x.op) !== Number(x.np)) bits.push(money(x.op) + ' ← ' + money(x.np) + ' ج');
+      if(x.oa != null && Number(x.oa) !== Number(x.na)) bits.push(Number(x.na) ? 'اتفتح' : 'اتقفل');
+    }
+    return `<div style="padding:1px 0">${escapeHtml(x.name)} · ${escapeHtml(bits.join(' · '))}</div>`;
+  };
+  const more = (r.changed || 0) - sample.length;
+  return `<details><summary style="cursor:pointer;color:${color}">${escapeHtml(body)}</summary>
+    <div style="font-size:11px;color:var(--muted);margin:4px 0 2px;max-height:160px;overflow:auto">
+      ${sample.map(line).join('')}
+      ${more > 0 ? `<div style="padding:2px 0">+ ${more} غيرهم</div>` : ''}
+    </div></details>`;
 }
 
 async function talUpToggle(on){
