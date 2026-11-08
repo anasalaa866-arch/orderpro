@@ -4897,6 +4897,17 @@ tr:hover td{background:#fafbff}
     </div>
 
     <!-- 🖥️ v735: شاشة فحص السعر — مفيش إدارة، الشاشة بتظبّط نفسها -->
+    <!-- ⚙️ v776: القيم والحدود -->
+    <div class="card" id="cfg-settings" style="margin-bottom:16px;display:none">
+      <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-weight:900">⚙️ القيم والحدود</span>
+        <span style="color:var(--muted);font-size:12px">أرقام العقود — تغيّرها بنفسك من غير ما ترجعلي</span>
+        <span style="margin-inline-start:auto">
+          <button class="btn btn-sm btn-ghost" onclick="cfgLoad()">🔄 حدّث</button></span>
+      </div>
+      <div style="padding:14px 16px"><div id="cfg-body"></div></div>
+    </div>
+
     <!-- 📊 v746: نسبة المرتجع لكل مندوب -->
     <div class="card" id="cr-settings" style="margin-bottom:16px;display:none">
       <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -55674,6 +55685,7 @@ function goPage(el,page){
   currentPage=page;$('ptitle').textContent=PAGE_T[page]||'';
   // 🆕 v202: اقفل الـ sidebar على الموبايل لما تختار صفحة
   if(window.innerWidth <= 1024) toggleSidebar(false);
+  if(page==='settings')cfgOpen();              // ⚙️ v776
   if(page==='settings')lkSetOpen();            // 🔒 v731
   if(page==='settings')pcOpen();               // 🖥️ v735
   if(page==='settings')pmOpen();               // 🔑 v755
@@ -62898,6 +62910,84 @@ async function bkMapOpen(){
       })()}
       <button class="btn btn-sm btn-ghost" style="margin-top:10px" onclick="bkLoad()">← رجوع للحركات</button>`;
   }catch(e){ body.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+// ═══ ⚙️ v776: القيم والحدود ═══
+//   أرقام العقود وغيرها. الرقم المعدّل بيتعلّم، وتقدر ترجّعه للأصلي.
+function cfgOpen(){
+  const box = document.getElementById('cfg-settings');
+  if(!box) return;
+  if(currentUser?.username !== 'admin' && currentUser?.role !== 'admin'){ box.style.display='none'; return; }
+  box.style.display = '';
+  cfgLoad();
+}
+
+async function cfgLoad(){
+  const body = document.getElementById('cfg-body');
+  if(!body) return;
+  body.innerHTML = '<span style="color:var(--muted)">⏳...</span>';
+  try{
+    const d = apiNN(await apiFetch('/api/config'), 'القيم');
+    const groups = [];
+    for(const r of d.rows){
+      let g = groups[groups.length-1];
+      if(!g || g.name !== r.group){ g = { name:r.group, items:[] }; groups.push(g); }
+      g.items.push(r);
+    }
+    const bad = d.rows.filter(r => r.expired);
+    body.innerHTML = `
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">
+        الأرقام دي بتتحسب بيها عمولاتك وأرباحك. لو جدّدت عقد، غيّرها هنا —
+        من غير كده النظام هيفضل يحسب بالقديم <b>من غير ما يشتكي</b>.</div>
+      ${bad.length ? `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;
+         padding:10px;color:#991b1b;font-size:12.5px;margin-bottom:12px">
+         ⏰ <b>${bad.length}</b> قيمة عقدها خلص: ${bad.map(x=>escapeHtml(x.label)).join(' · ')}
+         — راجع العقد الجديد وحدّثها.</div>` : ''}
+      ${groups.map(g => `
+        <div style="font-weight:900;font-size:12px;margin:14px 0 6px;color:var(--primary)">${escapeHtml(g.name)}</div>
+        ${g.items.map(r => `
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:7px;flex-wrap:wrap">
+            <span style="flex:1;min-width:200px;font-size:12.5px">
+              <b>${escapeHtml(r.label)}</b>
+              ${r.changed?'<span style="color:#1d4ed8;font-size:10.5px"> ✏️ معدّل</span>':''}
+              ${r.expired?'<span style="color:#dc2626;font-size:10.5px"> ⏰ العقد خلص</span>'
+                : r.expiring?'<span style="color:#92400e;font-size:10.5px"> ⏳ قرب يخلص</span>':''}
+              ${r.note?`<div style="font-size:10.5px;color:var(--muted)">${escapeHtml(r.note)}</div>`:''}
+              ${r.expires?`<div style="font-size:10.5px;color:var(--muted)">لحد ${escapeHtml(r.expires)}</div>`:''}
+            </span>
+            <input class="form-input" type="number" step="any" inputmode="decimal"
+                   style="width:120px;padding:4px 7px;direction:ltr" value="${r.value}"
+                   onchange="cfgSave('${r.key}', this)">
+            <span style="font-size:11px;color:var(--muted);min-width:34px">${r.type==='pct'?'%':r.type==='pct1'?'نسبة':''}</span>
+            ${r.changed?`<button class="btn btn-sm btn-ghost" style="padding:2px 7px;font-size:11px"
+               onclick="cfgSave('${r.key}', null, true)" title="الأصلي ${r.def}">↩️ ${r.def}</button>`:''}
+          </div>`).join('')}`).join('')}
+      <div id="cfg-msg" style="margin-top:10px;font-size:12px"></div>`;
+  }catch(e){ body.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+async function cfgSave(key, el, reset){
+  const msg = document.getElementById('cfg-msg');
+  const send = async confirmed => {
+    const b = reset ? { key, reset:true } : { key, value: el.value, confirm: confirmed };
+    const r = await apiFetch('/api/config', 'POST', b);
+    if(r === null) throw new Error(_apiLastErr?.msg || 'النداء فشل');
+    return r;
+  };
+  try{
+    let r = await send(false);
+    // 🛡️ القيمة البعيدة جداً عن الأصلي بتتأكّد — غالباً صفر زيادة
+    if(r?.need_confirm || (r?.error && /أكّدها/.test(r.error))){
+      if(!confirm(`القيمة دي بعيدة جداً عن الأصلي (${r.def}). متأكد؟`)){ cfgLoad(); return; }
+      r = await send(true);
+    }
+    if(r?.error) throw new Error(r.error);
+    if(msg) msg.innerHTML = `<span style="color:#166534">✅ اتحفظت — ${reset?'رجعت للأصلي':r.value}</span>`;
+    cfgLoad();
+  }catch(e){
+    if(msg) msg.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message||e) + '</span>';
+    cfgLoad();
+  }
 }
 
 // ═══ 📅 v775: تاريخ البداية ═══
