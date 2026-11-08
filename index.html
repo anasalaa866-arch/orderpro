@@ -5382,6 +5382,16 @@ tr:hover td{background:#fafbff}
         <button class="btn btn-sm" onclick="drScan()" style="background:#b45309;color:#fff">🔍 افحص المتفوترة</button>
         <button class="btn btn-ghost btn-sm" onclick="drStatus()">🔄 تحديث</button>
         <span style="font-size:11px;color:var(--muted)">الفحص احتياطي لو الـ webhook فشل</span>
+        <!-- 🛑 v789: حد البداية — القديم اتظبط بإيد أنس ومايتلمسش -->
+        <span style="margin-inline-start:auto;display:flex;gap:6px;align-items:center;font-size:12px">
+          <b>يصلّح من أوردر رقم:</b>
+          <input id="dr-from" type="number" placeholder="فاضي = القديم كله مايتلمسش"
+                 style="width:150px;padding:6px;border:1px solid var(--border);border-radius:8px;text-align:center;font-family:Roboto,sans-serif"
+                 onchange="drFromSave()">
+        </span>
+      </div>
+      <div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:7px;padding:6px 9px;margin-bottom:10px">
+        🛑 من غير الرقم ده، الفحص بيشتغل زي ما كان بالظبط (اللي ليه بصمة بس) — يعني الفواتير القديمة اللي اتظبطت بإيدك مش هتتلمس.
       </div>
       <div id="dr-box" style="font-size:13px"></div>
     </div>
@@ -24408,6 +24418,7 @@ async function zhSaveCodeField(){
 // 🆕 v513: إشعارات دائن تلقائية
 // 🆕 v522: انحراف الأوردر بعد الفوترة
 async function drStatus(){
+  drFromLoad();
   const box=$('dr-box'); if(!box) return;
   try{
     const r=await apiFetch('/api/zoho/drift-status','GET');
@@ -24428,6 +24439,21 @@ async function drStatus(){
       </tr>`).join('')}</tbody></table></div>`;
   }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
 }
+// 🛑 v789: حد البداية — من غيره مفيش حاجة قديمة بتتلمس
+async function drFromSave(){
+  const el = $('dr-from'); if(!el) return;
+  try{
+    const r = await apiFetch('/api/zoho/fix-from','POST',{ from: el.value });
+    if(!r || r.error){ toast('❌ ' + (r?.error||'فشل')); return; }
+    toast(r.from ? `✅ هيصلّح من أوردر ${r.from} ورايح` : '✅ اتقفل — مفيش حاجة قديمة هتتلمس');
+  }catch(e){ toast('❌ ' + e.message); }
+}
+async function drFromLoad(){
+  const el = $('dr-from'); if(!el) return;
+  try{ const r = await apiFetch('/api/zoho/fix-from','GET'); if(r && !r.error) el.value = r.from ?? ''; }
+  catch(e){}
+}
+
 async function drScan(){
   const box=$('dr-box'); if(box) box.innerHTML='<span style="color:var(--muted)">⏳ بيفحص...</span>';
   try{
@@ -24435,7 +24461,8 @@ async function drScan(){
     if(!r||r.error){ toast('❌ '+(r?.error||'فشل')); drStatus(); return; }
     // 🚑 v788: اللي من غير بصمة بقى بيتفحص كمان — نبيّن نصيبه
     toast(`✅ اتفحص ${r.checked} · اتعدّل ${r.drifted}`
-          + (r.no_fp ? ` · من غير بصمة ${r.no_fp} (اتصلّح منهم ${r.fixed_no_fp||0})` : ''), 'success');
+          + (r.no_fp ? ` · من غير بصمة ${r.no_fp} (اتصلّح منهم ${r.fixed_no_fp||0})` : '')
+          + (r.skipped_old ? ` · اتساب قديم ${r.skipped_old}` : ''), 'success');
     drStatus();
   }catch(e){ toast('❌ '+e.message); drStatus(); }
 }
