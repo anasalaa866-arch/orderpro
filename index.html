@@ -62557,6 +62557,97 @@ async function bkLoad(page){
 function bkFilter(k, v){ _BK.filter[k] = v; _BK.page = 0; bkLoad(); }
 
 // مراجعة حركة واحدة — الترشيحات والتنفيذ
+// ═══ ✂️ v773: تقسيم الحركة على كذا جهة ═══
+//   تحويلة واحدة لكذا مورد · شيك بيغطي أكتر من أوردر.
+//   المجموع لازم يساوي الحركة بالظبط — الزرار بيتقفل غير كده.
+let _BKS = { on:false, lines:[], suppliers:[], accounts:[] };
+
+async function bkSplitToggle(){
+  _BKS.on = !_BKS.on;
+  if(_BKS.on && !_BKS.suppliers.length){
+    const mp = await apiFetch('/api/bank/map').catch(() => null);
+    _BKS.suppliers = (mp && mp.suppliers) || [];
+    _BKS.accounts  = (mp && mp.accounts)  || [];
+  }
+  if(_BKS.on && !_BKS.lines.length) _BKS.lines = [{ target:'supplier', target_id:'', amount:'' }];
+  bkSplitRender();
+}
+
+function bkSplitAdd(){ _BKS.lines.push({ target:'supplier', target_id:'', amount:'' }); bkSplitRender(); }
+function bkSplitDel(i){ _BKS.lines.splice(i,1); if(!_BKS.lines.length) _BKS.on=false; bkSplitRender(); }
+function bkSplitSet(i, k, v){ _BKS.lines[i][k] = v; if(k==='target') _BKS.lines[i].target_id=''; bkSplitRender(); }
+
+// الباقي من مبلغ الحركة — بيتحط في آخر سطر بضغطة
+function bkSplitRest(i){
+  const total = Number(_BKS.tx?.amount || 0);
+  const used = _BKS.lines.reduce((a,l,j) => a + (j===i?0:Number(l.amount)||0), 0);
+  _BKS.lines[i].amount = Math.max(0, +(total - used).toFixed(2));
+  bkSplitRender();
+}
+
+function bkSplitSum(){
+  return +_BKS.lines.reduce((a,l) => a + (Number(l.amount)||0), 0).toFixed(2);
+}
+
+function bkSplitRender(){
+  const box = document.getElementById('bk-split');
+  if(!box) return;
+  if(!_BKS.on){
+    box.innerHTML = `<button class="btn btn-sm btn-ghost" onclick="bkSplitToggle()"
+      style="margin-top:8px">✂️ قسّم على أكتر من جهة</button>`;
+    return;
+  }
+  const total = Number(_BKS.tx?.amount || 0), sum = bkSplitSum();
+  const diff = +(total - sum).toFixed(2);
+  const n = v => Number(v||0).toLocaleString('ar-EG', { maximumFractionDigits:2 });
+  box.innerHTML = `
+    <div style="margin-top:10px;border:1px solid var(--border);border-radius:10px;padding:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+        <b style="font-size:12.5px">✂️ التقسيم</b>
+        <button class="btn btn-sm btn-ghost" onclick="bkSplitToggle()">إلغاء التقسيم</button>
+      </div>
+      ${_BKS.lines.map((l,i) => `
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+          <select class="form-input" style="width:105px;padding:4px 6px"
+                  onchange="bkSplitSet(${i},'target',this.value)">
+            <option value="supplier" ${l.target==='supplier'?'selected':''}>مورد</option>
+            <option value="order"    ${l.target==='order'?'selected':''}>أوردر</option>
+            <option value="account"  ${l.target==='account'?'selected':''}>حساب</option>
+          </select>
+          ${l.target==='order'
+            ? `<input class="form-input" style="flex:1;min-width:120px;padding:4px 7px;direction:ltr"
+                 placeholder="رقم الأوردر" value="${escapeHtml(l.target_id||'')}"
+                 oninput="bkSplitSet(${i},'target_id',this.value)">`
+            : `<select class="form-input" style="flex:1;min-width:150px;padding:4px 6px"
+                 onchange="bkSplitSet(${i},'target_id',this.value)">
+                 <option value="">— اختار —</option>
+                 ${(l.target==='supplier'?_BKS.suppliers:_BKS.accounts).map(x =>
+                   `<option value="${escapeHtml(x.id)}" ${String(l.target_id)===String(x.id)?'selected':''}
+                    >${escapeHtml(x.name||'')}</option>`).join('')}
+               </select>`}
+          <input class="form-input" type="number" step="0.01" inputmode="decimal"
+                 style="width:110px;padding:4px 7px;direction:ltr" placeholder="المبلغ"
+                 value="${l.amount}" oninput="_BKS.lines[${i}].amount=this.value;bkSplitRender()">
+          <button class="btn btn-sm btn-ghost" onclick="bkSplitRest(${i})" title="حط الباقي هنا">⤵️</button>
+          <button class="btn btn-sm btn-ghost" onclick="bkSplitDel(${i})">✕</button>
+        </div>`).join('')}
+      <button class="btn btn-sm btn-ghost" onclick="bkSplitAdd()">+ سطر</button>
+      <div style="margin-top:8px;padding-top:7px;border-top:1px solid var(--border);font-size:12.5px">
+        المجموع <b>${n(sum)}</b> من <b>${n(total)}</b>
+        ${Math.abs(diff) < 0.005
+          ? ' · <span style="color:#166534;font-weight:800">✅ مظبوط</span>'
+          : ` · <span style="color:#dc2626;font-weight:800">${diff>0?'ناقص':'زيادة'} ${n(Math.abs(diff))} ج</span>`}
+      </div>
+    </div>`;
+  const btn = document.getElementById('bk-post-btn');
+  if(btn){
+    const bad = Math.abs(diff) >= 0.005 || _BKS.lines.some(l => !l.target_id || !(Number(l.amount)>0));
+    btn.disabled = bad;
+    btn.style.opacity = bad ? '.5' : '';
+    btn.title = bad ? 'ظبّط السطور والمجموع الأول' : '';
+  }
+}
+
 // 🆕 v771: لو مفيش اقتراح مظبوط — اكتب رقم الأوردر من شوبيفاي بإيدك
 function bkManualBox(){
   return `<div style="margin-top:8px;padding:9px;border:1px dashed var(--border);border-radius:8px">
@@ -62599,6 +62690,7 @@ async function bkRow(id){
   try{ d = apiNN(await apiFetch('/api/bank/tx/' + id + '/suggest'), 'الحركة'); }
   catch(e){ toast('❌ ' + (e.message || e)); return; }
   _BK.tx = d.tx;
+  _BKS = { on:false, lines:[], suppliers:_BKS.suppliers, accounts:_BKS.accounts, tx:d.tx };
   const t = d.tx, n = v => Number(v||0).toLocaleString('ar-EG');
   const kinds = _BK.kinds || {};
 
@@ -62662,10 +62754,11 @@ async function bkRow(id){
         <label style="font-size:12px;font-weight:700">ملاحظة (اختياري)</label>
         <input id="bk-desc" class="form-input" style="width:100%;margin-top:4px" autocomplete="off">
       </div>
+      <div id="bk-split"></div>
       <div id="bk-err" style="margin-top:8px;font-size:12px"></div>
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
         <button class="btn" style="background:var(--primary);color:#fff;flex:1;min-width:150px"
-                onclick="bkPost(${t.id})">⚡ نفّذ في Zoho</button>
+                id="bk-post-btn" onclick="bkPost(${t.id})">⚡ نفّذ في Zoho</button>
         <button class="btn btn-ghost" onclick="bkManual(${t.id})"
                 title="اتسجّلت في Zoho بإيدك — بتتشال من المتبقي ومابتتنفّذش تاني">✍️ عملتها يدوي</button>
         <button class="btn btn-ghost" onclick="bkSkip(${t.id})">🚫 تجاهل</button>
@@ -62673,6 +62766,7 @@ async function bkRow(id){
     </div>`;
   // op.html بيستخدم openM/closeM على div موجود — مش showModal
   document.getElementById('bk-modal-body').innerHTML = html;
+  bkSplitRender();                       // ✂️ v773: زرار «قسّم»
   openM('m-bank-tx');
 }
 
@@ -62697,6 +62791,11 @@ async function bkPost(id){
       if(!orderId) throw new Error('اكتب رقم أوردر صحيح — لسه مالقيناهوش');
     }
     if(kind === 'instapay_in' && orderId) body.order_id = orderId;
+    // ✂️ v773: لو مقسّمة، السطور بتاخد الأولوية
+    if(_BKS.on && _BKS.lines.length)
+      body.splits = _BKS.lines.map(l => ({ target:l.target, target_id:String(l.target_id).trim(),
+        target_name:(_BKS.suppliers.concat(_BKS.accounts).find(x=>String(x.id)===String(l.target_id))||{}).name
+                    || String(l.target_id), amount:Number(l.amount) }));
     const r = await apiFetch('/api/bank/tx/' + id + '/post', 'POST', body);
     if(r?.error) throw new Error(r.error);
     closeM('m-bank-tx'); toast('✅ اتنفّذت في Zoho'); bkLoad();
