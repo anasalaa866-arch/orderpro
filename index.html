@@ -4105,6 +4105,9 @@ tr:hover td{background:#fafbff}
             <button class="btn btn-ghost btn-sm" onclick="openAddSupplier()" title="إضافة مورد جديد" style="white-space:nowrap">+ مورد</button>
           </div>
           <input id="chk-payee" type="hidden">
+          <input id="chk-payee-q" type="text" placeholder="🔎 اكتب جزء من الاسم..." oninput="fillSupplierSel()"
+                 style="width:100%;margin-top:6px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px">
+          <div id="chk-payee-hint" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="fg"><label>القيمة *</label><input id="chk-amount" type="number" placeholder="0" step="0.01"></div>
@@ -24107,7 +24110,7 @@ function printShopAccounting(){
 }
 
 // تهيئة من localStorage أولاً
-let chkBooks=[], chkList=[], chkSuppliers=[];
+let chkBooks=[], chkList=[], chkSuppliers=[], chkZohoVendors=[];
 try{ const b=localStorage.getItem('chk_books'); if(b) chkBooks=JSON.parse(b); }catch(e){}
 try{ const c=localStorage.getItem('chk_list'); if(c) chkList=JSON.parse(c); }catch(e){}
 try{ const s=localStorage.getItem('chk_suppliers'); if(s) chkSuppliers=JSON.parse(s); }catch(e){}
@@ -24130,12 +24133,18 @@ async function loadChks(force){
     const results = await Promise.allSettled([
       apiFetch('/api/check-books'),
       apiFetch('/api/checks'),
-      apiFetch('/api/vendors')   // 🆕 v194: vendors جديدة
+      apiFetch('/api/vendors'),  // 🆕 v194: vendors جديدة
+      apiFetch('/api/suppliers?zohoOnly=1')   // 🏷️ v782: موردين Zoho — زي أمر الشراء
     ]);
 
     const r1 = results[0].status === 'fulfilled' ? results[0].value : null;
     const r2 = results[1].status === 'fulfilled' ? results[1].value : null;
     const r3 = results[2].status === 'fulfilled' ? results[2].value : null;
+    const r4 = results[3].status === 'fulfilled' ? results[3].value : null;
+    // 🏷️ v782: لو سحب Zoho فشل مابنفضّيش القايمة — بنسيب آخر نسخة
+    if(r4 && Array.isArray(r4.suppliers))
+      chkZohoVendors = r4.suppliers.map(v => ({ id: v.id, zid: v.zoho_vendor_id || '', name: v.name || '' }))
+                                   .filter(v => v.name);
 
     // ⚠️ apiFetch بيرجع null لما يفشل (مش throw)، فلازم نعتبر null = فشل
     const booksFetchFailed = results[0].status === 'rejected' || r1 === null || r1 === undefined;
@@ -26327,8 +26336,9 @@ function openAddChk(){
   $('chk-img-show').style.display='none';$('chk-img-placeholder').style.display='block';
   $('chk-img-input').value='';
   fillChkBookSel();
-  fillSupplierSel();
-  if($('chk-payee'))$('chk-payee').style.display='block';
+  if($('chk-payee-q')) $('chk-payee-q').value='';   // 🏷️ v782: بحث نضيف لكل شيك جديد
+  fillSupplierSel('');
+  if($('chk-payee')) $('chk-payee').style.display='none';   // مخفي دايماً — الاختيار من القايمة
   openM('m-chk');
 }
 async function openEditChk(id){
@@ -26376,15 +26386,11 @@ async function openEditChk(id){
   // المورد — حدد في select أو اكتب يدوي
   const payeeSel=$('chk-payee-sel');
   if(payeeSel){
-    fillSupplierSel();
-    const exists2=[...payeeSel.options].some(o=>o.value===c.payee);
-    if(exists2){
-      payeeSel.value=c.payee;
-      if($('chk-payee')) $('chk-payee').style.display='none';
-    } else {
-      payeeSel.value='__other__';
-      if($('chk-payee')){ $('chk-payee').style.display='block'; $('chk-payee').value=c.payee||''; }
-    }
+    // 🏷️ v782: fillSupplierSel بتضيف الاسم القديم لو مش في أي قايمة،
+    //   فمفيش شيك بيتفتح للتعديل وخانة المستفيد بتاعته فاضية.
+    if($('chk-payee-q')) $('chk-payee-q').value='';
+    fillSupplierSel(c.payee || '');
+    if($('chk-payee')){ $('chk-payee').style.display='none'; $('chk-payee').value=c.payee||''; }
   } else {
     if($('chk-payee')) $('chk-payee').value=c.payee||'';
   }
@@ -31571,13 +31577,43 @@ function openAddSupplier(){
 // تنادي الدالة الفعلية
 function saveSupplier(){ return saveSupplierActual(); }
 
-function fillSupplierSel(){
+// 🏷️ v782: مجموعتين — موردين Zoho فوق (زي أمر الشراء) والمحليين تحت.
+//   الاسم هو اللي بيتخزّن زي ما كان، فالشيكات القديمة مابتتأثرش.
+//   اللي اسمه موجود في الاتنين بيتعرض في مجموعة Zoho بس.
+function fillSupplierSel(keepValue){
   const sel=$('chk-payee-sel');
   if(!sel)return;
-  // 🆕 v194: dropdown بس — مفيش "أخرى (يدوياً)" لأن لازم اختيار من الموردين
-  const sortedSuppliers=[...chkSuppliers].sort((a,b)=>(a.name||'').localeCompare(b.name||'','ar'));
-  sel.innerHTML='<option value="">— اختر المورد —</option>'+
-    sortedSuppliers.map(s=>`<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}${s.phone?` · ${s.phone}`:''}</option>`).join('');
+  const keep = keepValue !== undefined ? keepValue : sel.value;
+  const q = String($('chk-payee-q')?.value || '').trim().toLowerCase();
+  const hit = n => !q || String(n||'').toLowerCase().includes(q);
+  const byName = (a,b) => String(a.name||'').localeCompare(String(b.name||''),'ar');
+
+  const zoho = chkZohoVendors.filter(v => hit(v.name)).sort(byName);
+  const zNames = new Set(chkZohoVendors.map(v => String(v.name||'').trim()));
+  const local = chkSuppliers.filter(v => !zNames.has(String(v.name||'').trim()) && hit(v.name)).sort(byName);
+
+  const opt = v => `<option value="${escapeHtml(v.name)}">${escapeHtml(v.name)}${v.phone?` · ${escapeHtml(v.phone)}`:''}</option>`;
+  let html = '<option value="">— اختر المورد —</option>';
+  if(zoho.length)  html += `<optgroup label="🧾 موردين Zoho">${zoho.map(opt).join('')}</optgroup>`;
+  if(local.length) html += `<optgroup label="📒 محلي — مش في Zoho">${local.map(opt).join('')}</optgroup>`;
+  sel.innerHTML = html;
+
+  // 🛡️ شيك قديم اسم مستفيده مش في أي قايمة — مايضيعش وهو بيتعدّل
+  if(keep && ![...sel.options].some(o => o.value === keep)){
+    const g = document.createElement('optgroup');
+    g.label = '⚠️ مسجّل على الشيك — مش في أي قايمة';
+    g.innerHTML = `<option value="${escapeHtml(keep)}">${escapeHtml(keep)}</option>`;
+    sel.appendChild(g);
+  }
+  if(keep) sel.value = keep;
+
+  const hint = $('chk-payee-hint');
+  if(hint){
+    hint.innerHTML = !chkZohoVendors.length
+      ? '<span style="color:var(--danger)">مفيش موردين متزامنين من Zoho — اسحبهم من صفحة الموردين</span>'
+      : (q ? `${zoho.length + local.length} من ${chkZohoVendors.length + chkSuppliers.length}`
+           : `${chkZohoVendors.length} من Zoho · ${local.length} محلي`);
+  }
 }
 
 // 🆕 v194: صفحة الموردين الكاملة
