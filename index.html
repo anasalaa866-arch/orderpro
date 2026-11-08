@@ -7348,6 +7348,9 @@ tr:hover td{background:#fafbff}
             <input type="file" accept=".csv,.CSV,.txt,.sta,.mt940,text/csv,text/plain"
                    style="display:none" onchange="bkUpload(this)">
           </label>
+          <button class="btn btn-sm btn-ghost" onclick="bkPartiesOpen()">🔗 ربط الأطراف
+            <span id="bk-parties-badge" style="display:none;background:var(--danger);color:#fff;
+              border-radius:9px;padding:0 6px;font-size:10.5px;margin-inline-start:4px"></span></button>
           <button class="btn btn-sm btn-ghost" onclick="bkMapOpen()">🗺️ خريطة الحسابات</button>
           <button class="btn btn-sm btn-ghost" onclick="bkLoad(0)">🔄 حدّث</button>
         </span>
@@ -62415,6 +62418,18 @@ async function tgTrePdf(){
 // ══════════════════════════════════════════════════════════════════
 let _BK = { rows: [], filter: { status:'new', kind:'', q:'' }, page: 0, map: null };
 
+// 🔗 v772: عدّاد الأطراف اللي لسه مش مربوطة — على الزرار
+async function bkPartiesBadge(){
+  const el = document.getElementById('bk-parties-badge');
+  if(!el) return;
+  try{
+    const d = await apiFetch('/api/bank/parties');
+    const n = d?.unmapped || 0;
+    el.style.display = n ? '' : 'none';
+    el.textContent = n;
+  }catch(_){ el.style.display = 'none'; }
+}
+
 function bkOpen(){
   const box = document.getElementById('bk-settings');
   if(!box) return;
@@ -62725,20 +62740,153 @@ async function bkMapOpen(){
       ${d.zoho_error ? `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;
          padding:10px;color:#991b1b;font-size:12px;margin-bottom:10px">
          ⚠️ ماقدرناش نجيب الحسابات من Zoho: ${escapeHtml(d.zoho_error)}</div>` : ''}
-      ${d.slots.map(s => {
-        const cur = d.map[s.slot];
-        return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:7px;flex-wrap:wrap">
-          <span style="flex:1;min-width:190px;font-size:12.5px;font-weight:700">${escapeHtml(s.label)}</span>
-          <select class="form-input" style="width:260px;padding:5px 8px"
-                  onchange="bkMapSet('${s.slot}', this)">
-            <option value="">— مش محدد —</option>
-            ${d.accounts.map(a => `<option value="${escapeHtml(a.id)}"
-              ${cur?.account_id===a.id?'selected':''}>${escapeHtml(a.name)}</option>`).join('')}
-          </select>
-          ${cur?.account_id?'<span style="color:#166534">✅</span>':'<span style="color:#dc2626">مطلوب</span>'}
-        </div>`;}).join('')}
+      ${(() => {                                     // 🗺️ v772: مجمّعة بالمجموعة
+        const groups = [];
+        for(const sl of d.slots){
+          const g = sl.group || 'أساسي';
+          let last = groups[groups.length-1];
+          if(!last || last.name !== g){ last = { name:g, items:[] }; groups.push(last); }
+          last.items.push(sl);
+        }
+        return groups.map(g => `
+          <div style="font-weight:900;font-size:12px;margin:14px 0 6px;color:var(--primary)">
+            ${escapeHtml(g.name)}${g.items[0]?.zero
+              ? ' <span style="font-weight:400;color:var(--muted);font-size:11px">— رصيدها المفروض يرجع صفر بعد كل تحويلة</span>' : ''}</div>
+          ${g.items.map(sl => {
+            const cur = d.map[sl.slot];
+            return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:7px;flex-wrap:wrap
+                        ${sl.legacy?';opacity:.55':''}">
+              <span style="flex:1;min-width:190px;font-size:12.5px;font-weight:700">${escapeHtml(sl.label)}</span>
+              <select class="form-input" style="width:260px;padding:5px 8px"
+                      onchange="bkMapSet('${sl.slot}', this)">
+                <option value="">— مش محدد —</option>
+                ${d.accounts.map(a => `<option value="${escapeHtml(a.id)}"
+                  ${cur?.account_id===a.id?'selected':''}>${escapeHtml(a.name)}</option>`).join('')}
+              </select>
+              ${cur?.account_id ? '<span style="color:#166534">✅</span>'
+                : sl.legacy ? '<span style="color:var(--muted);font-size:11px">قديم</span>'
+                : '<span style="color:#dc2626">مطلوب</span>'}
+            </div>`;}).join('')}`).join('');
+      })()}
       <button class="btn btn-sm btn-ghost" style="margin-top:10px" onclick="bkLoad()">← رجوع للحركات</button>`;
   }catch(e){ body.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+// ═══ 🔗 v772: ربط أسماء الأطراف ═══
+//   الكشف بيكتب الاسم زي ما هو. بتربطه مرة بمورد أو حساب، وبعدها
+//   كل حركة من نفس الطرف بتتعرف لوحدها.
+let _BKP = { rows: [], suppliers: [], accounts: [], targets: {} };
+
+async function bkPartiesOpen(){
+  const body = document.getElementById('bk-body');
+  body.innerHTML = '<span style="color:var(--muted)">⏳ بيجمّع الأطراف...</span>';
+  try{
+    const [d, mp] = await Promise.all([
+      apiFetch('/api/bank/parties'),
+      apiFetch('/api/bank/map'),
+    ]);
+    _BKP.rows = apiNN(d, 'الأطراف').rows || [];
+    _BKP.targets = d.targets || {};
+    _BKP.accounts = (mp && mp.accounts) || [];
+    _BKP.suppliers = (mp && mp.suppliers) || [];
+    if(!_BKP.suppliers.length){
+      const sp = await apiFetch('/api/suppliers').catch(() => null);
+      _BKP.suppliers = (sp && (sp.suppliers || sp.rows || sp.vendors)) || [];
+    }
+    bkPartiesRender();
+  }catch(e){ body.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+function bkPartiesRender(){
+  const n = v => Number(v||0).toLocaleString('ar-EG', { maximumFractionDigits:0 });
+  const unmapped = _BKP.rows.filter(r => !r.mapped).length;
+  document.getElementById('bk-body').innerHTML = `
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:4px">
+      اربط كل اسم مرة واحدة — بعدها كل حركة منه بتتعرف لوحدها.</div>
+    <div style="font-size:12px;margin-bottom:10px">
+      ${unmapped ? `<b style="color:#92400e">${unmapped} طرف لسه مش مربوط</b>`
+                 : '<b style="color:#166534">✅ كل الأطراف مربوطة</b>'}
+      · إجمالي ${_BKP.rows.length}</div>
+    <div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+      <thead><tr style="background:var(--bg)">
+        <th style="padding:7px;text-align:right">الطرف</th>
+        <th style="padding:7px;text-align:center">حركات</th>
+        <th style="padding:7px;text-align:center">المبلغ</th>
+        <th style="padding:7px;text-align:center">الربط</th>
+      </tr></thead><tbody>
+      ${_BKP.rows.map((r, i) => `<tr style="border-top:1px solid var(--border);
+          ${r.mapped?'':'background:#fffbeb'}">
+        <td style="padding:7px"><b>${escapeHtml(r.raw)}</b>
+          <div style="font-size:10.5px;color:var(--muted)">آخر حركة ${escapeHtml(r.last||'')}</div></td>
+        <td style="padding:7px;text-align:center">${r.n}</td>
+        <td style="padding:7px;text-align:center;white-space:nowrap">
+          ${r.out?`<span style="color:#dc2626">−${n(r.out)}</span>`:''}
+          ${r.in?`<span style="color:#16a34a">+${n(r.in)}</span>`:''}</td>
+        <td style="padding:7px;text-align:center">
+          <select class="form-input" style="width:190px;padding:4px 7px"
+                  onchange="bkPartyTarget(${i}, this.value)">
+            <option value="">— مش مربوط —</option>
+            ${Object.entries(_BKP.targets).map(([k,l]) =>
+              `<option value="${k}" ${r.mapped?.target===k?'selected':''}>${escapeHtml(l)}</option>`).join('')}
+          </select>
+          <div id="bkp-pick-${i}" style="margin-top:5px">${bkPartyPick(i)}</div>
+        </td>
+      </tr>`).join('')}
+    </tbody></table></div>
+    <button class="btn btn-sm btn-ghost" style="margin-top:10px" onclick="bkLoad()">← رجوع للحركات</button>`;
+}
+
+// الاختيار التاني بيتغيّر حسب نوع الربط
+function bkPartyPick(i){
+  const r = _BKP.rows[i], t = r.mapped?.target;
+  if(t === 'supplier'){
+    return `<select class="form-input" style="width:190px;padding:4px 7px"
+             onchange="bkPartySave(${i},'supplier',this)">
+      <option value="">— اختار المورد —</option>
+      ${_BKP.suppliers.map(s => `<option value="${escapeHtml(s.id)}"
+        ${String(r.mapped?.supplier_id)===String(s.id)?'selected':''}>${escapeHtml(s.name||s.company_name||'')}</option>`).join('')}
+    </select>`;
+  }
+  if(t === 'account'){
+    return `<select class="form-input" style="width:190px;padding:4px 7px"
+             onchange="bkPartySave(${i},'account',this)">
+      <option value="">— اختار الحساب —</option>
+      ${_BKP.accounts.map(a => `<option value="${escapeHtml(a.id)}"
+        ${r.mapped?.account_id===a.id?'selected':''}>${escapeHtml(a.name)}</option>`).join('')}
+    </select>`;
+  }
+  if(t === 'journal') return '<span style="font-size:11px;color:var(--muted)">الحساب التاني بتحدده كل مرة</span>';
+  if(t === 'manual')  return '<span style="font-size:11px;color:var(--muted)">مش هيسألك</span>';
+  return '';
+}
+
+async function bkPartyTarget(i, target){
+  const r = _BKP.rows[i];
+  r.mapped = target ? { ...(r.mapped||{}), target } : null;
+  document.getElementById('bkp-pick-' + i).innerHTML = bkPartyPick(i);
+  // journal و manual مالهمش اختيار تاني — بيتحفظوا على طول
+  if(target === 'journal' || target === 'manual' || !target) await bkPartyPost(i);
+}
+
+async function bkPartySave(i, kind, sel){
+  const r = _BKP.rows[i];
+  const label = sel.options[sel.selectedIndex]?.text || '';
+  if(kind === 'supplier'){ r.mapped.supplier_id = sel.value; r.mapped.supplier_name = label; }
+  else { r.mapped.account_id = sel.value; r.mapped.account_name = label; }
+  if(!sel.value) return;
+  await bkPartyPost(i);
+}
+
+async function bkPartyPost(i){
+  const r = _BKP.rows[i];
+  try{
+    apiNN(await apiFetch('/api/bank/parties', 'POST', {
+      raw: r.raw, target: r.mapped?.target || '',
+      supplier_id: r.mapped?.supplier_id, supplier_name: r.mapped?.supplier_name,
+      account_id: r.mapped?.account_id, account_name: r.mapped?.account_name,
+    }), 'حفظ الربط');
+    toast(r.mapped?.target ? '🔗 اتربط' : '↩️ اتفك');
+  }catch(e){ toast('❌ ' + (e.message || e)); bkPartiesOpen(); }
 }
 
 async function bkMapSet(slot, sel){
