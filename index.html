@@ -3911,6 +3911,7 @@ tr:hover td{background:#fafbff}
           </div>
           <input id="chk-search" placeholder="ابحث..." oninput="chkOnFilterChange()" style="padding:5px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:Cairo,sans-serif;width:150px">
           <div style="margin-right:auto;display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" style="color:#b91c1c;border-color:#b91c1c" onclick="chkDuePdf()" title="نفس التقرير اللي بيتبعت على تليجرام — بيتولّد دلوقتي من الداتا">📑 تقرير المستحق</button>
             <button class="btn btn-ghost btn-sm" onclick="printChecksReport()">🖨️ طباعة</button>
             <button class="btn btn-ghost btn-sm" style="color:#16a34a;border-color:#16a34a" onclick="exportChecksExcel()">📊 Excel</button>
             <button class="btn btn-ghost btn-sm" onclick="openCheckBook()">📚 دفاتر</button>
@@ -26183,6 +26184,19 @@ function getFilteredChkList(){
   if(q)list=list.filter(c=>(c.num+c.payee+(c.invoice||'')).toLowerCase().includes(q));
   list.sort((a,b)=>new Date(a.date)-new Date(b.date));
   return list;
+}
+
+// 📑 v779: نفس تقرير الشيكات اللي بيروح تليجرام، بس من الشاشة.
+//   الباكند بيبنيه وقت الضغطة من الداتابيز، فأي شيك اتصرف دلوقتي
+//   مش هيبقى فيه. بيفتح في تاب — منه تطبع أو تنزّل.
+//   التوكن في الـ query عشان window.open مابيبعتش Authorization.
+function chkDuePdf(){
+  const base = (API_URL || BACKEND_URL || '').replace(/\/$/, '');
+  if(!base) return toast('مفيش اتصال بالسيرفر', 'err');
+  if(!window._adminToken) return toast('سجّل دخول المدير الأول', 'err');
+  const w = window.open(base + '/api/reports/checks-pdf?token='
+                        + encodeURIComponent(window._adminToken), '_blank');
+  if(!w) toast('❗ المتصفح منع النافذة — اسمح بالنوافذ المنبثقة', 'err');
 }
 
 function printChecksReport(){
