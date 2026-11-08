@@ -7348,6 +7348,7 @@ tr:hover td{background:#fafbff}
             <input type="file" accept=".csv,.CSV,.txt,.sta,.mt940,text/csv,text/plain"
                    style="display:none" onchange="bkUpload(this)">
           </label>
+          <button class="btn btn-sm btn-ghost" onclick="bkCutoffOpen()">📅 تاريخ البداية</button>
           <button class="btn btn-sm btn-ghost" onclick="bkPartiesOpen()">🔗 ربط الأطراف
             <span id="bk-parties-badge" style="display:none;background:var(--danger);color:#fff;
               border-radius:9px;padding:0 6px;font-size:10.5px;margin-inline-start:4px"></span></button>
@@ -62510,6 +62511,12 @@ async function bkLoad(page){
         <input value="${escapeHtml(f.q)}" placeholder="رقم شيك / مرجع / مبلغ" class="form-input"
                style="width:200px;padding:5px 8px" onchange="bkFilter('q', this.value)">
       </div>
+      ${d.cutoff ? `<div style="font-size:11.5px;color:#92400e;margin-bottom:8px;
+         background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:7px 10px">
+         📅 بتعرض من <b>${escapeHtml(d.cutoff)}</b> وبعده
+         ${d.hidden?` · <b>${d.hidden}</b> حركة أقدم مخفية`:''}
+         <button class="btn btn-sm btn-ghost" style="padding:1px 7px;font-size:11px"
+                 onclick="bkCutoffOpen()">غيّر</button></div>` : ''}
       ${d.pending_by_kind.length ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">
         المحتاج مراجعة: ${d.pending_by_kind.map(x =>
           `${escapeHtml(d.kinds[x.kind]||x.kind)} <b>${x.n}</b>`).join(' · ')}</div>` : ''}
@@ -62891,6 +62898,53 @@ async function bkMapOpen(){
       })()}
       <button class="btn btn-sm btn-ghost" style="margin-top:10px" onclick="bkLoad()">← رجوع للحركات</button>`;
   }catch(e){ body.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+// ═══ 📅 v775: تاريخ البداية ═══
+//   كل حركة قبله مش بتظهر ومش بتتنفّذ — اتعملت في Zoho بإيده خلاص.
+async function bkCutoffOpen(){
+  const body = document.getElementById('bk-body');
+  body.innerHTML = '<span style="color:var(--muted)">⏳...</span>';
+  try{
+    const d = apiNN(await apiFetch('/api/bank/cutoff'), 'تاريخ البداية');
+    const r = d.range || {};
+    body.innerHTML = `
+      <div style="max-width:520px">
+        <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">
+          أي حركة قبل التاريخ ده مش هتظهر في القايمة ومش هتتنفّذ خالص.
+          بتستعملها مرة واحدة لما تبدأ تشتغل على الشاشة دي، عشان
+          الحركات القديمة اللي سجّلتها في Zoho بإيدك ماتتسجّلش تاني.</div>
+        <div style="background:var(--bg);border-radius:8px;padding:10px;font-size:12.5px;margin-bottom:12px">
+          عندك <b>${r.n||0}</b> حركة · من <b>${escapeHtml(r.first||'—')}</b>
+          لـ <b>${escapeHtml(r.last||'—')}</b>
+          ${r.posted?` · منهم <b>${r.posted}</b> اتنفّذوا من الشاشة`:''}</div>
+        <label style="font-size:12px;font-weight:700">ابدأ من تاريخ</label>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
+          <input type="date" id="bk-cutoff" class="form-input" style="width:180px"
+                 value="${escapeHtml(d.cutoff||'')}">
+          <button class="btn btn-sm" style="background:var(--primary);color:#fff"
+                  onclick="bkCutoffSave()">💾 احفظ</button>
+          ${d.cutoff?`<button class="btn btn-sm btn-ghost" onclick="bkCutoffSave(true)">شيل التاريخ</button>`:''}
+        </div>
+        ${d.cutoff?`<div style="margin-top:10px;font-size:12px;color:#92400e">
+          🙈 دلوقتي <b>${d.before?.n||0}</b> حركة مخفية (قبل ${escapeHtml(d.cutoff)})</div>`:''}
+        <div id="bk-cutoff-msg" style="margin-top:10px;font-size:12px"></div>
+        <button class="btn btn-sm btn-ghost" style="margin-top:12px" onclick="bkLoad(0)">← رجوع للحركات</button>
+      </div>`;
+  }catch(e){ body.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+async function bkCutoffSave(clear){
+  const v = clear ? '' : (document.getElementById('bk-cutoff')?.value || '');
+  const msg = document.getElementById('bk-cutoff-msg');
+  if(!clear && !v){ msg.innerHTML = '<span style="color:#dc2626">اختار تاريخ الأول</span>'; return; }
+  if(!clear && !confirm(`كل الحركات قبل ${v} هتختفي ومش هتتنفّذ. متأكد؟`)) return;
+  try{
+    const r = apiNN(await apiFetch('/api/bank/cutoff', 'POST', { cutoff: v }), 'حفظ التاريخ');
+    toast(v ? '📅 اتحفظ' : '↩️ التاريخ اتشال');
+    if(r.warn) msg.innerHTML = '<span style="color:#92400e">⚠️ ' + escapeHtml(r.warn) + '</span>';
+    setTimeout(() => bkCutoffOpen(), 400);
+  }catch(e){ msg.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
 }
 
 // ═══ 🔗 v772: ربط أسماء الأطراف ═══
