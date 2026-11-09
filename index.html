@@ -7776,7 +7776,14 @@ tr:hover td{background:#fafbff}
   </div>
   
   <div class="card">
-    <div class="card-header"><h3 style="margin:0">📋 الأوامر</h3></div>
+    <div class="card-header" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <h3 style="margin:0">📋 الأوامر</h3>
+      <!-- 🔎 v794: البحث على السيرفر — القايمة محدودة بـ100 أمر -->
+      <input id="po-q" type="search" placeholder="🔎 رقم الأمر · المورد · منتج · SKU · باركود"
+             oninput="poSearchSoon()" onkeydown="if(event.key==='Enter')loadPurchaseOrdersPage()"
+             style="flex:1;min-width:220px;padding:7px 12px;border:1px solid var(--border);border-radius:999px;font-family:Cairo,sans-serif;font-size:13px">
+      <span id="po-count" style="font-size:11px;color:var(--muted);white-space:nowrap"></span>
+    </div>
     <div id="po-list" style="padding:14px"></div>
   </div>
 </div>
@@ -36836,6 +36843,15 @@ let _poSelectedItem = null;
 let _poVariantSearchResults = [];
 let _poInvWarehouses = [];
 
+// 🔎 v794: البحث بيروح للسيرفر لأن القايمة محدودة بـ100 أمر —
+//   فلترة في المتصفح كانت هتفوّت الأقدم من غير ما حد يعرف.
+//   بنستنى شوية بعد آخر حرف بدل ما نضرب السيرفر مع كل زرار.
+let _poQTimer = null;
+function poSearchSoon(){
+  clearTimeout(_poQTimer);
+  _poQTimer = setTimeout(loadPurchaseOrdersPage, 350);
+}
+
 async function loadPurchaseOrdersPage(){
   cuBadgeOnly();   // 💰 v633
   const list = document.getElementById('po-list');
@@ -36846,12 +36862,21 @@ async function loadPurchaseOrdersPage(){
   try {
     const params = new URLSearchParams();
     if(_poFilter) params.set('status', _poFilter);
+    const q = String(document.getElementById('po-q')?.value || '').trim();
+    if(q) params.set('q', q);
     
     const r = await apiFetch('/api/purchase-orders?' + params.toString());
     _pos = r?.orders || [];
-    
+
+    const cnt = document.getElementById('po-count');
+    if(cnt) cnt.textContent = _pos.length
+      ? `${_pos.length} أمر${_pos.length >= 100 ? ' (أحدث ١٠٠ — ضيّق البحث)' : ''}`
+      : '';
+
     if(!_pos.length){
-      list.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:48px;opacity:.3">📋</div><div>مفيش أوامر شراء</div></div>';
+      list.innerHTML = q
+        ? `<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:48px;opacity:.3">🔎</div><div>مفيش أمر شراء فيه «${escapeHtml(q)}»</div></div>`
+        : '<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:48px;opacity:.3">📋</div><div>مفيش أوامر شراء</div></div>';
       return;
     }
     
