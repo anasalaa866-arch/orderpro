@@ -4468,9 +4468,24 @@ tr:hover td{background:#fafbff}
     <div class="card">
       <div class="card-hd">
         <h3>🚫 الطلبات الملغية بانتظار الاستلام</h3>
-        <button class="btn btn-ghost btn-sm" onclick="loadFieldCancels()" title="تحديث">🔄</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadFieldCancels();loadCancelledNotOnShopify()" title="تحديث">🔄</button>
       </div>
       <div class="card-body" id="field-cancels-list"></div>
+    </div>
+
+    <!-- 🔎 v812: الفجوة اللي خلّت طلب يرجع من المندوب ويفضل محسوب
+         مبيعات على شوبيفاي من غير ما حد ياخد باله -->
+    <div class="card" style="margin-top:16px">
+      <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <h3 style="margin:0">🔎 ملغي عندنا — ولسه شغّال على Shopify</h3>
+        <span id="cns-count" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div style="padding:0 14px 10px;font-size:12px;color:var(--muted);line-height:1.8">
+        دول اتلغوا في أوردر برو بس لسه مالغيّينش على Shopify — يعني لسه
+        محسوبين مبيعات هناك، والعميل لسه مدين، وزوهو مش هياخد إشعار دائن
+        إلا لما تلغيهم على Shopify.
+      </div>
+      <div class="card-body" id="cns-list"></div>
     </div>
   </div>
 
@@ -11489,7 +11504,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v811';
+const UI_BUILD = 'v813';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -56353,7 +56368,7 @@ function goPage(el,page){
   if(page==='shop-transfers')loadShopTransfers();
   if(page==='shipping-transfers')loadShippingTransfers();
   if(page==='customer-risk'){ loadRiskSettings(); loadRiskList(); }
-  if(page==='field-cancels')loadFieldCancels();
+  if(page==='field-cancels'){loadFieldCancels();loadCancelledNotOnShopify();}   // 🔎 v812
   // 🆕 v216: Dashboard Pages
   if(page==='order-types') loadOrderTypes();
   if(page==='shipping-mappings') { loadShippingMappings(); loadUnmappedShippingMethods(); }
@@ -61713,7 +61728,9 @@ function renderFieldCancels(){
 async function confirmReceiveCancellation(orderId){
   const c = _fieldCancels.find(x => x.id === orderId);
   if(!c) return;
-  const ok = confirm(`✅ تأكيد استلام البضاعة من ${c.cancelledBySource === 'shop' ? 'المحل' : c.courierName || 'المندوب'}؟\n\nالطلب ${orderId} — ${c.name}\n\nبعد التأكيد، الطلب يعتبر ملغي نهائياً.`);
+  // 🧾 v812: الرسالة كانت بتقول «ملغي نهائياً» وده مش صح — الإلغاء
+  //   النهائي بيحصل على شوبيفاي. دي بضاعة رجعت المخزن وبس.
+  const ok = confirm(`✅ تأكيد استلام البضاعة من ${c.cancelledBySource === 'shop' ? 'المحل' : c.courierName || 'المندوب'}؟\n\nالطلب ${orderId} — ${c.name}\n\n📦 الكمية هترجع للمخزون.\n⚠️ الطلب هيفضل شغّال على Shopify لحد ما تلغيه هناك — وساعتها بس زوهو ياخد إشعار دائن.`);
   if(!ok) return;
   try{
     const r = await apiFetch('/api/field-cancellations/'+orderId+'/confirm-receive','POST',{
@@ -61723,11 +61740,68 @@ async function confirmReceiveCancellation(orderId){
       // حدّث الطلب محلياً
       const oIdx = orders.findIndex(o => o.id === orderId);
       if(oIdx >= 0){ orders[oIdx].status = 'ملغي'; debouncedSaveOrders(); }
-      toast('✅ تم تأكيد الاستلام — الطلب ملغي نهائياً');
+      const n = r.restored?.restored || 0;
+      toast(n ? `✅ اتسلّمت — ورجّعنا ${n} قطعة للمخزون` : '✅ تم تأكيد الاستلام');
+      if(!r.restored || r.restored.already)
+        toast('ℹ️ المخزون كان راجع قبل كده — مارجّعناش تاني');
       loadFieldCancels();
+      loadCancelledNotOnShopify();   // 🔎 v812: الطلب بينتقل للقايمة التانية
       refreshAll();
     }
   }catch(e){ toast('❌ '+e.message); }
+}
+
+// 🔎 v812: عرض بس — مافيش زرار بيغيّر حاجة. الإلغاء على شوبيفاي
+//   قرارك انت، واللينك بيوديك عليه.
+async function loadCancelledNotOnShopify(){
+  const box = document.getElementById('cns-list');
+  if(!box) return;
+  box.innerHTML = '<div style="padding:16px;color:var(--muted);font-size:12px">⏳ ...</div>';
+  try{
+    const r = await apiFetch('/api/orders/cancelled-not-on-shopify');
+    if(!r) return apiNN(r, '/api/orders/cancelled-not-on-shopify');   // 🚑
+    if(r.error) throw new Error(r.error);
+    const list = r.orders || [];
+    const cnt = document.getElementById('cns-count');
+    if(cnt) cnt.textContent = list.length ? `${list.length} طلب` : '';
+    if(!list.length){
+      box.innerHTML = `<div style="padding:22px;text-align:center;color:var(--muted)">
+        <div style="font-size:30px;opacity:.4">✅</div>
+        <div style="font-weight:700;margin-top:6px">مفيش — كل الملغي عندنا ملغي على Shopify كمان</div></div>`;
+      return;
+    }
+    box.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+      <thead><tr style="border-bottom:2px solid var(--border)">
+        <th style="padding:7px;text-align:right">الطلب</th>
+        <th style="padding:7px">الحالة عندنا</th>
+        <th style="padding:7px">المبلغ</th>
+        <th style="padding:7px">المخزون</th>
+        <th style="padding:7px">فاتورة Zoho</th>
+        <th style="padding:7px">اتلغى امتى</th>
+        <th style="padding:7px">Shopify</th>
+      </tr></thead><tbody>${list.map(o => {
+        const num = String(o.id).replace(/^SH-/, '');
+        return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:7px"><b>${escapeHtml(num)}</b>
+          ${o.name ? `<div style="font-size:11px;color:var(--muted)">${escapeHtml(o.name)}</div>` : ''}</td>
+        <td style="padding:7px;text-align:center">${escapeHtml(o.status || '')}
+          ${o.cancellation_reason ? `<div style="font-size:10.5px;color:var(--muted)">${escapeHtml(o.cancellation_reason)}</div>` : ''}</td>
+        <td style="padding:7px;text-align:center;font-family:Roboto,sans-serif">${
+          (Number(o.total)||0).toLocaleString('ar-EG')} ج</td>
+        <td style="padding:7px;text-align:center">${o.stock_still_out
+          ? '<span style="color:#dc2626;font-weight:700" title="الكمية لسه مخصومة — البضاعة مارجعتش للدفعات">⚠️ لسه مخصوم</span>'
+          : '<span style="color:#16a34a" title="الكمية رجعت للدفعات">✅ رجع</span>'}</td>
+        <td style="padding:7px;text-align:center;font-family:Roboto,sans-serif;font-size:11px">${
+          escapeHtml(o.zoho_invoice_number || '—')}</td>
+        <td style="padding:7px;text-align:center;font-size:11px">${o.cancelled_at
+          ? escapeHtml(new Date(o.cancelled_at).toLocaleDateString('ar-EG',{day:'numeric',month:'short'})) : '—'}</td>
+        <td style="padding:7px;text-align:center">
+          <a href="https://admin.shopify.com/store/cafelax/orders?query=${encodeURIComponent(num)}"
+             target="_blank" rel="noopener" class="btn btn-ghost btn-sm">افتح</a></td>
+      </tr>`; }).join('')}</tbody></table></div>`;
+  }catch(e){
+    box.innerHTML = `<div style="padding:16px;color:var(--danger);font-size:12px">❌ ${escapeHtml(e.message)}</div>`;
+  }
 }
 
 async function revertFieldCancellation(orderId){
