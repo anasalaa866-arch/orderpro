@@ -7839,6 +7839,8 @@ tr:hover td{background:#fafbff}
                 <option value="">— اختار من القائمة —</option>
               </select>
               <div id="po-supplier-hint" style="font-size:11px;color:#6d7175;margin-top:4px"></div>
+              <!-- 🤝 v810: نوع المورد + إمكانية إن التوريد ده بالذات عادي -->
+              <div id="po-cg-box" style="display:none;margin-top:7px"></div>
             </div>
             <div>
               <label style="display:block;font-weight:600;font-size:13px;color:#1a1c1d;margin-bottom:6px">المخزن (Destination) *</label>
@@ -11487,7 +11489,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v808';
+const UI_BUILD = 'v810';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -37057,6 +37059,9 @@ async function openNewPO(skipSuggestionsDraft){
   const supSearch = document.getElementById('po-supplier-search');
   if(supSearch) supSearch.value = '';
   _poFillSupplierOptions('');
+  // 🧾 v810: أمر جديد = الاختيار يرجع لأصله، مايورّثش من أمر قبله
+  _poNotCg = false;
+  poRenderCgBox();
   
   const whSel = document.getElementById('po-warehouse');
   whSel.innerHTML = '<option value="">-- اختار --</option>' +
@@ -37175,7 +37180,46 @@ async function syncZohoSuppliers(){
 function onPOSupplierChange(){
   const val = document.getElementById('po-supplier').value;
   document.getElementById('po-custom-supplier').style.display = val === 'custom' ? 'block' : 'none';
+  poRenderCgBox();
 }
+
+// 🤝 v810: بيقول المورد ده عادي ولا تحت البيع، ولو تحت البيع بيدّيك
+//   اختيار إن التوريد ده بالذات عادي بفاتورة — فيمشي Purchase Order
+//   في Zoho زي أي أمر، ومايدخلش في تقرير تحت البيع ولا في القطع.
+function poRenderCgBox(){
+  const box = document.getElementById('po-cg-box');
+  if(!box) return;
+  const id = document.getElementById('po-supplier')?.value;
+  const sup = (_suppliers || []).find(x => String(x.id) === String(id));
+  if(!sup){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = 'block';
+  if(!sup.consignment){
+    box.innerHTML = `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;
+      background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:3px 10px;color:var(--muted)">
+      🧾 مورد عادي — فاتورة شراء</span>`;
+    return;
+  }
+  // الاختيار بيفضل زي ما سيبته لو رجعت تغيّر المورد لواحد تاني تحت البيع
+  const on = !!_poNotCg;
+  box.innerHTML = `
+    <span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;
+      background:#eef2ff;border:1px solid #6366f1;border-radius:999px;padding:3px 10px;color:#4338ca">
+      🤝 بضاعة تحت البيع</span>
+    <label style="display:flex;align-items:flex-start;gap:7px;margin-top:7px;cursor:pointer;
+      background:${on?'#fffbeb':'var(--bg)'};border:1px solid ${on?'#f59e0b':'var(--border)'};
+      border-radius:8px;padding:8px 10px">
+      <input type="checkbox" id="po-not-cg" ${on?'checked':''} onchange="poNotCgToggle(this.checked)"
+             style="margin-top:2px;cursor:pointer">
+      <span style="font-size:12px;line-height:1.7">
+        <b>التوريد ده عادي — مش تحت البيع</b>
+        <div style="color:var(--muted);font-size:11px">
+          هيتعمل له <b>فاتورة شراء</b> في Zoho زي أي أمر، ومش هيدخل في تقرير
+          «بضاعة تحت البيع» ولا في القطع، ومش هيسجّل أصنافه في قايمة المورد.
+        </div>
+      </span></label>`;
+}
+let _poNotCg = false;
+function poNotCgToggle(v){ _poNotCg = !!v; poRenderCgBox(); }
 
 // 🧮 v587: صافي سعر القطعة = المعلن × (1 − خصم%) × (1 + ضريبة%)
 function _poNet(it){
@@ -37706,6 +37750,9 @@ async function savePO(status){
     shippingCost: parseFloat(document.getElementById('po-shipping').value) || 0,
     paymentMethod: document.getElementById('po-payment-method').value,
     notes: document.getElementById('po-notes').value.trim(),
+    // 🧾 v810: بنقرا من الخانة نفسها لو ظاهرة — مش من المتغيّر لوحده
+    //   عشان لو المستخدم غيّر المورد لواحد عادي ما نبعتش قيمة قديمة
+    notConsignment: !!document.getElementById('po-not-cg')?.checked,
     status
   };
   
@@ -37767,6 +37814,9 @@ async function editPODraft(id){
         const nm = document.getElementById('po-supplier-name');  if(nm) nm.value = po.supplier_name || '';
         const ph = document.getElementById('po-supplier-phone'); if(ph) ph.value = po.supplier_phone || '';
       }
+      // 🧾 v810: المسودة بتفتح بنفس اختيارها — قبل onPOSupplierChange
+      //   عشان هي اللي بترسم الصندوق
+      _poNotCg = po.not_consignment === true;
       if(typeof onPOSupplierChange === 'function') onPOSupplierChange();
     }
 
