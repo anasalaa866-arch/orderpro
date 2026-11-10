@@ -11487,7 +11487,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v806';
+const UI_BUILD = 'v807';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -37714,7 +37714,14 @@ async function savePO(status){
     if(id){
       await apiFetch('/api/purchase-orders/' + id, 'PUT', data);
     } else {
-      await apiFetch('/api/purchase-orders', 'POST', data);
+      const _r = await apiFetch('/api/purchase-orders', 'POST', data);
+      // 📦 v807: مورد تحت البيع — الأصناف الجديدة اتسجّلت لوحدها.
+      //   بنقولها صريح عشان تعرف إنه حصل وتروح تحط السعر لو عايز،
+      //   مش يحصل في الخفا.
+      const _cg = _r?.consignment;
+      if(_cg?.error) toast('⚠️ أمر الشراء اتحفظ بس تسجيل أصناف «تحت البيع» فشل: ' + _cg.error);
+      else if(_cg?.added > 0)
+        toast(`📦 اتسجّل ${_cg.added} صنف جديد في «بضاعة تحت البيع» برصيد أول مدة صفر`, 'success');
     }
     toast(status === 'sent'
       ? '✅ تم الإرسال'
@@ -38100,7 +38107,7 @@ async function loadPurchaseReturnsPage(){
 // لوحدها والرصيد الحالي بييجي من شوبيفاي:
 //    مبيعات الفترة = رصيد أولها + توريداتها − الرصيد الحالي
 // وجنبها «مبيعات النظام» للمقارنة بس — الحساب بالاستنتاج زي ما اتفقنا.
-let _cgSup = null, _cgTab = 'report', _cgRep = null, _cgItems = null, _cgPick = [];
+let _cgSup = null, _cgTab = 'report', _cgRep = null, _cgItems = null, _cgPick = [], _cgSups = [];
 
 const _cgN  = v => (Number(v) || 0).toLocaleString('ar-EG');
 const _cgM  = v => (Number(v) || 0).toLocaleString('ar-EG', { minimumFractionDigits:2, maximumFractionDigits:2 });
@@ -38112,7 +38119,7 @@ async function cgOnOpen(){
   try{
     const r = await apiFetch('/api/consignment/suppliers');
     if(r?.error) throw new Error(r.error);
-    const sups = r.suppliers || [];
+    const sups = _cgSups = r.suppliers || [];
     if(!sups.length){
       box.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:8px 0">
         مفيش موردين متعلّمين «تحت البيع» لسه — دوس <b>➕ ضيف مورد</b>.</div>`;
@@ -38217,6 +38224,7 @@ function cgRenderReport(){
         <div style="font-weight:900;font-size:21px;color:#dc2626;font-family:Roboto,sans-serif">${_cgM(t.amount)} ج</div>
         <div style="font-size:11px;color:var(--muted)">${_cgN(t.sold)} قطعة</div>
       </div>
+      <button class="btn btn-sm btn-ghost" onclick="cgPrintReport()" title="اطبع التقرير قبل ما تقفل — تراجعه أو تدّيه للمورد">🖨️ طباعة</button>
       <button class="btn btn-sm" onclick="cgCut()" style="background:#dc2626;border-color:#dc2626;color:#fff;font-weight:800">✂️ اقفل الفترة واتحاسب</button>
     </div>
 
@@ -38425,8 +38433,108 @@ async function cgSaveAdd(){
                                  variantTitle: x.variantTitle, openingQty: parseInt(x.openingQty||0,10) || 0,
                                  estPrice: x.price })) });
     if(r?.error) return toast('❌ ' + r.error);
-    closeM('m-cg-add'); toast(`✅ اتضاف ${r.count} صنف`, 'success'); cgLoadItems();
+    closeM('m-cg-add'); toast(`✅ اتضاف ${r.count} صنف`, 'success');
+    // 🔢 v807: عدّاد «· N صنف» على شريحة المورد كان بيفضل على رقمه
+    //   القديم بعد الإضافة (بيتحسب في cgOnOpen بس)، فكان بيقول 0 والأصناف
+    //   قدامك. بنحدّث الرقم محلياً من غير ما نعيد تحميل الصفحة كلها.
+    const _me = _cgSups.find(x => String(x.id) === String(_cgSup));
+    if(_me) _me.items_count = (parseInt(_me.items_count,10) || 0) + (r.count || 0);
+    cgOnOpen();
   }catch(e){ toast('❌ ' + e.message); }
+}
+
+// 🖨️ v807: طباعة التقرير قبل القطع. بتتبني من _cgRep اللي على
+//   الشاشة — نفس الأرقام اللي بتشوفها بالظبط، مش نداء تاني ممكن
+//   يرجّع أرقام اتغيّرت في الوقت ده.
+function cgPrintReport(){
+  const r = _cgRep;
+  if(!r || !(r.items||[]).length) return toast('❌ مفيش تقرير مفتوح');
+  const items = r.items, t = r.totals || {};
+  const sup = (_cgSups||[]).find(x => String(x.id) === String(_cgSup));
+  const from = r.period_from
+    ? new Date(r.period_from).toLocaleDateString('ar-EG',{day:'numeric',month:'short',year:'numeric'})
+    : 'البداية';
+  const now = new Date().toLocaleString('ar-EG',
+    {day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+  const rows = items.map((x,i) => {
+    const diff = x.system_sold != null && x.system_sold !== x.sold_qty;
+    return `<tr${x.negative?' class="neg"':''}>
+      <td class="c">${i+1}</td>
+      <td>${escapeHtml(x.product_title||'')}${
+        x.sku?`<div class="sku">${escapeHtml(x.sku)}</div>`:''}</td>
+      <td class="n">${_cgN(x.opening_qty)}</td>
+      <td class="n">${_cgN(x.delivered_qty)}</td>
+      <td class="n">${_cgN(x.closing_qty)}</td>
+      <td class="n b">${_cgN(x.sold_qty)}${x.negative?' ⚠️':''}</td>
+      <td class="n${diff?' warn':''}">${x.system_sold==null?'—':_cgN(x.system_sold)}</td>
+      <td class="n">${_cgM(x.sale_price)}</td>
+      <td class="n">${_cgM(x.unit_price)}</td>
+      <td class="n b">${x.sold_qty>0?_cgM(x.line_total):'—'}</td></tr>`;
+  }).join('');
+
+  // ⚠️ التحذيرات بتتطبع كمان — التقرير المطبوع لازم يقول نفس اللي
+  //   الشاشة بتقوله، مش نسخة أنضف بتخفي المشاكل
+  const warn = [
+    t.negatives ? `<div class="w red">⚠️ <b>${t.negatives}</b> صنف رصيده أكبر من المتوقع — مش داخل في المبلغ.</div>` : '',
+    t.mismatch  ? `<div class="w amber">📊 <b>${t.mismatch}</b> صنف مختلف عن مبيعات النظام — تالف أو فاقد أو جرد.</div>` : '',
+  ].join('');
+
+  const w = window.open('', '_blank', 'width=1000,height=1100');
+  if(!w) return toast('❌ المتصفح منع النافذة — اسمح بالنوافذ المنبثقة');
+  w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
+  <title>بضاعة تحت البيع — ${escapeHtml(sup?.name||'')}</title>
+  <style>
+    @page{size:A4 landscape;margin:11mm}
+    *{box-sizing:border-box}
+    body{font-family:Cairo,Tahoma,sans-serif;margin:0;color:#111;font-size:12px}
+    h1{font-size:17px;margin:0 0 2px}
+    .sub{color:#555;font-size:11px;margin-bottom:9px}
+    .hd{display:flex;justify-content:space-between;align-items:flex-start;
+        border-bottom:2px solid #111;padding-bottom:7px;margin-bottom:9px}
+    .box{text-align:center;border:1.5px solid #111;border-radius:7px;padding:7px 15px}
+    .box .lbl{font-size:10px;color:#555}
+    .box .val{font-size:19px;font-weight:800;font-family:Roboto,sans-serif}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #bbb;padding:4px 5px;vertical-align:middle}
+    th{background:#eee;font-size:10px}
+    .n{text-align:center;font-family:Roboto,sans-serif}
+    .c{text-align:center;color:#666}
+    .b{font-weight:800}
+    .warn{color:#92400e;font-weight:700}
+    .neg{background:#fdeaea}
+    .sku{font-size:9px;color:#777;font-family:Roboto,sans-serif}
+    .w{padding:6px 9px;border-radius:5px;margin-bottom:6px;font-size:11px}
+    .red{background:#fdeaea;border:1px solid #e11}
+    .amber{background:#fff7e6;border:1px solid #d97706}
+    tfoot td{background:#eee;font-weight:800}
+    .sign{margin-top:22px;display:flex;gap:50px}
+    .sign div{flex:1;border-top:1px solid #111;padding-top:5px;font-size:11px;text-align:center}
+    @media print{.noprint{display:none}}
+  </style></head><body>
+  <div class="hd">
+    <div><h1>بضاعة تحت البيع — ${escapeHtml(sup?.name||'')}</h1>
+      <div class="sub">الفترة: ${escapeHtml(from)} → دلوقتي &nbsp;·&nbsp; اتطبع: ${escapeHtml(now)}
+        &nbsp;·&nbsp; خصم ${_cgN(items[0]?.discount_pct ?? 0)}% من سعر البيع</div>
+      <div class="sub"><b>تقرير مبدئي — الفترة لسه مقفلتش</b></div></div>
+    <div class="box"><div class="lbl">المستحق للمورد</div>
+      <div class="val">${_cgM(t.amount)} ج</div>
+      <div class="lbl">${_cgN(t.sold)} قطعة · ${items.length} صنف</div></div>
+  </div>
+  ${warn}
+  <table><thead><tr>
+    <th>#</th><th>الصنف</th><th>أول الفترة</th><th>توريدات</th><th>الرصيد الحالي</th>
+    <th>باع</th><th>مبيعات النظام</th><th>سعر البيع</th><th>التكلفة</th><th>الإجمالي</th>
+  </tr></thead><tbody>${rows}</tbody>
+  <tfoot><tr><td colspan="5" class="c">${items.length} صنف</td>
+    <td class="n">${_cgN(t.sold)}</td><td></td><td></td><td></td>
+    <td class="n">${_cgM(t.amount)} ج</td></tr></tfoot></table>
+  <div class="sign"><div>المستلم</div><div>المورد</div></div>
+  <div class="noprint" style="margin-top:14px;text-align:center">
+    <button onclick="window.print()" style="padding:8px 22px;font-family:Cairo,sans-serif;font-size:13px">🖨️ اطبع</button></div>
+  </body></html>`);
+  w.document.close();
+  setTimeout(() => { try{ w.focus(); w.print(); }catch(e){} }, 400);
 }
 
 // ───────────── القطع ─────────────
