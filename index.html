@@ -50506,7 +50506,9 @@ async function hrDelete(id, name){
   let chk;
   try{
     chk = await apiFetch(`/api/hr/employees/${id}/delete-check`, 'GET');
-    if(!chk?.ok) throw new Error(chk?.error || 'فشل الفحص');
+    if(!chk?.ok) throw new Error(chk?.error || _apiLastErr || 'فشل الفحص');
+    // 🚑 v796: من غير ده، counts الناقصة بتكسر السطر اللي تحت بـ TypeError
+    if(!chk.counts) throw new Error('السيرفر مارجّعش تفاصيل الموظف');
   }catch(e){ return toast('❌ ' + e.message); }
 
   if(chk.blocked){
@@ -50533,10 +50535,15 @@ async function hrDelete(id, name){
 
   try{
     const r = await apiFetch(`/api/hr/employees/${id}?force=true`, 'DELETE');
-    if(r?.error) throw new Error(r.error);
+    // 🚑 v796: apiFetch بترجّع null لما الطلب يفشل (404، نت، أي حاجة).
+    //   `r?.error` مابتمسكش ده، فالشاشة كانت بتقول «اتمسح» والموظف
+    //   مكانه. على فعل حذف، ده أسوأ نوع كذب.
+    if(!r) throw new Error(_apiLastErr || 'الطلب ماوصلش — الموظف مااتمسحش');
+    if(r.error) throw new Error(r.error);
+    if(r.success !== true) throw new Error('السيرفر مارجّعش تأكيد الحذف');
     toast('🗑️ اتمسح');
     loadHrEmployees();
-  }catch(e){ toast('❌ ' + e.message); }
+  }catch(e){ toast('❌ ' + e.message); loadHrEmployees(); }
 }
 
 // ══════════════════════════════════════════════════════════════
