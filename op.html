@@ -53583,6 +53583,40 @@ function _prodImg(url, size){
       style="${box}object-fit:contain;background:#fff;border:1px solid var(--border)">`;
 }
 
+// ⏱️ v800: بيستنى الصور تخلص وبيقيس الحجم الحقيقي اللي اتحمّل.
+//   الصورة المخزّنة في الكاش مابتظهرش في Network بس لسه بتاخد وقت
+//   فك ضغط — فبنقيس المقاس الطبيعي مش بس العدد.
+function _neoTiming(ms, render, n){
+  const t = (x) => Math.round(x) + 'ms';
+  console.log(`%c⏱️ عروض قرب الانتهاء%c  شبكة ${t(ms)} · رسم ${t(render)} · ${n} عرض`,
+    'background:#ea580c;color:#fff;padding:2px 6px;border-radius:4px', '');
+  const imgs = [...document.querySelectorAll('#neo-list img')];
+  if(!imgs.length) return;
+  const done = () => {
+    let big = 0, px = 0;
+    for(const im of imgs){
+      const w = im.naturalWidth || 0;
+      px += w * (im.naturalHeight || 0);
+      if(w > im.clientWidth * 3) big++;          // أكبر 3 أضعاف من اللي بيتعرض
+    }
+    const mp = (px / 1e6).toFixed(1);
+    console.log(`%c🖼️%c ${imgs.length} صورة · ${mp} ميجابكسل اتفكّ ضغطها` +
+      (big ? ` · ⚠️ ${big} منهم لسه أكبر من اللازم` : ' · ✅ كلهم بالمقاس'),
+      'background:#0ea5e9;color:#fff;padding:2px 6px;border-radius:4px', '');
+    if(big){
+      const s = imgs.find(i => i.naturalWidth > i.clientWidth * 3);
+      console.log('   مثال:', s.naturalWidth + '×' + s.naturalHeight,
+                  '→ بيتعرض', s.clientWidth + 'px', '\n   ' + s.src);
+    }
+  };
+  const pend = imgs.filter(i => !i.complete);
+  if(!pend.length) return done();
+  let left = pend.length;
+  pend.forEach(i => i.addEventListener('load', () => --left || done(), { once:true })
+             || i.addEventListener('error', () => --left || done(), { once:true }));
+  setTimeout(() => left && done(), 8000);
+}
+
 async function loadNeoPage(){
   const box = document.getElementById('neo-list');
   if(!box) return;
@@ -53592,9 +53626,16 @@ async function loadNeoPage(){
   if(!box.dataset.loaded)
     box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div>';
   try{
+    // ⏱️ v800: قياس كل مرحلة — الوقت رايح فين بالظبط؟
+    //   بيطبع سطر واحد في الـ Console. مالوش أي تأثير على الشغل نفسه.
+    const _t0 = performance.now();
     const r = await apiFetch('/api/near-expiry-offers?status=' + encodeURIComponent(status));
+    const _tFetch = performance.now() - _t0;
     _neoOffers = r?.offers || [];
+    const _t1 = performance.now();
     renderNeoList();
+    const _tRender = performance.now() - _t1;
+    _neoTiming(_tFetch, _tRender, _neoOffers.length);
     box.dataset.loaded = '1';
     const badge = document.getElementById('nb-neo');
     if(badge){
