@@ -11487,7 +11487,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v803';
+const UI_BUILD = 'v804';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -26122,6 +26122,14 @@ function pfExcel(){
   XLSX.writeFile(wb,`الأداء_${cur.label}.xlsx`);
 }
 
+// 🔎 v804: مسح البحث والفترة معاً — بيتنده من الرسالة الفاضية
+function chkClearSearch(){
+  const sb = $('chk-search'); if(sb) sb.value = '';
+  const pf = $('chk-period-filter'); if(pf) pf.value = 'all';
+  const dr = $('chk-date-range'); if(dr) dr.style.display = 'none';
+  chkRenderActive();
+}
+
 function chkSetFilter(f,btn){
   chkStatusFilter=f;
   document.querySelectorAll('#chk-status-chips .chip').forEach(c=>c.classList.remove('on'));
@@ -26136,15 +26144,8 @@ function chkOnFilterChange(){
     renderWeeklyReport(_chkWkView || undefined);
     return;
   }
-  // تقرير الموردين لسه مالوش بحث - رجعنا للـ regular view
-  if(chkStatusFilter === 'suppliers'){
-    chkStatusFilter = 'all';
-    document.querySelectorAll('#chk-status-chips .chip').forEach(c=>{
-      c.classList.remove('on');
-      const m = (c.getAttribute('onclick') || '').match(/chkSetFilter\('([^']+)'/);
-      if(m && m[1] === 'all') c.classList.add('on');
-    });
-  }
+  // 🔎 v804: تقرير الموردين بقى له بحث وفترات زي الشهري والأسبوعي،
+  //   فمابنطردش منه. كان بيرجّعك لقايمة الشيكات أول ما تكتب حرف.
   // أظهر/خبي date range لو custom اتختار
   const period = document.getElementById('chk-period-filter')?.value;
   const dateRange = document.getElementById('chk-date-range');
@@ -33023,8 +33024,12 @@ function renderSuppliersReport(){
       <th>تفاصيل</th>`;
   }
 
+  // 🔎 v804: بنبني من القايمة المفلترة — البحث والفترة بيشتغلوا هنا
+  //   زي أي عرض تاني في الصفحة. getFilteredChkList بتعمل الاتنين،
+  //   و chkStatusFilter='suppliers' مالوش فرع جواها فمابيفلترش بحالة.
+  const _src = getFilteredChkList();
   const supplierMap={};
-  chkList.forEach(c=>{
+  _src.forEach(c=>{
     const key=c.payee||'غير محدد';
     if(!supplierMap[key])supplierMap[key]={name:key,checks:[],total:0,pending:0,done:0,overdue:0,lastDate:''};
     supplierMap[key].checks.push(c);
@@ -33036,9 +33041,26 @@ function renderSuppliersReport(){
   });
 
   const suppliers=Object.values(supplierMap).sort((a,b)=>b.total-a.total);
+  // 🔎 v804: العداد يقول الظاهر فعلاً — من غير كده بيفضل مكتوب العدد
+  //   الكلي والبحث شايل نص الموردين، وده بيضلّل
+  if($('chk-count'))
+    $('chk-count').textContent = _src.length === chkList.length
+      ? `${chkList.length} شيك`
+      : `${suppliers.length} مورد · ${_src.length} من ${chkList.length} شيك`;
 
   if(!suppliers.length){
-    container.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--muted)">لا توجد شيكات</td></tr>`;
+    // 🔎 v804: لو في بحث شغّال، نقول إنها نتيجة بحث مش إن مفيش شيكات
+    const _q = ($('chk-search')?.value || '').trim();
+    const _p = $('chk-period-filter')?.value || 'all';
+    const filtered = !!_q || (_p && _p !== 'all');
+    container.innerHTML = filtered
+      ? `<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--muted)">
+           <div style="font-size:30px;opacity:.4">🔍</div>
+           <div style="font-weight:700;margin-top:6px">مفيش مورد مطابق</div>
+           ${_q ? `<div style="font-size:12px;margin-top:4px">البحث: «${escapeHtml(_q)}»</div>` : ''}
+           <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="chkClearSearch()">✖️ امسح البحث</button>
+         </td></tr>`
+      : `<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--muted)">لا توجد شيكات</td></tr>`;
     return;
   }
 
