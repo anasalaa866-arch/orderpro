@@ -2302,8 +2302,15 @@ tr:hover td{background:#fafbff}
             <input type="number" id="tpro-pct" min="1" max="99" step="0.5" class="form-input" style="width:90px;text-align:center"></div>
           <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:2px">أيام الشهر (مفصولة بفاصلة)</label>
             <input type="text" id="tpro-days" class="form-input" style="width:170px;text-align:center" placeholder="23,24,25"></div>
+          <!-- 🏷️ v818: نسبة التسعير أيام العروض — بتحل محل النسبة اللي فوق -->
+          <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:2px"
+                 title="بتحل محل نسبة طلبات العادية في أيام العروض دي بس">نسبة التسعير أيام العروض %</label>
+            <input type="number" id="tpro-price-pct" min="0" max="90" step="0.5" class="form-input"
+                   style="width:150px;text-align:center" placeholder="سيبها فاضية = العادية"
+                   oninput="tproPreview()"></div>
           <button class="btn" id="tpro-save" onclick="tproSave()" style="background:#7c3aed;color:#fff">💾 حفظ</button>
         </div>
+        <div id="tpro-price-note" style="margin-top:8px;font-size:12px;line-height:1.9"></div>
         <div id="tpro-stats" style="margin-top:12px;font-size:12px"></div>
       </div>
     </div>
@@ -11511,7 +11518,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v817';
+const UI_BUILD = 'v818';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -65048,6 +65055,39 @@ function talAuditHtml(a){
 
 
 
+// 🏷️ v818: بتوري السعر بيطلع كام بالنسبة الجديدة — قبل ما تحفظ.
+//   المعادلة نفس اللي على السيرفر: ceil(سعر الموقع ÷ (1 − النسبة))
+let _tproNormalPct = 0, _tproEffPct = 0;
+function tproPreview(){
+  const el = $('tpro-price-note'); if(!el) return;
+  const p = parseFloat($('tpro-price-pct')?.value);
+  const on = $('tpro-enabled')?.checked;
+  const days = ($('tpro-days')?.value||'').trim();
+  if(!Number.isFinite(p) || p <= 0){
+    el.innerHTML = `<span style="color:var(--muted)">النسبة فاضية — أيام العروض هتستعمل نسبة طلبات العادية
+      (<b>${_tproNormalPct}%</b>) زي أي يوم.</span>`;
+    return;
+  }
+  if(p > 90){ el.innerHTML = '<span style="color:#dc2626">النسبة لازم تكون 90% أو أقل</span>'; return; }
+  // 🧮 نفس شكل السيرفر بالظبط — w*100/(100-pct) مش w/(1-pct/100)،
+  //   عشان خطأ الفاصلة العشرية مايخليش المعاينة تقول رقم والسيرفر تاني
+  const f = (w, pct) => pct < 100 ? Math.ceil(w * 100 / (100 - pct)) : Math.ceil(w);
+  const rows = [100, 250, 500].map(w =>
+    `<tr><td style="padding:2px 10px 2px 0">${w}</td>
+         <td style="padding:2px 14px 2px 0;color:var(--muted)">${f(w,_tproNormalPct)}</td>
+         <td style="padding:2px 14px 2px 0;font-weight:800;color:#7c3aed">${f(w,p)}</td>
+         <td style="padding:2px;color:#16a34a">+${f(w,p)-f(w,_tproNormalPct)}</td></tr>`).join('');
+  el.innerHTML = `
+    <div style="background:#faf5ff;border:1px solid #7c3aed;border-radius:8px;padding:9px 11px">
+      أيام <b>${escapeHtml(days||'—')}</b> السعر هيتحسب بـ <b>${p}%</b> بدل <b>${_tproNormalPct}%</b>
+      ${on ? '' : ' <span style="color:#b45309">— بس الخصم مقفول دلوقتي فمش هيتطبّق</span>'}
+      <table style="margin-top:6px;font-family:Roboto,sans-serif;font-size:12px">
+        <tr style="color:var(--muted);font-size:11px"><td>سعر الموقع</td><td>العادي</td><td>أيام العروض</td><td>الفرق</td></tr>
+        ${rows}
+      </table>
+    </div>`;
+}
+
 // ⭐ v628: إعدادات خصم عملاء طلبات برو
 async function tproLoad(){
   const r = await apiFetch('/api/talabat/tpro');
@@ -65055,6 +65095,10 @@ async function tproLoad(){
   if($('tpro-enabled')) $('tpro-enabled').checked = !!r.enabled;
   if($('tpro-pct'))     $('tpro-pct').value = r.pct;
   if($('tpro-days'))    $('tpro-days').value = (r.days||[]).join(',');
+  if($('tpro-price-pct')) $('tpro-price-pct').value = r.price_pct > 0 ? r.price_pct : '';
+  _tproNormalPct = Number(r.normal_pct) || 0;          // 🏷️ v818
+  _tproEffPct    = Number(r.effective_pct) || 0;
+  tproPreview();
   const st = $('tpro-state');
   if(st){
     st.textContent = r.enabled ? (r.active_today ? '🟢 شغّال — والنهاردة من أيام الخصم' : '🟡 شغّال — بس النهاردة مش من أيامه')
@@ -65089,7 +65133,10 @@ async function tproSave(){
   if(en && !confirm(`تشغيل خصم ${pct}% لعملاء طلبات برو أيام ${days}؟\n\nالتكلفة عليك — طلبات بتحوّل بعد الخصم.`)) return;
   const b = $('tpro-save'); if(b){ b.disabled = true; b.textContent = '⏳'; }
   try{
-    const r = await apiFetch('/api/talabat/tpro','POST',{ enabled: en, pct, days });
+    const pricePct = ($('tpro-price-pct')?.value || '').trim();   // 🏷️ v818
+    const r = await apiFetch('/api/talabat/tpro','POST',
+      { enabled: en, pct, days, price_pct: pricePct === '' ? 0 : pricePct });
+    if(!r) return toast(_apiLastErr || 'الطلب ماوصلش','error');   // 🚑
     if(r?.error) return toast(r.error,'error');
     toast(en ? '⭐ الخصم شغّال' : '🔴 الخصم اتقفل', 'success');
     await tproLoad();
