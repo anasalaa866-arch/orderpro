@@ -11487,7 +11487,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v805';
+const UI_BUILD = 'v806';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -53662,18 +53662,24 @@ function _neoTiming(ms, render, n){
   const imgs = [...document.querySelectorAll('#neo-list img')];
   if(!imgs.length) return;
   const done = () => {
-    let big = 0, px = 0;
+    // 🐞 v806: الصورة اللي لسه مش متعرضة clientWidth بتاعها = 0، فكانت
+    //   بتتحسب «أكبر من اللازم» غلط. بنعدّي عليها — مش بنقيس اللي
+    //   مش ظاهر.
+    let big = 0, px = 0, skipped = 0;
     for(const im of imgs){
       const w = im.naturalWidth || 0;
       px += w * (im.naturalHeight || 0);
-      if(w > im.clientWidth * 3) big++;          // أكبر 3 أضعاف من اللي بيتعرض
+      const shown = im.clientWidth || 0;
+      if(!shown){ skipped++; continue; }
+      if(w > shown * 3) big++;                   // أكبر 3 أضعاف من اللي بيتعرض
     }
     const mp = (px / 1e6).toFixed(1);
     console.log(`%c🖼️%c ${imgs.length} صورة · ${mp} ميجابكسل اتفكّ ضغطها` +
-      (big ? ` · ⚠️ ${big} منهم لسه أكبر من اللازم` : ' · ✅ كلهم بالمقاس'),
+      (big ? ` · ⚠️ ${big} منهم لسه أكبر من اللازم` : ' · ✅ كلهم بالمقاس') +
+      (skipped ? ` · (${skipped} لسه مش ظاهرين — ماتقاسوش)` : ''),
       'background:#0ea5e9;color:#fff;padding:2px 6px;border-radius:4px', '');
     if(big){
-      const s = imgs.find(i => i.naturalWidth > i.clientWidth * 3);
+      const s = imgs.find(i => i.clientWidth && i.naturalWidth > i.clientWidth * 3);
       console.log('   مثال:', s.naturalWidth + '×' + s.naturalHeight,
                   '→ بيتعرض', s.clientWidth + 'px', '\n   ' + s.src);
     }
