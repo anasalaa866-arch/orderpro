@@ -9968,6 +9968,13 @@ tr:hover td{background:#fafbff}
               onmousedown="event.preventDefault();cboToggle(document.getElementById('cs-pick'))">▼</span>
       </div>
       <button class="btn btn-ghost btn-sm" onclick="csList()">🔄 تحديث</button>
+      <!-- 🔗 v814: افتح الكوليكشن على الموقع أو على Shopify -->
+      <span id="cs-links" style="display:none;gap:7px">
+        <a id="cs-link-site" class="btn btn-ghost btn-sm" target="_blank" rel="noopener"
+           title="افتح الكوليكشن على cafelax.com — تشوف الترتيب زي ما العميل بيشوفه">🌐 على الموقع</a>
+        <a id="cs-link-admin" class="btn btn-ghost btn-sm" target="_blank" rel="noopener"
+           title="افتح الكوليكشن في Shopify Admin">🛍️ على Shopify</a>
+      </span>
     </div>
   </div>
 
@@ -11504,7 +11511,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v813';
+const UI_BUILD = 'v815';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -28544,12 +28551,16 @@ async function confirmSettleToTreasury(dateStr){
   const amount = parseFloat(document.getElementById('stt-amount')?.value)||0;
   const reason = document.getElementById('stt-reason')?.value.trim()||'تسوية مندوب';
   if(!tId||!amount){ toast('❗ اختر الخزنة والمبلغ'); return; }
+  // 🚑 v814: system:true — لو «تحصيل مناديب» اتغيّر اسمه أو اتوقف في
+  //   إعدادات الأقسام، السيرفر بيصنّفها لوحده بدل ما يرفض الحركة.
+  //   قبل كده كانت بترجع 400 والفلوس ماتدخلش الخزنة.
   const tx = {id:Date.now()+'_tx', treasuryId:tId, type:'in', amount, reason,
-              date:dateStr, category:'تحصيل مناديب'};
+              date:dateStr, category:'تحصيل مناديب', system:true};
   if(API_URL){
     try{
       const r = await apiFetch('/api/treasury-tx','POST',tx);
-      if(r?.ok === false || r?.error) throw new Error(r.error || 'السيرفر رفض الحركة');
+      if(!r) throw new Error(_apiLastErr || 'الطلب ماوصلش للسيرفر');   // 🚑 v814
+      if(r.ok === false || r.error) throw new Error(r.error || 'السيرفر رفض الحركة');
     }catch(e){
       toast('❌ ماتسجّلتش في الخزنة: ' + (e.message || e));
       return;                      // مانكدبش ومانحطّهاش محلياً
@@ -52105,8 +52116,32 @@ async function csList(){
   }
 }
 
+// 🔗 v814: بيحدّث اللينكين على الكوليكشن المختار. الـ handle جاي من
+//   السيرفر أصلاً في /collection-sort/list، والرقم بيتقص من الـ gid
+//   (gid://shopify/Collection/123 → 123).
+function csUpdateLinks(){
+  const box = $('cs-links');
+  if(!box) return;
+  const c = (_csCols || []).find(x => x.gid === _csPickGid);
+  if(!c){ box.style.display = 'none'; return; }
+  const site = $('cs-link-site'), admin = $('cs-link-admin');
+  const num = String(c.gid || '').split('/').pop();
+  // الموقع محتاج handle — لو ناقص لأي سبب بنخفي الزرار بدل ما نبني
+  //   لينك غلط يوديه صفحة 404
+  if(c.handle && site){
+    site.href = 'https://cafelax.com/collections/' + encodeURIComponent(c.handle);
+    site.style.display = '';
+  } else if(site) site.style.display = 'none';
+  if(num && /^\d+$/.test(num) && admin){
+    admin.href = 'https://admin.shopify.com/store/cafelax/collections/' + num;
+    admin.style.display = '';
+  } else if(admin) admin.style.display = 'none';
+  box.style.display = 'inline-flex';
+}
+
 async function csOpen(){
   const gid = _csPickGid || '';
+  csUpdateLinks();
   const body = $('cs-body'), cfg = $('cs-cfg');
   if(!gid){ _cs.gid=null; body.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">اختار كوليكشن من فوق</div>'; cfg.innerHTML=''; return; }
   body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)">⏳ بيجيب المنتجات...</div>';
