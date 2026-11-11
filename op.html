@@ -11606,7 +11606,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v834';
+const UI_BUILD = 'v835';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -25195,7 +25195,7 @@ async function dsLoad(){
         <thead><tr style="color:var(--muted)">
           <th style="text-align:right;padding:6px">المنتج</th><th>SKU</th><th>مخزون</th>
           <th>تكلفة</th><th>محبوس</th><th>سعر البيع</th><th>آخر بيعة</th><th>أقصى خصم</th></tr></thead>
-        <tbody>${_dsRows.map(x=>`<tr style="border-top:1px solid var(--border)">
+        <tbody>${_dsRows.slice(0,500).map(x=>`<tr style="border-top:1px solid var(--border)">
           <td style="padding:5px 6px">${escapeHtml(x.title)}</td>
           <td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted);font-size:10px">${escapeHtml(String(x.sku).slice(0,20))}</td>
           <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${x.stock_qty}</td>
@@ -25204,22 +25204,70 @@ async function dsLoad(){
           <td style="text-align:center;font-family:Roboto,sans-serif">${x.price.toLocaleString()}</td>
           <td style="text-align:center;font-size:11px;color:${x.never_sold?'#dc2626':'var(--muted)'}">${x.never_sold?'مباعش خالص':(x.days_since_sale+' يوم')}</td>
           <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700;color:#16a34a">${x.max_discount_pct!=null?x.max_discount_pct+'%':'—'}</td>
-        </tr>`).join('')}</tbody></table></div></div>`;
+        </tr>`).join('')}</tbody></table>
+      ${_dsRows.length>500?`<div style="padding:10px;text-align:center;font-size:12px;color:var(--muted)">
+        معروض أول 500 من ${_dsRows.length.toLocaleString()} — <b>زرار Excel بينزّلهم كلهم</b>.</div>`:''}
+      </div></div>`;
   }catch(e){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`; }
 }
+// 📋 v835: البيان بقى ورقتين — ملخص فيه الأرقام الكبيرة، وتفصيل بكل
+//   الأصناف (مش أول 500). الملخص هو اللي بتبص عليه وانت بتقرر العروض.
 function dsExcel(){
   if(!_dsRows.length){ toast('اعرض الأول'); return; }
+  const n = v => Number(v)||0;
+  const sum = f => _dsRows.reduce((s,x)=>s+n(f(x)),0);
+  const never = _dsRows.filter(x=>x.never_sold);
+  const noCost = _dsRows.filter(x=>!n(x.cost));
+  const days = $('ds-days')?.value || '90';
+
+  // ① ورقة الملخص
+  const over = (lo,hi) => _dsRows.filter(x => {
+    const d = x.never_sold ? 99999 : n(x.days_since_sale);
+    return d >= lo && d < hi;
+  });
+  const band = (label, rows) => ({
+    'الفئة': label, 'أصناف': rows.length,
+    'قطع': rows.reduce((s,x)=>s+n(x.stock_qty),0),
+    'رأس المال المحبوس': +rows.reduce((s,x)=>s+n(x.tied_value),0).toFixed(2),
+    'قيمتها بالبيع': +rows.reduce((s,x)=>s+n(x.retail_value),0).toFixed(2),
+  });
+  const summary = [
+    { 'الفئة':'📅 البيان بتاريخ', 'أصناف':new Date().toLocaleDateString('en-GB'), 'قطع':'', 'رأس المال المحبوس':'', 'قيمتها بالبيع':'' },
+    { 'الفئة':`المعيار: مافيش بيع من ${days} يوم`, 'أصناف':'', 'قطع':'', 'رأس المال المحبوس':'', 'قيمتها بالبيع':'' },
+    {},
+    band('🔴 الإجمالي', _dsRows),
+    {},
+    band('مباعش ولا مرة', never),
+    band(`واقف من ${days}–180 يوم`, over(n(days), 180)),
+    band('واقف من 180 يوم – سنة', over(180, 365)),
+    band('واقف أكتر من سنة', over(365, 99998)),
+    {},
+    { 'الفئة':'⚠️ تكلفته صفر (المحبوس مش محسوب — الرقم الحقيقي أكبر)',
+      'أصناف':noCost.length, 'قطع':noCost.reduce((s,x)=>s+n(x.stock_qty),0),
+      'رأس المال المحبوس':0, 'قيمتها بالبيع':+noCost.reduce((s,x)=>s+n(x.retail_value),0).toFixed(2) },
+  ];
+  const ws1 = XLSX.utils.json_to_sheet(summary);
+  ws1['!cols']=[{wch:46},{wch:14},{wch:12},{wch:22},{wch:18}];
+
+  // ② ورقة التفصيل — كل الأصناف
   const data=_dsRows.map(x=>({
     'المنتج':x.title,'SKU':x.sku,'باركود':x.barcode,'مخزون':x.stock_qty,
     'التكلفة':x.cost,'رأس المال المحبوس':x.tied_value,'سعر البيع':x.price,
     'قيمتها بالبيع':x.retail_value,
     'آخر بيعة (يوم)':x.never_sold?'مباعش خالص':x.days_since_sale,
     'اتباع قبل كده':x.sold_ever,'أقصى خصم %':x.max_discount_pct??'',
+    // السعر اللي لو نزلت تحته تبقى بتخسر
+    'سعر التعادل':n(x.cost)||'',
   }));
   const ws=XLSX.utils.json_to_sheet(data);
-  ws['!cols']=[{wch:40},{wch:16},{wch:16},{wch:9},{wch:10},{wch:18},{wch:10},{wch:14},{wch:14},{wch:12},{wch:12}];
-  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'الرواكد');
+  ws['!cols']=[{wch:40},{wch:16},{wch:16},{wch:9},{wch:10},{wch:18},{wch:10},{wch:14},{wch:14},{wch:12},{wch:12},{wch:12}];
+  ws['!autofilter']={ ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:data.length, c:11} }) };
+
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws1,'الملخص');
+  XLSX.utils.book_append_sheet(wb,ws,'التفصيل');
   XLSX.writeFile(wb, `الأصناف_الراكدة_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast(`⬇️ ${_dsRows.length.toLocaleString()} صنف`);
 }
 async function dsTag(){
   if(!_dsRows.length){ toast('اعرض الأول'); return; }
