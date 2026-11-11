@@ -11549,7 +11549,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v822';
+const UI_BUILD = 'v823';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -25530,7 +25530,8 @@ function pmShowTz(serverInfo){
   const off=-now.getTimezoneOffset()/60;
   el.innerHTML = `🕐 Cairo now: <b>${cairo}</b> · Browser: ${local} (UTC${off>=0?'+':''}${off})`
     + (serverInfo?` · Server: ${serverInfo.now} (${serverInfo.tz}, UTC${serverInfo.offset})`:'')
-    + ` · <span style="color:#b45309">Paymob export is UTC — displayed in Cairo (+${off}h)</span>`;
+    + ` · <span style="color:#b45309">Paymob export is UTC — displayed in Cairo (+${off}h)</span>`
+    + `<span id="pm-tz-note"></span>`;   // 🕰️ v823
 }
 // 🆕 v550: فلتر + إكسل لكشف Paymob
 let _pmFilter='all';
@@ -25609,6 +25610,17 @@ async function pmPick(file, reuse){
         ${[['all','الكل'],['sure','✅ أكيد'],['maybe','🤔 محتمل'],['unmatched','❌ مش لاقي'],['already','متسجل/مدفوع'],['other','باقي']].map(([k,l])=>`<button class="btn btn-sm ${_pmFilter===k?'btn-primary':'btn-ghost'}" onclick="_pmFilter='${k}';pmPick(null,true)" style="font-size:11px">${l}</button>`).join('')}
         <button class="btn btn-ghost btn-sm" onclick="pmExcel()" style="margin-inline-start:auto;font-size:11px">⬇️ Excel (المعروض)</button>
       </div>
+      ${r.tz_offset && r.tz_offset.hours ? `<div style="border:1px solid #16a34a;background:#f0fdf4;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12.5px">
+        <b>🕰️ إزاحة توقيت اتكشفت واتظبطت:</b>
+        تصدير Paymob كان فارق <b>${r.tz_offset.hours > 0 ? '+' : ''}${r.tz_offset.hours} ساعة</b> عن أوقات البيع عندك،
+        فظبّطناه قبل المطابقة.
+        <span style="color:var(--muted)">(اتفقت ${r.tz_offset.agree} من ${r.tz_offset.n} عملية — ${Math.round((r.tz_offset.share||0)*100)}%)</span>
+        <div style="color:var(--muted);margin-top:3px">الإزاحة بتتحسب من الداتا كل رفعة، فلو التوقيت الصيفي اتغيّر أو Paymob غيّر الشكل بتتظبط لوحدها.</div>
+      </div>` : ''}
+      ${r.tz_offset && !r.tz_offset.hours && r.unmatched > 3 ? `<div style="border:1px solid #d97706;background:#fffbeb;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12.5px">
+        <b>🕰️ مافيش إزاحة توقيت واضحة</b> — ${escapeHtml(r.tz_offset.why || '')}.
+        يعني سبب «مش لاقي» حاجة تانية غير التوقيت.
+      </div>` : ''}
       ${r.diagnosis && r.unmatched ? `<div style="border:1px solid #2563eb;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px">
         <div style="font-weight:800;color:#2563eb;margin-bottom:6px">🔬 دليل — ليه ${r.unmatched} مش لاقيين؟</div>
         <div>بيعات بنفس المبلغ موجودة في ±24 ساعة بس بعيدة عن الوقت: <b>${Object.entries(r.diagnosis.delta_hours_hist).sort((a,b)=>b[1]-a[1]).map(([h,n])=>`${n} عملية فرقها ~${h>0?'+':''}${h} ساعة`).join(' · ')||'—'}</b></div>
