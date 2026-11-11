@@ -7727,6 +7727,9 @@ tr:hover td{background:#fafbff}
     </div>
     <div id="ds-stats" style="padding:0 14px 12px"></div>
   </div>
+  <!-- 🔍 v836: شريط البحث والفلاتر — منفصل عن الجدول عشان ما يتولدش
+       من جديد مع كل حرف ويضيّع المؤشر -->
+  <div id="ds-bar"></div>
 
   <div id="ds-list"></div>
 </div>
@@ -11606,7 +11609,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v835';
+const UI_BUILD = 'v837';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -25171,7 +25174,15 @@ async function retFixOrphans(){
 }
 
 // 🆕 v516: الأصناف الراكدة
-let _dsRows = [];
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║ 🧊 الأصناف الراكدة — v836: بحث وفلاتر وترتيب                      ║
+// ╚══════════════════════════════════════════════════════════════════╝
+// _dsAll = اللي جاي من السيرفر · _dsRows = اللي بعد الفلترة.
+// الفلترة كلها في المتصفح — مفيش طلب جديد مع كل ضغطة.
+// والأرقام فوق بتتحسب على المعروض، عشان تفلتر شريحة وتشوف فلوسها فوراً.
+let _dsAll = [], _dsRows = [], _dsSort = 'tied';
+const _dsF = { q:'', state:'all', age:'all' };
+
 async function dsLoad(){
   const box=$('ds-list'), st=$('ds-stats'); if(!box) return;
   box.innerHTML='<div class="card"><div style="padding:20px;color:var(--muted)">⏳ بيحسب...</div></div>';
@@ -25179,36 +25190,166 @@ async function dsLoad(){
     const qs = `days=${$('ds-days').value}&min_value=${$('ds-minval').value||0}&min_age=${$('ds-minage').value}`;
     const r = await apiFetch('/api/dead-stock?'+qs,'GET');
     if(!r||r.error){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(r?.error||'فشل')}</div></div>`; return; }
-    _dsRows = r.rows||[];
-    st.innerHTML = `
-      <div style="display:flex;gap:14px;flex-wrap:wrap">
-        <div class="sc" style="flex:1;min-width:150px;background:var(--danger-light)"><div class="sc-label">رأس مال محبوس</div><div class="sc-val" style="color:var(--danger)">${r.tied_total.toLocaleString()} ج</div></div>
-        <div class="sc" style="flex:1;min-width:150px"><div class="sc-label">قيمتها بالبيع</div><div class="sc-val">${r.retail_total.toLocaleString()} ج</div></div>
-        <div class="sc" style="flex:1;min-width:130px"><div class="sc-label">أصناف</div><div class="sc-val">${r.count.toLocaleString()}</div></div>
-        <div class="sc" style="flex:1;min-width:130px"><div class="sc-label">قطع</div><div class="sc-val">${r.units_total.toLocaleString()}</div></div>
-        <div class="sc" style="flex:1;min-width:160px;background:#fff7ed"><div class="sc-label">مباعش ولا مرة</div><div class="sc-val" style="color:#b45309">${r.never_sold_count} · ${r.never_sold_value.toLocaleString()} ج</div></div>
-      </div>
-      ${r.no_cost_count?`<div style="margin-top:8px;font-size:11px;color:#b45309">⚠️ ${r.no_cost_count} صنف تكلفته صفر — رأس المال المحبوس بتاعهم مش محسوب، الرقم الحقيقي أكبر.</div>`:''}`;
-    if(!_dsRows.length){ box.innerHTML='<div class="card"><div style="padding:24px;text-align:center;color:#16a34a;font-weight:700">✅ مفيش أصناف راكدة بالمعايير دي</div></div>'; return; }
-    box.innerHTML = `<div class="card"><div style="padding:6px 14px;overflow-x:auto">
-      <table style="width:100%;font-size:12px">
-        <thead><tr style="color:var(--muted)">
-          <th style="text-align:right;padding:6px">المنتج</th><th>SKU</th><th>مخزون</th>
-          <th>تكلفة</th><th>محبوس</th><th>سعر البيع</th><th>آخر بيعة</th><th>أقصى خصم</th></tr></thead>
-        <tbody>${_dsRows.slice(0,500).map(x=>`<tr style="border-top:1px solid var(--border)">
-          <td style="padding:5px 6px">${escapeHtml(x.title)}</td>
-          <td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted);font-size:10px">${escapeHtml(String(x.sku).slice(0,20))}</td>
-          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${x.stock_qty}</td>
-          <td style="text-align:center;font-family:Roboto,sans-serif;color:${x.cost?'inherit':'#b45309'}">${x.cost?x.cost.toLocaleString():'—'}</td>
-          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:var(--danger)">${x.tied_value.toLocaleString()}</td>
-          <td style="text-align:center;font-family:Roboto,sans-serif">${x.price.toLocaleString()}</td>
-          <td style="text-align:center;font-size:11px;color:${x.never_sold?'#dc2626':'var(--muted)'}">${x.never_sold?'مباعش خالص':(x.days_since_sale+' يوم')}</td>
-          <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700;color:#16a34a">${x.max_discount_pct!=null?x.max_discount_pct+'%':'—'}</td>
-        </tr>`).join('')}</tbody></table>
-      ${_dsRows.length>500?`<div style="padding:10px;text-align:center;font-size:12px;color:var(--muted)">
-        معروض أول 500 من ${_dsRows.length.toLocaleString()} — <b>زرار Excel بينزّلهم كلهم</b>.</div>`:''}
-      </div></div>`;
+    _dsAll = r.rows||[];
+    dsApply();
   }catch(e){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`; }
+}
+
+// واقف من كام يوم من غير بيع.
+// اللي اتباع قبل كده: من آخر بيعة. واللي مباعش خالص: من يوم ما دخل
+// عندنا (age_days) — ده نفس المعنى بالظبط، فالاتنين يتقارنوا عادي.
+// قبل كده كنا بنديله ∞، فكان بيقع برّه كل فئات المدة — و٤٨١ صنف
+// بـ٦ مليون ماكانوش بيبانوا لما تدوس «أكتر من سنة».
+function _dsAge(x){
+  if(!x.never_sold) return Number(x.days_since_sale) || 0;
+  const a = Number(x.age_days);
+  return Number.isFinite(a) ? a : 99998;   // مش معروف = أقدم حاجة
+}
+
+function dsSetSort(v){ _dsSort = v; dsApply(); }
+function dsSetF(k, v){ _dsF[k] = v; dsApply(); }
+function dsClearF(){
+  _dsF.q=''; _dsF.state='all'; _dsF.age='all'; _dsSort='tied';
+  const q=$('ds-q'); if(q) q.value='';
+  dsApply();
+}
+
+function dsApply(){
+  const box=$('ds-list'), st=$('ds-stats'); if(!box) return;
+
+  // ① فلترة
+  let rows = _dsAll;
+  const q = String(_dsF.q||'').trim().toLowerCase();
+  if(q){
+    const words = q.split(/\s+/).filter(Boolean);
+    rows = rows.filter(x => {
+      const hay = `${x.title} ${x.sku} ${x.barcode}`.toLowerCase();
+      return words.every(w => hay.includes(w));   // الكلمات بأي ترتيب
+    });
+  }
+  if(_dsF.state === 'never')  rows = rows.filter(x => x.never_sold);
+  if(_dsF.state === 'sold')   rows = rows.filter(x => !x.never_sold);
+  if(_dsF.state === 'nocost') rows = rows.filter(x => !Number(x.cost));
+  if(_dsF.age !== 'all'){
+    const [lo, hi] = _dsF.age.split('-').map(Number);
+    rows = rows.filter(x => { const d=_dsAge(x); return d >= lo && d < hi; });
+  }
+
+  // ② ترتيب
+  const num = v => Number(v)||0;
+  const S = {
+    tied:   (a,b) => num(b.tied_value) - num(a.tied_value),
+    retail: (a,b) => num(b.retail_value) - num(a.retail_value),
+    qty:    (a,b) => num(b.stock_qty) - num(a.stock_qty),
+    oldest: (a,b) => _dsAge(b) - _dsAge(a),
+    disc:   (a,b) => num(b.max_discount_pct) - num(a.max_discount_pct),
+    price:  (a,b) => num(b.price) - num(a.price),
+    name:   (a,b) => String(a.title).localeCompare(String(b.title), 'ar'),
+  };
+  // ⚠️ _dsAge بيرجّع Infinity لـ«مباعش» — والطرح بيعمل NaN لو الاتنين
+  //    مباعش، فالـ sort بيبوظ. نمسكها هنا.
+  const cmp = _dsSort === 'oldest'
+    ? (a,b) => { const x=_dsAge(a), y=_dsAge(b); return x===y ? 0 : (y-x); }
+    : (S[_dsSort] || S.tied);
+  rows = rows.slice().sort(cmp);
+  _dsRows = rows;
+
+  // ③ الأرقام — على المعروض
+  const sum = f => rows.reduce((s,x)=>s+(Number(f(x))||0), 0);
+  const never  = rows.filter(x => x.never_sold);
+  const noCost = rows.filter(x => !Number(x.cost));
+  const filtered = q || _dsF.state!=='all' || _dsF.age!=='all';
+  const f0 = n => Math.round(n).toLocaleString();
+
+  st.innerHTML = `
+    <div style="display:flex;gap:14px;flex-wrap:wrap">
+      <div class="sc" style="flex:1;min-width:150px;background:var(--danger-light)"><div class="sc-label">رأس مال محبوس</div><div class="sc-val" style="color:var(--danger)">${f0(sum(x=>x.tied_value))} ج</div></div>
+      <div class="sc" style="flex:1;min-width:150px"><div class="sc-label">قيمتها بالبيع</div><div class="sc-val">${f0(sum(x=>x.retail_value))} ج</div></div>
+      <div class="sc" style="flex:1;min-width:130px"><div class="sc-label">أصناف</div><div class="sc-val">${rows.length.toLocaleString()}</div></div>
+      <div class="sc" style="flex:1;min-width:130px"><div class="sc-label">قطع</div><div class="sc-val">${f0(sum(x=>x.stock_qty))}</div></div>
+      <div class="sc" style="flex:1;min-width:160px;background:#fff7ed"><div class="sc-label">مباعش ولا مرة</div><div class="sc-val" style="color:#b45309">${never.length} · ${f0(never.reduce((s,x)=>s+(Number(x.tied_value)||0),0))} ج</div></div>
+    </div>
+    ${filtered?`<div style="margin-top:8px;font-size:12px;color:#1d4ed8;background:#eff6ff;padding:7px 10px;border-radius:8px">
+      🔍 الأرقام دي على <b>${rows.length.toLocaleString()}</b> صنف مفلتر من أصل <b>${_dsAll.length.toLocaleString()}</b> — و<b>زرار Excel بينزّل المفلتر</b>.
+      <button onclick="dsClearF()" style="background:none;border:none;color:#1d4ed8;font-family:Cairo,sans-serif;font-weight:800;cursor:pointer;text-decoration:underline">شيل الفلاتر</button>
+    </div>`:''}
+    ${noCost.length?`<div style="margin-top:8px;font-size:11px;color:#b45309">⚠️ ${noCost.length} صنف تكلفته صفر — رأس المال المحبوس بتاعهم مش محسوب، الرقم الحقيقي أكبر.
+      <button onclick="dsSetF('state','nocost')" style="background:none;border:none;color:#b45309;font-family:Cairo,sans-serif;font-weight:800;cursor:pointer;text-decoration:underline">اعرضهم</button></div>`:''}`;
+
+  // ④ شريط الفلاتر — بيتبني مرة واحدة بس.
+  //   لو أعدنا رسمه مع كل حرف، مربع البحث بيتولد من جديد والمؤشر بيضيع
+  //   من تحت إيد المستخدم. فبنبني مرة، وبعدها بنلوّن الأزرار بس.
+  dsBuildBar();
+  dsSyncPills();
+
+  if(!rows.length){
+    box.innerHTML = `<div class="card"><div style="padding:24px;text-align:center;color:var(--muted);font-weight:700">
+      ${_dsAll.length ? '🔍 مفيش نتائج بالفلاتر دي' : '✅ مفيش أصناف راكدة بالمعايير دي'}</div></div>`;
+    return;
+  }
+
+  box.innerHTML = `<div class="card"><div style="padding:6px 14px;overflow-x:auto">
+    <table style="width:100%;font-size:12px">
+      <thead><tr style="color:var(--muted)">
+        <th style="text-align:right;padding:6px">المنتج</th><th>SKU</th><th>مخزون</th>
+        <th>تكلفة</th><th>محبوس</th><th>سعر البيع</th><th>آخر بيعة</th><th>أقصى خصم</th></tr></thead>
+      <tbody>${rows.slice(0,500).map(x=>`<tr style="border-top:1px solid var(--border)">
+        <td style="padding:5px 6px">${escapeHtml(x.title)}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif;color:var(--muted);font-size:10px">${escapeHtml(String(x.sku).slice(0,20))}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${x.stock_qty}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif;color:${x.cost?'inherit':'#b45309'}">${x.cost?x.cost.toLocaleString():'—'}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:var(--danger)">${x.tied_value.toLocaleString()}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif">${x.price.toLocaleString()}</td>
+        <td style="text-align:center;font-size:11px;color:${x.never_sold?'#dc2626':'var(--muted)'}">${x.never_sold?'مباعش خالص':(x.days_since_sale+' يوم')}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700;color:#16a34a">${x.max_discount_pct!=null?x.max_discount_pct+'%':'—'}</td>
+      </tr>`).join('')}</tbody></table>
+    ${rows.length>500?`<div style="padding:10px;text-align:center;font-size:12px;color:var(--muted)">
+      معروض أول 500 من ${rows.length.toLocaleString()} — <b>زرار Excel بينزّلهم كلهم</b>.</div>`:''}
+    </div></div>`;
+}
+
+// الشريط بيتبني مرة واحدة — مربع البحث مابيتولدش تاني فالمؤشر بيفضل مكانه
+function dsBuildBar(){
+  const bar = $('ds-bar');
+  if(!bar || bar.dataset.built) return;
+  const days = Number($('ds-days')?.value)||90;
+  const pill = (k,v,label) => `<button class="ds-pill" data-k="${k}" data-v="${v}" onclick="dsSetF('${k}','${v}')"
+    style="padding:5px 12px;border-radius:99px;font-family:Cairo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">${label}</button>`;
+  bar.innerHTML = `<div class="card" style="margin-bottom:10px"><div style="padding:11px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <input id="ds-q" type="search" oninput="dsSetF('q',this.value)"
+      placeholder="🔍 ابحث بالاسم أو SKU أو الباركود..."
+      style="flex:1;min-width:210px;padding:8px 11px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">
+    <select id="ds-sort" onchange="dsSetSort(this.value)" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px">
+      <option value="tied">💰 الأكتر فلوس محبوسة</option>
+      <option value="oldest">🕰️ الأقدم وقوفاً</option>
+      <option value="qty">📦 الأكتر كمية</option>
+      <option value="retail">🏷️ الأعلى قيمة بيع</option>
+      <option value="disc">✂️ الأعلى هامش خصم</option>
+      <option value="price">💵 الأغلى سعراً</option>
+      <option value="name">🔤 بالاسم</option>
+    </select>
+    <div style="display:flex;gap:5px;flex-wrap:wrap">
+      ${pill('state','all','الكل')}${pill('state','never','مباعش ولا مرة')}
+      ${pill('state','sold','اتباع قبل كده')}${pill('state','nocost','تكلفته صفر')}
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap">
+      ${pill('age','all','أي مدة')}${pill('age',`${days}-180`,`${days}–180 يوم`)}
+      ${pill('age','180-365','180 – سنة')}${pill('age','365-99999','أكتر من سنة')}
+    </div>
+  </div></div>`;
+  bar.dataset.built = '1';
+}
+
+// بنلوّن الأزرار بس — من غير ما نلمس مربع البحث
+function dsSyncPills(){
+  document.querySelectorAll('#ds-bar .ds-pill').forEach(b => {
+    const on = _dsF[b.dataset.k] === b.dataset.v;
+    b.style.border     = '1px solid ' + (on ? 'var(--primary)' : 'var(--border)');
+    b.style.background = on ? 'var(--primary)' : 'var(--bg)';
+    b.style.color      = on ? '#fff' : 'var(--text)';
+  });
+  const s = $('ds-sort'); if(s && s.value !== _dsSort) s.value = _dsSort;
+  const q = $('ds-q');    if(q && q.value !== _dsF.q)  q.value = _dsF.q;
 }
 // 📋 v835: البيان بقى ورقتين — ملخص فيه الأرقام الكبيرة، وتفصيل بكل
 //   الأصناف (مش أول 500). الملخص هو اللي بتبص عليه وانت بتقرر العروض.
@@ -25221,19 +25362,25 @@ function dsExcel(){
   const days = $('ds-days')?.value || '90';
 
   // ① ورقة الملخص
-  const over = (lo,hi) => _dsRows.filter(x => {
-    const d = x.never_sold ? 99999 : n(x.days_since_sale);
-    return d >= lo && d < hi;
-  });
+  // v836: نفس _dsAge بتاعة الفلاتر — عشان الملخص والشاشة مايختلفوش
+  const over = (lo,hi) => _dsRows.filter(x => { const d=_dsAge(x); return d >= lo && d < hi; });
   const band = (label, rows) => ({
     'الفئة': label, 'أصناف': rows.length,
     'قطع': rows.reduce((s,x)=>s+n(x.stock_qty),0),
     'رأس المال المحبوس': +rows.reduce((s,x)=>s+n(x.tied_value),0).toFixed(2),
     'قيمتها بالبيع': +rows.reduce((s,x)=>s+n(x.retail_value),0).toFixed(2),
   });
+  // v836: لو فيه فلتر شغال، البيان بيطلع على المفلتر — ومكتوب فيه كده
+  const fTxt = [
+    _dsF.q ? `بحث: «${_dsF.q}»` : '',
+    { all:'', never:'مباعش ولا مرة', sold:'اتباع قبل كده', nocost:'تكلفته صفر' }[_dsF.state] || '',
+    _dsF.age!=='all' ? `واقف ${_dsF.age.replace('-',' – ').replace('99999','∞')} يوم` : '',
+  ].filter(Boolean).join(' · ');
+
   const summary = [
     { 'الفئة':'📅 البيان بتاريخ', 'أصناف':new Date().toLocaleDateString('en-GB'), 'قطع':'', 'رأس المال المحبوس':'', 'قيمتها بالبيع':'' },
     { 'الفئة':`المعيار: مافيش بيع من ${days} يوم`, 'أصناف':'', 'قطع':'', 'رأس المال المحبوس':'', 'قيمتها بالبيع':'' },
+    fTxt ? { 'الفئة':`🔍 مفلتر — ${fTxt} (${_dsRows.length} من ${_dsAll.length})`, 'أصناف':'', 'قطع':'', 'رأس المال المحبوس':'', 'قيمتها بالبيع':'' } : {},
     {},
     band('🔴 الإجمالي', _dsRows),
     {},
