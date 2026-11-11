@@ -2373,6 +2373,11 @@ tr:hover td{background:#fafbff}
           <div><div style="font-weight:800">🆕 منتجات جديدة — اتضافت بعد آخر شيت طلبات</div>
             <div id="tal-new-sub" style="font-size:12px;color:var(--muted)">أي منتج دخل الكتالوج بعد آخر مرة ولّدت شيت. اضيفه على طلبات وولّد شيت جديد.</div></div>
           <div style="display:flex;gap:6px;align-items:center">
+            <!-- 👁️ v840: المربوط بطلبات مابيظهرش — القايمة دي للشغل
+                 اللي لسه مش متعمل. التشييك بيرجّعهم لو عايز تراجع. -->
+            <label style="font-size:11px;color:var(--muted);display:flex;gap:4px;align-items:center;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" id="tal-new-linked" onchange="talNewRender()"> اعرض المربوطين كمان
+            </label>
             <label style="font-size:11px;color:var(--muted)">من تاريخ:</label><input type="date" id="tal-new-since" style="padding:6px;border:1px solid var(--border);border-radius:8px;font-family:Roboto,sans-serif" onchange="talNewLoad(true)">
             <button class="btn btn-ghost btn-sm" onclick="talNewLoad(true)">🔄</button>
             <button class="btn btn-sm" style="background:#16a34a;color:#fff" onclick="talNewExcel()">⬇️ Excel</button>
@@ -11609,7 +11614,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v839';
+const UI_BUILD = 'v841';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -46464,16 +46469,31 @@ async function talRemoveBundles(){
   }catch(e){ toast('❌ '+e.message); }
 }
 
-let _talNew=null;
+let _talNew=null, _talNewShown=[];   // v840: _talNewShown = المعروض بعد الفلترة
 async function talNewLoad(useDate){
   const box=$('tal-new-list'); if(!box) return; box.innerHTML='<span style="color:var(--muted)">⏳</span>';
   try{
     const since=useDate&&$('tal-new-since')?.value ? '?since='+$('tal-new-since').value : '';
     const r=await apiFetch('/api/talabat/new-products'+since,'GET'); if(!r||r.error) throw new Error(r?.error||'فشل'); _talNew=r;
     if(!r) apiNN(r, '/api/talabat/new-products');   // 🚑 v797
-    const f=n=>Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
     if($('tal-new-since')&&!useDate) $('tal-new-since').value=String(r.since).slice(0,10);
-    if($('tal-new-sub')) $('tal-new-sub').innerHTML=`آخر شيت: <b>${r.last_sheet_at?new Date(r.last_sheet_at).toLocaleString('ar-EG'):'—'}</b> · ${r.count} منتج جديد · <b style="color:#16a34a">${r.not_linked}</b> مش مربوطين بطلبات`;
+    talNewRender();
+  }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
+}
+
+// 👁️ v840: الرسم اتفصل عن التحميل — التشييك بيعيد الرسم من غير
+//   ما يضرب السيرفر تاني.
+function talNewRender(){
+  const box=$('tal-new-list'); if(!box) return;
+  const r=_talNew; if(!r) return;
+  try{
+    const f=n=>Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
+    // المربوط بطلبات مش شغل — بيتشال إلا لو طلبته
+    const showLinked = !!$('tal-new-linked')?.checked;
+    const rows = showLinked ? r.rows : r.rows.filter(x => !x.linked);
+    _talNewShown = rows;
+
+    if($('tal-new-sub')) $('tal-new-sub').innerHTML=`آخر شيت: <b>${r.last_sheet_at?new Date(r.last_sheet_at).toLocaleString('ar-EG'):'—'}</b> · ${r.count} منتج جديد · <b style="color:#16a34a">${r.not_linked}</b> مش مربوطين بطلبات${showLinked?'':` · <span style="color:var(--muted)">${r.count-r.not_linked} مربوط مخفي</span>`}`;
     const b=$('tal-new-badge'); if(b){ b.textContent=r.not_linked||''; b.style.display=r.not_linked?'inline-block':'none'; }
     // 🎁 v838: الباندلز مابقتش تظهر هنا — بس لو فيه باندل مربوط فعلاً
     //   على طلبات، ده بيتباع هناك وهو بيتفكّ عندنا، فبنقوله
@@ -46483,10 +46503,14 @@ async function talNewLoad(useDate){
           <div style="margin-top:5px;font-size:11px">${r.linked_bundles.slice(0,8).map(b=>escapeHtml(b.product_title)).join(' · ')}${r.linked_bundles.length>8?' …':''}</div>
           <button class="btn btn-sm" onclick="talRemoveBundles()" style="margin-top:8px;background:#dc2626;color:#fff">🗑️ شيلهم من طلبات</button>
         </div>` : '';
-    if(!r.rows.length){ box.innerHTML=lbWarn+'<div style="color:var(--muted);padding:12px">مفيش منتجات جديدة بعد آخر شيت</div>'; return; }
+    if(!rows.length){
+      box.innerHTML = lbWarn + `<div style="color:var(--muted);padding:12px">${
+        r.rows.length ? '✅ كل المنتجات الجديدة مربوطة بطلبات خلاص' : 'مفيش منتجات جديدة بعد آخر شيت'}</div>`;
+      return;
+    }
     box.innerHTML=lbWarn+`<div style="overflow:auto;max-height:70vh"><table style="width:100%;font-size:12px">
       <thead style="position:sticky;top:0;background:var(--card);z-index:2"><tr style="color:var(--muted)"><th></th><th style="text-align:right;padding:6px">المنتج</th><th>الباركود</th><th>المورد</th><th>اتضاف</th><th>ترفيوم</th><th>الكل</th><th>سعر الموقع</th><th>سعر طلبات</th><th>طلبات</th></tr></thead>
-      <tbody>${r.rows.map(x=>`<tr style="border-top:1px solid var(--border);${x.linked?'opacity:.55':''}">
+      <tbody>${rows.map(x=>`<tr style="border-top:1px solid var(--border);${x.linked?'opacity:.55':''}">
         <td style="padding:4px">${x.image_url?`<img src="${escapeHtml(_shopThumb(x.image_url, 68))}" style="width:34px;height:34px;object-fit:contain;border-radius:6px">`:'📦'}</td>
         <td style="padding:4px 6px"><div style="font-weight:700">${escapeHtml(x.title)}</div><div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(x.sku||'')}</div></td>
         <td style="text-align:center;font-family:Roboto,sans-serif;font-size:11px">${escapeHtml(x.barcode||'')}</td>
@@ -46501,7 +46525,9 @@ async function talNewLoad(useDate){
 }
 function talNewExcel(){
   if(!_talNew) return;
-  const ws=XLSX.utils.json_to_sheet(_talNew.rows.map(x=>({'المنتج':x.title,'SKU':x.sku,'الباركود':x.barcode,'المورد':x.vendor,'اتضاف':String(x.created_at).slice(0,10),'مخزون ترفيوم':x.qty_triv,'مخزون الكل':x.qty_all,'سعر الموقع':x.price,'سعر طلبات':x.talabat_price,'مربوط بطلبات':x.linked?'نعم':'لا'})));
+  // v840: بينزّل المعروض — لو المربوطين مخفيين مابينزلوش
+  const src = (_talNewShown && _talNewShown.length) ? _talNewShown : _talNew.rows;
+  const ws=XLSX.utils.json_to_sheet(src.map(x=>({'المنتج':x.title,'SKU':x.sku,'الباركود':x.barcode,'المورد':x.vendor,'اتضاف':String(x.created_at).slice(0,10),'مخزون ترفيوم':x.qty_triv,'مخزون الكل':x.qty_all,'سعر الموقع':x.price,'سعر طلبات':x.talabat_price,'مربوط بطلبات':x.linked?'نعم':'لا'})));
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'منتجات جديدة'); XLSX.writeFile(wb,`طلبات_منتجات_جديدة_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 function talTab(which){
