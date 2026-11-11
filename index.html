@@ -11609,7 +11609,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v838';
+const UI_BUILD = 'v839';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -46447,6 +46447,23 @@ async function photoDelete(id){
 
 // 🆕 v422: تبويبات صفحة طلبات
 // 🆕 v576: منتجات جديدة بعد آخر شيت
+// 🗑️ v839: شيل الباندلز المربوطة. اللي شغّال على طلبات مابيتمسحش
+//   على طول — بيتقفل في الشيت الجاي الأول، وإلا هيفضل معروض عندهم
+//   وإحنا مش شايفينه.
+async function talRemoveBundles(){
+  if(!confirm('هيتشال ربط الباندلز من طلبات.\n\n• اللي مترفعش أو مقفول → يتمسح دلوقتي\n• اللي شغّال على طلبات → يتقفل في الشيت الجاي، وبعد ما تأكّد الرفع يتمسح لوحده\n\nتكمّل؟')) return;
+  try{
+    const r = await apiFetch('/api/talabat/remove-bundles','POST',{});
+    if(r?.error) throw new Error(r.error);
+    let m = '';
+    if(r.deleted) m += `🗑️ اتمسح ${r.deleted}`;
+    if(r.closing) m += `${m?' · ':''}🔒 ${r.closing} هيتقفل في الشيت الجاي`;
+    toast(m || 'مفيش باندلز مربوطة');
+    if(r.closing) alert(`${r.closing} باندل شغّال على طلبات دلوقتي:\n\n${r.closing_names.join('\n')}\n\nاتعلّموا للقفل. ولّد شيت جديد وارفعه على طلبات، وبعدها دوس «أكّد الرفع» — ساعتها الربط يتمسح لوحده.`);
+    talNewLoad();
+  }catch(e){ toast('❌ '+e.message); }
+}
+
 let _talNew=null;
 async function talNewLoad(useDate){
   const box=$('tal-new-list'); if(!box) return; box.innerHTML='<span style="color:var(--muted)">⏳</span>';
@@ -46462,8 +46479,9 @@ async function talNewLoad(useDate){
     //   على طلبات، ده بيتباع هناك وهو بيتفكّ عندنا، فبنقوله
     const lbWarn = (r.linked_bundles||[]).length
       ? `<div style="background:#fef3c7;color:#92400e;padding:10px 12px;border-radius:8px;margin-bottom:10px;font-size:12px;line-height:1.8">
-          🎁 <b>${r.linked_bundles.length} باندل مربوط على طلبات</b> — الباندل بيتفكّ لمكوّناته عندنا، فمخزونه على طلبات مش مظبوط. يفضل تشيلهم:
+          🎁 <b>${r.linked_bundles.length} باندل مربوط على طلبات</b> — الباندل بيتفكّ لمكوّناته عندنا، فمخزونه على طلبات مش مظبوط.
           <div style="margin-top:5px;font-size:11px">${r.linked_bundles.slice(0,8).map(b=>escapeHtml(b.product_title)).join(' · ')}${r.linked_bundles.length>8?' …':''}</div>
+          <button class="btn btn-sm" onclick="talRemoveBundles()" style="margin-top:8px;background:#dc2626;color:#fff">🗑️ شيلهم من طلبات</button>
         </div>` : '';
     if(!r.rows.length){ box.innerHTML=lbWarn+'<div style="color:var(--muted);padding:12px">مفيش منتجات جديدة بعد آخر شيت</div>'; return; }
     box.innerHTML=lbWarn+`<div style="overflow:auto;max-height:70vh"><table style="width:100%;font-size:12px">
