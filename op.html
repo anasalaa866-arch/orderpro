@@ -6762,6 +6762,12 @@ tr:hover td{background:#fafbff}
           <div><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:2px">كلمة السر (6+)</label>
             <input id="su-pass" class="form-input" style="width:150px" type="text" placeholder="اكتبها وابعتها له"></div>
           <button class="btn" style="background:#1F3864;color:#fff" onclick="supUserCreate()">➕ إنشاء / تغيير السر</button>
+          <!-- 👁️ v842: شوف شاشة المورد زي ما هو شايفها -->
+          <button class="btn btn-ghost" onclick="supPreview()">👁️ شوف شاشته</button>
+        </div>
+        <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;line-height:1.7">
+          «شوف شاشته» بيفتح <b>نفس بوابة المورد</b> المختار في تاب جديد — قراءة بس، وبتقفل لوحدها بعد ربع ساعة.
+          مابتأثرش على حسابه ولا بتسجّل دخول باسمه.
         </div>
         <div id="su-box"></div>
       </div>
@@ -11614,7 +11620,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v841';
+const UI_BUILD = 'v844';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -66372,6 +66378,26 @@ async function supUsersLoad(){
       </tr>`).join('')}</tbody></table>` : '<span style="color:var(--muted);font-size:12px">مفيش حسابات لسه</span>';
   }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
 }
+// 👁️ v842: معاينة شاشة المورد — جلسة حقيقية قصيرة وقراءة بس،
+//   فاللي بتشوفه هو اللي هو شايفه بالظبط مش نسخة مني.
+async function supPreview(){
+  const id = $('su-sup')?.value;
+  if(!id){ toast('اختار المورد الأول'); return; }
+  try{
+    const r = await apiFetch(`/api/suppliers/${id}/preview`, 'POST', {});
+    if(r?.error) throw new Error(r.error);
+    // اللينك نسبي — البوابة جنب أوردر برو على نفس الاستضافة
+    const url = new URL('supplier/', location.href.replace(/[^/]*$/, ''));
+    url.searchParams.set('preview', r.token);
+    const w = window.open(url.toString(), '_blank');
+    if(!w){ toast('المتصفح منع الفتح — اسمح بالنوافذ المنبثقة'); return; }
+    let m = `👁️ معاينة «${r.supplier}» — ${r.minutes} دقيقة`;
+    if(!r.has_account) m += ' · ⚠️ المورد ده لسه مالوش حساب';
+    if(r.supplier_active === false) m += ' · ⚠️ المورد موقوف';
+    toast(m);
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
 async function supUserCreate(){
   const supplier_id=$('su-sup')?.value, username=($('su-user')?.value||'').trim(), password=$('su-pass')?.value||'';
   if(!supplier_id||!username) return toast('اختار مورد واكتب اسم مستخدم','warning');

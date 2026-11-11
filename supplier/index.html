@@ -27,6 +27,8 @@ td{padding:7px 5px;border-top:1px solid var(--border);text-align:center} td.r{te
 img.th{width:36px;height:36px;object-fit:contain;border-radius:6px;background:#fff;border:1px solid var(--border)}
 </style></head><body>
 <div class="wrap">
+  <!-- 👁️ v842: شريط المعاينة — مخفي إلا لو الجلسة معاينة -->
+  <div id="pvbar" style="display:none;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:10px;padding:10px 13px;margin:6px 0 12px;font-size:13px;line-height:1.8"></div>
   <div style="display:flex;align-items:center;gap:10px;margin:6px 0 14px">
     <div style="font-weight:800;font-size:19px;color:var(--brand)">CAFELAX</div>
     <div style="color:var(--muted);font-size:13px">بوابة الموردين</div>
@@ -55,8 +57,25 @@ img.th{width:36px;height:36px;object-fit:contain;border-radius:6px;background:#f
   </div>
 </div>
 <script>
+// 🏷️ v842: رقم نسخة — deploy.sh بيختمه ويتأكد إن اللي على جيت هب
+//   هو نفسه. الملف ده كان برّه مسار الرفع كله.
+const SUP_BUILD = 'v844';
 const API='https://orderpro-backend-production.up.railway.app';
-let TK=localStorage.getItem('sup_tk')||'';
+// 👁️ v842: توكن معاينة جاي من أوردر برو في اللينك.
+//   بيتحط في sessionStorage مش localStorage — عشان ميفضلش على الجهاز
+//   وميخبطش مع جلسة المورد الحقيقية لو هو فاتح على نفس المتصفح.
+//   وبنمسحه من شريط العنوان على طول عشان ميتشاركش بالغلط.
+let PREVIEW=false;
+(function(){
+  const q=new URLSearchParams(location.search);
+  const t=q.get('preview');
+  if(t){
+    sessionStorage.setItem('sup_preview', t);
+    history.replaceState(null,'',location.pathname);
+  }
+})();
+const PV=sessionStorage.getItem('sup_preview')||'';
+let TK = PV || localStorage.getItem('sup_tk') || '';
 const $=i=>document.getElementById(i);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const n=v=>Number(v||0).toLocaleString('en-US');
@@ -66,8 +85,12 @@ async function api(path,opt={}){
   // 🐛 v2: كان أي 401 بيتعامل كانتهاء جلسة — حتى 401 اللوجين نفسه،
   //   فبيانات دخول غلط كانت بتطلع رسالة «الجلسة انتهت» وده مضلّل.
   if(r.status===401 && !path.includes('/login')){
-    TK=''; localStorage.removeItem('sup_tk'); show(false);
-    throw new Error('الجلسة انتهت — سجّل دخول تاني');
+    const wasPv=PREVIEW;
+    TK=''; sessionStorage.removeItem('sup_preview');
+    if(!wasPv) localStorage.removeItem('sup_tk');   // 👁️ v842: المعاينة ماتمسحش دخول المورد
+    PREVIEW=false; show(false);
+    throw new Error(wasPv ? 'المعاينة خلصت — ارجع لأوردر برو وافتحها تاني'
+                          : 'الجلسة انتهت — سجّل دخول تاني');
   }
   if(!r.ok||j.error) throw new Error(j.error||`خطأ ${r.status}`);
   return j;
@@ -85,12 +108,33 @@ async function doLogin(){
     TK=j.token; localStorage.setItem('sup_tk',TK); $('p').value=''; await boot();
   }catch(e){ $('err').textContent=e.message; }
 }
-async function doLogout(){ try{ await api('/api/supplier/logout',{method:'POST'}); }catch(e){}
+async function doLogout(){
+  // 👁️ v842: في المعاينة مفيش خروج — الجلسة مش بتاعتك أصلاً، وطلب
+  //   الخروج POST والمعاينة قراءة بس. بنقفل التاب وخلاص.
+  if(PREVIEW){
+    sessionStorage.removeItem('sup_preview'); TK=''; PREVIEW=false;
+    window.close();
+    show(false);
+    const pb=$('pvbar'); if(pb) pb.style.display='none';
+    $('err').textContent='المعاينة اتقفلت.';
+    return;
+  }
+  try{ await api('/api/supplier/logout',{method:'POST'}); }catch(e){}
   TK=''; localStorage.removeItem('sup_tk'); show(false); }
 async function boot(){
   try{ const me=await api('/api/supplier/me');
+    PREVIEW = !!me.preview;                       // 👁️ v842
     $('who').innerHTML=`<b>${esc(me.supplier?.name||'')}</b> <span style="color:var(--muted)">· ${me.products} منتج</span>`;
-    show(true); go('products');
+    show(true);
+    // شريط واضح — عشان متلخبطش بين المعاينة وحسابك
+    const pb=$('pvbar');
+    if(pb){
+      pb.style.display = PREVIEW ? '' : 'none';
+      if(PREVIEW) pb.innerHTML =
+        `👁️ <b>معاينة</b> — دي الشاشة اللي بيشوفها <b>${esc(me.supplier?.name||'')}</b>.
+         قراءة بس، وبتقفل لوحدها. <span style="opacity:.8">فتحها: ${esc(me.preview_by||'—')}</span>`;
+    }
+    go('products');
   }catch(e){ show(false); }
 }
 let TAB='products';
