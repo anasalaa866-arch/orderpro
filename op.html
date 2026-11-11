@@ -6232,6 +6232,25 @@ tr:hover td{background:#fafbff}
     <div class="card-header"><h3 style="margin:0">📋 المحلات المسجلة</h3></div>
     <div id="pos-stores-list" style="padding:14px"></div>
   </div>
+
+  <!-- ⭐ v834: كان مفتاح في الداتابيز من غير شاشة — ده مش إعداد -->
+  <div class="card" style="margin-top:14px">
+    <div class="card-header"><h3 style="margin:0">⭐ الأصناف المثبّتة للكاشير</h3></div>
+    <div style="padding:14px">
+      <div style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:12px">
+        مدير المحل بيقدر يثبّت أصناف تطلع أول شاشة الكاشير بنجمة.
+        هنا بتحدد <strong>أقصى عدد</strong> يقدر يثبّته — عشان ما ياخدش الشاشة كلها.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:13px;font-weight:700">أقصى عدد:</label>
+        <input id="pin-max-inp" type="number" min="1" max="60" step="1" class="form-input"
+               style="width:90px;font-family:Roboto,sans-serif">
+        <span style="font-size:12px;color:var(--muted)">صنف (من ١ لـ ٦٠)</span>
+        <button class="btn btn-primary btn-sm" onclick="savePinMax()">💾 احفظ</button>
+        <span id="pin-max-msg" style="font-size:12px"></span>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- 🆕 v260: PROMO CODES PAGE -->
@@ -11587,7 +11606,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v833';
+const UI_BUILD = 'v834';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -35601,10 +35620,42 @@ async function quickCreateTransferFromSuggestion(s){
 // ─── POS Stores ───
 let _posStoresList = [];
 
+// ⭐ v834: أقصى عدد أصناف مثبّتة — إعداد ليه شاشة، مش مفتاح في الداتابيز
+async function loadPinMax(){
+  const inp = document.getElementById('pin-max-inp');
+  if(!inp) return;
+  try{
+    const r = await apiFetch('/api/pos/pinned-max');
+    inp.value = r?.max ?? 12;
+  }catch(e){ inp.value = 12; }
+}
+
+async function savePinMax(){
+  const inp = document.getElementById('pin-max-inp');
+  const msg = document.getElementById('pin-max-msg');
+  const n = parseInt(inp?.value, 10);
+  if(!Number.isInteger(n) || n < 1 || n > 60){
+    if(msg){ msg.textContent = '⚠️ رقم من ١ لـ ٦٠'; msg.style.color = '#dc2626'; }
+    return;
+  }
+  try{
+    const r = await apiFetch('/api/pos/pinned-max', 'POST', { max: n });
+    if(r?.error) throw new Error(r.error);
+    inp.value = r.max;
+    if(msg){ msg.textContent = '✅ اتحفظ'; msg.style.color = '#16a34a'; }
+    // لو فيه محل مثبّت أكتر من الحد الجديد، السيرفر بيقول
+    if(r.over) toast(`⚠️ فيه محل مثبّت ${r.over} صنف — أكتر من الحد الجديد. المدير هيحتاج يشيل.`);
+    setTimeout(() => { if(msg) msg.textContent = ''; }, 3000);
+  }catch(e){
+    if(msg){ msg.textContent = '❌ ' + e.message; msg.style.color = '#dc2626'; }
+  }
+}
+
 async function loadPosStoresPage(){
+  loadPinMax();
   const container = document.getElementById('pos-stores-list');
   if(!container) return;
-  
+
   try {
     const r = await apiFetch('/api/pos/stores');
     _posStoresList = r?.stores || [];
