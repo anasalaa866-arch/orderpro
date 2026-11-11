@@ -11573,7 +11573,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v826';
+const UI_BUILD = 'v828';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -27672,6 +27672,18 @@ async function doLogout(){
   document.getElementById('login-username').value = '';
   document.getElementById('login-password').value = '';
   document.getElementById('login-err').textContent = '';
+}
+
+// ✅ v827: نفس منطق applyPermissions بالظبط، بس كسؤال بـ true/false.
+//   أي صفحة حساسة بتسأل بيه بدل ما تتقفل على اسم 'admin' بالهارد كود —
+//   عشان اللي أنس يديله الصفحة من الصلاحيات يدخلها عادي.
+function canPage(page){
+  const u = currentUser;
+  if(!u) return false;                       // الجلسة مش محمّلة
+  if(u.username === 'admin' || u.role === 'admin') return true;
+  const pages = u.pages;
+  if(!pages || (Array.isArray(pages) && pages.length === 0)) return true;  // مفيش تقييد
+  return Array.isArray(pages) && pages.includes(page);
 }
 
 function applyPermissions(role, pages){
@@ -63411,24 +63423,24 @@ function promoOpen(){
 function bkOpen(){
   const box = document.getElementById('bk-settings');
   if(!box) return;
-  // 🏦 v770: بقت صفحة مستقلة. غير المدير مابيشوفش العنصر في القايمة
-  //   أصلاً (applyPermissions)، بس لو وصل بأي طريقة يشوف سبب مفهوم
-  //   مش صفحة فاضية.
-  if(currentUser?.username !== 'admin' && currentUser?.role !== 'admin'){
-    // 🔎 v825: الرسالة كانت بتقول «للمدير بس» وبس — فلا انت ولا أنا
-    //   نعرف ليه. دلوقتي بتقول هي شايفة مين بالظبط.
+  // 🏦 v770: بقت صفحة مستقلة.
+  // ✅ v827: كانت مقفولة على اسم 'admin' بالهارد كود — يعني حتى لو أنس
+  //   دى الصفحة لحد من الصلاحيات ماكانش بيدخلها. دلوقتي بتمشي على
+  //   نفس نظام الصلاحيات زي أي صفحة تانية (canPage).
+  if(!canPage('bank')){
+    // 🔎 v825: الرسالة بتقول هي شايفة مين بالظبط.
     const u = currentUser;
     box.style.display = '';
     box.innerHTML = `<div style="padding:26px;text-align:center;color:var(--muted);line-height:2">
       <div style="font-size:30px">🔒</div>
-      <div style="font-weight:800;color:var(--text);margin-top:4px">كشف البنك للمدير بس</div>
+      <div style="font-weight:800;color:var(--text);margin-top:4px">كشف البنك مش في صلاحياتك</div>
       ${u ? `<div style="font-size:12.5px;margin-top:8px">
           انت داخل باسم <b>${escapeHtml(u.username || '—')}</b>
           ${u.name ? `(${escapeHtml(u.name)})` : ''} —
-          الصلاحية <b>${escapeHtml(u.role || 'مش متسجّلة')}</b>،
-          والصفحة محتاجة <b>admin</b>.
+          الصلاحية <b>${escapeHtml(u.role || 'مش متسجّلة')}</b>.
         </div>
-        <div style="font-size:12px;margin-top:6px">اخرج وادخل بحساب المدير.</div>`
+        <div style="font-size:12px;margin-top:6px">
+          المدير يقدر يضيفلك صفحة <b>كشف البنك</b> من الإعدادات ← المستخدمين.</div>`
         : `<div style="font-size:12.5px;margin-top:8px;color:#dc2626">
           <b>الجلسة مش محمّلة أصلاً</b> — غالباً انتهت.
           اعمل خروج ودخول تاني.</div>`}
