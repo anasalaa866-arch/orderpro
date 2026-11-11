@@ -5046,7 +5046,21 @@ tr:hover td{background:#fafbff}
             <input type="checkbox" id="tg-oos" onchange="tgSave()">
             <span>📉 منتج خلص — تنبيه منفصل لكل مخزن</span>
           </label>
-          <div id="tg-wh" style="margin:0 0 11px 26px;display:flex;gap:12px;flex-wrap:wrap"></div>
+          <div id="tg-wh" style="margin:0 0 6px 26px;display:flex;gap:12px;flex-wrap:wrap"></div>
+          <!-- 🔇 v830: بيعة الكاشير بتخصم من العبور الأول وبعدين بترجعها
+               وتخصم من تريفيوم — فالعبور بينزل صفر وبيرجع في ثواني.
+               بنستنى المدة دي وبنتأكد إنه لسه صفر فعلاً قبل ما نبعت. -->
+          <label style="display:flex;gap:8px;align-items:center;font-size:12px;margin:0 0 4px 26px;flex-wrap:wrap;cursor:pointer;color:var(--muted)">
+            <span>استنى</span>
+            <input id="tg-oos-delay" type="number" min="5" max="3600" step="5" onchange="tgSave()" class="form-input"
+                   style="width:76px;padding:4px 8px;font-family:Roboto,sans-serif">
+            <span>ثانية وتأكد إنه لسه خلص قبل ما تبعت</span>
+          </label>
+          <div style="font-size:11px;color:var(--muted);margin:0 0 11px 26px;line-height:1.7">
+            بيعة الكاشير بتعدّي على العبور الأول وبعدين بترجع وتتخصم من تريفيوم،
+            فالعبور بينزل صفر وبيرجع في ثواني. التأخير ده بيمنع التنبيه الكاذب ده
+            — وبرضه بتاع الجرد والتحويلات.
+          </div>
           <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:9px;flex-wrap:wrap;cursor:pointer">
             <input type="checkbox" id="tg-big" onchange="tgSave()">
             <span>💰 أوردر أكبر من</span>
@@ -11573,7 +11587,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v829';
+const UI_BUILD = 'v831';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -63234,6 +63248,7 @@ function tgPaint(){
   document.getElementById('tg-checks').checked   = !!c.checks_weekly;
   document.getElementById('tg-chk-day').value    = String(c.checks_day ?? 6);
   document.getElementById('tg-big-min').value    = c.big_order_min ?? 5000;
+  document.getElementById('tg-oos-delay').value  = c.oos_delay_sec ?? 90;   // 🔇 v830
   const _2 = n => String(n).padStart(2, '0');
   document.getElementById('tg-time').value = `${_2(c.hour ?? 9)}:${_2(c.minute ?? 0)}`;
   // التوكن من Railway؟ الخانة تتقفل — تغييره من هناك مش من هنا
@@ -63318,6 +63333,8 @@ async function tgSave(){
     chat_id:  document.getElementById('tg-chat').value || '',
     oos_warehouses: [...document.querySelectorAll('.tg-wh-c')]
       .filter(x => x.checked).map(x => x.value),
+    // 🔇 v830: مدة التأكد قبل تنبيه النفاد
+    oos_delay_sec: parseInt(document.getElementById('tg-oos-delay').value, 10) || 90,
   };
   // كلهم متعلّمين = مفيش فلتر، أنضف من إننا نخزّن القايمة كلها
   if(_tgWh && body.oos_warehouses.length === _tgWh.length) body.oos_warehouses = [];
