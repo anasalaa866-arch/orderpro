@@ -11609,7 +11609,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v837';
+const UI_BUILD = 'v838';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -46458,8 +46458,15 @@ async function talNewLoad(useDate){
     if($('tal-new-since')&&!useDate) $('tal-new-since').value=String(r.since).slice(0,10);
     if($('tal-new-sub')) $('tal-new-sub').innerHTML=`آخر شيت: <b>${r.last_sheet_at?new Date(r.last_sheet_at).toLocaleString('ar-EG'):'—'}</b> · ${r.count} منتج جديد · <b style="color:#16a34a">${r.not_linked}</b> مش مربوطين بطلبات`;
     const b=$('tal-new-badge'); if(b){ b.textContent=r.not_linked||''; b.style.display=r.not_linked?'inline-block':'none'; }
-    if(!r.rows.length){ box.innerHTML='<div style="color:var(--muted);padding:12px">مفيش منتجات جديدة بعد آخر شيت</div>'; return; }
-    box.innerHTML=`<div style="overflow:auto;max-height:70vh"><table style="width:100%;font-size:12px">
+    // 🎁 v838: الباندلز مابقتش تظهر هنا — بس لو فيه باندل مربوط فعلاً
+    //   على طلبات، ده بيتباع هناك وهو بيتفكّ عندنا، فبنقوله
+    const lbWarn = (r.linked_bundles||[]).length
+      ? `<div style="background:#fef3c7;color:#92400e;padding:10px 12px;border-radius:8px;margin-bottom:10px;font-size:12px;line-height:1.8">
+          🎁 <b>${r.linked_bundles.length} باندل مربوط على طلبات</b> — الباندل بيتفكّ لمكوّناته عندنا، فمخزونه على طلبات مش مظبوط. يفضل تشيلهم:
+          <div style="margin-top:5px;font-size:11px">${r.linked_bundles.slice(0,8).map(b=>escapeHtml(b.product_title)).join(' · ')}${r.linked_bundles.length>8?' …':''}</div>
+        </div>` : '';
+    if(!r.rows.length){ box.innerHTML=lbWarn+'<div style="color:var(--muted);padding:12px">مفيش منتجات جديدة بعد آخر شيت</div>'; return; }
+    box.innerHTML=lbWarn+`<div style="overflow:auto;max-height:70vh"><table style="width:100%;font-size:12px">
       <thead style="position:sticky;top:0;background:var(--card);z-index:2"><tr style="color:var(--muted)"><th></th><th style="text-align:right;padding:6px">المنتج</th><th>الباركود</th><th>المورد</th><th>اتضاف</th><th>ترفيوم</th><th>الكل</th><th>سعر الموقع</th><th>سعر طلبات</th><th>طلبات</th></tr></thead>
       <tbody>${r.rows.map(x=>`<tr style="border-top:1px solid var(--border);${x.linked?'opacity:.55':''}">
         <td style="padding:4px">${x.image_url?`<img src="${escapeHtml(_shopThumb(x.image_url, 68))}" style="width:34px;height:34px;object-fit:contain;border-radius:6px">`:'📦'}</td>
