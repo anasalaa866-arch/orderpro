@@ -2008,6 +2008,7 @@ tr:hover td{background:#fafbff}
       <div class="nav-group-body">
         <div class="ni" data-p="inventory" onclick="goPage(this,'inventory')"><span class="ni-icon">📦</span><span class="ni-label">المخزون</span><span class="nbadge" id="nb-inv-low" style="background:var(--warn)">0</span></div>
         <div class="ni" data-p="sku-audit" onclick="goPage(this,'sku-audit')"><span class="ni-icon">🔍</span><span class="ni-label">فحص SKU/باركود</span></div>
+        <div class="ni" data-p="margin-audit" onclick="goPage(this,'margin-audit')"><span class="ni-icon">💰</span><span class="ni-label">فحص الهوامش</span></div>
         <div class="ni" data-p="image-fix" onclick="goPage(this,'image-fix')"><span class="ni-icon">🖼️</span><span class="ni-label">تظبيط الصور</span></div>
         <div class="ni" data-p="collection-sort" onclick="goPage(this,'collection-sort')"><span class="ni-icon">🔀</span><span class="ni-label">ترتيب الكوليكشنز</span></div>
         <div class="ni" data-p="temp-price" onclick="goPage(this,'temp-price')"><span class="ni-icon">🏷️</span><span class="ni-label">تعديل سعر مؤقت</span></div>
@@ -9961,6 +9962,31 @@ tr:hover td{background:#fafbff}
 </div>
 
 <!-- ===== COLLECTION SORT PAGE (v700) ===== -->
+<!-- 💰 v822: فحص الهوامش -->
+<div class="page" id="page-margin-audit">
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:13px 15px">
+      <div style="font-weight:800;font-size:15px">💰 فحص الهوامش</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.8">
+        بيسحب التكلفة من <b>Shopify مباشرة</b> (مش من التكلفة المحلية — دي عمود منفصل وممكن يكون قديم)
+        ويحسب هامش كل صنف. مهم قبل أي موسم خصومات: صنف هامشه ٦٪ أي خصم بيوديه تحت الصفر.
+      </div>
+      <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:11px">
+        <button class="btn btn-primary" id="ma-run" onclick="maRun()">🔍 افحص الكتالوج</button>
+        <label style="font-size:12px;display:flex;align-items:center;gap:5px">الهامش الرفيع أقل من
+          <input type="number" id="ma-thr" value="15" min="0" max="90" step="1"
+                 class="form-input" style="width:68px;text-align:center" onchange="maLoad()">%</label>
+        <button class="btn btn-ghost btn-sm" onclick="maLoad()">🔄</button>
+        <button class="btn btn-sm" id="ma-xl" onclick="maExcel()" style="background:#16a34a;color:#fff;display:none">⬇️ Excel</button>
+        <span id="ma-state" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+    </div>
+  </div>
+  <div id="ma-cards" class="stats-row" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:14px;display:none"></div>
+  <div class="card" style="padding:0"><div id="ma-body" style="padding:22px;text-align:center;color:var(--muted)">
+    دوس «افحص الكتالوج» — بياخد دقيقة تقريباً</div></div>
+</div>
+
 <div class="page" id="page-collection-sort">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
     <div>
@@ -11518,12 +11544,12 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v821';
+const UI_BUILD = 'v822';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -52158,6 +52184,92 @@ function _csColsRender(){
   if(cur) inp.value = (cur.configured ? '⭐ ' : '') + cur.title;
 }
 
+// 💰 v822: فحص الهوامش
+let _maData = null, _maPoll = null;
+async function maRun(){
+  const b = $('ma-run'); if(b){ b.disabled = true; b.textContent = '⏳ بيفحص...'; }
+  try{
+    const r = await apiFetch('/api/catalog/margin-audit/run','POST',{});
+    if(!r) throw new Error(_apiLastErr || 'الطلب ماوصلش');
+    if(r.error) throw new Error(r.error);
+    // الفحص في الخلفية — بنسأل كل 3 ثواني لحد ما يخلص
+    clearInterval(_maPoll);
+    _maPoll = setInterval(maLoad, 3000);
+    maLoad();
+  }catch(e){
+    toast('❌ ' + e.message);
+    if(b){ b.disabled = false; b.textContent = '🔍 افحص الكتالوج'; }
+  }
+}
+async function maLoad(){
+  const thr = parseFloat($('ma-thr')?.value) || 15;
+  const r = await apiFetch('/api/catalog/margin-audit?threshold=' + encodeURIComponent(thr));
+  const st = $('ma-state'), b = $('ma-run');
+  if(!r){ if(st) st.textContent = '❌ ' + (_apiLastErr || 'الطلب ماوصلش'); return; }
+  if(r.running){ if(st) st.textContent = '⏳ بيسحب من شوبيفاي...'; return; }
+  clearInterval(_maPoll); _maPoll = null;
+  if(b){ b.disabled = false; b.textContent = '🔍 افحص الكتالوج'; }
+  if(r.error){ if(st) st.textContent = '❌ ' + r.error; return; }
+  if(!r.scanned){ if(st) st.textContent = ''; return; }
+  _maData = r;
+  if(st) st.textContent = 'آخر فحص: ' + new Date(r.at).toLocaleString('ar-EG');
+  maRender();
+}
+function maRender(){
+  const r = _maData; if(!r) return;
+  const box = $('ma-body'), cards = $('ma-cards');
+  const n = x => Number(x||0).toLocaleString('ar-EG');
+  if(cards){
+    cards.style.display = '';
+    const card = (lbl, val, color, sub) => `<div class="sc" style="border-right:4px solid ${color}">
+      <div class="sc-label">${lbl}</div><div class="sc-val" style="color:${color}">${val}</div>
+      ${sub ? `<div style="font-size:11px;color:var(--muted)">${sub}</div>` : ''}</div>`;
+    cards.innerHTML =
+      card('⛔ تحت التكلفة', n(r.below_cost), '#dc2626', 'بتخسر في كل قطعة') +
+      card('💸 الخسارة على المخزون', n(r.exposure) + ' ج', '#dc2626', 'لو اتباع بالسعر ده') +
+      card(`⚠️ هامش أقل من ${r.threshold}%`, n(r.thin), '#d97706', 'أي خصم بيوديه تحت') +
+      card('❔ من غير تكلفة', n(r.no_cost), '#6b7280', 'مش معروف — محتاج يتسجّل') +
+      card('✅ اتفحص', n(r.scanned), '#16a34a', n(r.with_cost) + ' بتكلفة');
+  }
+  const xl = $('ma-xl'); if(xl) xl.style.display = (r.items||[]).length ? 'inline-block' : 'none';
+  const items = r.items || [];
+  if(!items.length){
+    box.innerHTML = `<div style="padding:26px;text-align:center;color:var(--muted)">
+      <div style="font-size:30px">✅</div>
+      <div style="font-weight:700;margin-top:6px">مفيش صنف هامشه أقل من ${r.threshold}%</div></div>`;
+    return;
+  }
+  box.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+    <thead><tr style="border-bottom:2px solid var(--border)">
+      <th style="text-align:right;padding:8px">المنتج</th><th style="padding:8px">SKU</th>
+      <th style="padding:8px">السعر</th><th style="padding:8px">التكلفة</th>
+      <th style="padding:8px">الهامش</th><th style="padding:8px">المخزون</th>
+      <th style="padding:8px">الخسارة المحتملة</th>
+    </tr></thead><tbody>${items.map(x => {
+      const bad = x.margin < 0;
+      return `<tr style="border-bottom:1px solid var(--border);${bad?'background:rgba(220,38,38,.05)':''}">
+      <td style="padding:8px">${escapeHtml(x.title)}${x.variant?`<div style="font-size:11px;color:var(--muted)">${escapeHtml(x.variant)}</div>`:''}</td>
+      <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif;font-size:11px">${escapeHtml(x.sku)}</td>
+      <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif">${n(x.price)}</td>
+      <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif">${n(x.cost)}</td>
+      <td style="padding:8px;text-align:center;font-weight:800;color:${bad?'#dc2626':'#d97706'}">${x.margin}%</td>
+      <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif">${n(x.qty)}</td>
+      <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif;color:#dc2626;font-weight:${bad?'800':'400'}">
+        ${bad ? n((x.loss_per_unit * Math.max(0,x.qty)).toFixed(0)) + ' ج' : '—'}</td>
+    </tr>`; }).join('')}</tbody></table></div>`;
+}
+function maExcel(){
+  const items = _maData?.items || []; if(!items.length) return;
+  const ws = XLSX.utils.json_to_sheet(items.map(x => ({
+    'المنتج': x.title, 'الفاريانت': x.variant, 'SKU': x.sku,
+    'السعر': x.price, 'التكلفة': x.cost, 'الهامش %': x.margin,
+    'المخزون': x.qty, 'الخسارة لو اتباع': x.margin < 0 ? +(x.loss_per_unit * Math.max(0,x.qty)).toFixed(2) : 0,
+  })));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'الهوامش');
+  XLSX.writeFile(wb, `margins-${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
 async function csList(){
   const inp = $('cs-pick'); if(!inp) return;
   try{
@@ -56371,6 +56483,7 @@ function goPage(el,page){
   if(page==='manual-orders')loadManualOrders();
   if(page==='image-fix')imgfixOnOpen();
   if(page==='collection-sort')csList();
+  if(page==='margin-audit')maLoad();                 // 💰 v822
   if(page==='temp-price')tpLoad();
   if(page==='store-batches')sbaOnOpen();
   if(page==='vendor-batches')vbOnOpen();
