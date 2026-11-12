@@ -11641,7 +11641,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v861';
+const UI_BUILD = 'v862';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -12413,11 +12413,47 @@ function saveOfflineQueue(){
 //   (Shopify) ومفيش idempotency key، فإعادة المحاولة = منتج مكرر.
 //   الـ user بيشوف الخطأ ويقرر بنفسه.
 const _NO_REPLAY = ['/api/products/new'];
+
+// 🚑 v862: الطابور كان بيعيد إرسال نسخة قديمة فوق حفظ أحدث منها.
+//   أي طلب بيستبدل الحالة كلها (زي PUT /api/purchase-orders/:id اللي
+//   بيعمل DELETE لكل البنود وبيكتبها من الأول) لما يتعاد إرساله من
+//   الطابور بيرجّع الحالة القديمة. السيناريو اللي حصل:
+//     ١) حفظ بالأربع بنود → فشل (نت/500) → اتحط في الطابور
+//     ٢) مسح بندين وحفظ → نجح
+//     ٣) الطابور اشتغل بعدها وبعت نسخة (١) → البنود رجعت
+//   الحل: مفتاح واحد لكل (method + path) — النسخة الأحدث بتحل محل
+//   الأقدم، وأي حفظ ناجح بيشيل اللي في الطابور على نفس المسار.
+function _qKey(method, path){ return String(method||'').toUpperCase() + ' ' + String(path||''); }
+
+// بترجّع عدد اللي اتشال
+function _dropQueuedFor(method, path){
+  if(!Array.isArray(_offlineQueue) || !_offlineQueue.length) return 0;
+  const k = _qKey(method, path);
+  const before = _offlineQueue.length;
+  const kept = _offlineQueue.filter(it => _qKey(it.method, it.path) !== k);
+  if(kept.length === before) return 0;
+  _offlineQueue.length = 0;
+  kept.forEach(it => _offlineQueue.push(it));
+  saveOfflineQueue();
+  const n = before - kept.length;
+  console.warn(`[v862] اتشال ${n} من الطابور بعد حفظ أحدث:`, k);
+  return n;
+}
+
 function addToOfflineQueue(path, method, body){
   // ما تحفظش GET requests
   if(method==='GET') return;
   if(_NO_REPLAY.some(p => path.startsWith(p))){
     console.warn('[v618] مش هيتعاد إرساله تلقائياً:', path);
+    return;
+  }
+  // 🚑 v862: نسخة أحدث لنفس المسار بتحل محل القديمة مش بتتصف وراها
+  const k = _qKey(method, path);
+  const prev = _offlineQueue.findIndex(it => _qKey(it.method, it.path) === k);
+  if(prev >= 0){
+    _offlineQueue[prev] = { ..._offlineQueue[prev], body, ts: new Date().toISOString(), retries: 0 };
+    console.warn('[v862] حدّثت النسخة اللي في الطابور بدل ما أضيف تانية:', k);
+    saveOfflineQueue();
     return;
   }
   _offlineQueue.push({
@@ -12777,6 +12813,10 @@ async function apiFetch(path, method='GET', body=null){
       throw new Error(errMsg);
     }
     const data = _xssClean(await r.json(), 0);   // 🛡️ v736
+
+    // 🚑 v862: الحفظ نجح → أي نسخة قديمة لنفس المسار في الطابور بقت
+    //   باطلة. لو سابناها هتتبعت بعدين وترجّع الحالة القديمة فوق دي.
+    if(method !== 'GET') _dropQueuedFor(method, path);
 
     // 🆕 v203: cache الـ Last-Modified للـ GET requests
     if(method === 'GET'){
@@ -38277,9 +38317,33 @@ async function savePO(status){
     toast(status === 'sent'
       ? '✅ تم الإرسال'
       : (id ? '✅ المسودة اتحدّثت' : '✅ تم الحفظ كمسودة'));   // ✏️ v603
+
+    // 🔍 v862: تأكيد إن اللي اتحفظ هو اللي بعتناه فعلاً. لو السيرفر قال
+    //   «تمام» والبنود اللي رجعت مختلفة، ده بيبان دلوقتي مش بعد يومين.
+    if(id){
+      try{
+        // ?_v= عشان نتخطى كاش الـ If-Modified-Since ونقرا الحالة الحقيقية
+        const _chk = await apiFetch('/api/purchase-orders/' + id + '?_v=' + Date.now());
+        const _got = (_chk?.items || []).length;
+        const _sent = _poItems.length;
+        if(_got !== _sent)
+          infoModal('⚠️ اللي اتحفظ مش زي اللي بعتناه',
+            `بعتنا ${_sent} بند، والسيرفر رجّع ${_got}.\n\n` +
+            `ماتعملش حفظ تاني قبل ما تتأكد — افتح الأمر من الأول وشوف البنود.`);
+      }catch(_e){ console.warn('[v862] تعذّر التأكد من بنود الأمر:', _e.message); }
+    }
+
     closeM('m-po');
     loadPurchaseOrdersPage();
-  } catch(e) { toast('❌ ' + e.message); }
+  } catch(e) {
+    // 🚑 v862: كان توست بيختفي في ٣ ثواني — والفشل كان بيعدّي من غير
+    //   ما حد ياخد باله، والطلب بيروح الطابور ويترجع بعدين فوق حفظ أنجح.
+    toast('❌ ' + e.message);
+    infoModal('❌ أمر الشراء ماتحفظش',
+      `السبب: ${e.message}\n\n` +
+      `التعديل اللي عملته لسه ماوصلش السيرفر. جرّب تحفظ تاني،\n` +
+      `ولو فضل بيفشل ابعتلي الرسالة دي زي ما هي.`);
+  }
 }
 
 // ✏️ v603: افتح مسودة أمر شراء في شاشة التعديل بكل بياناتها.
