@@ -11642,7 +11642,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v864';
+const UI_BUILD = 'v865';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -37979,7 +37979,10 @@ async function poDiagnose(){
       : '   مفيش';
 
     const hdrCount = parseInt(po.items_count);
-    const realCount = rows.length;
+    // 🔍 v865: COUNT(*) حقيقي من السيرفر — مش عدد الصفوف اللي رجعت من
+    //   الاستعلام، عشان أي تضاعف في الـ JOIN يبان بدل ما يختفي.
+    const realCount = (r?.items_real_count != null) ? r.items_real_count : rows.length;
+    const returned = rows.length;
     const screen = _poItems.length;
     const qty = rows.reduce((a,it) => a + (parseInt(it.ordered_qty)||0), 0);
 
@@ -37988,6 +37991,8 @@ async function poDiagnose(){
       flags.push(`⚠️ الترويسة بتقول ${hdrCount} بند والصفوف الحقيقية ${realCount} — يعني آخر حفظ عدّل الترويسة وماعدّلش البنود.`);
     if(screen !== realCount)
       flags.push(`⚠️ على الشاشة ${screen} بند وفي الداتابيز ${realCount} — اللي قدامك مش اللي متخزّن.`);
+    if(returned !== realCount)
+      flags.push(`❗ الاستعلام رجّع ${returned} صف والجدول فيه ${realCount} — فيه تضاعف في الـ JOIN.`);
     if(dbDups.size)
       flags.push(`ℹ️ فيه ${dbDups.size} صنف متكرر متخزّن فعلاً في الداتابيز.`);
     if(!flags.length) flags.push('✅ الشاشة والترويسة والصفوف الحقيقية كلهم متطابقين.');
@@ -37996,7 +38001,8 @@ async function poDiagnose(){
       `الحالة: ${po.status}\n\n` +
       `على الشاشة دلوقتي ......... ${screen} بند\n` +
       `ترويسة الأمر (items_count) .. ${hdrCount} بند · ${po.total_qty} قطعة · ${n(po.total)} ج\n` +
-      `صفوف po_items الحقيقية ..... ${realCount} بند · ${qty} قطعة\n\n` +
+      `الاستعلام رجّع ............ ${returned} صف · ${qty} قطعة\n` +
+      `صفوف po_items الحقيقية ..... ${realCount} بند (COUNT مباشر)\n\n` +
       `أصناف متكررة في الداتابيز:\n${dupTxt}\n\n` +
       `طابور الأوفلاين: ${(_offlineQueue||[]).length} عملية معلّقة\n` +
       `نسخة الواجهة: ${UI_BUILD}\n\n` +
@@ -38505,6 +38511,25 @@ async function editPODraft(id){
   }catch(e){ toast('❌ ' + e.message); }
 }
 
+// 🗂️ v865: تبديل تبويبات شاشة تفاصيل أمر الشراء
+function poDetailTab(which){
+  const panes = { main: 'po-tab-main', prices: 'po-tab-prices' };
+  for(const [k, id] of Object.entries(panes)){
+    const pane = document.getElementById(id);
+    if(pane) pane.style.display = (k === which) ? '' : 'none';
+    const btn = document.getElementById('po-tabbtn-' + k);
+    if(btn){
+      const on = (k === which);
+      btn.style.background  = on ? 'var(--accent)' : 'var(--bg)';
+      btn.style.color       = on ? '#fff' : 'var(--muted)';
+      btn.style.borderColor = on ? 'var(--accent)' : 'var(--border)';
+    }
+  }
+  // رجّع السكرول لفوق عشان التبويبة الجديدة تبدأ من أولها
+  const body = document.getElementById('po-detail-content')?.closest('.modal-body');
+  if(body) body.scrollTop = 0;
+}
+
 async function viewPO(id){
   try {
     const r = await apiFetch('/api/purchase-orders/' + id);
@@ -38580,7 +38605,27 @@ async function viewPO(id){
       actionButtons += `<button class="btn btn-secondary btn-sm" onclick="closePO(${po.id})">🔒 إغلاق</button>`;
     }
     
+    // 🗂️ v865: الشاشة اتقسمت تبويبتين — البنود والإجماليات في واحدة،
+    //   والأسعار والصلاحية في التانية. والزراير اتثبتت فوق برّه المحتوى
+    //   فمابقتش محتاج تنزل بالعجلة لآخر 80 صنف عشان توصلها.
     const html = `
+      <div style="position:sticky;top:0;z-index:6;background:var(--card);padding:10px 0 10px;margin:-6px 0 12px;border-bottom:1px solid var(--border)">
+        ${actionButtons ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${actionButtons}</div>` : ''}
+        <div style="display:flex;gap:6px">
+          <button type="button" id="po-tabbtn-main" onclick="poDetailTab('main')"
+            style="flex:1;padding:9px 10px;border-radius:9px;font-size:13px;font-weight:800;cursor:pointer;
+                   border:1px solid var(--accent);background:var(--accent);color:#fff">
+            📦 البنود والإجمالي
+          </button>
+          <button type="button" id="po-tabbtn-prices" onclick="poDetailTab('prices')"
+            style="flex:1;padding:9px 10px;border-radius:9px;font-size:13px;font-weight:800;cursor:pointer;
+                   border:1px solid var(--border);background:var(--bg);color:var(--muted)">
+            💰 الأسعار والصلاحية
+          </button>
+        </div>
+      </div>
+
+      <div id="po-tab-main">
       <div style="background:${st.color}15;border:1px solid ${st.color};border-radius:10px;padding:12px;margin-bottom:14px">
         <div style="font-weight:800;color:${st.color};font-size:14px">${st.ico} ${st.name}</div>
       </div>
@@ -38696,10 +38741,12 @@ async function viewPO(id){
       
       ${po.notes ? `<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px">📝 ${escapeHtml(po.notes)}</div>` : ''}
       
-      ${actionButtons ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px">${actionButtons}</div>` : ''}
-      
-      <!-- 🆕 v300: قسم الأسعار والصلاحية -->
-      <div id="po-pricing-section" style="margin-top:16px"></div>
+      </div><!-- /po-tab-main -->
+
+      <!-- 🆕 v300: قسم الأسعار والصلاحية · 🗂️ v865: بقى تبويبة لوحده -->
+      <div id="po-tab-prices" style="display:none">
+        <div id="po-pricing-section"></div>
+      </div>
     `;
     
     document.getElementById('po-detail-content').innerHTML = html;
