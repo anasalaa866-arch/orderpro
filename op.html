@@ -11641,7 +11641,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v859';
+const UI_BUILD = 'v860';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -64421,7 +64421,10 @@ async function bkMapOpen(){
           if(!last || last.name !== g){ last = { name:g, items:[] }; groups.push(last); }
           last.items.push(sl);
         }
-        return groups.map(g => `
+        _BKACCS = d.accounts || [];
+        return `<datalist id="bk-accs">${d.accounts.map(a =>
+            `<option value="${escapeHtml(a.name)}">`).join('')}</datalist>` +
+          groups.map(g => `
           <div style="font-weight:900;font-size:12px;margin:14px 0 6px;color:var(--primary)">
             ${escapeHtml(g.name)}${g.items[0]?.zero
               ? ' <span style="font-weight:400;color:var(--muted);font-size:11px">— رصيدها المفروض يرجع صفر بعد كل تحويلة</span>' : ''}</div>
@@ -64430,12 +64433,10 @@ async function bkMapOpen(){
             return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:7px;flex-wrap:wrap
                         ${sl.legacy?';opacity:.55':''}">
               <span style="flex:1;min-width:190px;font-size:12.5px;font-weight:700">${escapeHtml(sl.label)}</span>
-              <select class="form-input" style="width:260px;padding:5px 8px"
-                      onchange="bkMapSet('${sl.slot}', this)">
-                <option value="">— مش محدد —</option>
-                ${d.accounts.map(a => `<option value="${escapeHtml(a.id)}"
-                  ${cur?.account_id===a.id?'selected':''}>${escapeHtml(a.name)}</option>`).join('')}
-              </select>
+              <input class="form-input" style="width:260px;padding:5px 8px"
+                     list="bk-accs" placeholder="اكتب اسم الحساب..."
+                     value="${escapeHtml((d.accounts.find(a=>a.id===cur?.account_id)||{}).name||'')}"
+                     onchange="bkMapSetByName('${sl.slot}', this)">
               ${cur?.account_id ? '<span style="color:#166534">✅</span>'
                 : sl.legacy ? '<span style="color:var(--muted);font-size:11px">قديم</span>'
                 : '<span style="color:#dc2626">مطلوب</span>'}
@@ -64709,10 +64710,29 @@ async function bkPartyPost(i){
   }catch(e){ toast('❌ ' + (e.message || e)); bkPartiesOpen(); }
 }
 
+// 🔎 v860: الاسم المكتوب → حساب. قايمة الحسابات طويلة فالكتابة
+//   بتفلتر. اسم مش في القايمة مابيتحفظش — عشان ما نربطش slot
+//   بحساب غلط (أو نفضيه من غير قصد).
+let _BKACCS = [];
+async function bkMapSetByName(slot, inp){
+  const v = String(inp.value || '').trim();
+  if(!v){ inp.style.borderColor = ''; return bkMapSet(slot, { value:'', _name:'' }); }
+  const hit = _BKACCS.find(a => String(a.name||'').trim() === v);
+  if(!hit){
+    inp.style.borderColor = '#dc2626';
+    toast('اختار اسم حساب من القايمة');
+    return;
+  }
+  inp.style.borderColor = '';
+  bkMapSet(slot, { value: hit.id, _name: hit.name });
+}
+
 async function bkMapSet(slot, sel){
   try{
     const r = await apiFetch('/api/bank/map', 'POST', {
-      slot, account_id: sel.value, account_name: sel.options[sel.selectedIndex]?.text || '' });
+      slot, account_id: sel.value,
+      // v860: جاي من الـinput معاه الاسم، أو من select قديم
+      account_name: sel._name ?? (sel.options?.[sel.selectedIndex]?.text || '') });
     if(r?.error) throw new Error(r.error);
     toast('✅ اتحفظ');
   }catch(e){ toast('❌ ' + (e.message||e)); }
