@@ -10026,9 +10026,16 @@ tr:hover td{background:#fafbff}
         <input type="text" id="pms-pat" class="form-input" style="width:180px;font-family:Roboto,sans-serif" placeholder="paymob|accept"></label>
       <label style="font-size:12px;display:flex;align-items:center;gap:4px">سماحية
         <input type="number" id="pms-tol" class="form-input" style="width:70px;text-align:center" step="0.5" min="0">ج</label>
+      <!-- 💳 v845: نسبة باي موب + أسماء البوابة على شوبيفاي -->
+      <label style="font-size:12px">نسبة باي موب
+        <input type="number" id="pms-fee" class="form-input" style="width:80px;text-align:center" step="0.05" min="0" max="99">%</label>
+      <label style="font-size:12px">اسم البوابة على شوبيفاي
+        <input type="text" id="pms-gw" class="form-input" style="width:190px;font-family:Roboto,sans-serif" placeholder="paymob|accept|card"></label>
+      <button class="btn btn-ghost btn-sm" onclick="pmsBackfill()">🔄 جيب بوابات الطلبات القديمة</button>
       <button class="btn btn-sm" onclick="pmsSaveCfg()" style="background:#7c3aed;color:#fff">💾</button>
     </div>
   </div></div>
+  <div id="pms-exp" class="card" style="margin-bottom:12px;display:none;border:2px solid #16a34a"></div>
   <div id="pms-cards" class="stats-row" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:14px;display:none"></div>
   <div class="card" style="padding:0"><div id="pms-body" style="padding:22px;text-align:center;color:var(--muted)">⏳</div></div>
 </div>
@@ -11620,7 +11627,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v844';
+const UI_BUILD = 'v846';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -52565,15 +52572,49 @@ async function pmsLoad(){
   if($('pms-to')   && !$('pms-to').value)   $('pms-to').value   = r.to;
   if($('pms-pat') && !$('pms-pat').value) $('pms-pat').value = r.cfg?.pattern || '';
   if($('pms-tol') && $('pms-tol').value === '') $('pms-tol').value = r.cfg?.tolerance ?? 1;
+  // 💳 v845
+  if($('pms-fee') && $('pms-fee').value === '') $('pms-fee').value = r.cfg?.fee_pct ?? 2;
+  if($('pms-gw')  && !$('pms-gw').value)        $('pms-gw').value  = r.cfg?.gw_pattern || '';
+  pmsExpected();
   pmsRender();
 }
 async function pmsSaveCfg(){
   const r = await apiFetch('/api/paymob/settlement/config','POST',
-    { pattern: $('pms-pat')?.value, tolerance: $('pms-tol')?.value });
+    { pattern: $('pms-pat')?.value, tolerance: $('pms-tol')?.value,
+      fee_pct: $('pms-fee')?.value, gw_pattern: $('pms-gw')?.value });   // 💳 v845
   if(!r) return toast('❌ ' + (_apiLastErr || 'الطلب ماوصلش'));
   if(r.error) return toast('❌ ' + r.error);
   toast('✅ اتحفظ'); pmsLoad();
 }
+// 💳 v845: المتوقع النهاردة — نفس الحساب اللي التقرير الليلي بيبعته
+async function pmsExpected(){
+  const box = $('pms-exp'); if(!box) return;
+  try{
+    const r = await apiFetch('/api/paymob/expected');
+    if(!r || r.error){ box.style.display='none'; return; }
+    const n = x => Number(x||0).toLocaleString('ar-EG',{maximumFractionDigits:2});
+    const dn = d => d ? new Date(d+'T12:00:00Z').toLocaleDateString('ar-EG',
+      {weekday:'long', day:'numeric', month:'long', timeZone:'UTC'}) : '—';
+    box.style.display = '';
+    box.innerHTML = `<div style="padding:12px 14px;line-height:1.9;font-size:13px">
+      <b>💳 النهاردة لحد دلوقتي:</b> ${r.count} طلب بالفيزا · <b>${n(r.gross)} ج</b>
+      <span style="color:var(--muted)">(الموقع ${n(r.online.gross)} · المحل ${n(r.store.gross)})</span>
+      <br><b>🏦 متوقّع يوصل:</b> <b style="color:#16a34a">${n(r.net)} ج</b>
+      <span style="color:var(--muted)">بعد ${r.fee_pct}% = ${n(r.fee)} ج</span> — يوم <b>${dn(r.payout_date)}</b>
+      ${r.also_days?.length ? `<br><span style="color:#b45309">⚠️ نفس اليوم فيه كمان فلوس ${r.also_days.length} يوم قبله</span>` : ''}
+    </div>`;
+  }catch(e){ box.style.display='none'; }
+}
+
+async function pmsBackfill(){
+  if(!confirm('هيجيب بوابة الدفع من شوبيفاي للطلبات اللي مالهاش.\nممكن ياخد دقيقة أو اتنين.')) return;
+  toast('⏳ بيجيب...');
+  const r = await apiFetch('/api/paymob/backfill-gateways','POST',{ days: 60 });
+  if(!r || r.error) return toast('❌ ' + (r?.error || _apiLastErr || 'فشل'));
+  toast(`✅ ${r.done} طلب اتظبط${r.failed ? ` · ${r.failed} فشل` : ''}${r.more ? ' · فيه كمان — دوس تاني' : ''}`);
+  pmsLoad();
+}
+
 function pmsRender(){
   const r = _pmsData; if(!r) return;
   const n = x => Number(x||0).toLocaleString('ar-EG', { maximumFractionDigits:2 });
