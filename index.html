@@ -11641,7 +11641,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v849';
+const UI_BUILD = 'v850';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -31363,9 +31363,22 @@ async function buildPackingSlipHtml(o){
   lineItems.forEach(i=>{ const q=i.quantity||1; qtyFreq[q]=(qtyFreq[q]||0)+1; });
   const commonQty = parseInt(Object.entries(qtyFreq).sort((a,b)=>b[1]-a[1])[0][0]);
 
+  // 🏷️ v850: الخصم — كان مش بيبان خالص، فالورقة كانت بتقول صنف
+  //   بـ3990 وإجمالي 3192 من غير أي تفسير.
+  let _discTotal = 0;
+  const _codesTxt = (() => {
+    try{
+      let c = o.discount_codes;
+      if(typeof c === 'string') c = JSON.parse(c || '[]');
+      return (c||[]).map(x => x && x.code).filter(Boolean).join(', ');
+    }catch(e){ return ''; }
+  })();
   const itemsHtml = lineItems.map(i=>{
     const qty = i.quantity || 1;
-    const lineTotal = i.totalPrice || (i.price*qty) || 0;
+    const disc = parseFloat(i.discount) || 0;
+    _discTotal += disc;
+    const gross = i.totalPrice || (i.price*qty) || 0;
+    const lineTotal = disc > 0 ? (parseFloat(i.netTotal) || (gross - disc)) : gross;
     const isDiff = lineItems.length > 1 && qty > commonQty;
     const imgHtml = i.image
       ? `<div style="width:60px;height:60px"><img src="${i.image}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:4px"></div>`
@@ -31382,9 +31395,13 @@ async function buildPackingSlipHtml(o){
           <div style="${isDiff?'font-weight:700;':''}font-size:14px">${i.name||''}</div>
           ${i.variantTitle?`<div style="font-size:11px;color:#6b7280">${i.variantTitle}</div>`:''}
           ${i._codes?`<div style="font-size:11px;color:#6b7280;direction:ltr;unicode-bidi:plaintext">${i._codes}</div>`:''}
-          ${i.price>0?`<div style="font-size:11px;color:#6b7280">${fmtMoney(i.price)}</div>`:''}
+          ${i.price>0?`<div style="font-size:11px;color:#6b7280">${
+            disc>0 ? `<span style="text-decoration:line-through">${fmtMoney(i.price)}</span> <strong style="color:#000">${fmtMoney((gross-disc)/qty)}</strong>` : fmtMoney(i.price)
+          }</div>`:''}
+          ${disc>0?`<div style="font-size:11px;font-weight:700">Discount −${fmtMoney(disc)}</div>`:''}
         </div>
-        <div style="text-align:left;font-weight:700;font-size:14px">${lineTotal>0?fmtMoney(lineTotal):''}</div>
+        <div style="text-align:left;font-weight:700;font-size:14px">${lineTotal>0?fmtMoney(lineTotal):''}${
+          disc>0?`<div style="font-size:11px;font-weight:400;color:#6b7280;text-decoration:line-through">${fmtMoney(gross)}</div>`:''}</div>
       </div>`;
   }).join('');
 
@@ -31410,6 +31427,8 @@ async function buildPackingSlipHtml(o){
       </div>
       ${itemsHtml}
       <div style="text-align:left;margin-top:15px;font-size:14px;font-weight:700;line-height:2">
+        ${_discTotal>0?`Items ${fmtMoney(subtotal+_discTotal)}<br>`:''}
+        ${_discTotal>0?`<span>Discount${_codesTxt?` (${_codesTxt})`:''} −${fmtMoney(_discTotal)}</span><br>`:''}
         Subtotal ${fmtMoney(subtotal)}<br>
         Shipping ${fmtMoney(shippingCost)}<br>
         Total ${fmtMoney(o.total||subtotal)}
