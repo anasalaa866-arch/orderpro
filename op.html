@@ -11641,7 +11641,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v860';
+const UI_BUILD = 'v861';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -37529,8 +37529,13 @@ async function openNewPO(skipSuggestionsDraft){
           variantTitle: it.variantTitle || '',
           sku: it.sku || '',
           barcode: it.barcode || '',
-          qty: parseInt(it.qty) || 1,
+          // 🐛 v861: كان `qty` — والشاشة كلها بتقرا `orderedQty`، فأي صنف
+          //   جاي من ذكاء الشراء كان بييجي من غير كمية (وبيتحفظ بصفر).
+          orderedQty: parseInt(it.qty ?? it.orderedQty) || 1,
           unitCost: parseFloat(it.unitCost) || 0,
+          discountPct: 0,
+          taxPct: 0,
+          notes: '',
           lineTotal: 0,
         }));
         // 🆕 v253: pre-select supplier لو محدد
@@ -37699,6 +37704,31 @@ function applyPOBulk(kind){
   updatePOTotals();
 }
 
+// 🔁 v861: التكرار في أمر الشراء مسموح — نفس الصنف ممكن ييجي بسعرين
+//   في نفس الفاتورة. بس لازم يبان بوضوح، عشان ما يعديش في الخفا ويتحسب
+//   مرتين بالغلط. الدوال دي بتعرّف السطور المتكررة من غير ما تدمجها.
+function _poItemKey(it){
+  if(it && it.variantId !== undefined && it.variantId !== null && String(it.variantId).trim() !== '')
+    return 'v:' + String(it.variantId).trim();
+  if(it && it.sku)     return 's:' + String(it.sku).trim().toLowerCase();
+  if(it && it.barcode) return 'b:' + String(it.barcode).trim();
+  return 't:' + String(it?.productTitle || '').trim().toLowerCase()
+       + '|'  + String(it?.variantTitle || '').trim().toLowerCase();
+}
+
+// بترجّع Map: المفتاح → مصفوفة الـ indexes، للسطور اللي اتكررت بس
+function _poDupGroups(items){
+  const all = new Map();
+  (items || _poItems).forEach((it, i) => {
+    const k = _poItemKey(it);
+    if(!all.has(k)) all.set(k, []);
+    all.get(k).push(i);
+  });
+  const dups = new Map();
+  for(const [k, idxs] of all) if(idxs.length > 1) dups.set(k, idxs);
+  return dups;
+}
+
 function renderPOItems(){
   const list = document.getElementById('po-items-list');
   const header = document.getElementById('po-items-header');
@@ -37718,8 +37748,34 @@ function renderPOItems(){
   
   // 🆕 v337: Shopify-style table layout
   if(header) header.style.display = 'block';
-  
-  list.innerHTML = _poItems.map((it, i) => {
+
+  // 🔁 v861: شريط تحذير بالأصناف المتكررة + رقم لكل سطر متكرر
+  const _dups = _poDupGroups();
+  const _dupOf = new Map();   // index → { pos, n, difPrice }
+  for(const idxs of _dups.values()){
+    const prices = new Set(idxs.map(i => _poNet(_poItems[i]).net.toFixed(2)));
+    idxs.forEach((i, pos) => _dupOf.set(i, { pos: pos + 1, n: idxs.length, difPrice: prices.size > 1 }));
+  }
+  let _dupBar = '';
+  if(_dups.size){
+    const lines = [..._dups.values()].map(idxs => {
+      const it = _poItems[idxs[0]];
+      const prices = [...new Set(idxs.map(i => _poNet(_poItems[i]).net.toFixed(2)))];
+      const qty = idxs.reduce((a, i) => a + (parseInt(_poItems[i].orderedQty) || 0), 0);
+      return `<div style="margin-top:5px">• <b>${escapeHtml(it.productTitle)}</b>${it.variantTitle ? ' - ' + escapeHtml(it.variantTitle) : ''}`
+           + ` — <b>${idxs.length} سطور</b> بإجمالي كمية <b>${qty}</b>، `
+           + (prices.length > 1
+               ? `<span style="color:#15803d">بأسعار مختلفة (${prices.join(' · ')}) ✓ ده طبيعي</span>`
+               : `<span style="color:#b45309">كلهم بنفس السعر (${prices[0]}) — راجعه</span>`)
+           + `</div>`;
+    }).join('');
+    _dupBar = `<div style="margin:0;padding:12px 20px;background:#fffbeb;border-bottom:1px solid #fcd34d;font-size:12px;color:#78350f;line-height:1.6">`
+            + `<div style="font-weight:800">⚠️ فيه أصناف متكررة في الأمر</div>`
+            + `<div style="font-size:11px;color:#92400e;margin-top:2px">التكرار مسموح (نفس الصنف ممكن ييجي بسعرين في نفس الفاتورة) — ده للعلم بس.</div>`
+            + lines + `</div>`;
+  }
+
+  list.innerHTML = _dupBar + _poItems.map((it, i) => {
     // 🆕 v337: highlight السطر اللي اتضاف من شوية (yellow flash)
     const isJustAdded = (i === _poJustAddedIdx);
     const bgColor = isJustAdded ? '#fef9c3' : 'transparent';
@@ -37729,7 +37785,7 @@ function renderPOItems(){
     <div data-poitem-row="${i}" style="padding:14px 20px;border-bottom:1px solid ${borderColor};display:grid;grid-template-columns:1fr 64px 92px 62px 58px 100px 96px 26px;gap:8px;align-items:center;font-size:13px;background:${bgColor};transition:background 0.6s" onmouseover="this.style.background='#fafbfb'" onmouseout="this.style.background='${bgColor}'">
       <!-- Product info -->
       <div style="min-width:0">
-        <div style="font-weight:600;color:#1a1c1d;font-size:13px;line-height:1.4;word-break:break-word">${escapeHtml(it.productTitle)}${it.variantTitle ? ' - '+escapeHtml(it.variantTitle) : ''}</div>
+        <div style="font-weight:600;color:#1a1c1d;font-size:13px;line-height:1.4;word-break:break-word">${escapeHtml(it.productTitle)}${it.variantTitle ? ' - '+escapeHtml(it.variantTitle) : ''}${_dupOf.has(i) ? `<span style="display:inline-block;margin-inline-start:6px;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:800;font-family:monospace;background:${_dupOf.get(i).difPrice ? '#dcfce7;color:#15803d' : '#fef3c7;color:#92400e'}" title="${_dupOf.get(i).difPrice ? 'نفس الصنف بسعر مختلف — طبيعي' : 'نفس الصنف بنفس السعر — اتأكد إنه مش مكرر بالغلط'}">مكرر ${_dupOf.get(i).pos}/${_dupOf.get(i).n}</span>` : ''}</div>
         ${it.sku || it.barcode ? `
           <div style="font-size:11px;color:#6d7175;margin-top:3px;font-family:monospace">
             ${it.sku ? 'SKU: ' + escapeHtml(it.sku) : ''}${it.sku && it.barcode ? ' · ' : ''}${it.barcode ? escapeHtml(it.barcode) : ''}
@@ -38125,7 +38181,13 @@ function addPOItem(){
   
   if(!qty || qty < 1){ toast('❌ الكمية لازم > 0'); return; }
   if(isNaN(cost) || cost < 0){ toast('❌ السعر لازم >= 0'); return; }
-  
+
+  // 🔁 v861: الإضافة بالبحث مكانتش بتبص على اللي موجود خالص — فكل ضغطة
+  //   على «إضافة» كانت بتعمل سطر جديد من غير ما حد يقول. التكرار نفسه
+  //   مسموح (نفس الصنف بسعرين)، فمش بندمج — بس بنحذّر.
+  const _k = _poItemKey(_poSelectedItem);
+  const _prevIdx = _poItems.findIndex(it => _poItemKey(it) === _k);
+
   _poItems.push({
     ..._poSelectedItem,
     orderedQty: qty,
@@ -38134,10 +38196,18 @@ function addPOItem(){
     taxPct: 0,                                             // 🔘 v588: مطفي افتراضياً
     notes
   });
-  
+
   renderPOItems();
   updatePOTotals();
   closeM('m-po-add-item');
+
+  if(_prevIdx >= 0){
+    const prevCost = parseFloat(_poItems[_prevIdx].unitCost) || 0;
+    const n = _poItems.filter(it => _poItemKey(it) === _k).length;
+    toast(Math.abs(prevCost - cost) < 0.005
+      ? `⚠️ الصنف ده موجود قبل كده <b>بنفس السعر</b> (${cost.toFixed(2)}) — بقى ${n} سطور. اتأكد إنه مش مكرر بالغلط.`
+      : `🔁 الصنف ده موجود قبل كده بسعر <b>${prevCost.toFixed(2)}</b> — اتضاف سطر جديد بـ <b>${cost.toFixed(2)}</b> (${n} سطور).`);
+  }
 }
 
 async function savePO(status){
