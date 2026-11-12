@@ -7894,6 +7894,7 @@ tr:hover td{background:#fafbff}
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-ghost" onclick="closeM('m-po')" style="border:1px solid #c9cccf;color:#5c5f62;font-weight:600">إلغاء</button>
+        <button class="btn btn-ghost" id="po-diag-btn" onclick="poDiagnose()" style="display:none;border:1px solid #c9cccf;color:#5c5f62;font-weight:600" title="يقارن اللي على الشاشة باللي متخزّن في الداتابيز فعلاً">🔍 افحص</button>
         <button class="btn btn-secondary" onclick="savePO('draft')" style="background:#fff;border:1px solid #c9cccf;color:#1a1c1d;font-weight:600">💾 حفظ كمسودة</button>
         <button class="btn btn-primary" onclick="savePO('sent')" style="background:#1a1c1d;border-color:#1a1c1d;color:#fff;font-weight:600">📤 حفظ وإرسال</button>
       </div>
@@ -11641,7 +11642,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v863';
+const UI_BUILD = 'v864';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -12412,7 +12413,11 @@ function saveOfflineQueue(){
 // 🚫 v618: عمليات ممنوع يعاد إرسالها في الخفاء — بتعمل حاجة على طرف تالت
 //   (Shopify) ومفيش idempotency key، فإعادة المحاولة = منتج مكرر.
 //   الـ user بيشوف الخطأ ويقرر بنفسه.
-const _NO_REPLAY = ['/api/products/new'];
+// 🚑 v864: أي طلب بيستبدل الحالة كلها (أمر الشراء بيمسح كل بنوده ويكتبها
+//   من الأول) ماينفعش يتعاد إرساله من الطابور بعد دقايق — النسخة اللي
+//   في الطابور لقطة قديمة، ولو اتبعتت بترجّع حالة قديمة فوق أحدث منها.
+//   لو الحفظ فشل، المستخدم يعيد المحاولة وهو شايف، مش في الخفا.
+const _NO_REPLAY = ['/api/products/new', '/api/purchase-orders'];
 
 // 🚑 v862: الطابور كان بيعيد إرسال نسخة قديمة فوق حفظ أحدث منها.
 //   أي طلب بيستبدل الحالة كلها (زي PUT /api/purchase-orders/:id اللي
@@ -37527,6 +37532,7 @@ async function openNewPO(skipSuggestionsDraft){
   }
   
   document.getElementById('po-id').value = '';
+  const _dgb = document.getElementById('po-diag-btn'); if(_dgb) _dgb.style.display = 'none';   // 🔍 v864
   document.getElementById('po-modal-title').textContent = '📋 أمر شراء جديد';
   
   // 🔎 v584: فضّي البحث واملأ القائمة
@@ -37947,6 +37953,57 @@ function updatePOItemField(idx, field, value){
   _poItems[idx][field] = value;
   renderPOItems();
   updatePOTotals();
+}
+
+// 🔍 v864: بدل ما نخمّن ليه البنود بترجع — بنقارن التلاتة مع بعض:
+//   اللي على الشاشة · ترويسة الأمر في purchase_orders · صفوف po_items
+//   الحقيقية. أي اختلاف بينهم بيقول بالظبط فين المشكلة.
+async function poDiagnose(){
+  const id = document.getElementById('po-id')?.value;
+  if(!id){ toast('ده أمر جديد لسه ماتحفظش'); return; }
+  try{
+    const r = await apiFetch('/api/purchase-orders/' + id + '?_v=' + Date.now());
+    const po = r?.order || {};
+    const rows = r?.items || [];
+    const n = (v) => (parseFloat(v) || 0).toFixed(2);
+
+    // تكرار في الداتابيز نفسها
+    const dbItems = rows.map(it => ({ variantId: it.variant_id, sku: it.sku,
+                                      barcode: it.barcode, productTitle: it.product_title,
+                                      variantTitle: it.variant_title }));
+    const dbDups = _poDupGroups(dbItems);
+    const dupTxt = dbDups.size
+      ? [...dbDups.values()].map(ix =>
+          `   • ${rows[ix[0]].product_title} — ${ix.length} صفوف (id: ${ix.map(i=>rows[i].id).join(', ')})`
+        ).join('\n')
+      : '   مفيش';
+
+    const hdrCount = parseInt(po.items_count);
+    const realCount = rows.length;
+    const screen = _poItems.length;
+    const qty = rows.reduce((a,it) => a + (parseInt(it.ordered_qty)||0), 0);
+
+    const flags = [];
+    if(hdrCount !== realCount)
+      flags.push(`⚠️ الترويسة بتقول ${hdrCount} بند والصفوف الحقيقية ${realCount} — يعني آخر حفظ عدّل الترويسة وماعدّلش البنود.`);
+    if(screen !== realCount)
+      flags.push(`⚠️ على الشاشة ${screen} بند وفي الداتابيز ${realCount} — اللي قدامك مش اللي متخزّن.`);
+    if(dbDups.size)
+      flags.push(`ℹ️ فيه ${dbDups.size} صنف متكرر متخزّن فعلاً في الداتابيز.`);
+    if(!flags.length) flags.push('✅ الشاشة والترويسة والصفوف الحقيقية كلهم متطابقين.');
+
+    infoModal('🔍 فحص ' + (po.po_number || ('#'+id)),
+      `الحالة: ${po.status}\n\n` +
+      `على الشاشة دلوقتي ......... ${screen} بند\n` +
+      `ترويسة الأمر (items_count) .. ${hdrCount} بند · ${po.total_qty} قطعة · ${n(po.total)} ج\n` +
+      `صفوف po_items الحقيقية ..... ${realCount} بند · ${qty} قطعة\n\n` +
+      `أصناف متكررة في الداتابيز:\n${dupTxt}\n\n` +
+      `طابور الأوفلاين: ${(_offlineQueue||[]).length} عملية معلّقة\n` +
+      `نسخة الواجهة: ${UI_BUILD}\n\n` +
+      flags.join('\n'));
+  }catch(e){
+    infoModal('❌ الفحص فشل', e.message);
+  }
 }
 
 function removePOItem(idx){
@@ -38394,6 +38451,7 @@ async function editPODraft(id){
 
     document.getElementById('po-id').value = po.id;
     document.getElementById('po-modal-title').textContent = '✏️ تعديل ' + (po.po_number || 'المسودة');
+    const _dg = document.getElementById('po-diag-btn'); if(_dg) _dg.style.display = '';   // 🔍 v864
 
     // المخزن
     const whSel = document.getElementById('po-warehouse');
