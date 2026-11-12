@@ -4362,7 +4362,14 @@ tr:hover td{background:#fafbff}
     <div class="acc-tabs"><div class="acc-tab on" onclick="accTab(this,'acc-sum')">ملخص المناديب</div><div class="acc-tab" onclick="accTab(this,'acc-det')">تفاصيل الطلبات</div><div class="acc-tab" onclick="accTab(this,'acc-set')">تسوية الحسابات</div></div>
     <div class="acc-sec on" id="acc-sum"><div class="card"><div class="card-hd"><h3>💰 ملخص محاسبة المناديب</h3></div><div class="tw"><table><thead><tr><th>المندوب</th><th>مكتملة</th><th>إجمالي COD</th><th>تمن الشحن</th><th>صافي المحل</th><th>مستحق للمندوب</th><th>التسوية</th><th>إجراء</th></tr></thead><tbody id="acc-tbody"></tbody><tfoot><tr class="acc-hl" id="acc-total"></tr></tfoot></table></div></div></div>
     <div class="acc-sec" id="acc-det"><div class="card"><div class="card-hd"><h3>📋 تفاصيل الطلبات</h3><select id="acc-cf" onchange="renderAccDet()" style="font-family:Cairo,sans-serif;font-size:12px;padding:5px 10px;border:1px solid var(--border);border-radius:7px;outline:none"><option value="all">كل المناديب</option></select></div><div class="tw"><table><thead><tr><th>رقم الطلب</th><th>المندوب</th><th>العميل</th><th>المنطقة</th><th>نوع التوصيل</th><th>COD</th><th>الشحن</th><th>صافي المحل</th><th>الحالة</th></tr></thead><tbody id="acc-det-tbody"></tbody></table></div></div></div>
-    <div class="acc-sec" id="acc-set"><div class="card"><div class="card-hd"><h3>✅ تسوية الحسابات</h3></div><div class="card-body" id="settle-list"></div></div></div>
+    <div class="acc-sec" id="acc-set">
+      <!-- 🔎 v847: تصفيات قديمة فلوسها مادخلتش الخزنة (البوب أب القديم
+           كان بينفع يتخطّى) -->
+      <div id="acc-missing" style="display:none;margin-bottom:12px"></div>
+      <div class="card"><div class="card-hd"><h3>✅ تسوية الحسابات</h3>
+        <button class="btn btn-ghost btn-sm" onclick="accMissingLoad()">🔎 افحص اللي ماوصلش الخزنة</button>
+      </div><div class="card-body" id="settle-list"></div></div>
+    </div>
   </div>
 
   <!-- ⭐ CAFELAX STARS REVIEWS -->
@@ -11125,6 +11132,13 @@ tr:hover td{background:#fafbff}
 <div class="overlay" id="m-settle"><div class="modal">
   <div class="mhd"><h3 id="settle-title">تسوية حساب</h3><button class="xbtn" onclick="closeM('m-settle')">✕</button></div>
   <div class="mbd" id="settle-body"></div>
+  <!-- 💰 v847: الخزنة بقت جوه التصفية. كانت بوب أب بعدها ينفع يتخطّى
+       فالفلوس كانت بتضيع من غير أثر. -->
+  <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+    <label style="font-size:13px;font-weight:800">💰 تدخل خزنة:</label>
+    <select id="settle-treasury" class="form-input" style="min-width:190px"></select>
+    <span style="font-size:11.5px;color:var(--muted)">الصافي بيتسجّل فيها على طول — مفيش خطوة تانية</span>
+  </div>
   <div class="mft">
     <button class="btn btn-ghost" onclick="closeM('m-settle')">إلغاء</button>
     <button class="btn btn-ghost" onclick="printCurrentSettle()" style="color:var(--accent);border-color:var(--accent)">🖨️ طباعة للمراجعة</button>
@@ -11627,7 +11641,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v846';
+const UI_BUILD = 'v849';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -28678,6 +28692,50 @@ async function startSettleSession(cId){
   setTimeout(()=>openSettle(cId), 300);
 }
 
+// 🔎 v847: تصفيات ماوصلتش الخزنة — البوب أب القديم كان بينفع يتخطّى،
+//   فأكيد فيه فلوس اتسوّت ومادخلتش. دي بتوريك قد إيه وبتصلّحها.
+async function accMissingLoad(){
+  const box = $('acc-missing'); if(!box) return;
+  box.style.display = ''; box.innerHTML = '<div class="card"><div style="padding:14px;color:var(--muted)">⏳ بيفحص...</div></div>';
+  const r = await apiFetch('/api/settlements/missing-treasury?days=180');
+  if(!r || r.error){ box.innerHTML = `<div class="card"><div style="padding:14px;color:var(--danger)">❌ ${escapeHtml(r?.error||_apiLastErr||'فشل')}</div></div>`; return; }
+  if(!r.missing){
+    box.innerHTML = `<div class="card" style="border:2px solid #16a34a"><div style="padding:14px;color:#16a34a;font-weight:800">✅ كل التصفيات (${r.checked}) فلوسها مسجّلة في الخزنة</div></div>`;
+    return;
+  }
+  const f = n => Number(n||0).toLocaleString();
+  const opts = (_treasuries||[]).map(t=>`<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+  box.innerHTML = `<div class="card" style="border:2px solid #dc2626">
+    <div style="padding:13px 15px;border-bottom:1px solid var(--border)">
+      <div style="font-weight:900;color:#dc2626">⚠️ ${r.missing} تصفية فلوسها مادخلتش الخزنة</div>
+      <div style="font-size:12.5px;margin-top:4px">الإجمالي <b>${f(r.total_net)} ج</b> — من آخر ${r.days} يوم.</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:4px">
+        دي تصفيات اتعملت والبوب أب القديم اتخطّى فيها. اختار الخزنة ودوس سجّل لكل واحدة.</div>
+    </div>
+    <div style="max-height:400px;overflow:auto"><table style="width:100%;font-size:12.5px">
+      <thead><tr style="color:var(--muted)"><th style="text-align:right;padding:7px">المندوب</th><th>التاريخ</th><th>COD</th><th>الشحن</th><th>الصافي</th><th></th></tr></thead>
+      <tbody>${r.rows.map(x=>`<tr id="ms-${x.id}" style="border-top:1px solid var(--border)">
+        <td style="padding:6px 8px;font-weight:700">${escapeHtml(x.courier_name||'—')}</td>
+        <td style="text-align:center;font-size:11.5px;color:var(--muted)">${new Date(x.ts).toLocaleDateString('ar-EG')}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif">${f(x.cod)}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif">${f(x.ship)}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:${x.net<0?'#dc2626':'#16a34a'}">${f(x.net)}</td>
+        <td style="text-align:center;white-space:nowrap">
+          <select id="mst-${x.id}" class="form-input" style="width:130px;font-size:11.5px;padding:3px 6px">${opts}</select>
+          <button class="btn btn-sm btn-success" onclick="accMissingPost(${x.id})">سجّل</button></td>
+      </tr>`).join('')}</tbody></table></div></div>`;
+}
+
+async function accMissingPost(id){
+  const treasuryId = $(`mst-${id}`)?.value;
+  if(!treasuryId) return toast('❗ اختار الخزنة');
+  const r = await apiFetch(`/api/settlements/${id}/post-treasury`,'POST',{ treasuryId });
+  if(!r || r.error) return toast('❌ ' + (r?.error || _apiLastErr || 'فشل'));
+  toast(`✅ اتسجّلت — ${Number(r.net).toLocaleString()} ج`);
+  $(`ms-${id}`)?.remove();
+  loadTreasuries?.();
+}
+
 function openSettle(cId){
   settlingCourierId = cId;
   const c = couriers.find(x=>x.id==cId);
@@ -28691,6 +28749,16 @@ function openSettle(cId){
   const ship = pending.reduce((s,o)=>s+getShipCost(o,c),0);
   const sessNum = _allSettlements.filter(s=>String(s.courierId)===String(cId)).length+1;
   $('settle-title').textContent = 'تسوية حساب — '+c.name;
+  // 💰 v847: املا الخزن. آخر خزنة اتختارت بتفضل مختارة عشان
+  //   مايبقاش في اختيار كل مرة.
+  const sel = $('settle-treasury');
+  if(sel){
+    const last = localStorage.getItem('settle_treasury') || '';
+    sel.innerHTML = (_treasuries || []).map(t =>
+      `<option value="${t.id}" ${String(t.id)===last?'selected':''}>${escapeHtml(t.name)}</option>`).join('')
+      || '<option value="">⚠️ مفيش خزن — ضيف خزنة الأول</option>';
+    sel.onchange = () => { try{ localStorage.setItem('settle_treasury', sel.value); }catch(e){} };
+  }
   $('settle-body').innerHTML = '<div style="background:var(--accent-light);border-radius:8px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:var(--accent);font-weight:700">تسوية رقم '+sessNum+'</div>'
     +'<div style="background:var(--bg);border-radius:9px;padding:14px;margin-bottom:12px">'
     +'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span>📦 عدد الطلبات</span><strong>'+pending.length+' طلب</strong></div>'
@@ -28811,6 +28879,31 @@ async function doSettle(){
   const adj = window._settleAdj || [];
   const adjTotal = adj.reduce((s,a)=>s+a.amount,0);
   const newS = {id:Date.now(), courierId:c.id, ts:new Date(now), orderIds, cod, ship, adj, adjTotal};
+  // 💰 v847: الخزنة بقت جزء من التصفية — بتتبعت للسيرفر وبيكتب
+  //   الحركة جوه نفس الـtransaction. قبل كده كان بوب أب بعدها
+  //   ينفع يتخطّى، والفلوس كانت بتضيع من غير ما حد ياخد باله.
+  const _net = cod - ship + adjTotal;
+  const treasuryId = $('settle-treasury')?.value;
+  if(!treasuryId){ toast('❗ اختار الخزنة الأول'); return; }
+
+  if(API_URL){
+    // 🆕 v199: ابعت adjustmentIds عشان السيرفر يربطهم بالتسوية
+    const adjustmentIds = window._settleAdjFromStars || [];
+    let r;
+    try{
+      r = await apiFetch('/api/settlements','POST',
+        {courierId:c.id,ts:now,orderIds,cod,ship,adj,adjTotal,adjustmentIds,treasuryId});
+      if(!r) throw new Error(_apiLastErr || 'الطلب ماوصلش للسيرفر');
+      if(r.error || r.success === false) throw new Error(r.error || 'السيرفر رفض التصفية');
+    }catch(e){
+      // مانقولش «تمت» وهي ماتمتش — ومانضيفهاش محلياً
+      toast('❌ التصفية ماتمتش: ' + (e.message || e));
+      return;
+    }
+    if(r.id) newS.id = r.id;
+    if(r.warning) toast('⚠️ ' + r.warning);
+    apiFetch('/api/couriers/'+c.id,'PATCH',{settled:true}).catch(()=>{});
+  }
   _allSettlements.push(newS);
   pending.forEach(o=>{
     if(o.status==='تحت التسوية'){
@@ -28818,91 +28911,23 @@ async function doSettle(){
       if(API_URL) apiFetch('/api/orders/'+o.id,'PATCH',{status:'مكتمل'}).catch(()=>{});
     }
   });
-  if(API_URL){
-    // 🆕 v199: ابعت adjustmentIds عشان السيرفر يربطهم بالتسوية
-    const adjustmentIds = window._settleAdjFromStars || [];
-    apiFetch('/api/settlements','POST',{courierId:c.id,ts:now,orderIds,cod,ship,adj,adjTotal,adjustmentIds})
-      .then(r=>{ if(r&&r.id) newS.id=r.id; }).catch(e=>console.error('settle error:',e));
-    apiFetch('/api/couriers/'+c.id,'PATCH',{settled:true}).catch(()=>{});
-  }
   closeM('m-settle');
   pushNotif('💰','تمت تسوية حساب '+c.name,'');
   renderAcc();
-  toast('✅ تمت تسوية '+c.name+' — '+pending.length+' طلب');
-  const _net = cod - ship + adjTotal;
+  const _tn = _treasuries.find(t=>String(t.id)===String(treasuryId))?.name || 'الخزنة';
+  toast(`✅ تمت تسوية ${c.name} — ${pending.length} طلب · ${_net.toLocaleString()} ج ${_net<0?'من':'لـ'} ${_tn}`);
+  if(_treasuries.length) loadTreasuries?.();
   // طباعة
   setTimeout(()=>{
     if(confirm('هل تريد طباعة ورقة تسوية '+c.name+'؟')) printCurrentSettle();
   },300);
-  // ربط الخزنة
-  if(_treasuries.length && _net > 0){
-    setTimeout(()=>openSettleToTreasury(c.name, _net, now), 800);
-  }
 }
 
-function openSettleToTreasury(courierName, net, ts){
-  if(!_treasuries.length) return;
-  const fmtAmt = n => Number(n).toLocaleString();
-  const opts = _treasuries.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
-  const dateStr = new Date(ts).toISOString().split('T')[0];
+// 🗑️ v847: اتشال البوب أب القديم (openSettleToTreasury /
+//   confirmSettleToTreasury). الخزنة بقت جزء من التصفية نفسها على
+//   السيرفر، فالكود ده بقى ميت — وكود ميت بيكتب في الخزنة خطر.
+//   التصليح للتصفيات القديمة بقى من «افحص اللي ماوصلش الخزنة».
 
-  const div = document.createElement('div');
-  div.id = 'settle-treasury-popup';
-  div.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:center;justify-content:center';
-  div.innerHTML = `
-    <div style="background:var(--card);border-radius:16px;padding:24px;width:min(400px,92vw);font-family:Cairo,sans-serif;direction:rtl">
-      <div style="font-size:16px;font-weight:800;margin-bottom:4px">💰 إضافة للخزنة</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">تسوية ${courierName} — صافي <strong style="color:var(--success)">${fmtAmt(net)} ج</strong></div>
-      <div style="margin-bottom:12px">
-        <label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">الخزنة</label>
-        <select id="stt-treasury" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">${opts}</select>
-      </div>
-      <div style="margin-bottom:12px">
-        <label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">المبلغ</label>
-        <input id="stt-amount" type="number" value="${net}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">
-      </div>
-      <div style="margin-bottom:16px">
-        <label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">البيان</label>
-        <input id="stt-reason" value="تسوية ${courierName}" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button onclick="document.getElementById('settle-treasury-popup').remove()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:8px 18px;font-family:Cairo,sans-serif;cursor:pointer;font-size:13px">تخطي</button>
-        <button onclick="confirmSettleToTreasury('${dateStr}')" style="background:var(--success);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-family:Cairo,sans-serif;font-weight:700;font-size:13px;cursor:pointer">✅ إضافة للخزنة</button>
-      </div>
-    </div>`;
-  document.body.appendChild(div);
-}
-
-// 🚨 v754: دي كانت بتبعت من غير category. من v700 القسم بقى إجباري
-//   على /api/treasury-tx، فالسيرفر كان بيرد 400 — و.catch(()=>{})
-//   كان بيبلع الخطأ، والـ toast بيقول «تم» والحركة اتحطّت محلياً بس.
-//   فتصفيات المناديب بطلت تتسجّل من غير ما حد ياخد باله.
-//   دلوقتي: بتبعت القسم، وبتستنى رد السيرفر، وبتقول الحقيقة.
-async function confirmSettleToTreasury(dateStr){
-  const tId = document.getElementById('stt-treasury')?.value;
-  const amount = parseFloat(document.getElementById('stt-amount')?.value)||0;
-  const reason = document.getElementById('stt-reason')?.value.trim()||'تسوية مندوب';
-  if(!tId||!amount){ toast('❗ اختر الخزنة والمبلغ'); return; }
-  // 🚑 v814: system:true — لو «تحصيل مناديب» اتغيّر اسمه أو اتوقف في
-  //   إعدادات الأقسام، السيرفر بيصنّفها لوحده بدل ما يرفض الحركة.
-  //   قبل كده كانت بترجع 400 والفلوس ماتدخلش الخزنة.
-  const tx = {id:Date.now()+'_tx', treasuryId:tId, type:'in', amount, reason,
-              date:dateStr, category:'تحصيل مناديب', system:true};
-  if(API_URL){
-    try{
-      const r = await apiFetch('/api/treasury-tx','POST',tx);
-      if(!r) throw new Error(_apiLastErr || 'الطلب ماوصلش للسيرفر');   // 🚑 v814
-      if(r.ok === false || r.error) throw new Error(r.error || 'السيرفر رفض الحركة');
-    }catch(e){
-      toast('❌ ماتسجّلتش في الخزنة: ' + (e.message || e));
-      return;                      // مانكدبش ومانحطّهاش محلياً
-    }
-  }
-  _treasuryTx.push(tx);
-  document.getElementById('settle-treasury-popup')?.remove();
-  if(_activeTreasuryId===tId) renderTreasuryTxList(tId);
-  toast('✅ تم إضافة '+amount.toLocaleString()+' ج للخزنة');
-}
 
 function printCurrentSettle(){
   const c = couriers.find(x=>x.id==settlingCourierId);
