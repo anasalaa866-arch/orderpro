@@ -11641,7 +11641,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v857';
+const UI_BUILD = 'v859';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -63929,14 +63929,25 @@ async function bkLoad(page){
       ${d.pending_by_kind.length ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">
         المحتاج مراجعة: ${d.pending_by_kind.map(x =>
           `${escapeHtml(d.kinds[x.kind]||x.kind)} <b>${x.n}</b>`).join(' · ')}</div>` : ''}
+      ${f.status==='new' && d.rows.length ? `<div id="bk-bulk" style="display:none;position:sticky;top:0;z-index:5;
+        background:var(--card);border:2px solid var(--primary);border-radius:10px;padding:9px 12px;
+        margin-bottom:10px;align-items:center;gap:10px;flex-wrap:wrap">
+        <b id="bk-bulk-n" style="font-size:13px"></b>
+        <button class="btn btn-sm btn-primary" onclick="bkPostBatch()">⚡ نفّذ المحدد في Zoho</button>
+        <button class="btn btn-sm btn-ghost" onclick="bkToggleAll(false)">شيل التحديد</button>
+        <span id="bk-bulk-note" style="font-size:11.5px;color:var(--muted)"></span>
+      </div>` : ''}
       ${!d.rows.length ? '<div style="padding:20px;text-align:center;color:var(--muted)">مفيش حركات</div>' : `
       <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="background:var(--bg)">
+          <th style="padding:7px;width:28px">${f.status==='new'?'<input type="checkbox" id="bk-all" onchange="bkToggleAll(this.checked)" title="حدد الكل">':''}</th>
           <th style="padding:7px">التاريخ</th><th style="padding:7px">المبلغ</th>
           <th style="padding:7px">النوع</th><th style="padding:7px">المرجع</th>
           <th style="padding:7px"></th></tr></thead>
         <tbody>${d.rows.map(x => `
-          <tr style="border-top:1px solid var(--border)">
+          <tr style="border-top:1px solid var(--border)" id="bkr-${x.id}">
+            <td style="padding:7px;text-align:center">${x.status==='new'
+              ? `<input type="checkbox" class="bk-pick" data-id="${x.id}" onchange="bkPickChanged()">` : ''}</td>
             <td style="padding:7px;text-align:center;direction:ltr;white-space:nowrap">
               ${escapeHtml(x.value_date)}
               ${x.late ? '<div style="font-size:9.5px;color:#92400e" title="ظهرت في كشف أحدث من تاريخها">⏰ متأخرة</div>' : ''}</td>
@@ -63962,12 +63973,137 @@ async function bkLoad(page){
                 : `<button class="btn btn-sm btn-ghost" onclick="bkRow(${x.id})">📝 راجع</button>
                    ${x.status==='failed'?`<div style="font-size:10px;color:#dc2626;max-width:170px">${escapeHtml(x.skip_reason||'')}</div>`:''}`}
             </td>
-          </tr>`).join('')}</tbody></table></div>
+          </tr>
+          ${x.status==='new' ? `<tr id="bks-${x.id}" style="background:var(--bg)">
+            <td colspan="6" style="padding:0 7px 7px 7px"><div id="bksg-${x.id}"
+              style="font-size:11.5px;color:var(--muted)">⏳</div></td></tr>` : ''}`).join('')}</tbody></table></div>
       <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
         ${_BK.page>0?`<button class="btn btn-sm btn-ghost" onclick="bkLoad(${_BK.page-1})">السابق</button>`:''}
         ${d.rows.length===60?`<button class="btn btn-sm btn-ghost" onclick="bkLoad(${_BK.page+1})">التالي</button>`:''}
       </div>`}`;
+    if(f.status==='new' && d.rows.length) bkSuggestAll(d.rows.map(x=>x.id));
   }catch(e){ box.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
+}
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║ ⚡ v858: الترشيح في السطر + تنفيذ بالجملة                          ║
+// ╚══════════════════════════════════════════════════════════════════╝
+// ٢٣٨ حركة مستحيل تتفتح واحدة واحدة. بنجيب أحسن ترشيح لكلها دفعة
+// واحدة، نعرضه في السطر، ونتحدد **المؤكّد بس** تلقائياً.
+// اللي مش مؤكّد بيبان بعلامة ⚠️ وبيفضل من غير تحديد — عشان «نفّذ
+// المحدد» ما يرحّلش فلوس غلط على عشرات الحركات.
+let _BKG = {};     // id → { type, top, confident }
+
+async function bkSuggestAll(ids){
+  _BKG = {};
+  for(const id of ids){ const e = $(`bksg-${id}`); if(e) e.textContent = '⏳'; }
+  try{
+    const r = await apiFetch('/api/bank/suggest-batch','POST',{ ids });
+    if(!r || r.error) throw new Error(r?.error || _apiLastErr || 'فشل');
+    _BKG = r.out || {};
+  }catch(e){
+    for(const id of ids){ const el = $(`bksg-${id}`); if(el) el.textContent = ''; }
+    return;
+  }
+  let auto = 0;
+  for(const id of ids){
+    const g = _BKG[id], el = $(`bksg-${id}`);
+    if(!el) continue;
+    const t = g?.top;
+    if(!t){ el.innerHTML = '<span style="color:var(--muted)">— مفيش ترشيح، افتح وراجع</span>'; continue; }
+    const money = v => Number(v||0).toLocaleString('ar-EG');
+    const why = (t.why||[]).slice(0,3).join(' · ');
+    el.innerHTML = `
+      <span style="color:${g.confident?'#16a34a':'#b45309'};font-weight:800">
+        ${g.confident?'✅ مؤكّد':'⚠️ راجعه'}</span>
+      <b style="color:var(--text)">${escapeHtml(String(t.id))}</b>
+      · ${escapeHtml(t.name||'')} · <b>${money(t.total)} ج</b>
+      · <span style="direction:ltr;display:inline-block">${escapeHtml(t.at||'')}</span>
+      ${t.status?` · ${escapeHtml(t.status)}`:''}
+      ${why?` · <i>${escapeHtml(why)}</i>`:''}
+      ${g.count>1?` · <span style="color:var(--muted)">(+${g.count-1} احتمال)</span>`:''}
+      <button class="btn btn-sm" style="padding:1px 9px;font-size:11px;margin-inline-start:6px"
+        onclick="bkPostOne(${id})">⚡ نفّذ</button>`;
+    // 🛡️ المؤكّد بس هو اللي بيتعلّم لوحده
+    if(g.confident){
+      const cb = document.querySelector(`.bk-pick[data-id="${id}"]`);
+      if(cb){ cb.checked = true; auto++; }
+    }
+  }
+  bkPickChanged();
+  if(auto){
+    const nt = $('bk-bulk-note');
+    if(nt) nt.textContent = `اتحدد ${auto} مؤكّد تلقائياً · اللي عليه ⚠️ محتاج تراجعه بنفسك`;
+  }
+}
+
+function bkPicked(){
+  return [...document.querySelectorAll('.bk-pick')].filter(x=>x.checked)
+    .map(x=>parseInt(x.dataset.id,10));
+}
+function bkPickChanged(){
+  const ids = bkPicked();
+  const bar = $('bk-bulk'); if(!bar) return;
+  bar.style.display = ids.length ? 'flex' : 'none';
+  const warn = ids.filter(id => !_BKG[id]?.confident).length;
+  const n = $('bk-bulk-n');
+  if(n) n.innerHTML = `${ids.length} حركة متحددة` +
+    (warn ? ` · <span style="color:#b45309">${warn} منهم مش مؤكّد</span>` : '');
+}
+function bkToggleAll(on){
+  // «حدد الكل» بيحدد المؤكّد بس — مش كل حاجة
+  document.querySelectorAll('.bk-pick').forEach(cb => {
+    const id = parseInt(cb.dataset.id,10);
+    cb.checked = on ? !!_BKG[id]?.confident : false;
+  });
+  const a = $('bk-all'); if(a && !on) a.checked = false;
+  bkPickChanged();
+}
+
+// تنفيذ حركة واحدة من السطر من غير ما تفتح
+async function bkPostOne(id){
+  const g = _BKG[id]; const t = g?.top;
+  if(!t) return toast('مفيش ترشيح — افتح وراجع');
+  if(!g.confident && !confirm(`الترشيح ده مش مؤكّد:\n${t.id} · ${t.name} · ${t.total} ج\n\nتنفّذه برضه؟`)) return;
+  const el = $(`bksg-${id}`); if(el) el.innerHTML = '⏳ بينفّذ...';
+  const r = await apiFetch(`/api/bank/tx/${id}/post`,'POST', bkBodyFor(g));
+  if(!r || r.error){
+    if(el) el.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(r?.error||_apiLastErr||'فشل')}</span>`;
+    return;
+  }
+  toast('✅ اتنفّذت');
+  $(`bkr-${id}`)?.remove(); $(`bks-${id}`)?.remove();
+  bkPickChanged();
+}
+
+// شكل الجسم حسب نوع الترشيح
+function bkBodyFor(g){
+  if(g.type === 'order')  return { order_id: String(g.top.id) };
+  if(g.type === 'cheque') return { cheque_id: g.top.id };
+  if(g.type === 'return') return { return_id: g.top.id };
+  return {};
+}
+
+async function bkPostBatch(){
+  const ids = bkPicked();
+  if(!ids.length) return;
+  const warn = ids.filter(id => !_BKG[id]?.confident).length;
+  if(!confirm(`هيتنفّذ ${ids.length} حركة في Zoho` +
+      (warn ? `\n⚠️ منهم ${warn} ترشيحهم مش مؤكّد` : '') +
+      `\n\nتكمّل؟`)) return;
+  const items = ids.filter(id => _BKG[id]?.top).map(id => ({ id, body: bkBodyFor(_BKG[id]) }));
+  if(!items.length) return toast('مفيش ترشيحات للمحدد');
+  toast(`⏳ بينفّذ ${items.length}...`);
+  const r = await apiFetch('/api/bank/post-batch','POST',{ items });
+  if(!r || r.error) return toast('❌ ' + (r?.error || _apiLastErr || 'فشل'));
+  for(const row of (r.rows||[])){
+    if(row.ok){ $(`bkr-${row.id}`)?.remove(); $(`bks-${row.id}`)?.remove(); }
+    else { const el = $(`bksg-${row.id}`);
+      if(el) el.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(row.error||'فشل')}</span>`; }
+  }
+  toast(`✅ ${r.ok} اتنفّذت${r.failed?` · ❌ ${r.failed} فشلت`:''}${r.stopped?` · ${r.stopped}`:''}`);
+  bkPickChanged();
+  if(r.ok) setTimeout(()=>bkLoad(_BK.page), 800);
 }
 
 function bkFilter(k, v){ _BK.filter[k] = v; _BK.page = 0; bkLoad(); }
@@ -64469,6 +64605,7 @@ function bkPartiesRender(){
       ${unmapped ? `<b style="color:#92400e">${unmapped} طرف لسه مش مربوط</b>`
                  : '<b style="color:#166534">✅ كل الأطراف مربوطة</b>'}
       · إجمالي ${_BKP.rows.length}</div>
+    ${bkPartyDatalist()}
     <div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
       <thead><tr style="background:var(--bg)">
         <th style="padding:7px;text-align:right">الطرف</th>
@@ -64498,16 +64635,37 @@ function bkPartiesRender(){
     <button class="btn btn-sm btn-ghost" style="margin-top:10px" onclick="bkLoad()">← رجوع للحركات</button>`;
 }
 
+// 🔎 v858: الاسم المكتوب → id المورد. لو مش متطابق بنسيبه فاضي
+//   بدل ما نربطه بمورد غلط.
+function bkPartySaveSup(i, inp){
+  const v = String(inp.value || '').trim();
+  const hit = _BKP.suppliers.find(s =>
+    String(s.name||s.company_name||'').trim() === v);
+  if(v && !hit){
+    inp.style.borderColor = '#dc2626';
+    toast('اختار اسم من القايمة');
+    return;
+  }
+  inp.style.borderColor = '';
+  bkPartySave(i, 'supplier', { value: hit ? hit.id : '' });
+}
+
+function bkPartyDatalist(){
+  return `<datalist id="bkp-sups">${_BKP.suppliers.map(s =>
+    `<option value="${escapeHtml(s.name||s.company_name||'')}">`).join('')}</datalist>`;
+}
+
 // الاختيار التاني بيتغيّر حسب نوع الربط
 function bkPartyPick(i){
   const r = _BKP.rows[i], t = r.mapped?.target;
   if(t === 'supplier'){
-    return `<select class="form-input" style="width:190px;padding:4px 7px"
-             onchange="bkPartySave(${i},'supplier',this)">
-      <option value="">— اختار المورد —</option>
-      ${_BKP.suppliers.map(s => `<option value="${escapeHtml(s.id)}"
-        ${String(r.mapped?.supplier_id)===String(s.id)?'selected':''}>${escapeHtml(s.name||s.company_name||'')}</option>`).join('')}
-    </select>`;
+    // 🔎 v858: قايمة الموردين طويلة — datalist بيخلي الكتابة تفلتر
+    //   وبيفضل ينفع تختار من القايمة زي ما هي.
+    const cur = _BKP.suppliers.find(s => String(s.id) === String(r.mapped?.supplier_id));
+    return `<input class="form-input" style="width:190px;padding:4px 7px"
+             list="bkp-sups" placeholder="اكتب اسم المورد..."
+             value="${escapeHtml(cur ? (cur.name||cur.company_name||'') : '')}"
+             onchange="bkPartySaveSup(${i}, this)">`;
   }
   if(t === 'account'){
     return `<select class="form-input" style="width:190px;padding:4px 7px"
