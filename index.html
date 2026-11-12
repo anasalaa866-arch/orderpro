@@ -11641,7 +11641,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v862';
+const UI_BUILD = 'v863';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -37569,6 +37569,7 @@ async function openNewPO(skipSuggestionsDraft){
           variantTitle: it.variantTitle || '',
           sku: it.sku || '',
           barcode: it.barcode || '',
+          imageUrl: it.imageUrl || it.image_url || '',    // 🖼️ v863
           // 🐛 v861: كان `qty` — والشاشة كلها بتقرا `orderedQty`، فأي صنف
           //   جاي من ذكاء الشراء كان بييجي من غير كمية (وبيتحفظ بصفر).
           orderedQty: parseInt(it.qty ?? it.orderedQty) || 1,
@@ -37756,6 +37757,26 @@ function _poItemKey(it){
        + '|'  + String(it?.variantTitle || '').trim().toLowerCase();
 }
 
+// 🖼️ v863: صورة الصنف في سطور أمر الشراء. الصورة جاية من
+//   inventory_products (السيرفر بيعملها COALESCE بالـ variant ثم SKU ثم
+//   الباركود). لو فشل تحميلها أو مش موجودة أصلاً بيبان مربع 📦 بدالها،
+//   فالسطر مابيتهزّش ومابيفضلش مكان فاضي.
+function _poThumb(it, px = 44){
+  const url = it && (it.imageUrl || it.image_url) ? String(it.imageUrl || it.image_url) : '';
+  const box = `width:${px}px;height:${px}px`;
+  const ph  = `${box};display:flex;align-items:center;justify-content:center;border-radius:8px;`
+            + `border:1px dashed #c9cccf;background:#fafbfb;font-size:${Math.round(px*0.4)}px;color:#8c9196`;
+  return `<div style="flex:0 0 auto;position:relative;${box}">`
+       + (url
+          ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" decoding="async"
+                 style="${box};object-fit:cover;border-radius:8px;border:1px solid #e1e3e5;background:#fff;display:block"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+          : '')
+       + `<div style="${ph};position:absolute;inset:0;${url ? 'display:none' : ''}"
+               title="${url ? 'الصورة مش راضية تحمّل' : 'مفيش صورة للصنف ده'}">📦</div>`
+       + `</div>`;
+}
+
 // بترجّع Map: المفتاح → مصفوفة الـ indexes، للسطور اللي اتكررت بس
 function _poDupGroups(items){
   const all = new Map();
@@ -37824,7 +37845,9 @@ function renderPOItems(){
     return `
     <div data-poitem-row="${i}" style="padding:14px 20px;border-bottom:1px solid ${borderColor};display:grid;grid-template-columns:1fr 64px 92px 62px 58px 100px 96px 26px;gap:8px;align-items:center;font-size:13px;background:${bgColor};transition:background 0.6s" onmouseover="this.style.background='#fafbfb'" onmouseout="this.style.background='${bgColor}'">
       <!-- Product info -->
-      <div style="min-width:0">
+      <div style="min-width:0;display:flex;gap:10px;align-items:flex-start">
+        ${_poThumb(it)}
+        <div style="min-width:0;flex:1">
         <div style="font-weight:600;color:#1a1c1d;font-size:13px;line-height:1.4;word-break:break-word">${escapeHtml(it.productTitle)}${it.variantTitle ? ' - '+escapeHtml(it.variantTitle) : ''}${_dupOf.has(i) ? `<span style="display:inline-block;margin-inline-start:6px;padding:1px 6px;border-radius:999px;font-size:10px;font-weight:800;font-family:monospace;background:${_dupOf.get(i).difPrice ? '#dcfce7;color:#15803d' : '#fef3c7;color:#92400e'}" title="${_dupOf.get(i).difPrice ? 'نفس الصنف بسعر مختلف — طبيعي' : 'نفس الصنف بنفس السعر — اتأكد إنه مش مكرر بالغلط'}">مكرر ${_dupOf.get(i).pos}/${_dupOf.get(i).n}</span>` : ''}</div>
         ${it.sku || it.barcode ? `
           <div style="font-size:11px;color:#6d7175;margin-top:3px;font-family:monospace">
@@ -37840,8 +37863,9 @@ function renderPOItems(){
             style="padding:3px 5px;font-size:11px;font-family:monospace;border:1px solid ${it.expDate ? '#16a34a' : '#c9cccf'};border-radius:5px;background:${it.expDate ? '#f0fdf4' : '#fff'}"
             title="سيبه فاضي لو المنتج مالوش صلاحية — لو اتملى، هيتعمل batch وقت إرسال الأمر">
         </label>
+        </div>
       </div>
-      
+
       <!-- Quantity (editable inline) -->
       <div>
         <input type="number" min="1" value="${it.orderedQty}" 
@@ -38097,6 +38121,7 @@ async function handleBarcodeQuickAdd(){
         variantTitle: match.variant_title || '',
         sku: match.sku || '',
         barcode: match.barcode || '',
+        imageUrl: match.image_url || '',                  // 🖼️ v863
         orderedQty: 1,
         unitCost: 0,
         discountPct: 0,                                   // 🧮 v587
@@ -38173,9 +38198,12 @@ async function searchPOItem(){
         resultsEl.innerHTML = '<div style="padding:10px;text-align:center;color:var(--muted);font-size:12px">مفيش نتائج</div>';
       } else {
         resultsEl.innerHTML = _poVariantSearchResults.map((v, i) => `
-          <div onclick="selectPOItem(${i})" style="padding:10px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px" onmouseover="this.style.background='var(--elev)'" onmouseout="this.style.background='transparent'">
-            <div style="font-weight:700">${escapeHtml(v.product_title || v.title || '')}${v.variant_title ? ' - '+escapeHtml(v.variant_title) : ''}</div>
-            <div style="color:var(--muted);font-size:11px">${v.sku ? 'SKU: '+escapeHtml(v.sku) : ''} ${v.barcode ? '· '+escapeHtml(v.barcode) : ''}</div>
+          <div onclick="selectPOItem(${i})" style="padding:10px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px;display:flex;gap:9px;align-items:center" onmouseover="this.style.background='var(--elev)'" onmouseout="this.style.background='transparent'">
+            ${_poThumb(v, 34)}
+            <div style="min-width:0;flex:1">
+              <div style="font-weight:700">${escapeHtml(v.product_title || v.title || '')}${v.variant_title ? ' - '+escapeHtml(v.variant_title) : ''}</div>
+              <div style="color:var(--muted);font-size:11px">${v.sku ? 'SKU: '+escapeHtml(v.sku) : ''} ${v.barcode ? '· '+escapeHtml(v.barcode) : ''}</div>
+            </div>
           </div>
         `).join('');
       }
@@ -38196,7 +38224,8 @@ function selectPOItem(idx){
     productTitle: v.product_title || v.title,
     variantTitle: v.variant_title || '',
     sku: v.sku || '',
-    barcode: v.barcode || ''
+    barcode: v.barcode || '',
+    imageUrl: v.image_url || ''                 // 🖼️ v863
   };
   
   document.getElementById('po-selected-name').textContent = _poSelectedItem.productTitle + (_poSelectedItem.variantTitle ? ' - ' + _poSelectedItem.variantTitle : '');
@@ -38402,6 +38431,7 @@ async function editPODraft(id){
       variantTitle: it.variant_title || '',
       sku:         it.sku || '',
       barcode:     it.barcode || '',
+      imageUrl:    it.image_url || '',          // 🖼️ v863
       orderedQty:  parseInt(it.ordered_qty) || 1,
       // السعر المعلن هو اللي بيتعدّل؛ الصافي بيتحسب منه بالخصم والضريبة
       unitCost:    parseFloat(it.list_price != null ? it.list_price : it.unit_cost) || 0,
