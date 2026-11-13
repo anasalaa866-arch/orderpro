@@ -11642,7 +11642,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v865';
+const UI_BUILD = 'v866';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -37767,6 +37767,12 @@ function _poItemKey(it){
 //   inventory_products (السيرفر بيعملها COALESCE بالـ variant ثم SKU ثم
 //   الباركود). لو فشل تحميلها أو مش موجودة أصلاً بيبان مربع 📦 بدالها،
 //   فالسطر مابيتهزّش ومابيفضلش مكان فاضي.
+// 🖼️ v866: صورة صنف في أي جدول — نفس السلوك في كل مكان: لو مفيش صورة
+//   أو الرابط وقع، بيبان مربع 📦 بنفس المقاس فالصفوف مابتتهزّش.
+function _imgThumb(url, px = 44){
+  return _poThumb({ imageUrl: url }, px);
+}
+
 function _poThumb(it, px = 44){
   const url = it && (it.imageUrl || it.image_url) ? String(it.imageUrl || it.image_url) : '';
   const box = `width:${px}px;height:${px}px`;
@@ -47340,7 +47346,13 @@ function talabatRender(){
     </tr></thead><tbody>${rows.slice(0,800).map(l=>`<tr style="${l.matched?'':'background:#fef2f2'}">
       <td style="font-weight:600">${escapeHtml(l.talabat_name||'—')}</td>
       <td>${l.matched
-          ? `<span style="color:#15803d">${escapeHtml(l.matched_name||'—')}</span> <button class="btn btn-ghost" style="padding:1px 6px;font-size:10px" onclick="talabatOpenLink(${l.id})" title="تغيير الربط">✏️</button>`
+          ? `<div style="display:flex;gap:8px;align-items:center">
+               ${_imgThumb(l.matched_image, 38)}
+               <div style="min-width:0;flex:1">
+                 <span style="color:#15803d">${escapeHtml(l.matched_name||'—')}</span>
+                 <button class="btn btn-ghost" style="padding:1px 6px;font-size:10px" onclick="talabatOpenLink(${l.id})" title="تغيير الربط">✏️</button>
+               </div>
+             </div>`
           : `<button class="btn" style="background:#2563eb;color:#fff;padding:4px 12px;font-size:12px" onclick="talabatOpenLink(${l.id})">🔗 ربط</button>`}</td>
       <td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(l.talabat_sku)}</td>
       <td style="text-align:center;font-weight:700">${l.matched?l.trivium_qty:'—'}</td>
@@ -47383,8 +47395,9 @@ function talabatSearchProducts(){
       const r=await apiFetch(`/api/inventory/search?q=${encodeURIComponent(q)}&limit=25`,'GET');
       const res=(r&&r.results)||[];
       if(!res.length){ $('tal-link-results').innerHTML='<div style="padding:12px;color:var(--muted);font-size:12px">مفيش نتايج</div>'; return; }
-      $('tal-link-results').innerHTML=res.map(p=>`<div onclick="talabatPickProduct('${p.variant_id}')" style="padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;gap:8px" onmouseover="this.style.background='var(--hover,#f1f5f9)'" onmouseout="this.style.background=''">
-        <div><div style="font-weight:600;font-size:13px">${escapeHtml(p.product_title)}${p.variant_title&&p.variant_title!=='Default Title'?' · '+escapeHtml(p.variant_title):''}</div>
+      $('tal-link-results').innerHTML=res.map(p=>`<div onclick="talabatPickProduct('${p.variant_id}')" style="padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:9px" onmouseover="this.style.background='var(--hover,#f1f5f9)'" onmouseout="this.style.background=''">
+        ${_imgThumb(p.image_url, 34)}
+        <div style="min-width:0;flex:1"><div style="font-weight:600;font-size:13px">${escapeHtml(p.product_title)}${p.variant_title&&p.variant_title!=='Default Title'?' · '+escapeHtml(p.variant_title):''}</div>
         <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(p.barcode||p.sku||'')} · ${(Number(p.price)||0).toLocaleString()} ج</div></div>
       </div>`).join('');
     }catch(e){ $('tal-link-results').innerHTML=`<div style="padding:12px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`; }
