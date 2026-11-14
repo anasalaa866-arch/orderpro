@@ -11713,7 +11713,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v877';
+const UI_BUILD = 'v878';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -35197,10 +35197,31 @@ async function tpCreateBulkTransfer(){
       fromWarehouseId: _tpData.from.warehouse_id,
       toWarehouseId: _tpData.to.warehouse_id,
       notes: `تحويل مجمّع من ذكاء التحويلات (${new Date().toLocaleDateString('ar-EG')}) — ${items.length} منتج`,
-      items
+      items,
+      pushToShopify: true            // 🚚 v878: يتعمل Transfer على شوبيفاي ونكمّل هناك
     };
     const r = await apiFetch('/api/transfers', 'POST', payload);
     if(r && (r.success || r.id)){
+      // 🚚 v878: النتيجة على شوبيفاي — نجاح أو فشل، بس مش في صمت
+      const sh = r.shopify;
+      if(sh && sh.ok){
+        const skipped = sh.skipped || [];
+        infoModal('✅ التحويل اتعمل على شوبيفاي',
+          `رقم التحويل عندنا: ${r.transferNumber}\n` +
+          `على شوبيفاي: ${sh.name}\n` +
+          `اتبعت ${sh.sent} صنف · ${totalQty} قطعة\n\n` +
+          (skipped.length
+            ? `⚠️ اتشال ${skipped.length} صنف مش مربوط بشوبيفاي:\n` +
+              skipped.slice(0, 25).map(x => `  • ${x.title}${x.sku ? ' (' + x.sku + ')' : ''}`).join('\n') +
+              (skipped.length > 25 ? `\n  … و${skipped.length - 25} غيرهم` : '') +
+              `\n\nدول مااتحوّلوش — اربطهم بشوبيفاي وحوّلهم لوحدهم.\n\n`
+            : '') +
+          `كمّل الشحن والاستلام من شوبيفاي — الأرصدة هترجعلنا لوحدها.`);
+      }else if(sh){
+        infoModal('⚠️ التحويل اتسجّل عندنا بس ماوصلش شوبيفاي',
+          `رقم التحويل: ${r.transferNumber}\n\nالسبب: ${_errText(sh.error, 'مش معروف')}\n\n` +
+          `التحويل موجود عندنا بحالة «قيد الانتظار» — تقدر تبعته لشوبيفاي تاني بعد ما تظبّط السبب.`);
+      }
       toast(`✅ تم إنشاء التحويل: ${items.length} منتج · ${totalQty} قطعة`);
       // أعد التحليل عشان نشوف الأرصدة المحدّثة
       setTimeout(() => tpAnalyze(), 800);
