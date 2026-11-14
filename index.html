@@ -11642,7 +11642,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v866';
+const UI_BUILD = 'v868';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -12842,6 +12842,31 @@ async function apiFetch(path, method='GET', body=null){
     _apiLastErr = { path, msg: e.message, at: Date.now() };   // 🚑 v766
     return null;
   }
+}
+
+// 🚑 v867: `_apiLastErr` بقى object من v766 ({path, msg, at})، بس 15 مكان
+//   في الكود لسه بيلزقه في نص على طول — فالمستخدم كان بيشوف
+//   «❌ التصفية ماتمتش: [object Object]» بدل السبب الحقيقي.
+//   الدالة دي بتطلّع نص مقروء من أي حاجة: Error أو object أو نص أو null.
+function _errText(x, fallback = 'خطأ مش معروف'){
+  if(x == null) return fallback;
+  if(typeof x === 'string') return x.trim() || fallback;
+  if(x instanceof Error) return x.message || fallback;
+  if(typeof x === 'object'){
+    const m = x.msg ?? x.message ?? x.error ?? x.detail ?? x.hint;
+    if(typeof m === 'string' && m.trim()){
+      const txt = /^\d+$/.test(m.trim()) ? `السيرفر ردّ ${m.trim()}` : m.trim();
+      return x.path ? `${txt} — ${x.path}` : txt;
+    }
+    if(m && typeof m === 'object') return _errText(m, fallback);
+    try{
+      const j = JSON.stringify(x);
+      if(j && j !== '{}' && j !== 'null') return j.slice(0, 300);
+    }catch(_){}
+    return fallback;
+  }
+  const s = String(x);
+  return (!s || s === '[object Object]') ? fallback : s;
 }
 
 // 🚑 v766: استعملها مكان `if(d?.error) throw` لما الكود بعدها هيقرا من d.
@@ -28743,7 +28768,7 @@ async function accMissingLoad(){
   const box = $('acc-missing'); if(!box) return;
   box.style.display = ''; box.innerHTML = '<div class="card"><div style="padding:14px;color:var(--muted)">⏳ بيفحص...</div></div>';
   const r = await apiFetch('/api/settlements/missing-treasury?days=180');
-  if(!r || r.error){ box.innerHTML = `<div class="card"><div style="padding:14px;color:var(--danger)">❌ ${escapeHtml(r?.error||_apiLastErr||'فشل')}</div></div>`; return; }
+  if(!r || r.error){ box.innerHTML = `<div class="card"><div style="padding:14px;color:var(--danger)">❌ ${escapeHtml(_errText(r?.error||_apiLastErr,'فشل'))}</div></div>`; return; }
   if(!r.missing){
     box.innerHTML = `<div class="card" style="border:2px solid #16a34a"><div style="padding:14px;color:#16a34a;font-weight:800">✅ كل التصفيات (${r.checked}) فلوسها مسجّلة في الخزنة</div></div>`;
     return;
@@ -28775,7 +28800,7 @@ async function accMissingPost(id){
   const treasuryId = $(`mst-${id}`)?.value;
   if(!treasuryId) return toast('❗ اختار الخزنة');
   const r = await apiFetch(`/api/settlements/${id}/post-treasury`,'POST',{ treasuryId });
-  if(!r || r.error) return toast('❌ ' + (r?.error || _apiLastErr || 'فشل'));
+  if(!r || r.error) return toast('❌ ' + _errText(r?.error || _apiLastErr, 'فشل'));
   toast(`✅ اتسجّلت — ${Number(r.net).toLocaleString()} ج`);
   $(`ms-${id}`)?.remove();
   loadTreasuries?.();
@@ -28938,11 +28963,11 @@ async function doSettle(){
     try{
       r = await apiFetch('/api/settlements','POST',
         {courierId:c.id,ts:now,orderIds,cod,ship,adj,adjTotal,adjustmentIds,treasuryId});
-      if(!r) throw new Error(_apiLastErr || 'الطلب ماوصلش للسيرفر');
-      if(r.error || r.success === false) throw new Error(r.error || 'السيرفر رفض التصفية');
+      if(!r) throw new Error(_errText(_apiLastErr, 'الطلب ماوصلش للسيرفر'));
+      if(r.error || r.success === false) throw new Error(_errText(r.error, 'السيرفر رفض التصفية'));
     }catch(e){
       // مانقولش «تمت» وهي ماتمتش — ومانضيفهاش محلياً
-      toast('❌ التصفية ماتمتش: ' + (e.message || e));
+      toast('❌ التصفية ماتمتش: ' + _errText(e, 'سبب مش معروف'));
       return;
     }
     if(r.id) newS.id = r.id;
@@ -51608,7 +51633,7 @@ async function hrDelete(id, name){
   let chk;
   try{
     chk = await apiFetch(`/api/hr/employees/${id}/delete-check`, 'GET');
-    if(!chk?.ok) throw new Error(chk?.error || _apiLastErr || 'فشل الفحص');
+    if(!chk?.ok) throw new Error(_errText(chk?.error || _apiLastErr, 'فشل الفحص'));
     // 🚑 v796: من غير ده، counts الناقصة بتكسر السطر اللي تحت بـ TypeError
     if(!chk.counts) throw new Error('السيرفر مارجّعش تفاصيل الموظف');
   }catch(e){ return toast('❌ ' + e.message); }
@@ -51640,7 +51665,7 @@ async function hrDelete(id, name){
     // 🚑 v796: apiFetch بترجّع null لما الطلب يفشل (404، نت، أي حاجة).
     //   `r?.error` مابتمسكش ده، فالشاشة كانت بتقول «اتمسح» والموظف
     //   مكانه. على فعل حذف، ده أسوأ نوع كذب.
-    if(!r) throw new Error(_apiLastErr || 'الطلب ماوصلش — الموظف مااتمسحش');
+    if(!r) throw new Error(_errText(_apiLastErr, 'الطلب ماوصلش — الموظف مااتمسحش'));
     if(r.error) throw new Error(r.error);
     if(r.success !== true) throw new Error('السيرفر مارجّعش تأكيد الحذف');
     toast('🗑️ اتمسح');
@@ -52891,7 +52916,7 @@ async function pmsLoad(){
   if($('pms-to')?.value)   q.set('to',   $('pms-to').value);
   box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">⏳</div>';
   const r = await apiFetch('/api/paymob/settlement?' + q);
-  if(!r){ box.innerHTML = `<div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(_apiLastErr||'الطلب ماوصلش')}</div>`; return; }
+  if(!r){ box.innerHTML = `<div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(_errText(_apiLastErr,'الطلب ماوصلش'))}</div>`; return; }
   if(r.error){ box.innerHTML = `<div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(r.error)}</div>`; return; }
   _pmsData = r;
   if($('pms-from') && !$('pms-from').value) $('pms-from').value = r.from;
@@ -52908,7 +52933,7 @@ async function pmsSaveCfg(){
   const r = await apiFetch('/api/paymob/settlement/config','POST',
     { pattern: $('pms-pat')?.value, tolerance: $('pms-tol')?.value,
       fee_pct: $('pms-fee')?.value, gw_pattern: $('pms-gw')?.value });   // 💳 v845
-  if(!r) return toast('❌ ' + (_apiLastErr || 'الطلب ماوصلش'));
+  if(!r) return toast('❌ ' + _errText(_apiLastErr, 'الطلب ماوصلش'));
   if(r.error) return toast('❌ ' + r.error);
   toast('✅ اتحفظ'); pmsLoad();
 }
@@ -52936,7 +52961,7 @@ async function pmsBackfill(){
   if(!confirm('هيجيب بوابة الدفع من شوبيفاي للطلبات اللي مالهاش.\nممكن ياخد دقيقة أو اتنين.')) return;
   toast('⏳ بيجيب...');
   const r = await apiFetch('/api/paymob/backfill-gateways','POST',{ days: 60 });
-  if(!r || r.error) return toast('❌ ' + (r?.error || _apiLastErr || 'فشل'));
+  if(!r || r.error) return toast('❌ ' + _errText(r?.error || _apiLastErr, 'فشل'));
   toast(`✅ ${r.done} طلب اتظبط${r.failed ? ` · ${r.failed} فشل` : ''}${r.more ? ' · فيه كمان — دوس تاني' : ''}`);
   pmsLoad();
 }
@@ -53000,7 +53025,7 @@ async function maRun(){
   const b = $('ma-run'); if(b){ b.disabled = true; b.textContent = '⏳ بيفحص...'; }
   try{
     const r = await apiFetch('/api/catalog/margin-audit/run','POST',{});
-    if(!r) throw new Error(_apiLastErr || 'الطلب ماوصلش');
+    if(!r) throw new Error(_errText(_apiLastErr, 'الطلب ماوصلش'));
     if(r.error) throw new Error(r.error);
     // الفحص في الخلفية — بنسأل كل 3 ثواني لحد ما يخلص
     clearInterval(_maPoll);
@@ -53015,7 +53040,7 @@ async function maLoad(){
   const thr = parseFloat($('ma-thr')?.value) || 15;
   const r = await apiFetch('/api/catalog/margin-audit?threshold=' + encodeURIComponent(thr));
   const st = $('ma-state'), b = $('ma-run');
-  if(!r){ if(st) st.textContent = '❌ ' + (_apiLastErr || 'الطلب ماوصلش'); return; }
+  if(!r){ if(st) st.textContent = '❌ ' + _errText(_apiLastErr, 'الطلب ماوصلش'); return; }
   if(r.running){ if(st) st.textContent = '⏳ بيسحب من شوبيفاي...'; return; }
   clearInterval(_maPoll); _maPoll = null;
   if(b){ b.disabled = false; b.textContent = '🔍 افحص الكتالوج'; }
@@ -64281,7 +64306,7 @@ async function bkSuggestAll(ids){
   for(const id of ids){ const e = $(`bksg-${id}`); if(e) e.textContent = '⏳'; }
   try{
     const r = await apiFetch('/api/bank/suggest-batch','POST',{ ids });
-    if(!r || r.error) throw new Error(r?.error || _apiLastErr || 'فشل');
+    if(!r || r.error) throw new Error(_errText(r?.error || _apiLastErr, 'فشل'));
     _BKG = r.out || {};
   }catch(e){
     for(const id of ids){ const el = $(`bksg-${id}`); if(el) el.textContent = ''; }
@@ -64350,7 +64375,7 @@ async function bkPostOne(id){
   const el = $(`bksg-${id}`); if(el) el.innerHTML = '⏳ بينفّذ...';
   const r = await apiFetch(`/api/bank/tx/${id}/post`,'POST', bkBodyFor(g));
   if(!r || r.error){
-    if(el) el.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(r?.error||_apiLastErr||'فشل')}</span>`;
+    if(el) el.innerHTML = `<span style="color:#dc2626">❌ ${escapeHtml(_errText(r?.error||_apiLastErr,'فشل'))}</span>`;
     return;
   }
   toast('✅ اتنفّذت');
@@ -64377,7 +64402,7 @@ async function bkPostBatch(){
   if(!items.length) return toast('مفيش ترشيحات للمحدد');
   toast(`⏳ بينفّذ ${items.length}...`);
   const r = await apiFetch('/api/bank/post-batch','POST',{ items });
-  if(!r || r.error) return toast('❌ ' + (r?.error || _apiLastErr || 'فشل'));
+  if(!r || r.error) return toast('❌ ' + _errText(r?.error || _apiLastErr, 'فشل'));
   for(const row of (r.rows||[])){
     if(row.ok){ $(`bkr-${row.id}`)?.remove(); $(`bks-${row.id}`)?.remove(); }
     else { const el = $(`bksg-${row.id}`);
@@ -64787,7 +64812,7 @@ async function cfgSave(key, el, reset){
   const send = async confirmed => {
     const b = reset ? { key, reset:true } : { key, value: el.value, confirm: confirmed };
     const r = await apiFetch('/api/config', 'POST', b);
-    if(r === null) throw new Error(_apiLastErr?.msg || 'النداء فشل');
+    if(r === null) throw new Error(_errText(_apiLastErr, 'النداء فشل'));
     return r;
   };
   try{
@@ -66311,7 +66336,7 @@ async function tproSave(){
     const pricePct = ($('tpro-price-pct')?.value || '').trim();   // 🏷️ v818
     const r = await apiFetch('/api/talabat/tpro','POST',
       { enabled: en, pct, days, price_pct: pricePct === '' ? 0 : pricePct });
-    if(!r) return toast(_apiLastErr || 'الطلب ماوصلش','error');   // 🚑
+    if(!r) return toast(_errText(_apiLastErr, 'الطلب ماوصلش'),'error');   // 🚑
     if(r?.error) return toast(r.error,'error');
     toast(en ? '⭐ الخصم شغّال' : '🔴 الخصم اتقفل', 'success');
     await tproLoad();
