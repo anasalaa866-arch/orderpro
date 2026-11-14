@@ -2203,6 +2203,26 @@ tr:hover td{background:#fafbff}
         <div style="margin-top:6px;font-size:11px;color:var(--muted)">بيرجّع المخزون على Shopify فوراً (refund بصفر فلوس). مالوش علاقة بمرتجعات المحل/الكاشير.</div>
       </div>
     </div>
+    <!-- 📊 v873: سحب مرتجعات المحل Excel -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="padding:14px">
+        <div style="font-weight:800;margin-bottom:6px">📊 سحب مرتجعات المحل — Excel</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+          مرتجعات الكاشير (RET-…) — ورقة بالمرتجعات وورقة بالأصناف سطر سطر.
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <label style="font-size:12px;color:var(--muted)">من
+            <input type="date" id="rex-from" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px"></label>
+          <label style="font-size:12px;color:var(--muted)">لـ
+            <input type="date" id="rex-to" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px"></label>
+          <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:4px">
+            <input type="checkbox" id="rex-voided"> يشمل الملغي</label>
+          <button class="btn btn-primary" onclick="posReturnsExport()">📊 نزّل Excel</button>
+          <span id="rex-status" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+      </div>
+    </div>
+
     <!-- 🔍 v872: مرتجعات المحل اللي رجعت على المخزن الغلط -->
     <div class="card" style="margin-bottom:14px">
       <div style="padding:14px">
@@ -11663,7 +11683,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v872';
+const UI_BUILD = 'v873';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -46648,6 +46668,51 @@ async function stkRepair(dryRun){
 let _ret={ shopify_id:null, name:null, items:[] };
 function returnsInit(){ returnsHistory(); }
 
+// 📊 v873: سحب مرتجعات المحل Excel
+async function posReturnsExport(){
+  const st = $('rex-status');
+  const from = $('rex-from')?.value || '', to = $('rex-to')?.value || '';
+  const voided = $('rex-voided')?.checked ? '1' : '';
+  if(st) st.textContent = '⏳ بنجيب المرتجعات...';
+  try{
+    const qs = new URLSearchParams();
+    if(from) qs.set('from', from);
+    if(to)   qs.set('to', to);
+    if(voided) qs.set('voided', '1');
+    const r = await apiFetch('/api/pos/returns/export' + (qs.toString() ? '?' + qs : ''));
+    if(!r || r.error) throw new Error(_errText(r?.error || _apiLastErr, 'السحب فشل'));
+    if(!r.returns.length){ if(st) st.textContent = 'مفيش مرتجعات في المدة دي'; return; }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(r.returns.map(x => ({
+      'رقم المرتجع': x.return_number, 'التاريخ': x.at,
+      'المحل': x.store_of_return || x.store_name, 'الكاشير': x.cashier_name,
+      'العميل': x.customer_name, 'التليفون': x.customer_phone,
+      'البيعة الأصلية': x.original_sale_number, 'أوردر شوبيفاي': x.shopify_order_name,
+      'عدد الأصناف': x.items_count, 'المبلغ': Number(x.refund_total) || 0,
+      'طريقة الاسترداد': x.refund_method, 'السبب': x.reason, 'ملاحظات': x.refund_notes,
+      'الاعتماد': x.approval_status, 'اعتمدها': x.approved_by_name,
+      'اتزامن مع شوبيفاي': x.synced_to_shopify ? 'نعم' : 'لا',
+      'خطأ المزامنة': x.sync_error || '',
+      'ملغي': x.voided_at ? 'نعم' : '', 'ألغاه': x.voided_by || '',
+      'الطريقة قبل التعديل': x.method_changed_from || ''
+    }))), 'المرتجعات');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(r.lines.map(x => ({
+      'رقم المرتجع': x.return_number, 'التاريخ': x.at, 'المحل': x.store, 'الكاشير': x.cashier,
+      'البيعة': x.sale, 'أوردر شوبيفاي': x.order,
+      'SKU': x.sku, 'الصنف': x.title, 'الvariant': x.variant,
+      'الكمية': x.qty, 'سعر القطعة': x.unit_price, 'الإجمالي': x.line_total,
+      'رجع للمخزون': x.restock ? 'نعم' : 'لا',
+      'طريقة الاسترداد': x.method, 'السبب': x.reason
+    }))), 'الأصناف');
+    XLSX.writeFile(wb, `مرتجعات-المحل-${r.from}_${r.to}.xlsx`);
+    if(st) st.textContent = `✅ ${r.totals.returns} مرتجع · ${r.totals.items} صنف · `
+                          + `${r.totals.qty} قطعة · ${r.totals.amount.toLocaleString()} ج`;
+  }catch(e){
+    if(st) st.textContent = '❌ ' + _errText(e, 'فشل');
+  }
+}
+
 // 🔍 v872: فحص المخزن اللي المرتجعات رجعت عليه فعلاً
 async function retLocAudit(){
   const st = $('rla-status'), out = $('rla-out');
@@ -46690,19 +46755,25 @@ async function retLocAudit(){
       <div style="overflow:auto;max-height:280px;border:1px solid var(--border);border-radius:8px">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead><tr style="background:var(--elev);position:sticky;top:0">
+            <th style="padding:7px;text-align:right">رقم الطلب</th>
+            <th style="padding:7px;text-align:right">تاريخ الطلب</th>
             <th style="padding:7px;text-align:right">المرتجع</th>
-            <th style="padding:7px;text-align:right">التاريخ</th>
+            <th style="padding:7px;text-align:right">تاريخ المرتجع</th>
             <th style="padding:7px;text-align:right">المحل</th>
             <th style="padding:7px;text-align:right">الصنف</th>
+            <th style="padding:7px;text-align:right">SKU</th>
             <th style="padding:7px;text-align:center">كمية</th>
             <th style="padding:7px;text-align:right">رجع على</th>
             <th style="padding:7px;text-align:right">المفروض</th></tr></thead>
           <tbody>${r.rows.map(x => `<tr style="border-top:1px solid var(--border)">
+            <td style="padding:7px;font-weight:700;white-space:nowrap">${escapeHtml(x.order || '')}${x.sale_number ? `<div style="font-size:10px;color:var(--muted);font-weight:400;font-family:monospace">${escapeHtml(x.sale_number)}</div>` : ''}</td>
+            <td style="padding:7px;white-space:nowrap">${escapeHtml(x.order_at || '')}</td>
             <td style="padding:7px;font-family:monospace;font-size:11px">${escapeHtml(x.return_number)}</td>
-            <td style="padding:7px">${escapeHtml(x.at || '')}</td>
+            <td style="padding:7px;white-space:nowrap">${escapeHtml(x.at || '')}</td>
             <td style="padding:7px">${escapeHtml(x.store || '')}</td>
-            <td style="padding:7px">${escapeHtml(x.title || x.sku || '')}</td>
-            <td style="padding:7px;text-align:center">${x.qty}</td>
+            <td style="padding:7px">${escapeHtml(x.title || '')}</td>
+            <td style="padding:7px;font-family:monospace;font-size:11px">${escapeHtml(x.sku || '')}</td>
+            <td style="padding:7px;text-align:center;font-weight:700">${x.qty}</td>
             <td style="padding:7px;color:#dc2626">${escapeHtml(x.went_to)}</td>
             <td style="padding:7px;color:#15803d">${escapeHtml(x.should_be)}</td>
           </tr>`).join('')}</tbody>
@@ -46722,7 +46793,8 @@ function retLocAuditExcel(){
     'المخزن': c.location, 'الصنف': c.title, 'SKU': c.sku, 'التعديل المطلوب': c.delta
   }))), 'التصحيح');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(d.rows.map(x => ({
-    'المرتجع': x.return_number, 'التاريخ': x.at, 'الأوردر': x.order, 'المحل': x.store,
+    'رقم الطلب': x.order, 'تاريخ الطلب': x.order_at, 'رقم البيعة': x.sale_number,
+    'المرتجع': x.return_number, 'تاريخ المرتجع': x.at, 'المحل': x.store,
     'الصنف': x.title, 'SKU': x.sku, 'الكمية': x.qty,
     'رجع على': x.went_to, 'المفروض': x.should_be
   }))), 'السطور');
