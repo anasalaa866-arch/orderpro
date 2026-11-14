@@ -2203,6 +2203,27 @@ tr:hover td{background:#fafbff}
         <div style="margin-top:6px;font-size:11px;color:var(--muted)">بيرجّع المخزون على Shopify فوراً (refund بصفر فلوس). مالوش علاقة بمرتجعات المحل/الكاشير.</div>
       </div>
     </div>
+    <!-- 🔍 v872: مرتجعات المحل اللي رجعت على المخزن الغلط -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="padding:14px">
+        <div style="font-weight:800;margin-bottom:6px">🔍 فحص مخازن مرتجعات المحل</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+          المخزون كان بيرجع على <code>order.location_id</code> بدل المحل اللي المرتجع اتعمل فيه —
+          فبضاعة بتخرج من ترفيوم وترجع على العبور. الفحص بيقرا المرتجعات من Shopify نفسها
+          ويقول إيه اللي رجع غلط وإيه التصحيح المطلوب في كل مخزن.
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="retLocAudit()">🔍 افحص</button>
+          <label style="font-size:12px;color:var(--muted)">آخر
+            <input type="number" id="rla-limit" value="200" min="10" max="500"
+                   style="width:70px;padding:5px 8px;border:1px solid var(--border);border-radius:6px"> مرتجع
+          </label>
+          <span id="rla-status" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+        <div id="rla-out" style="margin-top:12px"></div>
+      </div>
+    </div>
+
     <div id="ret-order"></div>
     <div id="ret-history" style="margin-top:14px"></div>
   </div>
@@ -11642,7 +11663,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v871';
+const UI_BUILD = 'v872';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -46626,6 +46647,87 @@ async function stkRepair(dryRun){
 // 🆕 v411: مرتجعات الأدمن (إرجاع مخزون بس)
 let _ret={ shopify_id:null, name:null, items:[] };
 function returnsInit(){ returnsHistory(); }
+
+// 🔍 v872: فحص المخزن اللي المرتجعات رجعت عليه فعلاً
+async function retLocAudit(){
+  const st = $('rla-status'), out = $('rla-out');
+  const lim = parseInt($('rla-limit')?.value) || 200;
+  if(st) st.textContent = '⏳ بنقرا المرتجعات من Shopify — ممكن ياخد دقيقة...';
+  if(out) out.innerHTML = '';
+  try{
+    const r = await apiFetch('/api/returns/location-audit?limit=' + lim);
+    if(!r || r.error) throw new Error(_errText(r?.error || _apiLastErr, 'الفحص فشل'));
+    window._rlaData = r;
+    if(st) st.textContent = `فحصنا ${r.checked} مرتجع · ✅ ${r.right} سليم · ❌ ${r.wrong} غلط`
+                          + (r.skipped ? ` · ⏭️ ${r.skipped} ماتفحصوش` : '');
+    if(!r.wrong){
+      out.innerHTML = `<div style="padding:16px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;color:#166534;font-weight:700">
+        ✅ كل المرتجعات رجعت على المخزن الصح.</div>`;
+      return;
+    }
+    const money = n => (n > 0 ? '+' : '') + n;
+    out.innerHTML = `
+      <div style="padding:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;margin-bottom:12px">
+        <div style="font-weight:800;color:#991b1b">❌ ${r.wrong} سطر رجع على المخزن الغلط</div>
+      </div>
+      <div style="font-weight:800;margin:10px 0 6px">التصحيح المطلوب في المخزون</div>
+      <div style="overflow:auto;max-height:320px;border:1px solid var(--border);border-radius:8px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:var(--elev);position:sticky;top:0">
+            <th style="padding:7px;text-align:right">المخزن</th>
+            <th style="padding:7px;text-align:right">الصنف</th>
+            <th style="padding:7px;text-align:right">SKU</th>
+            <th style="padding:7px;text-align:center">التعديل</th></tr></thead>
+          <tbody>${r.corrections.map(c => `<tr style="border-top:1px solid var(--border)">
+            <td style="padding:7px">${escapeHtml(c.location)}</td>
+            <td style="padding:7px">${escapeHtml(c.title || '—')}</td>
+            <td style="padding:7px;font-family:monospace;font-size:11px">${escapeHtml(c.sku || '—')}</td>
+            <td style="padding:7px;text-align:center;font-weight:800;color:${c.delta > 0 ? '#15803d' : '#dc2626'}">${money(c.delta)}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+      <div style="font-weight:800;margin:14px 0 6px">السطور اللي غلط</div>
+      <div style="overflow:auto;max-height:280px;border:1px solid var(--border);border-radius:8px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:var(--elev);position:sticky;top:0">
+            <th style="padding:7px;text-align:right">المرتجع</th>
+            <th style="padding:7px;text-align:right">التاريخ</th>
+            <th style="padding:7px;text-align:right">المحل</th>
+            <th style="padding:7px;text-align:right">الصنف</th>
+            <th style="padding:7px;text-align:center">كمية</th>
+            <th style="padding:7px;text-align:right">رجع على</th>
+            <th style="padding:7px;text-align:right">المفروض</th></tr></thead>
+          <tbody>${r.rows.map(x => `<tr style="border-top:1px solid var(--border)">
+            <td style="padding:7px;font-family:monospace;font-size:11px">${escapeHtml(x.return_number)}</td>
+            <td style="padding:7px">${escapeHtml(x.at || '')}</td>
+            <td style="padding:7px">${escapeHtml(x.store || '')}</td>
+            <td style="padding:7px">${escapeHtml(x.title || x.sku || '')}</td>
+            <td style="padding:7px;text-align:center">${x.qty}</td>
+            <td style="padding:7px;color:#dc2626">${escapeHtml(x.went_to)}</td>
+            <td style="padding:7px;color:#15803d">${escapeHtml(x.should_be)}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+      <button class="btn btn-secondary" style="margin-top:10px" onclick="retLocAuditExcel()">📊 نزّل Excel</button>`;
+  }catch(e){
+    if(st) st.textContent = '';
+    if(out) out.innerHTML = `<div style="padding:14px;color:var(--danger)">❌ ${escapeHtml(_errText(e,'فشل'))}</div>`;
+  }
+}
+
+function retLocAuditExcel(){
+  const d = window._rlaData; if(!d) return;
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(d.corrections.map(c => ({
+    'المخزن': c.location, 'الصنف': c.title, 'SKU': c.sku, 'التعديل المطلوب': c.delta
+  }))), 'التصحيح');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(d.rows.map(x => ({
+    'المرتجع': x.return_number, 'التاريخ': x.at, 'الأوردر': x.order, 'المحل': x.store,
+    'الصنف': x.title, 'SKU': x.sku, 'الكمية': x.qty,
+    'رجع على': x.went_to, 'المفروض': x.should_be
+  }))), 'السطور');
+  XLSX.writeFile(wb, 'مرتجعات-المخزن-الغلط.xlsx');
+}
 function _retDate(s){ try{ return new Date(s).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'}); }catch(e){ return ''; } }
 async function returnsLookup(){
   const q=($('ret-q')?.value||'').trim(); const box=$('ret-order');
