@@ -5803,6 +5803,24 @@ tr:hover td{background:#fafbff}
   </div>
 </div>
 <div class="page" id="page-sku-audit">
+  <!-- 🔍 v882: الـ SKU/الباركود المتكرر — بيضاعف المبيعات في كل حساب -->
+  <div class="card" style="margin-bottom:14px;border:2px solid #dc2626">
+    <div style="padding:12px 14px">
+      <div style="font-weight:800">🚨 أكواد متكررة في الكتالوج</div>
+      <div style="font-size:11.5px;color:var(--muted);margin:4px 0 10px">
+        أي SKU أو باركود على أكتر من منتج بيخلي كل استعلام بيربط بيه <b>يضاعف المبيعات</b> —
+        وده بيغذّي سرعة البيع وذكاء الشراء وقايمة الطلب. يعني قرارات شراء بفلوس.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="dupKeysScan()">🔍 افحص</button>
+        <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:4px">
+          <input type="checkbox" id="dk-archived"> يشمل المؤرشف</label>
+        <span id="dk-status" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div id="dk-out" style="margin-top:10px"></div>
+    </div>
+  </div>
+
   <div class="card" style="margin-bottom:14px;border:1px solid #bfdbfe">
     <div style="padding:12px 14px">
       <div style="font-weight:800">🏷️ جدول باركودات الطباعة (SKU → كل الأكواد)</div>
@@ -11713,7 +11731,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v881';
+const UI_BUILD = 'v882';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -12140,6 +12158,16 @@ function fmtRelative(d){
   return fmtDate(d, { short: true });
 }
 // safer escapeHtml
+// 📅 v882: «النهاردة» بتوقيت القاهرة — مش UTC ومش توقيت الجهاز.
+//   `_todayCairo()` بيحوّل لـ UTC، فمن ١٠ مساءً
+//   لنص الليل بيرجّع **بكرة**. ومتوقيت الجهاز ماينفعش كمان لأن الشغل
+//   كله بتوقيت القاهرة حتى لو فتحت الصفحة من بلد تانية. ولازم تطابق
+//   _todayCairo() اللي في السيرفر وإلا الفلاتر هتختلف.
+const _CAIRO_YMD = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit'
+});
+function _todayCairo(){ return _CAIRO_YMD.format(new Date()); }
+
 function escapeHtml(s){
   if(s == null) return '';
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -13697,12 +13725,12 @@ let _cdashActiveCourierId = null;
 let _preparerReportsCache = null;
 
 function _prDefaultFromDate(){
-  const d = new Date();
-  d.setDate(d.getDate() - 30);
+  const d = new Date(_todayCairo() + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() - 30);
   return d.toISOString().slice(0, 10);
 }
 function _prDefaultToDate(){
-  return new Date().toISOString().slice(0, 10);
+  return _todayCairo();
 }
 
 function openPreparerReports(){
@@ -14101,7 +14129,7 @@ function _renderCdashChart(daily){
   const el = document.getElementById('cdash-chart');
   if(!el) return;
   const max = Math.max(...daily.map(d => d.count), 1);
-  const todayStr = new Date().toISOString().slice(0,10);
+  const todayStr = _todayCairo();
   el.innerHTML = daily.map(d => {
     const h = (d.count / max) * 100;
     const isToday = d.date === todayStr;
@@ -15138,7 +15166,7 @@ function addAiMessage(role, text){
 
 function buildAiContext(){
   // snapshot بسيط من البيانات المهمة
-  const todayStr = new Date().toISOString().slice(0,10);
+  const todayStr = _todayCairo();
   const stats = {
     today: todayStr,
     orders_total: orders.length,
@@ -17336,7 +17364,7 @@ async function awbBatches(keep){
     }
     // 🗓️ v664: التاريخ لازم يبان — الدفعة القديمة واللي النهاردة
     //   شكلهم واحد من غيره، وده خطر مع زرار بيعمل شحنات حقيقية.
-    const today = new Date().toISOString().slice(0,10);
+    const today = _todayCairo();
     // 🔄 v665: بعد ما تعمل شحنات، الأرقام في الـ dropdown بتبقى قديمة.
     //   keep = الدفعة اللي كانت مختارة، نرجّعها بعد التحديث.
     // الدفعة الافتراضية تفضل زي ماهي (أحدث دفعة) — النطاق ده بيبان فوق
@@ -17390,7 +17418,7 @@ async function awbLoad(){
     //   مايتطبّقش عليه، وإلا كان هيقرا '__XFER__' كتاريخ.
     const _isXfer = batchCode === '__XFER__';
     const _d = (_isXfer || oneId) ? '' : (batchCode || '').replace(/^B-/,'').slice(0,10);
-    _awbOldBatch = (_d && _d !== new Date().toISOString().slice(0,10)) ? _d : null;
+    _awbOldBatch = (_d && _d !== _todayCairo()) ? _d : null;
     const needRows = _awbList.filter(i => i.needsCreate);
     const need = needRows.length;
     const miss = _awbList.filter(i => !i.needsCreate && !i.hasAwb).length;
@@ -18463,7 +18491,7 @@ async function awbPrint(downloadOnly){
     if(downloadOnly){
       const a = document.createElement('a');
       a.href = url;
-      a.download = `بوالص-${new Date().toISOString().slice(0,10)}-${merged.getPageCount()}ص.pdf`;
+      a.download = `بوالص-${_todayCairo()}-${merged.getPageCount()}ص.pdf`;
       a.click();
     }else{
       const w = window.open(url, '_blank');
@@ -19770,7 +19798,7 @@ function exportLateOrdersCSV(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'طلبات_متأخرة_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.download = 'طلبات_متأخرة_' + _todayCairo() + '.csv';
   a.click();
   URL.revokeObjectURL(url);
   toast('✅ تم التصدير');
@@ -20026,7 +20054,7 @@ function exportTrackerCSV(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `tracker-${from}-to-${to}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `tracker-${from}-to-${to}-${_todayCairo()}.csv`;
   a.click();
   URL.revokeObjectURL(url);
   toast('✅ تم التصدير');
@@ -21906,7 +21934,7 @@ function renderPayables(){
     return;
   }
 
-  const today = new Date().toISOString().slice(0,10);
+  const today = _todayCairo();
   cont.innerHTML = _payables.map(p => {
     const cat = PAYABLE_CATEGORIES[p.category] || PAYABLE_CATEGORIES.other;
     const isPaid = p.status === 'paid';
@@ -21959,7 +21987,7 @@ function openPayableModal(){
   $('payable-payee').value = '';
   $('payable-category').value = 'other';
   $('payable-amount').value = '';
-  $('payable-due-date').value = new Date().toISOString().slice(0,10);
+  $('payable-due-date').value = _todayCairo();
   $('payable-notes').value = '';
   $('payable-recurring').checked = false;
   $('payable-recurrence-type').value = 'monthly';
@@ -22052,7 +22080,7 @@ function openPayPayable(id){
     </div>
   `;
   $('pay-method').value = 'cash';
-  $('pay-date').value = new Date().toISOString().slice(0,10);
+  $('pay-date').value = _todayCairo();
   $('pay-reference').value = '';
   $('pay-notes').value = '';
   openM('m-pay-payable');
@@ -24136,7 +24164,7 @@ async function refreshCartAuditBadge(){
   if(!API_URL) return;
   try {
     // 🔧 v195: الـ DB أصلاً فيها المشبوهة فقط
-    const today = new Date().toISOString().slice(0,10);
+    const today = _todayCairo();
     const params = new URLSearchParams({ from: today, limit: '50' });
     const r = await apiFetch('/api/cart-audit?' + params.toString());
     const count = r?.events?.length || 0;
@@ -25301,7 +25329,7 @@ function talSetExcel(){
     {wch:12},{wch:12},{wch:12},{wch:13},{wch:14},{wch:20},
     {wch:14},{wch:14},{wch:12},{wch:12},{wch:14},{wch:12},{wch:20},{wch:12},{wch:11},{wch:13},{wch:16},{wch:12},{wch:16},{wch:16},{wch:22},{wch:20},{wch:14}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'مطابقة طلبات');
-  XLSX.writeFile(wb, `مطابقة_كشف_طلبات_${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(wb, `مطابقة_كشف_طلبات_${_todayCairo()}.xlsx`);
 }
 
 // 🆕 v515: المرتجعات اليتيمة (cashier_id = NULL)
@@ -25586,7 +25614,7 @@ function dsExcel(){
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws1,'الملخص');
   XLSX.utils.book_append_sheet(wb,ws,'التفصيل');
-  XLSX.writeFile(wb, `الأصناف_الراكدة_${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(wb, `الأصناف_الراكدة_${_todayCairo()}.xlsx`);
   toast(`⬇️ ${_dsRows.length.toLocaleString()} صنف`);
 }
 async function dsTag(){
@@ -25921,7 +25949,7 @@ function invValHistExcel(){
     ...(g!=='day'?{'أيام مغطّاة':x.days,'ناقصة؟':x.partial?'نعم':'لا','آخر سناب':x.upto}:{}),
     'أصناف':x.items,'قطع':x.units,'بسعر البيع':x.retail,'بالتكلفة':x.cost,'الهامش':x.margin,'قطع بدون تكلفة':x.units_no_cost})));
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'سجل الرصيد');
-  XLSX.writeFile(wb,`سجل_رصيد_البضاعة_${g==='month'?'شهري':(g==='week'?'أسبوعي':'يومي')}_${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(wb,`سجل_رصيد_البضاعة_${g==='month'?'شهري':(g==='week'?'أسبوعي':'يومي')}_${_todayCairo()}.xlsx`);
 }
 async function invValDetail(wid,name){
   const el=document.getElementById('inv-val-detail'); if(!el) return;
@@ -25942,7 +25970,7 @@ function invValExcel(){
   data.push({'المخزن':'الإجمالي','أصناف':'','قطع':_invValData.total.units,'بسعر البيع':_invValData.total.retail_value,'بالتكلفة':_invValData.total.cost_value,'الهامش':_invValData.total.margin_value,'قطع بدون تكلفة':_invValData.total.units_no_cost});
   const ws=XLSX.utils.json_to_sheet(data); ws['!cols']=[{wch:26},{wch:9},{wch:10},{wch:16},{wch:16},{wch:14},{wch:14}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'رصيد البضاعة');
-  XLSX.writeFile(wb,`رصيد_البضاعة_${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(wb,`رصيد_البضاعة_${_todayCairo()}.xlsx`);
 }
 
 // 🆕 v545: كشف Paymob
@@ -25984,7 +26012,7 @@ function pmExcel(){
   const ws=XLSX.utils.json_to_sheet(data);
   ws['!cols']=[{wch:20},{wch:20},{wch:8},{wch:14},{wch:10},{wch:9},{wch:8},{wch:12},{wch:20},{wch:14},{wch:12},{wch:18},{wch:14},{wch:30},{wch:20},{wch:10}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Paymob');
-  XLSX.writeFile(wb,`Paymob_${_pmFilter}_${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(wb,`Paymob_${_pmFilter}_${_todayCairo()}.xlsx`);
 }
 async function pmLoad(){
   pmShowTz();
@@ -26113,7 +26141,7 @@ function pmNotesExcel(){
   if(n.combo.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(n.combo.map(x=>({'عملية':x.txn,'البيعات':x.parts.map(p=>p.label+' ('+p.amount+')').join(' + '),'Paymob':x.paymob,'مجموع البيعات':x.orders_total,'الفرق':x.diff}))),'دمج');
   if(n.pickup.length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(n.pickup.map(x=>({'عملية':x.txn,'الأوردر':x.order,'فاتورة':x.invoice,'Paymob':x.paymob,'الأوردر':x.order_total,'فرق الوقت (د)':x.mins}))),'بيك أب');
   if((n.mixed||[]).length) XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(n.mixed.map(x=>({'عملية':x.txn,'البيعة':x.label,'فاتورة':x.invoice,'إجمالي البيعة':x.order_total,'فيزا (Paymob)':x.paymob,'كاش':x.cash_part}))),'دفع مدمج');
-  XLSX.writeFile(wb,`Paymob_ملاحظات_${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(wb,`Paymob_ملاحظات_${_todayCairo()}.xlsx`);
 }
 function pmNotesPrint(){
   const el=document.getElementById('pm-notes'); if(!el) return;
@@ -26489,7 +26517,7 @@ function oiExcel(){
   const ws=XLSX.utils.json_to_sheet(rows.map(x=>({'الفاتورة':x.invoice,'التاريخ':x.date,'العمر (يوم)':x.age_days,'العميل':x.customer,'الأوردر':x.order_id?String(x.order_id).replace(/^SH-/,''):'','حالة الأوردر':x.order_status,'الكود':x.code||'','القناة':x.channel_label,'تتقفل من':x.hint,'الإجمالي':x.total,'الرصيد':x.balance})));
   ws['!cols']=[{wch:12},{wch:11},{wch:9},{wch:24},{wch:10},{wch:12},{wch:20},{wch:16},{wch:30},{wch:10},{wch:10}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'مفتوحة');
-  XLSX.writeFile(wb,`فواتير_مفتوحة_${_oiFilter}_${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(wb,`فواتير_مفتوحة_${_oiFilter}_${_todayCairo()}.xlsx`);
 }
 
 // 🆕 v573: بيعات من غير تصفية
@@ -32594,7 +32622,7 @@ function openVendorTx(type){
   
   $('vtx-type').value = type;
   $('vtx-amount').value = '';
-  $('vtx-date').value = new Date().toISOString().slice(0,10);
+  $('vtx-date').value = _todayCairo();
   $('vtx-reference').value = '';
   $('vtx-description').value = '';
   
@@ -32679,7 +32707,7 @@ function openOpeningBalance(){
   if(!_currentVendorId){ toast('❌ اختر مورد أولاً'); return; }
   const v = _vendorsLedger.find(x => x.id === _currentVendorId) || _currentVendorStatement?.vendor;
   $('vob-amount').value = v?.opening_balance || 0;
-  $('vob-date').value = v?.opening_date ? v.opening_date.slice(0,10) : new Date().toISOString().slice(0,10);
+  $('vob-date').value = v?.opening_date ? v.opening_date.slice(0,10) : _todayCairo();
   openM('m-vendor-opening');
 }
 
@@ -34046,7 +34074,7 @@ function exportHiddenQtyCSV(){
   const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `hidden-qty-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `hidden-qty-${_todayCairo()}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -36663,7 +36691,7 @@ async function loadWhatsappPage(){
       return;
     }
     
-    const today = new Date().toISOString().slice(0,10);
+    const today = _todayCairo();
     
     list.innerHTML = _whatsappTpls.map(t => {
       const expired = t.valid_until && t.valid_until < today;
@@ -36967,7 +36995,7 @@ async function openUploadStatement(){
   } catch(e){}
   
   // default dates - اليوم
-  const today = new Date().toISOString().slice(0,10);
+  const today = _todayCairo();
   document.getElementById('stmt-from').value = today;
   document.getElementById('stmt-to').value = today;
   document.getElementById('stmt-method').value = 'visa';
@@ -37130,7 +37158,7 @@ async function openNewStatement(){
   } catch(e){}
   
   document.getElementById('stmt-method').value = 'visa';
-  const today = new Date().toISOString().slice(0,10);
+  const today = _todayCairo();
   document.getElementById('stmt-from').value = today;
   document.getElementById('stmt-to').value = today;
   document.getElementById('stmt-csv').value = '';
@@ -40869,7 +40897,7 @@ async function _saveBatchFromPO(poId, itemId){
   }
   
   // validate date not in past
-  const today = new Date().toISOString().slice(0, 10);
+  const today = _todayCairo();
   if(exp_date < today){
     if(!confirm('⚠️ التاريخ ده فات بالفعل - متأكد؟')) return;
   }
@@ -42373,7 +42401,7 @@ async function exportReorderPDF(){
     <html dir="rtl">
     <head>
       <meta charset="UTF-8">
-      <title>PO-DRAFT-${new Date().toISOString().slice(0,10).replace(/-/g,'')} - ${escapeHtml(sup?.name || '')}</title>
+      <title>PO-DRAFT-${_todayCairo().replace(/-/g,'')} - ${escapeHtml(sup?.name || '')}</title>
       <style>
         @page { size: A4; margin: 12mm; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -42493,7 +42521,7 @@ async function exportReorderPDF(){
   w.document.close();
   // 🆕 v289: ضمان اسم الفايل في الـ Save dialog
   try {
-    const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    const dateStr = _todayCairo().replace(/-/g,'');
     w.document.title = 'PO-DRAFT-' + dateStr + ' - ' + (sup?.name || '');
   } catch(e) {}
 }
@@ -46747,6 +46775,74 @@ async function stkRepair(dryRun){
 let _ret={ shopify_id:null, name:null, items:[] };
 function returnsInit(){ returnsHistory(); }
 
+// 🔍 v882: فحص الأكواد المتكررة في الكتالوج
+let _dkData = null;
+async function dupKeysScan(){
+  const st = $('dk-status'), out = $('dk-out');
+  if(st) st.textContent = '⏳ بنفحص الكتالوج...';
+  if(out) out.innerHTML = '';
+  try{
+    const r = await apiFetch('/api/catalog/duplicate-keys'
+      + ($('dk-archived')?.checked ? '?archived=1' : ''));
+    if(!r || r.error) throw new Error(_errText(r?.error || _apiLastErr, 'الفحص فشل'));
+    _dkData = r;
+    const total = r.sku_groups + r.barcode_groups;
+    if(st) st.textContent = `الكتالوج ${r.catalog.toLocaleString()} منتج`;
+    if(!total){
+      out.innerHTML = `<div style="padding:14px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;color:#166534;font-weight:700">
+        ✅ مفيش كود متكرر — كل SKU وكل باركود على منتج واحد بس.</div>`;
+      return;
+    }
+    const sect = (title, groups, extra, kind) => !groups.length ? '' : `
+      <div style="font-weight:800;margin:12px 0 6px;color:#991b1b">${title} — ${groups.length} كود · ${extra} صف زيادة</div>
+      <div style="overflow:auto;max-height:340px;border:1px solid var(--border);border-radius:8px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:var(--elev);position:sticky;top:0">
+            <th style="padding:7px;text-align:right">الكود</th>
+            <th style="padding:7px;text-align:center">مرات</th>
+            <th style="padding:7px;text-align:right">المنتجات</th></tr></thead>
+          <tbody>${groups.map(g => `<tr style="border-top:1px solid var(--border)">
+            <td style="padding:7px;font-family:monospace;font-weight:700">${escapeHtml(g.key)}</td>
+            <td style="padding:7px;text-align:center;font-weight:800;color:#dc2626">${g.count}</td>
+            <td style="padding:7px">${g.items.map(it => `<div style="padding:2px 0${it.archived ? ';opacity:.55' : ''}">
+                 ${escapeHtml(it.title || '—')}${it.variant && it.variant !== 'Default Title' ? ' — ' + escapeHtml(it.variant) : ''}
+                 <span style="color:var(--muted);font-size:10px;font-family:monospace">${escapeHtml(String(it.variant_id || ''))}</span>
+                 ${it.archived ? '<span style="font-size:10px;color:#b45309"> (مؤرشف)</span>' : ''}
+               </div>`).join('')}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
+    out.innerHTML = `
+      <div style="padding:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;margin-bottom:6px">
+        <div style="font-weight:800;color:#991b1b">🚨 ${total} كود متكرر</div>
+        <div style="font-size:11.5px;color:#7f1d1d;margin-top:3px">
+          كل صف زيادة بيضاعف مبيعات المنتج ده في حسابات سرعة البيع.
+          الحل: وحّد المنتجات المكررة في شوبيفاي، أو أرشِف الزيادة.
+        </div>
+      </div>
+      ${sect('SKU متكرر', r.sku, r.sku_extra, 'sku')}
+      ${sect('باركود متكرر', r.barcode, r.barcode_extra, 'barcode')}
+      <button class="btn btn-secondary" style="margin-top:10px" onclick="dupKeysExcel()">📊 نزّل Excel</button>`;
+  }catch(e){
+    if(st) st.textContent = '';
+    if(out) out.innerHTML = `<div style="padding:14px;color:var(--danger)">❌ ${escapeHtml(_errText(e,'فشل'))}</div>`;
+  }
+}
+
+function dupKeysExcel(){
+  if(!_dkData){ toast('شغّل الفحص الأول'); return; }
+  const rows = [];
+  for(const [kind, groups] of [['SKU', _dkData.sku], ['باركود', _dkData.barcode]])
+    for(const g of groups) for(const it of g.items)
+      rows.push({ 'النوع': kind, 'الكود': g.key, 'مرات': g.count,
+        'المنتج': it.title || '', 'الvariant': it.variant || '',
+        'variant_id': it.variant_id || '', 'SKU': it.sku || '',
+        'الباركود': it.barcode || '', 'مؤرشف': it.archived ? 'نعم' : '' });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'أكواد متكررة');
+  XLSX.writeFile(wb, 'أكواد-متكررة.xlsx');
+}
+
 // 📊 v873: سحب مرتجعات المحل Excel
 async function posReturnsExport(){
   const st = $('rex-status');
@@ -47150,7 +47246,7 @@ function talNewExcel(){
   // v840: بينزّل المعروض — لو المربوطين مخفيين مابينزلوش
   const src = (_talNewShown && _talNewShown.length) ? _talNewShown : _talNew.rows;
   const ws=XLSX.utils.json_to_sheet(src.map(x=>({'المنتج':x.title,'SKU':x.sku,'الباركود':x.barcode,'المورد':x.vendor,'اتضاف':String(x.created_at).slice(0,10),'مخزون ترفيوم':x.qty_triv,'مخزون الكل':x.qty_all,'سعر الموقع':x.price,'سعر طلبات':x.talabat_price,'مربوط بطلبات':x.linked?'نعم':'لا'})));
-  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'منتجات جديدة'); XLSX.writeFile(wb,`طلبات_منتجات_جديدة_${new Date().toISOString().slice(0,10)}.xlsx`);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'منتجات جديدة'); XLSX.writeFile(wb,`طلبات_منتجات_جديدة_${_todayCairo()}.xlsx`);
 }
 function talTab(which){
   // 🔧 v442: بقت 3 تابات بدل 2
@@ -47298,7 +47394,7 @@ function talRestockExcel(){
     'السعر على طلبات': x.final_price,
   })));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'محتاج تحويل');
-  XLSX.writeFile(wb, `talabat-restock-${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(wb, `talabat-restock-${_todayCairo()}.xlsx`);
 }
 
 // 🆕 v421: فرص طلبات — منتجات ليها ستوك ومش على طلبات
@@ -47352,7 +47448,7 @@ function talOppExcel(){
   const ws=XLSX.utils.json_to_sheet(data);
   ws['!cols']=[{wch:5},{wch:40},{wch:16},{wch:14},{wch:14},{wch:12},{wch:16}];
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'فرص طلبات');
-  XLSX.writeFile(wb, `فرص_طلبات_${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(wb, `فرص_طلبات_${_todayCairo()}.xlsx`);
 }
 
 // 🆕 v418: طلبات (Talabat) — ربط + توليد شيت التحديث
@@ -48000,7 +48096,7 @@ function downloadCustByProducts(){
   ws['!cols'] = [{wch:5},{wch:28},{wch:16},{wch:22},{wch:12},{wch:14},{wch:14}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'customers');
-  XLSX.writeFile(wb, `customers-by-products-${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(wb, `customers-by-products-${_todayCairo()}.xlsx`);
 }
 
 function downloadPosExcel(){
@@ -51138,7 +51234,7 @@ async function openNewEmployee(){
   document.getElementById('hr-emp-title').textContent = 'إضافة موظف';
   ['hr-emp-name-ar','hr-emp-name-en','hr-emp-nid','hr-emp-phone','hr-emp-email','hr-emp-birth','hr-emp-position','hr-emp-address','hr-emp-bank','hr-emp-shopify-email','hr-emp-notes','hr-emp-base','hr-emp-transport','hr-emp-housing','hr-emp-meal','hr-emp-other-alw','hr-emp-insurance','hr-emp-tax']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
-  document.getElementById('hr-emp-hire').value = new Date().toISOString().slice(0,10);
+  document.getElementById('hr-emp-hire').value = _todayCairo();
   
   // 🆕 v247: reset photos
   setEmpPhoto('photo', '');
@@ -51264,7 +51360,7 @@ async function saveEmployee(){
           other_allowances: data.other_allowances,
           insurance_deduction: data.insurance_deduction,
           tax_deduction: data.tax_deduction,
-          effective_from: new Date().toISOString().slice(0,10),
+          effective_from: _todayCairo(),
           notes: 'تحديث من نموذج الموظف'
         });
       }
@@ -53367,7 +53463,7 @@ function maExcel(){
   })));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'الهوامش');
-  XLSX.writeFile(wb, `margins-${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(wb, `margins-${_todayCairo()}.xlsx`);
 }
 
 async function csList(){
@@ -54221,7 +54317,7 @@ async function openNewPenalty(){
     _hrEmployees.filter(e => e.active).map(e => `<option value="${e.id}">${escapeHtml(e.name_ar)} (${escapeHtml(e.code||'')})</option>`).join('');
   
   document.getElementById('pen-amount').value = '';
-  document.getElementById('pen-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('pen-date').value = _todayCairo();
   document.getElementById('pen-reason').value = '';
   document.getElementById('pen-notes').value = '';
   
@@ -60131,7 +60227,7 @@ function biDownload(){
   if(!_biDataUrl) return;
   const a = document.createElement('a');
   a.href = _biDataUrl;
-  a.download = 'bundle-' + new Date().toISOString().slice(0,10) + '.png';
+  a.download = 'bundle-' + _todayCairo() + '.png';
   document.body.appendChild(a); a.click(); a.remove();
 }
 
@@ -61215,7 +61311,7 @@ function dupSkuExcel(){
   })));
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'duplicates');
-  XLSX.writeFile(wb, `duplicate-skus-${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(wb, `duplicate-skus-${_todayCairo()}.xlsx`);
 }
 
 // 🆕 v463: أصناف من غير تكلفة — تعديل يدوي
@@ -61395,7 +61491,7 @@ function costImportUnmatched(){
   if(!u.length){ toast('مفيش'); return; }
   const ws = XLSX.utils.json_to_sheet(u.map(x=>({ 'الكود': x.code, 'التكلفة في الشيت': x.cost })));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'unmatched');
-  XLSX.writeFile(wb, `cost-unmatched-${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(wb, `cost-unmatched-${_todayCairo()}.xlsx`);
 }
 
 async function costImportApply(){
@@ -61478,7 +61574,7 @@ async function zohoExport(){
     }
     const wbTpl = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wbTpl, wsTpl, 'Zoho Import');
-    XLSX.writeFile(wbTpl, `zoho-import-${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.writeFile(wbTpl, `zoho-import-${_todayCairo()}.xlsx`);
 
     const wsRef = XLSX.utils.json_to_sheet(r.rows.map(x=>({
       'SKU': x.sku, 'Item Name': x.title, 'Barcode': x.barcode,
@@ -61487,7 +61583,7 @@ async function zohoExport(){
     })));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, wsRef, 'مرجع تفصيلي');
-    XLSX.writeFile(wb, `zoho-reference-${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.writeFile(wb, `zoho-reference-${_todayCairo()}.xlsx`);
 
     let msg = `✅ نزل ملفين: zoho-import.xlsx (للرفع — محصّن ضد Excel) + zoho-reference.xlsx (مرجعك) — ${r.count.toLocaleString('en-US')} صنف (on hand)`;
     if(r.committedUnits) msg += ` · 📦 منهم ${r.committedUnits.toLocaleString('en-US')} قطعة محجوزة لطلبات مفتوحة`;
@@ -61785,7 +61881,7 @@ async function skuAuditExport(){
     })));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, _skuAudit.category.slice(0,28));
-    XLSX.writeFile(wb, `sku-barcode-${_skuAudit.category}-${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.writeFile(wb, `sku-barcode-${_skuAudit.category}-${_todayCairo()}.xlsx`);
     if(r.matched > r.rows.length) toast(`⚠️ نزّلت ${r.rows.length} من ${r.matched} (حد 5000)`);
   }catch(e){ toast('❌ ' + (e.message||'فشل')); }
 }
