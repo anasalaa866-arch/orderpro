@@ -11683,7 +11683,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v873';
+const UI_BUILD = 'v874';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -46779,26 +46779,38 @@ async function retLocAudit(){
           </tr>`).join('')}</tbody>
         </table>
       </div>
-      <button class="btn btn-secondary" style="margin-top:10px" onclick="retLocAuditExcel()">📊 نزّل Excel</button>`;
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="retLocAuditExcel('rows')">📊 Excel — السطور الغلط (${r.wrong})</button>
+        <button class="btn btn-secondary" onclick="retLocAuditExcel('fix')">📊 Excel — التصحيح المطلوب (${r.corrections.length})</button>
+        <button class="btn btn-ghost" style="border:1px solid var(--border)" onclick="retLocAuditExcel()">📊 الاتنين في ملف</button>
+      </div>`;
   }catch(e){
     if(st) st.textContent = '';
     if(out) out.innerHTML = `<div style="padding:14px;color:var(--danger)">❌ ${escapeHtml(_errText(e,'فشل'))}</div>`;
   }
 }
 
-function retLocAuditExcel(){
-  const d = window._rlaData; if(!d) return;
+// 📊 v874: which = 'rows' السطور الغلط · 'fix' التصحيح · فاضي = الاتنين
+function retLocAuditExcel(which){
+  const d = window._rlaData;
+  if(!d){ toast('❌ شغّل الفحص الأول'); return; }
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(d.corrections.map(c => ({
-    'المخزن': c.location, 'الصنف': c.title, 'SKU': c.sku, 'التعديل المطلوب': c.delta
-  }))), 'التصحيح');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(d.rows.map(x => ({
-    'رقم الطلب': x.order, 'تاريخ الطلب': x.order_at, 'رقم البيعة': x.sale_number,
-    'المرتجع': x.return_number, 'تاريخ المرتجع': x.at, 'المحل': x.store,
-    'الصنف': x.title, 'SKU': x.sku, 'الكمية': x.qty,
-    'رجع على': x.went_to, 'المفروض': x.should_be
-  }))), 'السطور');
-  XLSX.writeFile(wb, 'مرتجعات-المخزن-الغلط.xlsx');
+  const addFix = () => XLSX.utils.book_append_sheet(wb,
+    XLSX.utils.json_to_sheet(d.corrections.map(c => ({
+      'المخزن': c.location, 'الصنف': c.title, 'SKU': c.sku, 'التعديل المطلوب': c.delta
+    }))), 'التصحيح');
+  const addRows = () => XLSX.utils.book_append_sheet(wb,
+    XLSX.utils.json_to_sheet(d.rows.map(x => ({
+      'رقم الطلب': x.order, 'تاريخ الطلب': x.order_at, 'رقم البيعة': x.sale_number,
+      'المرتجع': x.return_number, 'تاريخ المرتجع': x.at, 'المحل': x.store,
+      'الصنف': x.title, 'SKU': x.sku, 'الكمية': x.qty,
+      'رجع على': x.went_to, 'المفروض': x.should_be
+    }))), 'السطور الغلط');
+  let name = 'مرتجعات-المخزن-الغلط.xlsx';
+  if(which === 'rows'){ addRows(); name = `السطور-الغلط-${d.rows.length}.xlsx`; }
+  else if(which === 'fix'){ addFix(); name = 'التصحيح-المطلوب.xlsx'; }
+  else { addFix(); addRows(); }
+  XLSX.writeFile(wb, name);
 }
 function _retDate(s){ try{ return new Date(s).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'}); }catch(e){ return ''; } }
 async function returnsLookup(){
