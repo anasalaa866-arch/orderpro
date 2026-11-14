@@ -8926,8 +8926,8 @@ tr:hover td{background:#fafbff}
           <label style="font-weight:700;color:var(--muted);font-size:11px">فترة حساب البيع</label>
           <select id="tp-days" class="form-input">
             <option value="7">آخر 7 أيام</option>
-            <option value="14" selected>آخر 14 يوم</option>
-            <option value="30">آخر 30 يوم</option>
+            <option value="14">آخر 14 يوم</option>
+            <option value="30" selected>آخر 30 يوم</option>
           </select>
         </div>
         <div>
@@ -8947,6 +8947,11 @@ tr:hover td{background:#fafbff}
           <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600">
             <input type="checkbox" id="tp-include-all" style="width:16px;height:16px"> اعرض كل المنتجات (حتى اللي مش محتاجة)
           </label>
+        </div>
+        <!-- ⚙️ v876: الأرقام دي بقت تتحفظ — الافتراضي بقى بإيدك -->
+        <div style="display:flex;align-items:flex-end;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="tpSaveDefaults()">💾 احفظ كافتراضي</button>
+          <span id="tp-settings-note" style="font-size:11px;color:var(--muted)"></span>
         </div>
       </div>
       <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6">
@@ -11708,7 +11713,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v875';
+const UI_BUILD = 'v876';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -34774,6 +34779,34 @@ function tpToggleSettings(){
 }
 
 // تحميل المخازن في الـ dropdowns (أول مرة)
+// ⚙️ v876: إعدادات ذكاء التحويلات بتتحمّل من السيرفر بدل ما تكون
+//   مكتوبة في الـ HTML — فالافتراضي بقى بإيدك مش محتاج تغيير كود.
+async function tpLoadDefaults(){
+  try{
+    const r = await apiFetch('/api/transfers/settings');
+    const s = r?.settings; if(!s) return;
+    const set = (id, v) => { const el = $(id); if(el && v != null) el.value = String(v); };
+    set('tp-days', s.days); set('tp-target', s.target); set('tp-critical', s.critical);
+    const inc = $('tp-include-all'); if(inc) inc.checked = !!s.include_all;
+    const note = $('tp-settings-note');
+    if(note) note.textContent = `الافتراضي: ${s.days} يوم`;
+  }catch(e){ console.warn('[v876] tp settings:', e.message); }
+}
+
+async function tpSaveDefaults(){
+  const body = {
+    days:        parseInt($('tp-days')?.value),
+    target:      parseInt($('tp-target')?.value),
+    critical:    parseInt($('tp-critical')?.value),
+    include_all: $('tp-include-all')?.checked ? 1 : 0,
+  };
+  const r = await apiFetch('/api/transfers/settings', 'POST', body);
+  if(!r || r.error){ toast('❌ ' + _errText(r?.error || _apiLastErr, 'الحفظ فشل')); return; }
+  const note = $('tp-settings-note');
+  if(note) note.textContent = `الافتراضي: ${r.settings.days} يوم`;
+  toast('✅ اتحفظ — الصفحة هتفتح على الأرقام دي كل مرة');
+}
+
 async function tpLoadWarehouses(){
   if(_tpWarehouses.length) return;
   try {
@@ -34824,7 +34857,7 @@ async function tpAnalyze(){
   if(!from || !to){ toast('⚠️ اختر المخزن المصدر والوجهة'); return; }
   if(from === to){ toast('⚠️ المصدر والوجهة لازم يكونوا مختلفين'); return; }
 
-  const days = parseInt(document.getElementById('tp-days')?.value) || 14;
+  const days = parseInt(document.getElementById('tp-days')?.value) || 30;   // ⚙️ v876
   const target = parseInt(document.getElementById('tp-target')?.value) || 14;
   const critical = parseInt(document.getElementById('tp-critical')?.value) || 7;
   const includeAll = document.getElementById('tp-include-all')?.checked || false;
@@ -57580,7 +57613,7 @@ function goPage(el,page){
   if(page==='photo-library') loadPhotoLibrary();
   if(page==='returns') returnsInit();
   if(page==='transfers') loadTransfersPage();
-  if(page==='transfer-suggestions') tpLoadWarehouses();
+  if(page==='transfer-suggestions'){ tpLoadWarehouses(); tpLoadDefaults(); }   // ⚙️ v876
   if(page==='purchase-suggestions') loadPurchaseSuggestions();
   if(page==='pos-stores') loadPosStoresPage();
   if(page==='pos-promo') loadPromoPage();
