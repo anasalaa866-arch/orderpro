@@ -11713,7 +11713,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v876';
+const UI_BUILD = 'v877';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -57632,7 +57632,8 @@ function goPage(el,page){
       }
     } catch(e){}
   }
-  if(page==='suppliers'){ loadSuppliersPage(); roLoad(); }   // 📋 v875
+  // 📋 v877: الأرقام بس — القايمة نفسها بالزرار، لأن حسابها بياخد وقت
+  if(page==='suppliers'){ loadSuppliersPage(); roLoadSettings(); }
   if(page==='sales-velocity') loadSalesVelocityPage();
   if(page==='watchlist') loadWatchlistPage();
   if(page==='replenishment') loadReplenishmentDashboard();
@@ -67175,6 +67176,20 @@ async function cuBadgeOnly(){
 
 // 📋 v875: قايمة الطلب — نفس بيانات تليجرام، Excel و PDF
 let _roData = null;
+
+// ⚙️ v877: بتملا الخانات بالمحفوظ بس — من غير ما تحسب القايمة
+async function roLoadSettings(){
+  try{
+    const r = await apiFetch('/api/reports/reorder/settings');
+    const s = r?.settings; if(!s) return;
+    for(const k of ['top','days','threshold','cover'])
+      if($('ro-' + k) && s[k] != null) $('ro-' + k).value = s[k];
+    const sum = $('ro-summary');
+    if(sum && !_roData)
+      sum.innerHTML = `أعلى <b>${s.top}</b> صنف بالإيراد · معدل البيع على <b>${s.days}</b> يوم · `
+        + `ينبّه تحت <b>${s.threshold}</b> يوم — دوس <b>«🔄 جيب القايمة»</b> عشان تحسبها`;
+  }catch(e){ console.warn('[v877] ro settings:', e.message); }
+}
 
 async function roLoad(){
   const out = $('ro-out'), sum = $('ro-summary');
