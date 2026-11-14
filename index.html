@@ -11713,7 +11713,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v880';
+const UI_BUILD = 'v881';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -55138,12 +55138,28 @@ let _neoSearchTimer = null;
 //   سي دي إن شوبيفاي بيعمل المقاس من الرابط نفسه: name_96x96.jpg
 //   فبنطلب مقاس الشاشة ×2 (للشاشات العالية الدقة) بدل الأصل.
 //   لو الرابط مش بتاع شوبيفاي بيرجع زي ما هو.
+// 🐛 v881: كانت بتحط المقاس في اسم الملف بس (`a_96x96.png`) — وروابط
+//   شوبيفاي الحديثة جاية بـ `?width=2048` في الـ query، والـ query بيغلب
+//   الاسم. فالنتيجة إن الصورة كانت بتتحمّل 2048×2048 وتتعرض في 46 بكسل
+//   رغم إن الكود «بيصغّرها». دلوقتي بنشيل أي width/height/crop قديم
+//   ونكتب width بتاعنا — ودي الطريقة الرسمية لتصغير صور شوبيفاي.
 function _shopThumb(url, px){
   const u = String(url || '');
   if(!/cdn\.shopify\.com|\/cdn\/shop\//.test(u)) return u;
-  // شيل أي مقاس قديم في الاسم قبل ما نحط بتاعنا
-  return u.replace(/_(\d+)x(\d+)?(?=\.[a-z]{3,4}(\?|$))/i, '')
-          .replace(/(\.(?:png|jpe?g|webp|gif))(\?|$)/i, `_${px}x${px}$1$2`);
+  const n = Math.max(1, Math.round(Number(px)) || 1);
+  // 🐛 v881: المقاس في اسم الملف شغّال (ودي الصيغة اللي شوبيفاي نفسها
+  //   بتطلّعها) — بس لو الرابط المحفوظ جاي بـ `?width=2048` الـ query
+  //   بيغلب الاسم وشوبيفاي بتبعت الصورة كاملة. كانت بتتحمّل 2048×2048
+  //   وتتعرض في 46 بكسل. بنشيل width/height/crop القديمين الأول.
+  const qi = u.indexOf('?');
+  const base = qi < 0 ? u : u.slice(0, qi);
+  const qs   = qi < 0 ? '' : u.slice(qi + 1);
+  const keep = qs.split('&').filter(Boolean)
+                 .filter(p => !/^(width|height|crop)=/i.test(p))
+                 .join('&');
+  const sized = base.replace(/_(\d+)x(\d+)?(?=\.[a-z]{3,4}$)/i, '')
+                    .replace(/(\.(?:png|jpe?g|webp|gif))$/i, `_${n}x${n}$1`);
+  return keep ? `${sized}?${keep}` : sized;
 }
 
 function _prodImg(url, size){
