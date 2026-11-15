@@ -11731,7 +11731,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v890';
+const UI_BUILD = 'v891';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -11778,9 +11778,20 @@ let orders=[],notifications=[],nextLocalId=2000;
 //   يقول «انتهت الجلسة» ويرجّع 401 على كل حاجة.
 //   _lsSet بتحاول، ولو المساحة ملت بتفضّي الكاش اللي ينفع يضيع
 //   (نسخ بتتجاب من السيرفر تاني) وتحاول من جديد.
-const _LS_DISPOSABLE = ['orderpro_orders', 'batch_history', 'chk_list', 'chk_books',
-                        'chk_suppliers', 'chk_deleted_ids', 'sb_groups', 'pr_full',
-                        'bosta_exported_ids', 'bosta_ids'];
+// ⚠️ v891: القايمة دي كانت أطول، وده كان غلط خطير. اللي ينفع يضيع هو
+//   اللي نقدر **نثبت** إنه نسخة من السيرفر — مش اللي شكله كاش.
+//   اللي شيلته ولازم يفضل مشيول:
+//     bosta_exported_ids — سجل محلي بحت لطلبات اتصدّرت لبوسطة. السيرفر
+//       مش عارفها كلها (`if(!base.bostaExported && _bostaExported[id])`).
+//       مسحها = الطلب يبان مش متصدّر = يتصدّر تاني = بوليصة مكررة.
+//     bosta_ids         — نفس الحكاية، الطلب بيفقد إنه عند بوسطة.
+//     chk_deleted_ids   — قايمة الشيكات الممسوحة. مسحها بيرجّع المحذوف.
+//     sb_groups         — مالوش أي مصدر على السيرفر.
+//     chk_* / batch_history / pr_full — مقدرتش أتأكد، فمابلمسهمش.
+//   orderpro_orders هو الوحيد المضمون: نسخة من /api/orders، وهو كمان
+//   أكبرهم بمراحل — وde لوحده بيفضّي المساحة. ولو مكفّاش، _lsSet
+//   بترجّع false والدخول بيكمّل بتحذير بدل ما يضيع بيانات.
+const _LS_DISPOSABLE = ['orderpro_orders'];
 function _lsQuotaErr(e){
   return e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED'
             || e.code === 22 || e.code === 1014);
