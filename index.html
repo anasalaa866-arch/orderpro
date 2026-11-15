@@ -11731,7 +11731,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v887';
+const UI_BUILD = 'v888';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -13147,6 +13147,10 @@ async function syncCouriersToDB(){
     }
   }catch(e){ console.error('syncCouriersToDB:',e); }
 }
+// 📏 v888: الافتراضي اللي السيرفر شغّال بيه — بييجي في رد /api/orders.
+//   معرّف هنا قبل أول استخدام فيه.
+let _ordersDefaultDays = '60';
+
 // 🆕 v272: Orders date range management
 function setOrdersRange(range){
   // Confirm لو "all" (مكلف)
@@ -13172,7 +13176,7 @@ function setOrdersRange(range){
 }
 
 function _updateOrdersRangeInfo(count){
-  const range = localStorage.getItem('orders_date_range') || '60';
+  const range = localStorage.getItem('orders_date_range') || _ordersDefaultDays;
   const info = document.getElementById('orders-range-info');
   if(!info) return;
   
@@ -13196,7 +13200,7 @@ function _updateOrdersRangeInfo(count){
 
 // عند الـ load الأول، اعمل sync للـ button للـ active
 document.addEventListener('DOMContentLoaded', () => {
-  const range = localStorage.getItem('orders_date_range') || '60';
+  const range = localStorage.getItem('orders_date_range') || _ordersDefaultDays;
   document.querySelectorAll('[data-orders-range]').forEach(btn => {
     btn.classList.remove('orders-range-btn-active');
     if(btn.dataset.ordersRange === String(range)){
@@ -13272,15 +13276,29 @@ document.addEventListener('DOMContentLoaded', () => setTimeout(loadFavorites, 15
 //   متأخرة شوية عشان ماتزاحمش تحميل الداتا الأساسية.
 document.addEventListener('DOMContentLoaded', () => setTimeout(verLoad, 2000));
 
+// 🔁 v888: نداء واحد في المرة. القايمة بتاخد ثواني، والبول كل 30 ثانية،
+//   فلما تتأخر كانت الدورة الجاية تبدأ فوق القديمة ويتراكموا ويزيدوا البطء.
+let _loadOrdersBusy = null;
 async function loadOrders(){
+  if(_loadOrdersBusy) return _loadOrdersBusy;
+  _loadOrdersBusy = _loadOrdersInner().finally(() => { _loadOrdersBusy = null; });
+  return _loadOrdersBusy;
+}
+async function _loadOrdersInner(){
   await syncCouriersToDB();
 
   // 🆕 v272: استخدم الـ range المحفوظ
-  const ordersRange = localStorage.getItem('orders_date_range') || '60';
-  const queryStr = ordersRange === 'all' ? '?days=all' : '?days=' + ordersRange;
+  // 📏 v888: لو إنت مااخترتش فترة بإيدك، مابنبعتش ?days= خالص —
+  //   فالسيرفر بيستعمل إعداد «قايمة الطلبات بتجيب كام يوم».
+  //   كان مكتوب 60 هنا فالإعداد اللي في السيرفر مكانش بيوصل أبداً.
+  const ordersRange = localStorage.getItem('orders_date_range');
+  const queryStr = !ordersRange ? ''
+                 : ordersRange === 'all' ? '?days=all'
+                 : '?days=' + ordersRange;
   
   const data=await apiFetch('/api/orders' + queryStr);
   if(!data)return;
+  if(data.default_days) _ordersDefaultDays = String(data.default_days);
   const prev=orders.length;
   
   // 🆕 v272: حدّث info نص الفترة
