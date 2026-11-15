@@ -11731,7 +11731,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v891';
+const UI_BUILD = 'v892';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -39242,7 +39242,7 @@ function cgRenderReport(){
       <td class="cgn" style="color:${diff?'#b45309':'var(--muted)'};font-weight:${diff?800:400}"
           title="${diff?'الفرق '+(x.sold_qty-(x.system_sold||0)):''}">${x.system_sold == null ? '—' : _cgN(x.system_sold)}</td>
       <td class="cgn">${_cgM(x.sale_price)}${x.had_offer?' <span title="عليه عرض صلاحية — ده السعر الحقيقي">🏷️</span>':''}</td>
-      <td class="cgn">${_cgM(x.unit_price)}</td>
+      <td class="cgn" style="padding:4px">${_cgCostCell(x)}</td>
       <td class="cgn" style="font-weight:800">${x.sold_qty > 0 ? _cgM(x.line_total) : '—'}</td>
     </tr>`;
   }).join('');
@@ -39303,6 +39303,49 @@ function cgRenderReport(){
     </div>`;
 }
 
+// 💰 v892: خانة التكلفة — تتكتب بالإيد لكل صنف لوحده.
+//   الأولوية: رقم مكتوب للصنف ← نسبة خاصة بالصنف ← نسبة المورد.
+//   بتفهم الشكلين: «11000» رقم ثابت، و«25%» نسبة على سعر البيع.
+function _cgCostCell(x){
+  const own = x.price_manual ? _cgM(x.own_cost)
+            : (x.own_pct != null ? x.own_pct + '%' : '');
+  const auto = x.price_manual || x.own_pct != null ? '' : _cgM(x.unit_price);
+  const edited = x.price_manual || x.own_pct != null;
+  return `<div style="display:flex;align-items:center;gap:4px;justify-content:center">
+    <input value="${escapeHtml(own || auto)}" data-cg-cost="${x.item_id}"
+      onchange="cgSaveCost(${x.item_id}, this.value)"
+      onkeydown="if(event.key==='Enter')this.blur()"
+      title="اكتب رقم للتكلفة الثابتة، أو 25% لنسبة خاصة بالصنف ده. سيبها فاضية ترجع لنسبة المورد."
+      style="width:78px;padding:5px;text-align:center;border:1px solid ${edited?'var(--accent)':'var(--border)'};
+             border-radius:6px;background:var(--bg);color:var(--text);
+             font-family:Roboto,sans-serif;font-weight:${edited?800:400};font-size:12px">
+    ${edited ? `<span title="متغيّرة بالإيد${x.own_pct!=null?' (نسبة خاصة)':''} — دوس ↺ ترجع لنسبة المورد"
+        style="font-size:10px;color:var(--accent);cursor:pointer"
+        onclick="cgSaveCost(${x.item_id}, '')">↺</span>` : ''}
+  </div>`;
+}
+
+async function cgSaveCost(id, raw){
+  const v = String(raw == null ? '' : raw).trim().replace(/,/g, '').replace(/٪/g, '%');
+  let body;
+  if(!v){ body = { unitCost: null, itemPct: null }; }          // رجّعه لنسبة المورد
+  else if(/%$/.test(v)){
+    const p = Number(v.slice(0, -1));
+    if(!(p >= 0 && p <= 100)) return toast('❌ النسبة لازم بين 0 و 100');
+    body = { itemPct: p };
+  } else {
+    const c = Number(v);
+    if(!(c >= 0)) return toast('❌ اكتب رقم، أو نسبة بعلامة % — أو سيبها فاضية');
+    body = { unitCost: c };
+  }
+  try{
+    const r = await apiFetch(`/api/consignment/items/${id}`, 'PATCH', body);
+    if(r?.error) return toast('❌ ' + r.error);
+    toast(!v ? '✅ رجعت لنسبة المورد' : '✅ اتحفظت', 'success');
+    cgOnOpen();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
 async function cgSavePct(){
   const pct = Number(document.getElementById('cg-pct')?.value);
   if(!(pct >= 0 && pct <= 100)) return toast('❌ النسبة لازم بين 0 و 100');
@@ -39321,6 +39364,9 @@ async function cgLoadItems(){
     const r = await apiFetch(`/api/consignment/${_cgSup}/items`);
     if(r?.error) throw new Error(r.error);
     _cgItems = r.items || [];
+    // 🔒 v892: عدّاد المقفول والمفتوح — الزرار بيفضل شغّال للأصناف الجديدة
+    const _cgLocked = _cgItems.filter(x => x.opening_locked).length;
+    const _cgOpen   = _cgItems.length - _cgLocked;
     b.innerHTML = `
       <div class="card" style="padding:13px;margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <div style="font-size:12px;color:var(--muted);flex:1;min-width:240px;line-height:1.8">
@@ -39328,7 +39374,13 @@ async function cgLoadItems(){
           بعد أول قطع، النظام بياخد رصيد الإقفال أوتوماتيك ومش بيبص للرقم ده تاني.
         </div>
         <button class="btn btn-sm" onclick="cgOpenAdd()" style="background:#6366f1;border-color:#6366f1;color:#fff;font-weight:700">➕ ضيف أصناف</button>
+        ${_cgOpen ? `<button class="btn btn-sm" onclick="cgLockOpening()"
+            title="بعد ما تراجع الأرقام — بتتقفل فمحدش يغيّرها بالغلط"
+            style="background:#0f766e;border-color:#0f766e;color:#fff;font-weight:800">🔒 حفظ نهائي (${_cgOpen})</button>`
+          : `<span style="font-size:12px;color:#0f766e;font-weight:700">🔒 كله متقفل</span>`}
       </div>
+      ${_cgOpen && _cgLocked ? `<div style="background:#f0fdfa;border:1px solid #0f766e;border-radius:9px;padding:9px 13px;margin-bottom:11px;font-size:12px;color:#115e59">
+        <b>${_cgLocked}</b> صنف متقفل · <b>${_cgOpen}</b> لسه مفتوح</div>` : ''}
       ${!_cgItems.length ? `<div class="card" style="padding:26px;text-align:center;color:var(--muted)">مفيش أصناف لسه</div>` : `
       <div class="card" style="padding:0;overflow-x:auto">
         <table style="width:100%;min-width:620px;border-collapse:collapse">
@@ -39345,18 +39397,50 @@ async function cgLoadItems(){
                 ${x.sku ? `<div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(x.sku)}</div>` : ''}
               </td>
               <td style="padding:7px;text-align:center">
-                <input type="number" min="0" value="${x.opening_qty}" data-cgi="${x.id}" data-cgf="openingQty"
+                ${x.opening_locked ? `<span style="font-family:Roboto,sans-serif;font-weight:800;font-size:13px">${x.opening_qty}</span>
+                  <span title="متقفل${x.opening_locked_by?' — قفله '+escapeHtml(x.opening_locked_by):''}" style="font-size:11px">🔒</span>`
+                : `<input type="number" min="0" value="${x.opening_qty}" data-cgi="${x.id}" data-cgf="openingQty"
                   onchange="cgSaveItem(this)" style="width:86px;padding:6px;text-align:center;border:1px solid var(--border);
-                  border-radius:6px;background:var(--bg);color:var(--text);font-family:Roboto,sans-serif;font-weight:700"></td>
+                  border-radius:6px;background:var(--bg);color:var(--text);font-family:Roboto,sans-serif;font-weight:700">`}</td>
               <td style="padding:7px;text-align:center">
                 <input type="number" min="0" step="0.01" value="${Number(x.est_price)||0}" data-cgi="${x.id}" data-cgf="estPrice"
                   onchange="cgSaveItem(this)" style="width:96px;padding:6px;text-align:center;border:1px solid var(--border);
                   border-radius:6px;background:var(--bg);color:var(--text);font-family:Roboto,sans-serif"></td>
               <td style="padding:7px;text-align:center">
-                <button class="btn btn-sm btn-ghost" onclick="cgDelItem(${x.id})" title="شيله">🗑️</button></td>
+                ${x.opening_locked
+                  ? `<button class="btn btn-sm btn-ghost" onclick="cgUnlockItem(${x.id})"
+                       title="فتح رصيد أول المدة للصنف ده — بيتسجّل مين فتحه">🔓</button>`
+                  : `<button class="btn btn-sm btn-ghost" onclick="cgDelItem(${x.id})" title="شيله">🗑️</button>`}</td>
             </tr>`).join('')}</tbody>
         </table></div>`}`;
   }catch(e){ b.innerHTML = `<div style="color:var(--danger);padding:16px">❌ ${escapeHtml(e.message)}</div>`; }
+}
+
+// 🔒 v892: اقفل رصيد أول المدة. الرقم ده أساس حساب «باع» — أول المدة
+//   + التوريدات − الرصيد الحالي — فأي تغيير فيه بيغيّر المستحق للمورد.
+async function cgLockOpening(){
+  const open = (_cgItems || []).filter(x => !x.opening_locked);
+  if(!open.length) return toast('كله متقفل خلاص');
+  if(!confirm(`هتقفل رصيد أول المدة لـ ${open.length} صنف.\n\n`
+    + `بعدها مايتغيّرش ولا الصنف يتمسح من الشاشة دي.\n`
+    + `لو احتجت تصلّح واحد، فيه زرار 🔓 جنبه بيتسجّل مين فتحه.\n\nتمام؟`)) return;
+  try{
+    const r = await apiFetch(`/api/consignment/${_cgSup}/lock-opening`, 'POST', {});
+    if(r?.error) return toast('❌ ' + r.error);
+    toast(`🔒 اتقفل ${r.locked} صنف`, 'success');
+    cgLoadItems();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
+// 🔓 مخرج الطوارئ — رصيد أول مدة غلط معناه مستحق غلط للمورد
+async function cgUnlockItem(id){
+  if(!confirm('تفتح رصيد أول المدة للصنف ده؟\n\nالرقم ده بيغيّر المستحق للمورد، وبيتسجّل مين فتحه.')) return;
+  try{
+    const r = await apiFetch(`/api/consignment/items/${id}/unlock-opening`, 'POST', {});
+    if(r?.error) return toast('❌ ' + r.error);
+    toast('🔓 اتفتح — عدّله وبعدين اقفل تاني', 'success');
+    cgLoadItems();
+  }catch(e){ toast('❌ ' + e.message); }
 }
 
 async function cgSaveItem(inp){
