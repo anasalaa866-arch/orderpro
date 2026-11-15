@@ -11731,7 +11731,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v888';
+const UI_BUILD = 'v889';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -13276,14 +13276,25 @@ document.addEventListener('DOMContentLoaded', () => setTimeout(loadFavorites, 15
 //   متأخرة شوية عشان ماتزاحمش تحميل الداتا الأساسية.
 document.addEventListener('DOMContentLoaded', () => setTimeout(verLoad, 2000));
 
-// 🔁 v888: نداء واحد في المرة. القايمة بتاخد ثواني، والبول كل 30 ثانية،
-//   فلما تتأخر كانت الدورة الجاية تبدأ فوق القديمة ويتراكموا ويزيدوا البطء.
+// 🔁 v889: الدورة التلقائية بس هي اللي بتتخطّى لو فيه نداء شغّال.
+//   v888 كانت بترجّع النداء الشغّال لأي حد بينده loadOrders — وde غلط:
+//   loadOrders بتتنده من 19 مكان، منهم 8 بعد حفظ. يعني تحفظ تعديل،
+//   والنداء اللي بترجعه بدأ قبل الحفظ، فتعديلك مايظهرش. ومنهم تغيير
+//   الفترة، فتطلب 30 يوم وتستلم بيانات الـ 60. دلوقتي أي نداء غير
+//   الدورة بيجيب بيانات جديدة أكيد — بس بالدور، مش فوق بعضه.
 let _loadOrdersBusy = null;
 async function loadOrders(){
-  if(_loadOrdersBusy) return _loadOrdersBusy;
-  _loadOrdersBusy = _loadOrdersInner().finally(() => { _loadOrdersBusy = null; });
-  return _loadOrdersBusy;
+  const prev = _loadOrdersBusy;
+  const p = (async () => {
+    if(prev) await prev.catch(() => {});   // استنى اللي شغّال، وبعدين هات الجديد
+    return _loadOrdersInner();
+  })();
+  _loadOrdersBusy = p;
+  p.catch(() => {}).then(() => { if(_loadOrdersBusy === p) _loadOrdersBusy = null; });
+  return p;
 }
+// الدورة كل 30 ثانية: لو فيه نداء شغّال خلاص، مابتزوّدش واحد فوقه
+function _loadOrdersPoll(){ return _loadOrdersBusy || loadOrders(); }
 async function _loadOrdersInner(){
   await syncCouriersToDB();
 
@@ -13445,7 +13456,7 @@ function startPolling(){
   if(pollingInterval)clearInterval(pollingInterval);
   // 🆕 v203: استخدم visibility-aware interval
   pollingInterval = setInterval(()=>{
-    if(_pageVisible) loadOrders();
+    if(_pageVisible) _loadOrdersPoll();   // 🔁 v889: الدورة بس هي اللي بتتخطّى
   }, 30000);
 }
 
