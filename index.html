@@ -11731,7 +11731,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v889';
+const UI_BUILD = 'v890';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -11771,14 +11771,55 @@ let orderFilter='all',searchQ='',defaultShip=50;
 let pollingInterval=null,prevOrderCount=0;
 let orders=[],notifications=[],nextLocalId=2000;
 
+// 💾 v890: المساحة في المتصفح ~5 ميجا للموقع. قايمة الطلبات لوحدها
+//   19 ألف طلب — أكبر من المساحة كلها. الكتابات التقيلة ملفوفة في
+//   try/catch فبتفشل بصمت، بس `current_user_session` في doLogin مكانش
+//   ملفوف — فالمساحة لما تمتلي، تسجيل الدخول نفسه كان بيترمي ويفضل
+//   يقول «انتهت الجلسة» ويرجّع 401 على كل حاجة.
+//   _lsSet بتحاول، ولو المساحة ملت بتفضّي الكاش اللي ينفع يضيع
+//   (نسخ بتتجاب من السيرفر تاني) وتحاول من جديد.
+const _LS_DISPOSABLE = ['orderpro_orders', 'batch_history', 'chk_list', 'chk_books',
+                        'chk_suppliers', 'chk_deleted_ids', 'sb_groups', 'pr_full',
+                        'bosta_exported_ids', 'bosta_ids'];
+function _lsQuotaErr(e){
+  return e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+            || e.code === 22 || e.code === 1014);
+}
+function _lsSet(key, value){
+  try{ localStorage.setItem(key, value); return true; }
+  catch(e){
+    if(!_lsQuotaErr(e)) return false;
+    // المساحة ملت — فضّي اللي ينفع يضيع، الأقدم أولاً، وجرّب تاني
+    for(const k of _LS_DISPOSABLE){
+      if(k === key) continue;
+      if(localStorage.getItem(k) === null) continue;
+      try{ localStorage.removeItem(k); }catch(_){}
+      try{ localStorage.setItem(key, value); 
+           console.warn('[v890] المساحة كانت مليانة — فضّينا ' + k);
+           return true; }catch(_){}
+    }
+    console.error('[v890] المساحة مليانة ومقدرناش نحفظ: ' + key);
+    return false;
+  }
+}
+// الكاش الكبير: سقف بالعدد عشان مايحاولش يحفظ 19 ألف طلب أصلاً
+const _LS_ORDERS_MAX = 400;
+function _lsSaveOrders(list){
+  try{
+    const arr = Array.isArray(list) ? list : [];
+    const slim = arr.slice(0, _LS_ORDERS_MAX)
+                    .map(o => { const { bostaAwbBase64, ...r } = o; return r; });
+    return _lsSet('orderpro_orders', JSON.stringify(slim));
+  }catch(e){ return false; }
+}
+
 // حفظ الطلبات في localStorage مع debounce (500ms) لتجنب الحفظ المتكرر
 let _saveOrdersTimer=null;
 function debouncedSaveOrders(){
   clearTimeout(_saveOrdersTimer);
   _saveOrdersTimer=setTimeout(()=>{
     try{
-      const _slim=orders.map(o=>{const{bostaAwbBase64,...r}=o;return r;});
-      localStorage.setItem('orderpro_orders',JSON.stringify(_slim));
+      _lsSaveOrders(orders);
     }catch(e){}
   },500);
 }
@@ -16358,7 +16399,7 @@ async function assignToBosta(id){
     const bIds=JSON.parse(localStorage.getItem('bosta_ids')||'{}');
     bIds[id]=true;
     localStorage.setItem('bosta_ids',JSON.stringify(bIds));
-    localStorage.setItem('orderpro_orders',JSON.stringify(orders));
+    _lsSaveOrders(orders);
   }catch(e){}
   refreshAll();
   pushNotif('🚚','تم تعيين طلب لبوسطة',id+' — '+o.name);
@@ -19403,7 +19444,7 @@ async function doCoBulkReassign(idsStr, newCourierId){
     // Shopify fulfill + tag
     shopifyFulfill({ ...orderSnapshot, courierId: isBosta?null:newCourierId, isBosta, status:'جاري التوصيل' }, courierName);
   }
-  try{const _s=orders.map(o=>{const{bostaAwbBase64,...r}=o;return r;});localStorage.setItem('orderpro_orders',JSON.stringify(_s));}catch(e){}
+  _lsSaveOrders(orders);
   refreshAll();toast('✅ تم تعيين '+ids.length+' طلب');
 }
 
@@ -24416,7 +24457,7 @@ async function doShopSettle(){
   shopSettledAt = settleDate;
   try{
     localStorage.setItem('shop_settled_at', settleDate);
-    localStorage.setItem('orderpro_orders', JSON.stringify(orders));
+    _lsSaveOrders(orders);
   }catch(e){}
 
   closeM('m-shop-settle');
@@ -28053,10 +28094,14 @@ async function doLogin(){
   currentUser = user;
   // 🆕 v206: احفظ الـ token مع الـ session
   const sessionData = {...user, _token: serverToken, _expires: Date.now() + 30*24*60*60*1000};
-  localStorage.setItem('current_user_session', JSON.stringify(sessionData));
-  if(serverToken){
-    localStorage.setItem('admin_token', serverToken);
-    window._adminToken = serverToken;
+  // 🔑 v890: الدخول مايتعلقش على المساحة. لو المتصفح مليان، _lsSet
+  //   بتفضّي الكاش وتحاول تاني؛ ولو برضه مانفعش، التوكن في الذاكرة
+  //   فالجلسة شغّالة لحد ما تقفل التاب — بدل ما الدخول يترمي من أصله.
+  if(serverToken) window._adminToken = serverToken;
+  const _sessOk = _lsSet('current_user_session', JSON.stringify(sessionData));
+  if(serverToken) _lsSet('admin_token', serverToken);
+  if(!_sessOk){
+    toast('⚠️ مساحة المتصفح مليانة — دخلت، بس هتحتاج تسجّل تاني لو قفلت الصفحة', 'warn', 8000);
   }
 
   document.getElementById('login-screen').classList.add('hidden');
@@ -29826,7 +29871,7 @@ window.addEventListener('load', function(){
     loadShopCourierId().catch(()=>{});
     try{
       const s=JSON.parse(localStorage.getItem('current_user_session')||'null');
-      if(s){s._expires=Date.now()+8*60*60*1000;localStorage.setItem('current_user_session',JSON.stringify(s));}
+      if(s){s._expires=Date.now()+8*60*60*1000;_lsSet('current_user_session',JSON.stringify(s));}
     }catch(e){}
     // 🔧 v278: شيلنا الـ flow اللي كان بيكتب الـ token من localStorage في DB
     // لإن دلوقتي الـ token الصحيح موجود في Railway env vars
@@ -56903,7 +56948,7 @@ function exportBostaExcel(){
       const expIds=JSON.parse(localStorage.getItem('bosta_exported_ids')||'{}');
       selectedOrders.forEach(o=>expIds[o.id]=true);
       localStorage.setItem('bosta_exported_ids',JSON.stringify(expIds));
-      localStorage.setItem('orderpro_orders',JSON.stringify(orders));
+      _lsSaveOrders(orders);
     }catch(e){}
     refreshAll();
     toast('✅ تم تصدير '+checked.length+' طلب — انتقلوا لـ "تم التصدير"');
@@ -56922,7 +56967,7 @@ function undoBostaExport(id){
     const expIds=JSON.parse(localStorage.getItem('bosta_exported_ids')||'{}');
     delete expIds[id];
     localStorage.setItem('bosta_exported_ids',JSON.stringify(expIds));
-    localStorage.setItem('orderpro_orders',JSON.stringify(orders));
+    _lsSaveOrders(orders);
   }catch(e){}
   refreshAll();
   toast('↩ تم إرجاع الطلب لـ "لم ترفع بعد"');
