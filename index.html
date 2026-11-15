@@ -11731,7 +11731,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v893';
+const UI_BUILD = 'v894';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -39177,7 +39177,10 @@ async function cgOnOpen(){
         font-family:Cairo,sans-serif;font-size:12.5px;font-weight:${on?800:600};
         border:1.5px solid ${on?'#6366f1':'var(--border)'};background:${on?'#6366f1':'var(--elev)'};
         color:${on?'#fff':'var(--text)'}">🏭 ${escapeHtml(x.name)}
-        <span style="opacity:.75;font-size:11px">· ${x.items_count} صنف</span></button>`;
+        <span style="opacity:.75;font-size:11px">· ${x.items_count} صنف</span>
+        ${on ? `<span onclick="event.stopPropagation();cgUnmark(${x.id})"
+            title="شيل المورد ده من «تحت البيع»"
+            style="margin-inline-start:7px;opacity:.75;font-size:12px">✕</span>` : ''}</button>`;
     }).join('');
     document.getElementById('cg-tabs').style.display = 'flex';
     cgTab(_cgTab);
@@ -39185,6 +39188,25 @@ async function cgOnOpen(){
 }
 
 function cgPick(id){ _cgSup = id; cgOnOpen(); }
+
+// 🗑️ v895: شيل مورد اتعلّم «تحت البيع» بالغلط. العلامة بتتشال بس —
+//   مفيش حاجة بتتمسح. أصنافه وقطوعاته بتفضل مكانها، ولو رجّعته تاني
+//   هتلاقيها زي ما هي. عشان كده بنقوله بالظبط إيه اللي هيتخبّى.
+async function cgUnmark(id){
+  const sup = (_cgSups || []).find(x => String(x.id) === String(id));
+  const n = Number(sup?.items_count) || 0;
+  let msg = `تشيل «${sup?.name || ''}» من بضاعة تحت البيع؟`;
+  if(n) msg += `\n\n⚠️ عنده ${n} صنف — هيتخبّوا من الشاشة دي بس، مش هيتمسحوا.`;
+  msg += `\n\nلو رجّعته تاني هتلاقي كل حاجة زي ما هي.`;
+  if(!confirm(msg)) return;
+  try{
+    const r = await apiFetch(`/api/suppliers/${id}/consignment`, 'PATCH', { on: false });
+    if(r?.error) return toast('❌ ' + r.error);
+    toast('✅ اتشال من تحت البيع', 'success');
+    if(String(_cgSup) === String(id)) _cgSup = null;
+    cgOnOpen();
+  }catch(e){ toast('❌ ' + e.message); }
+}
 
 function cgTab(t){
   _cgTab = t;
@@ -39214,6 +39236,23 @@ async function cgLoadReport(){
   }catch(e){ b.innerHTML = `<div style="color:var(--danger);padding:16px">❌ ${escapeHtml(e.message)}</div>`; }
 }
 
+// 📦 v895: تفصيل التوريدات — رقم أمر الشراء وتاريخه وكميته تحت الرقم
+//   المجمّع. المورد بيسأل «الـ12 دول جم إمتى؟» فلازم يكونوا قدامه.
+function _cgDelivLines(x, opt){
+  const d = x.deliveries || [];
+  if(!d.length) return '';
+  const sep = opt && opt.print ? '<br>' : '';
+  const body = d.map(l => {
+    const when = l.date
+      ? new Date(l.date + 'T00:00:00').toLocaleDateString('ar-EG',{day:'numeric',month:'short'})
+      : '';
+    const q = (l.qty < 0 ? '−' : '') + _cgN(Math.abs(l.qty));
+    return `<span style="white-space:nowrap">${escapeHtml(l.po_number || '—')}${
+      when ? ' · ' + escapeHtml(when) : ''} · <b>${q}</b></span>`;
+  }).join(sep || ' | ');
+  return `<div style="font-size:9.5px;color:var(--muted);line-height:1.7;margin-top:2px">${body}</div>`;
+}
+
 function cgRenderReport(){
   const r = _cgRep, items = r.items || [];
   if(!items.length){
@@ -39230,20 +39269,20 @@ function cgRenderReport(){
   const rows = items.map(x => {
     const warn = x.negative;
     const diff = x.system_sold != null && x.system_sold !== x.sold_qty;
-    return `<tr style="border-bottom:1px solid var(--border);${warn?'background:#fef2f2':''}">
+    return `<tr data-cg-row="${x.item_id}" style="border-bottom:1px solid var(--border);${warn?'background:#fef2f2':''}">
       <td style="padding:7px">
         <div style="font-weight:700;font-size:12px">${escapeHtml(x.product_title || '')}</div>
         ${x.sku ? `<div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(x.sku)}</div>` : ''}
       </td>
       <td class="cgn">${_cgN(x.opening_qty)}</td>
-      <td class="cgn">${_cgN(x.delivered_qty)}</td>
+      <td class="cgn">${_cgN(x.delivered_qty)}${_cgDelivLines(x)}</td>
       <td class="cgn" style="font-weight:800">${_cgN(x.closing_qty)}</td>
       <td class="cgn" style="font-weight:900;color:${warn?'#dc2626':'#166534'}">${_cgN(x.sold_qty)}${warn?' ⚠️':''}</td>
       <td class="cgn" style="color:${diff?'#b45309':'var(--muted)'};font-weight:${diff?800:400}"
           title="${diff?'الفرق '+(x.sold_qty-(x.system_sold||0)):''}">${x.system_sold == null ? '—' : _cgN(x.system_sold)}</td>
       <td class="cgn">${_cgM(x.sale_price)}${x.had_offer?' <span title="عليه عرض صلاحية — ده السعر الحقيقي">🏷️</span>':''}</td>
-      <td class="cgn" style="padding:4px">${_cgCostCell(x)}</td>
-      <td class="cgn" style="font-weight:800">${x.sold_qty > 0 ? _cgM(x.line_total) : '—'}</td>
+      <td class="cgn" style="padding:4px" data-cg-cost-cell="${x.item_id}">${_cgCostCell(x)}</td>
+      <td class="cgn" style="font-weight:800" data-cg-total="${x.item_id}">${x.sold_qty > 0 ? _cgM(x.line_total) : '—'}</td>
     </tr>`;
   }).join('');
 
@@ -39264,11 +39303,11 @@ function cgRenderReport(){
       </div>
       <div style="margin-inline-start:auto;text-align:center">
         <div style="font-size:11px;color:var(--muted)">المستحق للمورد</div>
-        <div style="font-weight:900;font-size:21px;color:#dc2626;font-family:Roboto,sans-serif">${_cgM(t.amount)} ج</div>
+        <div id="cg-due" style="font-weight:900;font-size:21px;color:#dc2626;font-family:Roboto,sans-serif">${_cgM(t.amount)} ج</div>
         <div style="font-size:11px;color:var(--muted)">${_cgN(t.sold)} قطعة</div>
       </div>
       <button class="btn btn-sm btn-ghost" onclick="cgPrintReport()" title="اطبع التقرير قبل ما تقفل — تراجعه أو تدّيه للمورد">🖨️ طباعة</button>
-      <button class="btn btn-sm btn-ghost" onclick="cgPrintMovement()" title="كشف كميات للمورد — من غير أسعار ولا مبالغ">📄 حركة أصناف</button>
+      <button class="btn btn-sm btn-ghost" onclick="cgPrintMovement()" title="كشف كميات للمورد — من غير أسعار ولا مبالغ">📄 كشف جرد</button>
       <button class="btn btn-sm" onclick="cgCut()" style="background:#dc2626;border-color:#dc2626;color:#fff;font-weight:800">✂️ اقفل الفترة واتحاسب</button>
     </div>
 
@@ -39298,7 +39337,7 @@ function cgRenderReport(){
           <td colspan="3"></td>
           <td class="cgn" style="font-weight:900">${_cgN(t.sold)}</td>
           <td colspan="3"></td>
-          <td class="cgn" style="font-weight:900;font-size:14px;color:#dc2626">${_cgM(t.amount)}</td>
+          <td id="cg-due-foot" class="cgn" style="font-weight:900;font-size:14px;color:#dc2626">${_cgM(t.amount)}</td>
         </tr></tfoot>
       </table>
     </div>`;
@@ -39339,12 +39378,44 @@ async function cgSaveCost(id, raw){
     if(!(c >= 0)) return toast('❌ اكتب رقم، أو نسبة بعلامة % — أو سيبها فاضية');
     body = { unitCost: c };
   }
+  const inp = document.querySelector(`[data-cg-cost="${id}"]`);
+  if(inp) inp.style.borderColor = 'var(--border)';
   try{
     const r = await apiFetch(`/api/consignment/items/${id}`, 'PATCH', body);
-    if(r?.error) return toast('❌ ' + r.error);
-    toast(!v ? '✅ رجعت لنسبة المورد' : '✅ اتحفظت', 'success');
-    cgOnOpen();
-  }catch(e){ toast('❌ ' + e.message); }
+    if(r?.error){ if(inp) inp.style.borderColor = '#ef4444'; return toast('❌ ' + r.error); }
+    // 🔄 v894: تحديث الخانة في مكانها. إعادة تحميل الجدول كله كانت
+    //   بتوديك لفوق وتضيّع التركيز مع كل تعديل. لو السيرفر مرجّعش
+    //   السطر لأي سبب، بنرجع للتحميل الكامل عشان الأرقام ماتبقاش قديمة.
+    if(r.row && r.totals && _cgRep){
+      const k = (_cgRep.items || []).findIndex(x => String(x.item_id) === String(id));
+      if(k >= 0) _cgRep.items[k] = r.row;
+      _cgRep.totals = r.totals;
+      cgPatchRow(id, r.row, r.totals);
+      if(inp){ inp.style.borderColor = '#16a34a';
+               setTimeout(() => { const el = document.querySelector(`[data-cg-cost="${id}"]`);
+                                  if(el) el.style.borderColor = 'var(--border)'; }, 900); }
+    } else {
+      cgLoadReport();
+    }
+  }catch(e){ if(inp) inp.style.borderColor = '#ef4444'; toast('❌ ' + e.message); }
+}
+
+// 🔄 v894: بيحدّث خانة التكلفة وإجمالي السطر والمستحق — من غير ما
+//   يعيد بناء الجدول، فمكانك في الصفحة والتركيز مابيضيعوش.
+function cgPatchRow(id, row, totals){
+  const cell = document.querySelector(`[data-cg-cost-cell="${id}"]`);
+  if(cell){
+    const focused = document.activeElement
+      && document.activeElement.getAttribute?.('data-cg-cost') === String(id);
+    cell.innerHTML = _cgCostCell(row);
+    if(focused){ const el = cell.querySelector('[data-cg-cost]'); if(el) el.focus(); }
+  }
+  const tot = document.querySelector(`[data-cg-total="${id}"]`);
+  if(tot) tot.textContent = row.sold_qty > 0 ? _cgM(row.line_total) : '—';
+  const due = document.getElementById('cg-due');
+  if(due) due.textContent = _cgM(totals.amount) + ' ج';
+  const foot = document.getElementById('cg-due-foot');
+  if(foot) foot.textContent = _cgM(totals.amount);
 }
 
 async function cgSavePct(){
@@ -39592,7 +39663,7 @@ function cgPrintReport(){
       <td>${escapeHtml(x.product_title||'')}${
         x.sku?`<div class="sku">${escapeHtml(x.sku)}</div>`:''}</td>
       <td class="n">${_cgN(x.opening_qty)}</td>
-      <td class="n">${_cgN(x.delivered_qty)}</td>
+      <td class="n">${_cgN(x.delivered_qty)}${_cgDelivPrint(x)}</td>
       <td class="n">${_cgN(x.closing_qty)}</td>
       <td class="n b">${_cgN(x.sold_qty)}${x.negative?' ⚠️':''}</td>
       <td class="n${diff?' warn':''}">${x.system_sold==null?'—':_cgN(x.system_sold)}</td>
@@ -39632,6 +39703,7 @@ function cgPrintReport(){
     .warn{color:#92400e;font-weight:700}
     .neg{background:#fdeaea}
     .sku{font-size:9px;color:#777;font-family:Roboto,sans-serif}
+    .deliv{font-size:8.5px;color:#555;line-height:1.55;margin-top:2px;font-family:Roboto,sans-serif}
     .w{padding:6px 9px;border-radius:5px;margin-bottom:6px;font-size:11px}
     .red{background:#fdeaea;border:1px solid #e11}
     .amber{background:#fff7e6;border:1px solid #d97706}
@@ -39669,89 +39741,216 @@ function cgPrintReport(){
 //   ده اللي بتدّيه للمورد عشان يراجع الكميات: كام كان عنده، كام ورّد،
 //   كام فاضل، وكام باع. أسعارك وهوامشك مالهاش لازمة في الورقة دي،
 //   وكمان بتنفع للجرد مع المورد وهو واقف قدامك.
+// 📦 v895: نفس التفصيل بس بستايل الطباعة (مفيش متغيّرات CSS للصفحة)
+function _cgDelivPrint(x){
+  const d = x.deliveries || [];
+  if(!d.length) return '';
+  return '<div class="deliv">' + d.map(l => {
+    const when = l.date
+      ? new Date(l.date + 'T00:00:00').toLocaleDateString('ar-EG',{day:'numeric',month:'long'})
+      : '';
+    const back = l.qty < 0;
+    // الكمية الأول — هي اللي بتتعد. التاريخ جنبها، ورقم الأمر تحتهم.
+    return `<span class="ln${back?' back':''}">`
+      + `<span class="qt">${back?'−':''}${_cgN(Math.abs(l.qty))}</span>`
+      + (when ? `<span class="dt">${escapeHtml(when)}</span>` : '')
+      + `<span class="po">${escapeHtml(l.po_number || '—')}</span></span>`;
+  }).join('') + '</div>';
+}
+
 function cgPrintMovement(){
   const r = _cgRep;
   if(!r || !(r.items||[]).length) return toast('❌ مفيش تقرير مفتوح');
   const items = r.items, t = r.totals || {};
   const sup = (_cgSups||[]).find(x => String(x.id) === String(_cgSup));
   const from = r.period_from
-    ? new Date(r.period_from).toLocaleDateString('ar-EG',{day:'numeric',month:'short',year:'numeric'})
-    : 'البداية';
-  const now = new Date().toLocaleString('ar-EG',
-    {day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    ? new Date(r.period_from).toLocaleDateString('ar-EG',{day:'numeric',month:'long',year:'numeric'})
+    : 'بداية التعامل';
+  const today = new Date().toLocaleDateString('ar-EG',{day:'numeric',month:'long',year:'numeric'});
 
-  const totOpen = items.reduce((a,x) => a + (Number(x.opening_qty)||0), 0);
+  const totOpen  = items.reduce((a,x) => a + (Number(x.opening_qty)||0), 0);
   const totDeliv = items.reduce((a,x) => a + (Number(x.delivered_qty)||0), 0);
   const totClose = items.reduce((a,x) => a + (Number(x.closing_qty)||0), 0);
 
-  const rows = items.map((x,i) => `<tr${x.negative?' class="neg"':''}>
-      <td class="c">${i+1}</td>
-      <td>${escapeHtml(x.product_title||'')}${
-        x.sku?`<div class="sku">${escapeHtml(x.sku)}</div>`:''}</td>
-      <td class="n">${_cgN(x.opening_qty)}</td>
-      <td class="n">${_cgN(x.delivered_qty)}</td>
-      <td class="n">${_cgN(x.closing_qty)}</td>
-      <td class="n b">${_cgN(x.sold_qty)}${x.negative?' ⚠️':''}</td>
-      <td class="box-sign"></td></tr>`).join('');
+  const rows = items.map((x,i) => `<tr${x.negative?' class="flag"':''}>
+      <td class="idx">${_cgN(i+1)}</td>
+      <td class="item">
+        <span class="nm">${escapeHtml(x.product_title||'')}</span>
+        ${x.sku?`<span class="sku">${escapeHtml(x.sku)}</span>`:''}
+      </td>
+      <td class="q">${_cgN(x.opening_qty)}</td>
+      <td class="q in">${_cgN(x.delivered_qty)}${_cgDelivPrint(x)}</td>
+      <td class="q">${_cgN(x.closing_qty)}</td>
+      <td class="q sold">${x.sold_qty < 0 ? '−' : ''}${_cgN(Math.abs(x.sold_qty))}${
+        x.negative?'<span class="bang">؟</span>':''}</td>
+      <td class="count"></td></tr>`).join('');
 
-  // التحذيرات بتتطبع هنا كمان — الورقة دي بتتراجع مع المورد،
-  //   فالصنف اللي رقمه مش مظبوط لازم يبان مش يتخبّى
-  const warn = t.negatives
-    ? `<div class="w red">⚠️ <b>${t.negatives}</b> صنف رصيده الحالي أكبر من المتوقع — محتاج مراجعة.</div>` : '';
+  // الصنف اللي رقمه مش مظبوط لازم يبان قدام الاتنين — الورقة دي
+  //   بتتراجع مع المورد، فتخبية المشكلة بتأجّلها لحد ما تبقى خلاف
+  const flagged = items.filter(x => x.negative).length;
 
-  const w = window.open('', '_blank', 'width=1000,height=1100');
+  const w = window.open('', '_blank', 'width=1040,height=1180');
   if(!w) return toast('❌ المتصفح منع النافذة — اسمح بالنوافذ المنبثقة');
   w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
-  <title>حركة أصناف — ${escapeHtml(sup?.name||'')}</title>
+  <title>جرد بضاعة — ${escapeHtml(sup?.name||'')}</title>
   <style>
-    @page{size:A4;margin:12mm}
+    @page{ size:A4; margin:14mm 13mm 17mm }
+    :root{
+      --ink:#17120F;        /* نص */
+      --roast:#4A3222;      /* بُنّي محمّص — لون العلامة الوحيد */
+      --crema:#C9A227;      /* ذهبي خفيف، للمسات بس */
+      --paper:#FBF9F7;      /* تظليل سطر خفيف يطلع في الطباعة بالأبيض والأسود */
+      --rule:#D8D0C9;
+      --mute:#6B5E55;
+    }
     *{box-sizing:border-box}
-    body{font-family:Cairo,Tahoma,sans-serif;margin:0;color:#111;font-size:12.5px}
-    h1{font-size:18px;margin:0 0 2px}
-    .sub{color:#555;font-size:11px;margin-bottom:9px}
-    .hd{display:flex;justify-content:space-between;align-items:flex-start;
-        border-bottom:2px solid #111;padding-bottom:7px;margin-bottom:10px}
-    .box{text-align:center;border:1.5px solid #111;border-radius:7px;padding:7px 15px}
-    .box .lbl{font-size:10px;color:#555}
-    .box .val{font-size:19px;font-weight:800;font-family:Roboto,sans-serif}
-    table{width:100%;border-collapse:collapse}
-    th,td{border:1px solid #bbb;padding:5px 6px;vertical-align:middle}
-    th{background:#eee;font-size:10.5px}
-    .n{text-align:center;font-family:Roboto,sans-serif}
-    .c{text-align:center;color:#666}
-    .b{font-weight:800}
-    .neg{background:#fdeaea}
-    .sku{font-size:9px;color:#777;font-family:Roboto,sans-serif}
-    .w{padding:6px 9px;border-radius:5px;margin-bottom:7px;font-size:11px}
-    .red{background:#fdeaea;border:1px solid #e11}
-    .box-sign{width:92px;background:#fafafa}
-    tfoot td{background:#eee;font-weight:800}
-    .sign{margin-top:26px;display:flex;gap:50px}
-    .sign div{flex:1;border-top:1px solid #111;padding-top:5px;font-size:11px;text-align:center}
-    @media print{.noprint{display:none}}
+    html,body{margin:0;padding:0}
+    body{ font-family:Cairo,'Segoe UI',Tahoma,sans-serif; color:var(--ink);
+          font-size:12px; line-height:1.5; background:#EFECE8 }
+    .sheet{ background:#fff; max-width:200mm; margin:14px auto; padding:16mm 14mm;
+            box-shadow:0 18px 44px rgba(23,18,15,.14) }
+
+    /* ترويسة: العلامة فوق على اليمين (أول حاجة العين تشوفها بالعربي) */
+    .top{ display:flex; justify-content:space-between; align-items:flex-start; gap:18px }
+    .brand img{ height:34px; display:block }
+    .brand .role{ margin-top:5px; font-size:10px; color:var(--mute); letter-spacing:.2px }
+    .title{ text-align:left }
+    .title h1{ margin:0; font-size:21px; font-weight:800; letter-spacing:-.2px }
+    .title .who{ font-size:13px; color:var(--roast); font-weight:700; margin-top:1px }
+
+    /* البيانات كشبكة تعريفات — مش سطر مربوط بنقط */
+    .meta{ display:grid; grid-template-columns:repeat(3,auto); gap:0 26px;
+           margin:14px 0 0; padding:9px 0 10px;
+           border-top:2px solid var(--roast); border-bottom:1px solid var(--rule) }
+    .meta dt{ font-size:9px; color:var(--mute); margin:0 0 1px }
+    .meta dd{ margin:0; font-size:12px; font-weight:700 }
+
+    .lead{ margin:12px 0 13px; font-size:11px; color:var(--mute); max-width:86% }
+    .lead b{ color:var(--ink) }
+
+    table{ width:100%; border-collapse:collapse }
+    thead th{ background:var(--roast); color:#fff; font-size:10px; font-weight:700;
+              padding:7px 6px; border:none }
+    thead th:first-child{ border-start-start-radius:5px }
+    thead th:last-child{ border-start-end-radius:5px }
+    tbody td{ padding:7px 6px; border-bottom:1px solid var(--rule); vertical-align:top }
+    tbody tr:nth-child(even) td{ background:var(--paper) }
+    .idx{ width:26px; text-align:center; color:var(--mute); font-size:10px }
+    .item .nm{ display:block; font-weight:700; font-size:11px; line-height:1.45 }
+    .item .sku{ display:block; font-size:9px; color:var(--mute); letter-spacing:.3px;
+                font-family:Roboto,Consolas,monospace; margin-top:1px }
+    .q{ width:62px; text-align:center; font-family:Roboto,sans-serif;
+        font-variant-numeric:tabular-nums; font-size:12px }
+    .q.sold{ font-weight:800; font-size:13px }
+    .q.in{ width:118px }
+    .bang{ display:inline-block; margin-inline-start:3px; color:#9B2C14; font-weight:800 }
+    .flag td{ background:#FDF2EE !important }
+
+    /* سجل التوريد: ده تسلسل زمني حقيقي، فالترقيم هنا بيقول معلومة */
+    .deliv{ margin-top:5px; text-align:start }
+    .deliv .ln{ display:block; font-size:8px; color:var(--mute); line-height:1.5;
+                margin-top:3px; padding-inline-start:4px;
+                border-inline-start:2px solid var(--rule) }
+    /* الكمية في خانة لوحدها — من غيرها بتلزق في رقم التاريخ وتتقري رقم واحد */
+    .deliv .qt{ display:inline-block; min-width:18px; padding:1px 4px; border-radius:3px;
+                background:#EFE7DF; text-align:center; font-family:Roboto,sans-serif;
+                font-weight:800; color:var(--ink); font-size:9px }
+    .deliv .dt{ white-space:nowrap; margin-inline-start:5px }
+    .deliv .po{ display:block; font-family:Roboto,sans-serif; font-size:7px;
+                letter-spacing:.3px; color:#9A8F86 }
+    .deliv .back{ border-inline-start-color:#E8B4A0 }
+    .deliv .back .qt{ color:#9B2C14; background:#FBE6DE }
+
+    /* خانة الجرد — دي الوحيدة اللي حد هيكتب فيها، فهي بطلة الورقة */
+    thead th.hcount{ background:var(--crema); color:#2A1E12 }
+    .count{ width:96px; background:#FFFDF4;
+            border-inline-start:2px solid var(--crema) !important;
+            background-image:repeating-linear-gradient(to bottom,transparent 0 17px,#E6DCBF 17px 18px);
+            background-position:0 6px }
+    tfoot td{ background:#F2EEEA; font-weight:800; padding:8px 6px; border-top:2px solid var(--roast) }
+    tfoot .lbl{ text-align:start; font-size:11px }
+
+    .note{ margin-top:11px; font-size:10px; color:#8A3A1E; background:#FDF2EE;
+           border-inline-start:3px solid #C2410C; padding:7px 10px; border-radius:0 5px 5px 0 }
+
+    .sign{ margin-top:26px; display:flex; gap:40px }
+    .sign div{ flex:1 }
+    .sign .line{ border-top:1px solid var(--ink); margin-top:34px; padding-top:5px;
+                 font-size:10px; color:var(--mute) }
+    .fine{ margin-top:16px; padding-top:8px; border-top:1px solid var(--rule);
+           font-size:9px; color:var(--mute) }
+
+    .bar{ max-width:200mm; margin:0 auto 26px; display:flex; gap:9px; justify-content:center }
+    .bar button{ font-family:Cairo,sans-serif; font-size:13px; font-weight:700; cursor:pointer;
+                 border:none; border-radius:7px; padding:10px 24px; background:var(--roast); color:#fff }
+    .bar .ghost{ background:#fff; color:var(--roast); border:1px solid var(--rule) }
+
+    /* لحظة واحدة عند الفتح — مش تأثير على كل عنصر */
+    @media screen and (prefers-reduced-motion:no-preference){
+      .sheet{ animation:rise .45s cubic-bezier(.2,.7,.3,1) both }
+      @keyframes rise{ from{ opacity:0; transform:translateY(9px) } to{ opacity:1; transform:none } }
+    }
+    @media print{
+      body{ background:#fff }
+      .sheet{ box-shadow:none; margin:0; padding:0; max-width:none; animation:none }
+      .bar{ display:none }
+      thead{ display:table-header-group }
+      tr{ break-inside:avoid }
+    }
   </style></head><body>
-  <div class="hd">
-    <div><h1>حركة أصناف — ${escapeHtml(sup?.name||'')}</h1>
-      <div class="sub">الفترة: ${escapeHtml(from)} → دلوقتي &nbsp;·&nbsp; اتطبع: ${escapeHtml(now)}</div>
-      <div class="sub">كشف كميات للمراجعة — مفيش أسعار</div></div>
-    <div class="box"><div class="lbl">باع</div>
-      <div class="val">${_cgN(t.sold)}</div>
-      <div class="lbl">قطعة · ${items.length} صنف</div></div>
+  <div class="sheet">
+    <div class="top">
+      <div class="brand">
+        <img src="${LOGO_B64}" alt="CAFELAX">
+        <div class="role">كشف جرد بضاعة تحت البيع</div>
+      </div>
+      <div class="title">
+        <h1>جرد بضاعة</h1>
+        <div class="who">${escapeHtml(sup?.name||'')}</div>
+      </div>
+    </div>
+
+    <dl class="meta">
+      <div><dt>الفترة من</dt><dd>${escapeHtml(from)}</dd></div>
+      <div><dt>تاريخ الجرد</dt><dd>${escapeHtml(today)}</dd></div>
+      <div><dt>عدد الأصناف</dt><dd>${_cgN(items.length)}</dd></div>
+    </dl>
+
+    <p class="lead">الكشف ده للكميات بس — <b>مفيش أسعار ولا مبالغ</b>.
+      اعدّ معانا وسجّل اللي لقيته في خانة <b>جرد المورد</b>، ولو فيه فرق نراجعه سوا قبل التوقيع.</p>
+
+    <table>
+      <thead><tr>
+        <th>#</th><th style="text-align:start">الصنف</th>
+        <th>أول الفترة</th><th>توريدات</th><th>الرصيد الحالي</th><th>باع</th>
+        <th class="hcount">جرد المورد</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr>
+        <td colspan="2" class="lbl">إجمالي ${_cgN(items.length)} صنف</td>
+        <td class="q">${_cgN(totOpen)}</td><td class="q">${_cgN(totDeliv)}</td>
+        <td class="q">${_cgN(totClose)}</td><td class="q">${_cgN(t.sold)}</td>
+        <td class="count"></td></tr></tfoot>
+    </table>
+
+    ${flagged ? `<div class="note"><b>${_cgN(flagged)}</b> صنف علامته «؟» —
+      الرصيد الموجود أكبر من المتوقع، يعني فيه توريد مش متسجّل أو رقم أول المدة محتاج مراجعة.
+      نشوفهم سوا قبل التوقيع.</div>` : ''}
+
+    <div class="sign">
+      <div><div class="line">عن ${escapeHtml(sup?.name||'المورد')} — الاسم والتوقيع</div></div>
+      <div><div class="line">عن CAFELAX — الاسم والتوقيع</div></div>
+    </div>
+    <div class="fine">التوقيع هنا معناه الاتفاق على الكميات المذكورة في تاريخ الجرد.
+      الكشف ده نسختين: واحدة للمورد وواحدة عندنا.</div>
   </div>
-  ${warn}
-  <table><thead><tr>
-    <th>#</th><th>الصنف</th><th>أول الفترة</th><th>توريدات</th>
-    <th>الرصيد الحالي</th><th>باع</th><th>جرد المورد</th>
-  </tr></thead><tbody>${rows}</tbody>
-  <tfoot><tr><td colspan="2" class="c">${items.length} صنف</td>
-    <td class="n">${_cgN(totOpen)}</td><td class="n">${_cgN(totDeliv)}</td>
-    <td class="n">${_cgN(totClose)}</td><td class="n">${_cgN(t.sold)}</td><td></td></tr></tfoot></table>
-  <div class="sign"><div>المستلم</div><div>المورد</div></div>
-  <div class="noprint" style="margin-top:14px;text-align:center">
-    <button onclick="window.print()" style="padding:8px 22px;font-family:Cairo,sans-serif;font-size:13px">🖨️ اطبع</button></div>
+  <div class="bar">
+    <button onclick="window.print()">اطبع الكشف</button>
+    <button class="ghost" onclick="window.close()">اقفل</button>
+  </div>
   </body></html>`);
   w.document.close();
-  setTimeout(() => { try{ w.focus(); w.print(); }catch(e){} }, 400);
+  setTimeout(() => { try{ w.focus(); }catch(e){} }, 250);
 }
 
 // ───────────── القطع ─────────────
