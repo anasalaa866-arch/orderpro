@@ -3981,6 +3981,7 @@ tr:hover td{background:#fafbff}
           <div style="margin-right:auto;display:flex;gap:6px">
             <button class="btn btn-ghost btn-sm" style="color:#b91c1c;border-color:#b91c1c" onclick="chkDuePdf()" title="نفس التقرير اللي بيتبعت على تليجرام — بيتولّد دلوقتي من الداتا">📑 تقرير المستحق</button>
             <button class="btn btn-ghost btn-sm" onclick="printChecksReport()">🖨️ طباعة</button>
+            <button class="btn btn-ghost btn-sm" style="color:#7c3aed;border-color:#7c3aed" onclick="chqOpen()" title="اطبع على الشيك نفسه — المواضع متظبطة على شيك كريدي أجريكول">🖨️ اطبع شيك</button>
             <button class="btn btn-ghost btn-sm" style="color:#16a34a;border-color:#16a34a" onclick="exportChecksExcel()">📊 Excel</button>
             <button class="btn btn-ghost btn-sm" onclick="openCheckBook()">📚 دفاتر</button>
             <button class="btn btn-ghost btn-sm" id="chk-recovery-btn" onclick="openCheckBookRecovery()" style="display:none;color:#dc2626;border-color:#dc2626" title="فيه دفتر اتمسح وشيكاته لسه موجودة">♻️ استعادة دفتر</button>
@@ -8420,6 +8421,18 @@ tr:hover td{background:#fafbff}
 </div>
 
 <!-- PO Detail Modal -->
+<!-- 🖨️ v900: طباعة الشيكات -->
+<div id="m-chq" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:860px">
+    <div class="modal-header">
+      <h3 style="margin:0" id="m-chq-title">🖨️ طباعة شيك</h3>
+      <button class="modal-close" onclick="closeM('m-chq')">×</button>
+    </div>
+    <div class="modal-body" id="m-chq-body"></div>
+    <div class="modal-footer" id="m-chq-actions"></div>
+  </div>
+</div>
+
 <div id="m-po-detail" class="modal-overlay" style="display:none">
   <div class="modal" style="max-width:900px">
     <div class="modal-header">
@@ -11731,7 +11744,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v899';
+const UI_BUILD = 'v900';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -26895,6 +26908,7 @@ function renderChecksPage(){
         ${c.status==='void_requested'?`<button class="btn btn-xs" style="background:#dc2626;color:#fff;border:none" onclick="approveChkVoid('${c.id}')">✅ موافقة على الهالك</button> <button class="btn btn-ghost btn-xs" onclick="rejectChkVoid('${c.id}')">❌ رفض</button>`:''}
         ${c.status==='done'?`<button class="btn btn-ghost btn-xs" onclick="chkMarkPending('${c.id}')">↩️ إلغاء</button>`:''}
         ${c.status==='void'?`<button class="btn btn-ghost btn-xs" onclick="chkMarkPending('${c.id}')">↩️ إرجاع</button>`:''}
+        <button class="btn btn-ghost btn-xs" style="color:#7c3aed" onclick="chqOpen('${c.id}')" title="${c.printedCount ? 'اتطبع '+c.printedCount+' مرة' : 'اطبع الشيك'}">🖨️${c.printedCount ? '<sup style="color:#dc2626">'+c.printedCount+'</sup>' : ''}</button>
         <button class="btn btn-ghost btn-xs" onclick="openEditChk('${c.id}')">✏️</button>
         <button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="deleteChk('${c.id}')">🗑️</button>
       </div></td>
@@ -33507,7 +33521,8 @@ function openWeekChecksModal(weekNum){
   document.body.appendChild(modal);
   
   // اقفل بـ Escape
-  document.addEventListener('keydown', _weekModalEscHandler);
+  document.addEventListener('keydown', chqKey);   // 🖨️ v900: أسهم ظبط الشيك
+document.addEventListener('keydown', _weekModalEscHandler);
   // اقفل بالضغط على الـ overlay
   modal.addEventListener('click', (e) => {
     if(e.target === modal) closeWeekChecksModal();
@@ -54851,6 +54866,645 @@ th { background:#f0f0f0; padding:8px; border:1px solid #999; }
 }
 
 // helper: تحويل الرقم لكلام عربي (مبسّط)
+// 💰 تفقيط المبالغ للشيكات — النص اللي بيتكتب في خانة «مبلغ وقدره»
+// الصيغة زي ما المحاسب متعوّد عليها: «فقط عشرة آلاف جنيه مصري لا غير»
+//
+// ⚠️ ده كود بيكتب على شيك. أي غلط فيه = شيك محروق أو مبلغ غلط.
+//    القواعد اللي اتظبطت:
+//    - المئات كلمة واحدة: ثلاثمائة مش «ثلاثةمائة»
+//    - التمييز بعد العدد: ٣-١٠ جمع (آلاف/ملايين) · ١١+ مفرد منصوب (ألفاً/مليوناً)
+//    - المثنى: ألفان · مليونان · ملياران
+//    - مفيش رجوع لأرقام مهما كان المبلغ كبير
+
+const _TFQ_ONES = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة',
+  'عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر',
+  'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
+const _TFQ_TENS = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
+const _TFQ_HUNS = ['', 'مائة', 'مائتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة',
+  'سبعمائة', 'ثمانمائة', 'تسعمائة'];
+
+// ١ → ٩٩٩
+function _tfqSub(n) {
+  if (n <= 0) return '';
+  const parts = [];
+  const h = Math.floor(n / 100), r = n % 100;
+  if (h) parts.push(_TFQ_HUNS[h]);
+  if (r) {
+    if (r < 20) parts.push(_TFQ_ONES[r]);
+    else {
+      const t = Math.floor(r / 10), o = r % 10;
+      parts.push(o ? _TFQ_ONES[o] + ' و' + _TFQ_TENS[t] : _TFQ_TENS[t]);
+    }
+  }
+  return parts.join(' و');
+}
+
+// اسم المرتبة حسب العدد اللي قبلها
+//   one = المفرد · two = المثنى · few = جمع (٣-١٠) · many = مفرد منصوب (١١+)
+const _TFQ_SCALES = [
+  { v: 1e9, one: 'مليار', two: 'ملياران', few: 'مليارات', many: 'ملياراً' },
+  { v: 1e6, one: 'مليون', two: 'مليونان', few: 'ملايين', many: 'مليوناً' },
+  { v: 1e3, one: 'ألف', two: 'ألفان', few: 'آلاف', many: 'ألفاً' },
+];
+
+function _tfqScale(count, s) {
+  if (count === 1) return s.one;
+  if (count === 2) return s.two;
+  // التمييز بيتبع آخر خانتين مش العدد كله:
+  //   ٥٠٠ ألف → «خمسمائة ألف» (مفرد) · ١٣٥ ألف → «مائة وخمسة وثلاثون ألفاً» (منصوب)
+  const r = count % 100;
+  const word = (r <= 2) ? s.one : (r <= 10) ? s.few : s.many;
+  // المضاف بيخسر النون: مائتان ألف ← مائتا ألف
+  return _tfqSub(count).replace(/مائتان$/, 'مائتا') + ' ' + word;
+}
+
+// العدد الصحيح كله بالكلام — من غير عملة
+function tfqNumber(n) {
+  n = Math.floor(Math.abs(Number(n) || 0));
+  if (n === 0) return 'صفر';
+  if (n >= 1e12) return null;              // أكبر من قدرة التفقيط — المنادي بيتصرف
+  const parts = [];
+  let rest = n;
+  for (const s of _TFQ_SCALES) {
+    const c = Math.floor(rest / s.v);
+    if (c) { parts.push(_tfqScale(c, s)); rest %= s.v; }
+  }
+  if (rest) parts.push(_tfqSub(rest));
+  return parts.join(' و');
+}
+
+// المبلغ كامل بصيغة الشيك
+//   tfqCheque(10000)    → فقط عشرة آلاف جنيه مصري لا غير
+//   tfqCheque(1250.50)  → فقط ألف ومائتان وخمسون جنيه مصري وخمسون قرشاً لا غير
+function tfqCheque(amount) {
+  const v = Number(amount);
+  if (!Number.isFinite(v) || v < 0) return null;
+  // القروش بالتقريب لأقرب قرش — من غير ده ٠٫١+٠٫٢ بتطلع ٢٩ قرش
+  const total = Math.round(v * 100);
+  const pounds = Math.floor(total / 100);
+  const piastres = total % 100;
+  if (pounds === 0 && piastres === 0) return null;   // شيك بصفر؟ لأ.
+
+  const words = [];
+  if (pounds) {
+    const w = tfqNumber(pounds);
+    if (w === null) return null;
+    words.push(w + ' جنيه مصري');
+  }
+  if (piastres) {
+    const p = tfqNumber(piastres);
+    words.push((pounds ? 'و' : '') + p + ' ' + (piastres === 1 ? 'قرش'
+      : piastres === 2 ? 'قرشان' : piastres <= 10 ? 'قروش' : 'قرشاً'));
+  }
+  return 'فقط ' + words.join(' ') + ' لا غير';
+}
+
+// 🖨️ v900: طباعة الشيكات على الشيك نفسه
+// ═══════════════════════════════════════════════════════════════════
+//   كل خانة ليها مكان بالمليمتر من الركن الأعلى الشمال للشيك، ومقاس
+//   الصفحة وقت الطباعة = مقاس الشيك بالظبط. ده اللي بيخلي الكلام
+//   يقع مكانه بدل ما ينزل في عمود على ورقة A4.
+//
+//   الإزاحة (offX/offY) منفصلة عن مواضع الخانات عن قصد:
+//   المواضع اتقاست من الشيك نفسه مرة واحدة ومابتتغيرش، والإزاحة
+//   بتصلّح فرق سحب الورق في الطابعة — وده بيتغير من طابعة للتانية.
+// ═══════════════════════════════════════════════════════════════════
+
+const CHQ_TPL_ID = 'ca-eg';
+let _chqTpl = null;         // القالب الشغال
+let _chqForm = {};          // بيانات الشيك اللي بيتطبع
+let _chqCalib = false;      // إحنا في شاشة الظبط؟
+let _chqDrag = null;
+
+// القالب الافتراضي — المواضع اتقاست من شيك كريدي أجريكول الحقيقي
+// (١٧٦ × ٨٣ مم). لو الداتابيز فاضية بنبدأ من هنا.
+function _chqDefaultTpl(){
+  return {
+    id: CHQ_TPL_ID, name: 'كريدي أجريكول مصر', bank: 'Crédit Agricole Egypt',
+    w: 176, h: 83, bgUrl: 'cheque-bg.jpg', offX: 0, offY: 0, pageMode: 'cheque',
+    // المواضع دي مقيسة من شيك كريدي أجريكول الحقيقي، مش تقدير:
+    //   خانات التاريخ الوردي من ١٢٨٫٣ لـ ١٦١ مم (٨ خانات × ٤٫٠٩)
+    //   سطر المستفيد عند ٢٧٫٩ مم · مربع التفقيط من ٣٥٫٩ لـ ٤٤٫١ (سطرين جواه)
+    //   خانة EGP من ١٢٩ لـ ١٣٩٫٢ — والمبلغ بالأرقام في المربع اللي **يمينها**
+    //   (١٣٩٫٢→١٧٠)، زي ما مكتوب بخط الإيد في الشيكات القديمة، مش شمالها
+    //   والكلام المطبوع اللي ماينفعش نركب عليه:
+    //   «إدفعوا…» ١٣٦٫٦→١٧٠ · «مبلغ وقدره» ١١١٫٢→١٢٤٫٩ · «إسم الموقع» ١٥٧→١٧٠٫٧
+    fields: {
+      date:   { on:true, label:'التاريخ',            x:128.3, y:7.0,  w:32.7, size:3.4, kind:'boxes', boxes:8, bold:true },
+      payee:  { on:true, label:'المستفيد',           x:14,    y:23.9, w:120,  size:3.8, kind:'text', align:'right', bold:true },
+      words1: { on:true, label:'التفقيط',            x:19,    y:36.4, w:107,  size:3.2, kind:'text', align:'right', bold:true },
+      words2: { on:true, label:'التفقيط — سطر ٢',    x:19,    y:40.4, w:107,  size:3.2, kind:'text', align:'right', bold:true },
+      amount: { on:true, label:'المبلغ بالأرقام',     x:140.5, y:37.6, w:28,   size:4.0, kind:'text', align:'center', bold:true },
+      signer: { on:true, label:'اسم الموقّع',         x:99,    y:45.5, w:56,   size:3.2, kind:'text', align:'center', bold:false },
+      cross:  { on:true, label:'التسطير',            x:6,     y:13,   w:36,   h:14, size:2.4, kind:'cross' },
+    }
+  };
+}
+
+const _chqMM = v => (Math.round(Number(v) * 10) / 10);
+
+// ── تحميل القالب ──────────────────────────────────────────────────
+async function chqLoadTpl(force){
+  if(_chqTpl && !force) return _chqTpl;
+  let saved = null;
+  try{
+    const r = await apiFetch('/api/cheque-templates');
+    saved = (r?.templates || []).find(t => t.id === CHQ_TPL_ID) || (r?.templates || [])[0] || null;
+  }catch(e){ console.warn('[v900] قالب الشيك:', e.message); }
+  const def = _chqDefaultTpl();
+  if(!saved || !saved.fields || !Object.keys(saved.fields).length){
+    _chqTpl = def;
+  } else {
+    // الخانات الجديدة اللي اتضافت في نسخة أحدث لازم تيجي بقيمها الافتراضية
+    const fields = { ...def.fields };
+    for(const k in saved.fields) fields[k] = { ...(def.fields[k] || {}), ...saved.fields[k] };
+    _chqTpl = { ...def, ...saved, fields };
+  }
+  return _chqTpl;
+}
+
+async function chqSaveTpl(){
+  const t = _chqTpl;
+  try{
+    await apiFetch('/api/cheque-templates/' + encodeURIComponent(t.id), 'PUT', {
+      name:t.name, bank:t.bank, w:t.w, h:t.h, bgUrl:t.bgUrl, bg:t.bg || null,
+      fields:t.fields, offX:t.offX, offY:t.offY, pageMode:t.pageMode, isDefault:true });
+    toast('✅ المقاسات اتحفظت', 'success');
+    return true;
+  }catch(e){ toast('❌ الحفظ فشل: ' + e.message, 'error'); return false; }
+}
+
+// ── بناء محتوى الخانات من بيانات الشيك ────────────────────────────
+// بيرجّع { date, payee, words1, words2, amount, signer } نصوص جاهزة
+function chqRender(data){
+  const out = {};
+  const d = data.date ? new Date(data.date + 'T00:00:00') : null;
+  if(d && !isNaN(d)){
+    const p = n => String(n).padStart(2, '0');
+    out.date = p(d.getDate()) + p(d.getMonth() + 1) + d.getFullYear();   // DDMMYYYY
+  } else out.date = '';
+  out.payee = String(data.payee || '').trim();
+  out.signer = String(data.signer || '').trim();
+
+  const amt = Number(data.amount);
+  if(Number.isFinite(amt) && amt > 0){
+    // بين # و# زي ما المحاسب بيكتب — عشان محدش يزوّد رقم قدام أو ورا
+    out.amount = '#' + amt.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + '#';
+  } else out.amount = '';
+
+  const words = tfqCheque(amt);
+  if(words){
+    // التفقيط بيتقسم على سطرين لو طويل — بنكسره عند مسافة مش في نص كلمة
+    const lim = _chqLineCap(_chqTpl?.fields?.words1);
+    if(words.length <= lim){ out.words1 = words; out.words2 = ''; }
+    else {
+      let cut = words.lastIndexOf(' ', lim);
+      if(cut < lim * 0.5) cut = lim;
+      out.words1 = words.slice(0, cut).trim();
+      out.words2 = words.slice(cut).trim();
+    }
+  } else { out.words1 = ''; out.words2 = ''; }
+  // 🛡️ الخانات white-space:nowrap + overflow:hidden — يعني كلام أطول من
+  //    السطر بيتقص من غير ما حد ياخد باله. على شيك ده كارثة، فبنبلّغ.
+  out._over = [];
+  if(out.words2 && out.words2.length > _chqLineCap(_chqTpl?.fields?.words2)) out._over.push('التفقيط');
+  if(out.payee && out.payee.length > _chqLineCap(_chqTpl?.fields?.payee)) out._over.push('اسم المستفيد');
+  if(out.signer && out.signer.length > _chqLineCap(_chqTpl?.fields?.signer)) out._over.push('اسم الموقّع');
+  return out;
+}
+
+// كام حرف يدخل في الخانة. متوسط عرض الحرف في Cairo ≈ ٠٫٤٦ من حجم الخط،
+// وبناخد ٩٥٪ احتياطي عشان الكلمة الأخيرة ماتتقصّش.
+function _chqLineCap(f){
+  const w = Number(f?.w) || 90, size = Number(f?.size) || 3.2;
+  return Math.max(12, Math.floor((w * 0.95) / (size * 0.46)));
+}
+
+// ── توليد HTML الخانات بالمليمتر ──────────────────────────────────
+function _chqFieldsHtml(tpl, vals, opts){
+  opts = opts || {};
+  const ox = opts.noOffset ? 0 : (Number(tpl.offX) || 0);
+  const oy = opts.noOffset ? 0 : (Number(tpl.offY) || 0);
+  const out = [];
+  for(const [key, f] of Object.entries(tpl.fields || {})){
+    if(!f || f.on === false) continue;
+    const x = Number(f.x) + ox, y = Number(f.y) + oy;
+    const common = `position:absolute;left:${x}mm;top:${y}mm;width:${f.w}mm;`
+      + `font-family:'Cairo','Arial',sans-serif;${f.bold ? 'font-weight:700;' : ''}color:#000;`;
+
+    if(f.kind === 'cross'){
+      // التسطير: خطين مايلين و«يصرف للمستفيد الأول» بينهم
+      if(!opts.cross && !opts.outline) continue;
+      const h = Number(f.h) || 16;
+      out.push(`<div data-f="${key}" style="${common}height:${h}mm;pointer-events:none">
+        <svg width="100%" height="100%" viewBox="0 0 ${f.w} ${h}" style="display:block">
+          <line x1="0" y1="${h}" x2="${f.w}" y2="0" stroke="#000" stroke-width="0.4"/>
+          <line x1="0" y1="${h * 0.62}" x2="${f.w * 0.62}" y2="0" stroke="#000" stroke-width="0.4"/>
+          <text x="${f.w * 0.34}" y="${h * 0.46}" font-size="${f.size}" font-family="Cairo,Arial"
+                text-anchor="middle" fill="#000"
+                transform="rotate(-${Math.round(Math.atan2(h, f.w) * 180 / Math.PI)} ${f.w * 0.34} ${h * 0.46})"
+          >يصرف للمستفيد الأول</text>
+        </svg></div>`);
+      continue;
+    }
+
+    if(f.kind === 'boxes'){
+      // التاريخ: كل رقم في خانته — المسافات بين الخانات ثابتة على الشيك
+      const n = Number(f.boxes) || 8;
+      const digits = String(vals[key] || '').slice(0, n).split('');
+      const cell = Number(f.w) / n;
+      const cells = [];
+      for(let i = 0; i < n; i++){
+        cells.push(`<span style="display:inline-block;width:${cell}mm;text-align:center">`
+          + `${digits[i] != null ? escapeHtml(digits[i]) : ''}</span>`);
+      }
+      out.push(`<div data-f="${key}" style="${common}font-size:${f.size}mm;line-height:1;`
+        + `white-space:nowrap;direction:ltr;letter-spacing:0">${cells.join('')}</div>`);
+      continue;
+    }
+
+    const txt = vals[key] == null ? '' : String(vals[key]);
+    out.push(`<div data-f="${key}" style="${common}font-size:${f.size}mm;line-height:1;`
+      + `text-align:${f.align || 'right'};white-space:nowrap;overflow:hidden">${escapeHtml(txt)}</div>`);
+  }
+  return out.join('\n');
+}
+
+// ── الطباعة الحقيقية ──────────────────────────────────────────────
+function chqPrint(tpl, vals, mode){
+  const isCal = mode === 'calib';
+  const a4 = tpl.pageMode === 'a4';
+  const pageCss = a4
+    ? `@page{size:A4 landscape;margin:0}`
+    : `@page{size:${tpl.w}mm ${tpl.h}mm;margin:0}`;
+
+  // 📏 مسطرة ١٠٠ مم: لو طلعت أقل من ١٠٠ بالمسطرة الحقيقية يبقى
+  //    الطابعة مصغّرة — وده بيبوّظ كل المواضع. أهم حاجة في ورقة المعايرة.
+  const ruler = isCal ? `
+    <div style="position:absolute;left:10mm;top:${tpl.h - 12}mm;width:100mm;height:6mm">
+      <div style="position:absolute;inset:auto 0 0 0;border-top:0.3mm solid #c00"></div>
+      ${Array.from({length:11},(_,i)=>`<div style="position:absolute;left:${i*10}mm;bottom:0;
+        width:0.3mm;height:${i%5?2:4}mm;background:#c00"></div>
+        ${i%5?'':`<div style="position:absolute;left:${i*10}mm;bottom:4.2mm;font-size:2.6mm;
+          color:#c00;font-family:Arial">${i*10}</div>`}`).join('')}
+      <div style="position:absolute;left:0;bottom:-4mm;font-size:2.6mm;color:#c00;font-family:Cairo,Arial">
+        قيس الخط ده — لازم يطلع ١٠٠ مم بالظبط. لو أقل، الطابعة بتصغّر: خلّي Scale = 100%.</div>
+    </div>` : '';
+
+  const grid = isCal ? (() => {
+    const g = [];
+    for(let mm = 0; mm <= tpl.w; mm += 5)
+      g.push(`<div style="position:absolute;left:${mm}mm;top:0;width:${mm%20?0.1:0.25}mm;
+        height:${tpl.h}mm;background:${mm%20?'#cfe3f5':'#7fb3e0'}"></div>`
+        + (mm % 20 ? '' : `<div style="position:absolute;left:${mm+0.4}mm;top:0.4mm;font-size:2.2mm;
+            color:#2b6cb0;font-family:Arial">${mm}</div>`));
+    for(let mm = 0; mm <= tpl.h; mm += 5)
+      g.push(`<div style="position:absolute;top:${mm}mm;left:0;height:${mm%20?0.1:0.25}mm;
+        width:${tpl.w}mm;background:${mm%20?'#cfe3f5':'#7fb3e0'}"></div>`
+        + (mm % 20 ? '' : `<div style="position:absolute;top:${mm+0.4}mm;left:0.4mm;font-size:2.2mm;
+            color:#2b6cb0;font-family:Arial">${mm}</div>`));
+    return g.join('');
+  })() : '';
+
+  // في ورقة المعايرة بنرسم برواز حوالين كل خانة عشان يبان مكانها بالظبط
+  const outlines = isCal ? Object.entries(tpl.fields || {}).filter(([,f]) => f && f.on !== false)
+    .map(([k,f]) => `<div style="position:absolute;left:${Number(f.x)+(Number(tpl.offX)||0)}mm;
+        top:${Number(f.y)+(Number(tpl.offY)||0)}mm;width:${f.w}mm;
+        height:${f.kind==='cross'?(f.h||16):(Number(f.size)*1.25)}mm;
+        border:0.25mm dashed #e11d48"></div>`).join('') : '';
+
+  const body = `<div class="sheet">${grid}${outlines}
+      ${_chqFieldsHtml(tpl, vals, { cross: true, outline: isCal })}${ruler}</div>`;
+
+  const w = window.open('', '_blank', 'width=1100,height=700');
+  if(!w){ toast('❗ المتصفح منع النافذة — اسمح بالنوافذ المنبثقة', 'error'); return null; }
+  w.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
+<title>${isCal ? 'ورقة معايرة' : 'شيك'} — ${escapeHtml(tpl.name)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  ${pageCss}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#fff}
+  .sheet{position:relative;width:${tpl.w}mm;height:${tpl.h}mm;overflow:hidden;
+         ${a4 ? 'margin:0;' : ''}}
+  .hint{font-family:Cairo,Arial;font-size:13px;background:#fffbeb;border:1px solid #f59e0b;
+        color:#92400e;padding:10px 14px;margin:0 0 8px;line-height:1.9;border-radius:8px}
+  @media print{ .hint{display:none} }
+</style></head><body>
+<div class="hint"><b>قبل ما تدوس Print:</b> خلّي <b>Margins = None</b> و<b>Scale = 100%</b>
+ (مش Fit to page)، وشيل علامة <b>Headers and footers</b>.
+ ${isCal ? 'ودي ورقة معايرة — اطبعها على ورق عادي وحط الشيك فوقها على الضوء.'
+         : 'حطّ الشيك في درج التغذية اليدوية.'}</div>
+${body}
+<script>window.onload=function(){setTimeout(function(){window.print();},420);};<\/script>
+</body></html>`);
+  w.document.close();
+  return w;
+}
+
+// ── شاشة الطباعة والظبط ───────────────────────────────────────────
+async function chqOpen(checkId){
+  await chqLoadTpl();
+  const c = checkId ? (chkList || []).find(x => String(x.id) === String(checkId)) : null;
+  _chqForm = {
+    checkId: c ? c.id : null,
+    num: c ? (c.num || '') : '',
+    date: c && c.date ? c.date : _todayCairo(),
+    payee: c ? (c.payee || '') : '',
+    amount: c ? (c.amount || '') : '',
+    signer: localStorage.getItem('chq_signer') || '',
+    printedCount: c ? (c.printedCount || 0) : 0,
+  };
+  _chqCalib = false;
+  openM('m-chq');
+  chqRenderUI();
+}
+
+function chqRenderUI(){
+  const t = _chqTpl;
+  const f = _chqForm;
+  const warn = f.printedCount > 0
+    ? `<div style="background:#fef2f2;border:1px solid #ef4444;color:#991b1b;border-radius:8px;
+         padding:8px 11px;font-size:12px;margin-bottom:10px">
+         ⚠️ الشيك ده اتطبع قبل كده ${_cgN ? _cgN(f.printedCount) : f.printedCount} مرة — متأكد إنك عايز تطبعه تاني؟</div>` : '';
+
+  document.getElementById('m-chq-title').textContent =
+    _chqCalib ? '⚙️ ظبط مقاسات الشيك' : '🖨️ طباعة شيك';
+
+  document.getElementById('m-chq-body').innerHTML = _chqCalib ? chqCalibHtml() : `
+    ${warn}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">
+      <div class="form-group" style="margin:0"><label>التاريخ</label>
+        <input type="date" id="chq-date" value="${escapeHtml(f.date)}" oninput="chqOnInput()"></div>
+      <div class="form-group" style="margin:0"><label>المبلغ (جنيه)</label>
+        <input type="number" step="0.01" min="0" id="chq-amount" value="${escapeHtml(String(f.amount))}"
+               oninput="chqOnInput()" placeholder="10000"></div>
+      <div class="form-group" style="margin:0;grid-column:1/-1"><label>يُصرف لأمر</label>
+        <input id="chq-payee" value="${escapeHtml(f.payee)}" oninput="chqOnInput()" placeholder="اسم المستفيد"></div>
+      <div class="form-group" style="margin:0"><label>اسم الموقّع</label>
+        <input id="chq-signer" value="${escapeHtml(f.signer)}" oninput="chqOnInput()" placeholder="الاسم اللي تحت التوقيع"></div>
+      <div class="form-group" style="margin:0"><label>التسطير</label>
+        <label style="display:flex;gap:7px;align-items:center;font-size:12.5px;font-weight:600;padding-top:5px">
+          <input type="checkbox" id="chq-cross" ${t.fields.cross?.on !== false ? 'checked' : ''}
+                 onchange="chqToggleCross(this.checked)"> يصرف للمستفيد الأول</label></div>
+    </div>
+    <div id="chq-words" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;
+         padding:8px 11px;font-size:12.5px;font-weight:700;margin-bottom:12px;min-height:34px"></div>
+    ${chqPreviewHtml()}
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.9">
+      الشيك ${_chqMM(t.w)} × ${_chqMM(t.h)} مم · إزاحة الطابعة ${_chqMM(t.offX)} / ${_chqMM(t.offY)} مم ·
+      ${t.pageMode === 'a4' ? 'بيطبع على A4' : 'بيطبع على مقاس الشيك'}
+    </div>`;
+
+  document.getElementById('m-chq-actions').innerHTML = _chqCalib ? `
+    <button class="btn btn-ghost btn-sm" onclick="chqCalibDone()">✔️ خلصت الظبط</button>
+    <button class="btn btn-sm" onclick="chqPrintCalib()" style="background:#0ea5e9;color:#fff">📏 اطبع ورقة معايرة</button>
+    <button class="btn btn-ghost btn-sm" onclick="chqResetTpl()" style="color:var(--danger)">↩️ رجّع الأصل</button>` : `
+    <button class="btn btn-ghost btn-sm" onclick="chqCalibStart()">⚙️ ظبط المقاسات</button>
+    <button class="btn btn-ghost btn-sm" onclick="chqPrintCalib()">📏 ورقة معايرة</button>
+    <button class="btn btn-sm" onclick="chqDoPrint()" style="background:#16a34a;color:#fff;font-weight:700">🖨️ اطبع الشيك</button>`;
+
+  chqOnInput();
+}
+
+function chqPreviewHtml(){
+  const t = _chqTpl;
+  const bg = t.bg || t.bgUrl || '';
+  return `<div id="chq-prev-wrap" style="position:relative;border:1px solid var(--border);
+      border-radius:8px;overflow:hidden;background:#fff;aspect-ratio:${t.w}/${t.h}">
+    ${bg ? `<img src="${escapeHtml(bg)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;
+        object-fit:fill;opacity:.62" onerror="this.style.display='none'">` : ''}
+    <div id="chq-prev" style="position:absolute;inset:0"></div>
+  </div>`;
+}
+
+// المعاينة بتستعمل نفس أرقام المليمتر بتاعة الطباعة، متحوّلة لنِسب —
+// فاللي بتشوفه هو اللي هيطبع، مش تقريب ليه.
+function chqPaint(){
+  const t = _chqTpl, host = document.getElementById('chq-prev');
+  if(!host) return;
+  const vals = chqRender(_chqForm);
+  const wrap = document.getElementById('chq-prev-wrap');
+  const ppm = wrap ? wrap.clientWidth / t.w : 4;
+  const ox = Number(t.offX) || 0, oy = Number(t.offY) || 0;
+  const out = [];
+  for(const [key, f] of Object.entries(t.fields || {})){
+    if(!f || f.on === false) continue;
+    const sel = _chqCalib && _chqSel === key;
+    const box = `position:absolute;left:${(Number(f.x)+ox)/t.w*100}%;top:${(Number(f.y)+oy)/t.h*100}%;`
+      + `width:${Number(f.w)/t.w*100}%;font-family:Cairo,sans-serif;color:#111;`
+      + `${f.bold ? 'font-weight:700;' : ''}font-size:${(Number(f.size)*ppm).toFixed(2)}px;line-height:1;`
+      + (_chqCalib ? `outline:1.5px ${sel?'solid #2563eb':'dashed #94a3b8'};cursor:move;
+           background:${sel?'rgba(37,99,235,.12)':'rgba(148,163,184,.08)'};` : '');
+    if(f.kind === 'cross'){
+      out.push(`<div data-k="${key}" style="${box}height:${(Number(f.h)||16)/t.h*100}%;
+        border-top:1px solid #111;transform:none">${_chqCalib?`<span style="font-size:9px;color:#2563eb">تسطير</span>`:''}</div>`);
+      continue;
+    }
+    if(f.kind === 'boxes'){
+      const n = Number(f.boxes) || 8;
+      const ds = String(vals[key] || '').slice(0, n).split('');
+      out.push(`<div data-k="${key}" style="${box}white-space:nowrap;direction:ltr">`
+        + Array.from({length:n}, (_, i) => `<span style="display:inline-block;width:${100/n}%;
+            text-align:center">${ds[i] != null ? escapeHtml(ds[i]) : ''}</span>`).join('') + `</div>`);
+      continue;
+    }
+    out.push(`<div data-k="${key}" style="${box}text-align:${f.align||'right'};white-space:nowrap;
+      overflow:hidden">${escapeHtml(String(vals[key] || (_chqCalib ? f.label : '')))}</div>`);
+  }
+  host.innerHTML = out.join('');
+  if(_chqCalib) host.querySelectorAll('[data-k]').forEach(el => {
+    el.addEventListener('pointerdown', chqDragStart);
+  });
+}
+
+function chqOnInput(){
+  const g = id => document.getElementById(id);
+  if(g('chq-date'))   _chqForm.date = g('chq-date').value;
+  if(g('chq-payee'))  _chqForm.payee = g('chq-payee').value;
+  if(g('chq-amount')) _chqForm.amount = g('chq-amount').value;
+  if(g('chq-signer')){ _chqForm.signer = g('chq-signer').value;
+    try{ localStorage.setItem('chq_signer', _chqForm.signer); }catch(e){} }
+  const w = g('chq-words');
+  if(w){
+    const words = tfqCheque(Number(_chqForm.amount));
+    const v = chqRender(_chqForm);
+    w.innerHTML = (words
+      ? '✍️ ' + escapeHtml(words)
+      : '<span style="color:var(--muted);font-weight:400">اكتب المبلغ عشان يطلع التفقيط</span>')
+      + (v._over && v._over.length
+        ? `<div style="color:#b91c1c;font-size:11.5px;margin-top:6px">⚠️ هيتقص: ${escapeHtml(v._over.join(' · '))}
+             — صغّر الخط أو وسّع الخانة من «⚙️ ظبط المقاسات»</div>` : '');
+  }
+  chqPaint();
+}
+
+function chqToggleCross(on){
+  _chqTpl.fields.cross.on = !!on;
+  chqPaint();
+  chqSaveTpl();
+}
+
+// ── الظبط بالسحب ──────────────────────────────────────────────────
+let _chqSel = null;
+
+function chqCalibHtml(){
+  const t = _chqTpl;
+  return `
+  <div style="background:#eff6ff;border:1px solid #60a5fa;color:#1e40af;border-radius:9px;
+       padding:9px 12px;font-size:12px;line-height:1.9;margin-bottom:11px">
+    🖱️ اسحب أي خانة على الصورة لمكانها على الشيك · أو اختارها واستعمل الأسهم (Shift = خطوة أدق)
+    · المقاسات بتتحفظ أول ما تسيب الخانة.</div>
+  ${chqPreviewHtml()}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:9px;margin-top:12px">
+    <div class="form-group" style="margin:0"><label>عرض الشيك (مم)</label>
+      <input type="number" step="0.5" id="chq-w" value="${t.w}" onchange="chqSetSize()"></div>
+    <div class="form-group" style="margin:0"><label>ارتفاع الشيك (مم)</label>
+      <input type="number" step="0.5" id="chq-h" value="${t.h}" onchange="chqSetSize()"></div>
+    <div class="form-group" style="margin:0"><label>إزاحة الطابعة ← → (مم)</label>
+      <input type="number" step="0.5" id="chq-ox" value="${t.offX}" onchange="chqSetOff()"></div>
+    <div class="form-group" style="margin:0"><label>إزاحة الطابعة ↑ ↓ (مم)</label>
+      <input type="number" step="0.5" id="chq-oy" value="${t.offY}" onchange="chqSetOff()"></div>
+    <div class="form-group" style="margin:0"><label>الطباعة على</label>
+      <select id="chq-page" onchange="chqSetPage()">
+        <option value="cheque" ${t.pageMode!=='a4'?'selected':''}>الشيك لوحده (${_chqMM(t.w)}×${_chqMM(t.h)} مم)</option>
+        <option value="a4" ${t.pageMode==='a4'?'selected':''}>ورقة A4 (الشيك في الركن)</option>
+      </select></div>
+  </div>
+  <div id="chq-fsel" style="margin-top:12px"></div>`;
+}
+
+function chqCalibStart(){ _chqCalib = true; _chqSel = null; chqRenderUI(); chqFieldPanel(); }
+async function chqCalibDone(){ await chqSaveTpl(); _chqCalib = false; _chqSel = null; chqRenderUI(); }
+
+function chqFieldPanel(){
+  const host = document.getElementById('chq-fsel');
+  if(!host) return;
+  const t = _chqTpl;
+  const chips = Object.entries(t.fields).map(([k, f]) =>
+    `<button class="chip ${_chqSel===k?'on':''}" onclick="chqPick('${k}')">${escapeHtml(f.label)}</button>`).join('');
+  const f = _chqSel ? t.fields[_chqSel] : null;
+  host.innerHTML = `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">${chips}</div>`
+    + (!f ? '<div style="font-size:12px;color:var(--muted)">اختار خانة عشان تظبطها بالأرقام</div>' : `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px">
+      <div class="form-group" style="margin:0"><label>يمين/شمال X (مم)</label>
+        <input type="number" step="0.5" value="${_chqMM(f.x)}" onchange="chqSetF('x',this.value)"></div>
+      <div class="form-group" style="margin:0"><label>فوق/تحت Y (مم)</label>
+        <input type="number" step="0.5" value="${_chqMM(f.y)}" onchange="chqSetF('y',this.value)"></div>
+      <div class="form-group" style="margin:0"><label>العرض (مم)</label>
+        <input type="number" step="0.5" value="${_chqMM(f.w)}" onchange="chqSetF('w',this.value)"></div>
+      <div class="form-group" style="margin:0"><label>حجم الخط (مم)</label>
+        <input type="number" step="0.1" value="${_chqMM(f.size)}" onchange="chqSetF('size',this.value)"></div>
+      <div class="form-group" style="margin:0"><label>تظهر؟</label>
+        <label style="display:flex;gap:6px;align-items:center;font-size:12px;padding-top:6px">
+          <input type="checkbox" ${f.on!==false?'checked':''} onchange="chqSetF('on',this.checked)"> ظاهرة</label></div>
+    </div>`);
+}
+
+function chqPick(k){ _chqSel = k; chqPaint(); chqFieldPanel(); }
+
+function chqSetF(prop, v){
+  if(!_chqSel) return;
+  const f = _chqTpl.fields[_chqSel];
+  f[prop] = (prop === 'on') ? !!v : Number(v);
+  chqPaint(); chqSaveTpl();
+}
+function chqSetSize(){
+  const w = Number(document.getElementById('chq-w').value);
+  const h = Number(document.getElementById('chq-h').value);
+  if(w > 40 && w < 400) _chqTpl.w = w;
+  if(h > 30 && h < 300) _chqTpl.h = h;
+  chqRenderUI(); chqFieldPanel(); chqSaveTpl();
+}
+function chqSetOff(){
+  _chqTpl.offX = Number(document.getElementById('chq-ox').value) || 0;
+  _chqTpl.offY = Number(document.getElementById('chq-oy').value) || 0;
+  chqPaint(); chqSaveTpl();
+}
+function chqSetPage(){
+  _chqTpl.pageMode = document.getElementById('chq-page').value === 'a4' ? 'a4' : 'cheque';
+  chqSaveTpl();
+}
+
+function chqDragStart(e){
+  const k = e.currentTarget.getAttribute('data-k');
+  _chqSel = k; chqFieldPanel();
+  const wrap = document.getElementById('chq-prev-wrap');
+  const r = wrap.getBoundingClientRect();
+  const t = _chqTpl, f = t.fields[k];
+  _chqDrag = { k, px: e.clientX, py: e.clientY, x0: Number(f.x), y0: Number(f.y),
+               mmx: t.w / r.width, mmy: t.h / r.height };
+  e.currentTarget.setPointerCapture(e.pointerId);
+  e.preventDefault();
+  window.addEventListener('pointermove', chqDragMove);
+  window.addEventListener('pointerup', chqDragEnd, { once: true });
+}
+function chqDragMove(e){
+  if(!_chqDrag) return;
+  const d = _chqDrag, f = _chqTpl.fields[d.k], t = _chqTpl;
+  // نص مليمتر خطوة — أدق من كده مالوش لازمة على طابعة ليزر
+  const nx = d.x0 + (e.clientX - d.px) * d.mmx;
+  const ny = d.y0 + (e.clientY - d.py) * d.mmy;
+  f.x = Math.max(0, Math.min(t.w - 2, Math.round(nx * 2) / 2));
+  f.y = Math.max(0, Math.min(t.h - 2, Math.round(ny * 2) / 2));
+  chqPaint();
+}
+function chqDragEnd(){
+  window.removeEventListener('pointermove', chqDragMove);
+  if(_chqDrag){ _chqDrag = null; chqFieldPanel(); chqSaveTpl(); }
+}
+
+// الأسهم بتنقّل الخانة المختارة
+function chqKey(e){
+  if(!_chqCalib || !_chqSel) return;
+  const map = { ArrowLeft:['x',-1], ArrowRight:['x',1], ArrowUp:['y',-1], ArrowDown:['y',1] };
+  const m = map[e.key];
+  if(!m) return;
+  if(/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || '')) return;
+  e.preventDefault();
+  const step = e.shiftKey ? 0.1 : 0.5;
+  const f = _chqTpl.fields[_chqSel];
+  f[m[0]] = Math.max(0, Math.round((Number(f[m[0]]) + m[1] * step) * 10) / 10);
+  chqPaint(); chqFieldPanel();
+  clearTimeout(window._chqKeyT);
+  window._chqKeyT = setTimeout(chqSaveTpl, 700);
+}
+
+async function chqResetTpl(){
+  if(!confirm('ترجّع كل المقاسات للأصل اللي اتقاس من الشيك؟')) return;
+  const keep = { offX: _chqTpl.offX, offY: _chqTpl.offY };
+  _chqTpl = { ..._chqDefaultTpl(), ...keep };
+  await chqSaveTpl();
+  chqRenderUI(); chqFieldPanel();
+}
+
+// ── الطباعة ───────────────────────────────────────────────────────
+function chqPrintCalib(){ chqPrint(_chqTpl, chqRender(_chqForm), 'calib'); }
+
+async function chqDoPrint(){
+  const vals = chqRender(_chqForm);
+  // 🛡️ شيك من غير مبلغ أو مستفيد = ورقة محروقة. نوقف قبل الطباعة.
+  const miss = [];
+  if(!vals.payee) miss.push('اسم المستفيد');
+  if(!vals.words1) miss.push('المبلغ');
+  if(!vals.date) miss.push('التاريخ');
+  if(miss.length){ toast('❗ ناقص: ' + miss.join(' · '), 'error'); return; }
+  if(vals._over && vals._over.length){
+    toast('❗ مش هيدخل في الخانة ويتقص: ' + vals._over.join(' · ')
+      + ' — صغّر الخط أو وسّع الخانة من «ظبط المقاسات»', 'error', 7000);
+    return;
+  }
+  if(!confirm(`هتطبع شيك بمبلغ ${vals.amount} لصالح «${vals.payee}».\n\nحطّيت الشيك في الطابعة؟`)) return;
+  chqPrint(_chqTpl, vals, 'print');
+  if(_chqForm.checkId){
+    try{
+      const r = await apiFetch('/api/checks/' + encodeURIComponent(_chqForm.checkId) + '/mark-printed', 'POST', {});
+      _chqForm.printedCount = r?.count || (_chqForm.printedCount + 1);
+      if(typeof loadChecks === 'function') loadChecks();
+    }catch(e){ console.warn('[v900] mark-printed:', e.message); }
+  }
+}
+
 function numToArabicWords(num){
   if(!num) return 'صفر جنيه';
   const n = Math.round(parseFloat(num));
