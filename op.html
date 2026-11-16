@@ -2775,6 +2775,7 @@ tr:hover td{background:#fafbff}
         </div>
         <button class="btn btn-primary btn-sm" onclick="openM('m-order')">＋</button>
       </div>
+      <div id="dh-mismatch-bar"></div>
       <div class="tw mobile-cards"><table><thead><tr><th>رقم الطلب</th><th>المصدر</th><th>العميل</th><th>الهاتف</th><th>المنطقة</th><th>نوع التوصيل</th><th>COD</th><th>الشحن</th><th>المندوب</th><th>الحالة</th><th>إجراءات</th></tr></thead><tbody id="orders-tbody"></tbody></table></div>
       <div id="orders-pagination" style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;padding:14px 10px;margin-top:8px;border-top:1px solid var(--border)"></div>
     </div>
@@ -11744,7 +11745,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v903';
+const UI_BUILD = 'v904';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -13619,8 +13620,20 @@ function renderDash(){
 let ordersPage = 1;
 const ORDERS_PAGE_SIZE = 100;
 
+// 📦 v904: الطلبات المتعلّمة «اتسلّم مباشرة» وهي فعليًا اتوزّعت.
+//   دي حالة متضاربة: في التقارير بتتعد تسليم مباشر، وهي مع بوسطة أو
+//   مندوب. بتحصل في النسخ القديمة قبل ما نمنع التوزيع عليها.
+function _dhMismatch(){
+  return (orders || []).filter(o => o && o.directHandover
+    && (o.courierId || o.isBosta || o.bostaTrackingNo
+        || ['جاري التوصيل', 'تحت التسوية', 'مسوّى'].includes(o.status)));
+}
+let _dhOnly = false;
+function dhShowMismatch(){ _dhOnly = !_dhOnly; renderOrders(); }
+
 function renderOrders(){
   let list=orders;
+  if(_dhOnly){ list = _dhMismatch(); }
   if(orderFilter!=='all')list=list.filter(o=>o.status===orderFilter);
   if(orderFilter==='all')list=list.filter(o=>!(o.status==='ملغي'&&!o.courierId));
   if(orderFilter==='all')list=list.filter(o=>o.status!=='مدمج'); // إخفاء المدمجة من القائمة الرئيسية
@@ -13631,6 +13644,20 @@ function renderOrders(){
   else if(prepFilter==='in_progress')list=list.filter(o=>o.preparationStatus==='in_progress');
   else if(prepFilter==='completed')list=list.filter(o=>o.preparationStatus==='completed');
   if(searchQ)list=list.filter(o=>(o.id+o.name+o.area+o.phone).includes(searchQ));
+
+  // تنبيه لو فيه طلبات متضاربة — من غير ما نلمس حاجة لوحدنا
+  const _mm = _dhMismatch();
+  const _mmBar = document.getElementById('dh-mismatch-bar');
+  if(_mmBar){
+    _mmBar.innerHTML = _mm.length
+      ? `<div style="margin-bottom:11px;background:#fef2f2;border:1px solid #ef4444;color:#991b1b;
+           border-radius:9px;padding:9px 13px;font-size:12px;line-height:1.9">
+          ⚠️ فيه <b>${_mm.length}</b> طلب متعلّم «اتسلّم مباشرة» وهو فعليًا مع مندوب أو بوسطة —
+          بيتعدّ مرتين في التقارير. افتح كل واحد ودوس <b>«↩️ رجوع»</b> يشيل العلامة ويسيب الحالة زي ما هي.
+          <button class="btn btn-ghost btn-xs" onclick="dhShowMismatch()"
+            style="margin-right:7px;border-color:#991b1b;color:#991b1b">${_dhOnly ? '↩️ رجّع القايمة' : '👁️ ورّيني'}</button>
+         </div>` : '';
+  }
 
   // Pagination
   const totalCount = list.length;
@@ -14634,7 +14661,11 @@ function renderAssignPage(){
   // ولازم تظهر في التوزيع عشان يتم توزيعها للمحل
   // (الفلتر القديم: !isPickup(o) كان بيخفيها)
   // 🆕 استثني الطلبات اليدوية — بتروح Shopify fulfilled، مش محتاجة توزيع
-  const u=orders.filter(o=>!o.courierId&&!o.isBosta&&o.status!=='مكتمل'&&o.status!=='ملغي'&&!isTransit(o)&&o.sourceName!=='cafelax_manual');
+  // 📦 v904: الطلب اللي اتعمله Fulfil على شوبيفاي قبل التوزيع مابيدخلش
+  //   التوزيع خالص — بالعلامة نفسها مش بالحالة. قبل كده كان الاستثناء
+  //   معلّق على status='مكتمل'، فأول ما حد يغيّر الحالة الطلب كان بيرجع
+  //   يدخل التوزيع والطباعة وهو متسلّم أصلاً. (حصل في ١٩٢٤٩٩)
+  const u=orders.filter(o=>!o.courierId&&!o.isBosta&&o.status!=='مكتمل'&&o.status!=='ملغي'&&!isTransit(o)&&o.sourceName!=='cafelax_manual'&&!o.directHandover);
   $('assign-count').textContent=u.length+' طلب';
   const probCount=u.filter(o=>o.hasProblem).length;
   const probBtn=$('assign-prob-btn');
@@ -16086,6 +16117,7 @@ function shopifyFulfill(order, courierName){
 }
 
 async function selCAndConfirm(id){
+  if(_dhBlock(orders.find(x => String(x.id) === String(id)), 'التوزيع')) return;
   // ⚠️ احفظ الـ orderId فوراً قبل أي عملية async (عشان ما يتغيرش لو ضغط بسرعة)
   const currentOrderId = assignOrderId;
   if(!currentOrderId){ toast('❗ لا يوجد طلب محدد'); return; }
@@ -16260,8 +16292,32 @@ function assignSelAll(){
   updateAssignBulkBtns();
 }
 
+// 📦 v904: حارس التسليم المباشر
+// الطلب اللي اتعمله Fulfil على شوبيفاي قبل التوزيع متعلّم بـ directHandover.
+// الفلاتر بتشيله من الشاشات، بس الأزرار المباشرة (توزيع فردي، بوسطة،
+// تعيين جماعي) لازم تتمنع كمان — وإلا الطلب يتشحن تاني وهو متسلّم.
+// الخروج الوحيد: زرار «↩️ رجوع» اللي بيشيل العلامة ويسجّلها.
+function _dhBlock(o, what){
+  if(!o || !o.directHandover) return false;
+  toast(`⛔ الطلب ${o.id} متعلّم «اتسلّم مباشرة»${o.handoverBy ? ' (' + o.handoverBy + ')' : ''}`
+    + ` — مش هيدخل ${what || 'التوزيع'}. لو ده غلط دوس «↩️ رجوع» عليه في قايمة الطلبات الأول.`,
+    'error', 8000);
+  return true;
+}
+// في التعيين الجماعي بنفلتر بدل ما نوقف العملية كلها
+function _dhFilter(list, what){
+  const blocked = list.filter(o => o && o.directHandover);
+  if(blocked.length){
+    toast(`⛔ اتشال ${blocked.length} طلب متعلّم «اتسلّم مباشرة» من ${what || 'التوزيع'}: `
+      + blocked.map(o => o.id).join(' · '), 'error', 9000);
+  }
+  return list.filter(o => !(o && o.directHandover));
+}
+
 async function assignBulkBosta(){
-  const ids=[...document.querySelectorAll('.assign-chk:checked')].map(c=>c.value);
+  let ids=[...document.querySelectorAll('.assign-chk:checked')].map(c=>c.value);
+  ids = _dhFilter(ids.map(i => orders.find(x => String(x.id) === String(i))).filter(Boolean), 'بوسطة')
+          .map(o => o.id);
   if(!ids.length)return;
   if(!bostaApiKey){toast('❗ أدخل Bosta API Key في صفحة بوسطة أولاً');return;}
   let success=0,fail=0;
@@ -16293,7 +16349,9 @@ async function assignBulkBosta(){
 async function assignBulkCourier(){
   const cId=+$('assign-bulk-courier').value;
   if(!cId){toast('❗ اختر مندوب أولاً');return;}
-  const ids=[...document.querySelectorAll('.assign-chk:checked')].map(c=>c.value);
+  let ids=[...document.querySelectorAll('.assign-chk:checked')].map(c=>c.value);
+  ids = _dhFilter(ids.map(i => orders.find(x => String(x.id) === String(i))).filter(Boolean), 'التوزيع')
+          .map(o => o.id);
   if(!ids.length)return;
   const c=couriers.find(x=>x.id===cId);
 
@@ -16411,6 +16469,7 @@ async function toggleProblem(id){
 }
 
 async function assignToBosta(id){
+  if(_dhBlock(orders.find(x => String(x.id) === String(id)), 'بوسطة')) return;
   if(!confirmEditSettledOrder(id)) return;
   const o=orders.find(x=>x.id===id);
   if(!o)return;
@@ -16439,6 +16498,7 @@ async function assignToBosta(id){
 }
 
 async function bostaCreateOne(id){
+  if(_dhBlock(orders.find(x => String(x.id) === String(id)), 'بوسطة')) return;
   const o=orders.find(x=>x.id===id);
   if(!o)return;
   if(!bostaApiKey){
@@ -18733,7 +18793,7 @@ async function testBostaConnection(){
 
 function renderBostaPage(){
   const bostaOrders=orders.filter(o=>o.bostaId); // مرفوعة أو معينة
-  const allOrders=orders.filter(o=>o&&(o.isBosta||String(o.courierId)==='bosta')&&!o.bostaId&&!o.bostaExported&&o.status!=='ملغي'&&o.status!=='مكتمل');
+  const allOrders=orders.filter(o=>o&&(o.isBosta||String(o.courierId)==='bosta')&&!o.bostaId&&!o.bostaExported&&o.status!=='ملغي'&&o.status!=='مكتمل'&&!o.directHandover);
   const exportedOrders=orders.filter(o=>o&&(o.isBosta||String(o.courierId)==='bosta')&&!o.bostaId&&o.bostaExported&&o.status!=='ملغي');
   const sent=bostaOrders;
   const inProgress=bostaOrders.filter(o=>o.bostaStatus==='in-progress'||o.bostaStatus==='picked-up');
@@ -65424,6 +65484,7 @@ function dsRender(){
   dsRowNum = 0; // reset row counter
   const courierOrders=orders.filter(o=>{
     if(o.status!=='جاري التوصيل'||isTransit(o)) return false;
+    if(o.directHandover) return false;        // 📦 v904: اتسلّم مباشرة — مايتطبعش
     if(cId==='bosta') return o.isBosta||String(o.courierId)==='bosta';
     if(!o.courierId||o.courierId==='null'||o.courierId==='undefined') return false;
     return String(o.courierId)===String(cId)||Number(o.courierId)===Number(cId);
