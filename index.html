@@ -11744,7 +11744,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v900';
+const UI_BUILD = 'v901';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -54936,7 +54936,17 @@ function tfqNumber(n) {
 // المبلغ كامل بصيغة الشيك
 //   tfqCheque(10000)    → فقط عشرة آلاف جنيه مصري لا غير
 //   tfqCheque(1250.50)  → فقط ألف ومائتان وخمسون جنيه مصري وخمسون قرشاً لا غير
-function tfqCheque(amount) {
+// وحدات العملات — الجزء الصغير بيتغير مع العملة (قرش / سنت / هللة)
+const TFQ_CUR = {
+  'EGP': { one:'جنيه مصري', sub:['قرش','قرشان','قروش','قرشاً'] },
+  'USD': { one:'دولار أمريكي', sub:['سنت','سنتان','سنتات','سنتاً'] },
+  'EUR': { one:'يورو', sub:['سنت','سنتان','سنتات','سنتاً'] },
+  'SAR': { one:'ريال سعودي', sub:['هللة','هللتان','هللات','هللة'] },
+  'AED': { one:'درهم إماراتي', sub:['فلس','فلسان','فلوس','فلساً'] },
+};
+
+function tfqCheque(amount, cur) {
+  const C = TFQ_CUR[cur] || TFQ_CUR.EGP;
   const v = Number(amount);
   if (!Number.isFinite(v) || v < 0) return null;
   // القروش بالتقريب لأقرب قرش — من غير ده ٠٫١+٠٫٢ بتطلع ٢٩ قرش
@@ -54949,12 +54959,12 @@ function tfqCheque(amount) {
   if (pounds) {
     const w = tfqNumber(pounds);
     if (w === null) return null;
-    words.push(w + ' جنيه مصري');
+    words.push(w + ' ' + C.one);
   }
   if (piastres) {
     const p = tfqNumber(piastres);
-    words.push((pounds ? 'و' : '') + p + ' ' + (piastres === 1 ? 'قرش'
-      : piastres === 2 ? 'قرشان' : piastres <= 10 ? 'قروش' : 'قرشاً'));
+    words.push((pounds ? 'و' : '') + p + ' ' + (piastres === 1 ? C.sub[0]
+      : piastres === 2 ? C.sub[1] : piastres <= 10 ? C.sub[2] : C.sub[3]));
   }
   return 'فقط ' + words.join(' ') + ' لا غير';
 }
@@ -54971,6 +54981,9 @@ function tfqCheque(amount) {
 // ═══════════════════════════════════════════════════════════════════
 
 const CHQ_TPL_ID = 'ca-eg';
+// نصوص التسطير المتعارف عليها — واللي مش منهم يتكتب بالإيد
+const CHQ_CROSS = ['يصرف للمستفيد الأول', 'غير قابل للتداول', 'لا يصرف إلا بتاريخه'];
+const CHQ_FONTS = ['Cairo', 'Tajawal', 'Amiri', 'Noto Naskh Arabic', 'Almarai'];
 let _chqTpl = null;         // القالب الشغال
 let _chqForm = {};          // بيانات الشيك اللي بيتطبع
 let _chqCalib = false;      // إحنا في شاشة الظبط؟
@@ -54982,6 +54995,7 @@ function _chqDefaultTpl(){
   return {
     id: CHQ_TPL_ID, name: 'كريدي أجريكول مصر', bank: 'Crédit Agricole Egypt',
     w: 176, h: 83, bgUrl: 'cheque-bg.jpg', offX: 0, offY: 0, pageMode: 'cheque',
+    font: 'Cairo', currency: 'EGP', crossText: 'يصرف للمستفيد الأول',
     // المواضع دي مقيسة من شيك كريدي أجريكول الحقيقي، مش تقدير:
     //   خانات التاريخ الوردي من ١٢٨٫٣ لـ ١٦١ مم (٨ خانات × ٤٫٠٩)
     //   سطر المستفيد عند ٢٧٫٩ مم · مربع التفقيط من ٣٥٫٩ لـ ٤٤٫١ (سطرين جواه)
@@ -54996,6 +55010,7 @@ function _chqDefaultTpl(){
       words2: { on:true, label:'التفقيط — سطر ٢',    x:19,    y:40.4, w:107,  size:3.2, kind:'text', align:'right', bold:true },
       amount: { on:true, label:'المبلغ بالأرقام',     x:140.5, y:37.6, w:28,   size:4.0, kind:'text', align:'center', bold:true },
       signer: { on:true, label:'اسم الموقّع',         x:99,    y:45.5, w:56,   size:3.2, kind:'text', align:'center', bold:false },
+      payfor: { on:false, label:'مدفوع لأجل',        x:19,    y:44.8, w:70,   size:2.8, kind:'text', align:'right', bold:false },
       cross:  { on:true, label:'التسطير',            x:6,     y:13,   w:36,   h:14, size:2.4, kind:'cross' },
     }
   };
@@ -55028,7 +55043,8 @@ async function chqSaveTpl(){
   try{
     await apiFetch('/api/cheque-templates/' + encodeURIComponent(t.id), 'PUT', {
       name:t.name, bank:t.bank, w:t.w, h:t.h, bgUrl:t.bgUrl, bg:t.bg || null,
-      fields:t.fields, offX:t.offX, offY:t.offY, pageMode:t.pageMode, isDefault:true });
+      fields:t.fields, offX:t.offX, offY:t.offY, pageMode:t.pageMode, isDefault:true,
+      font:t.font, currency:t.currency, crossText:t.crossText });
     toast('✅ المقاسات اتحفظت', 'success');
     return true;
   }catch(e){ toast('❌ الحفظ فشل: ' + e.message, 'error'); return false; }
@@ -55052,7 +55068,8 @@ function chqRender(data){
     out.amount = '#' + amt.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + '#';
   } else out.amount = '';
 
-  const words = tfqCheque(amt);
+  out.payfor = String(data.payfor || '').trim();
+  const words = tfqCheque(amt, _chqTpl?.currency);
   if(words){
     // التفقيط بيتقسم على سطرين لو طويل — بنكسره عند مسافة مش في نص كلمة
     const lim = _chqLineCap(_chqTpl?.fields?.words1);
@@ -55070,6 +55087,7 @@ function chqRender(data){
   if(out.words2 && out.words2.length > _chqLineCap(_chqTpl?.fields?.words2)) out._over.push('التفقيط');
   if(out.payee && out.payee.length > _chqLineCap(_chqTpl?.fields?.payee)) out._over.push('اسم المستفيد');
   if(out.signer && out.signer.length > _chqLineCap(_chqTpl?.fields?.signer)) out._over.push('اسم الموقّع');
+  if(out.payfor && out.payfor.length > _chqLineCap(_chqTpl?.fields?.payfor)) out._over.push('مدفوع لأجل');
   return out;
 }
 
@@ -55090,7 +55108,8 @@ function _chqFieldsHtml(tpl, vals, opts){
     if(!f || f.on === false) continue;
     const x = Number(f.x) + ox, y = Number(f.y) + oy;
     const common = `position:absolute;left:${x}mm;top:${y}mm;width:${f.w}mm;`
-      + `font-family:'Cairo','Arial',sans-serif;${f.bold ? 'font-weight:700;' : ''}color:#000;`;
+      + `font-family:'${tpl.font || 'Cairo'}','Cairo','Arial',sans-serif;`
+      + `${f.bold ? 'font-weight:700;' : ''}color:#000;`;
 
     if(f.kind === 'cross'){
       // التسطير: خطين مايلين و«يصرف للمستفيد الأول» بينهم
@@ -55100,10 +55119,10 @@ function _chqFieldsHtml(tpl, vals, opts){
         <svg width="100%" height="100%" viewBox="0 0 ${f.w} ${h}" style="display:block">
           <line x1="0" y1="${h}" x2="${f.w}" y2="0" stroke="#000" stroke-width="0.4"/>
           <line x1="0" y1="${h * 0.62}" x2="${f.w * 0.62}" y2="0" stroke="#000" stroke-width="0.4"/>
-          <text x="${f.w * 0.34}" y="${h * 0.46}" font-size="${f.size}" font-family="Cairo,Arial"
-                text-anchor="middle" fill="#000"
+          <text x="${f.w * 0.34}" y="${h * 0.46}" font-size="${f.size}" font-family="${tpl.font || 'Cairo'},Arial"
+                text-anchor="middle" fill="#000" font-family="${tpl.font || 'Cairo'},Arial"
                 transform="rotate(-${Math.round(Math.atan2(h, f.w) * 180 / Math.PI)} ${f.w * 0.34} ${h * 0.46})"
-          >يصرف للمستفيد الأول</text>
+          >${escapeHtml(tpl.crossText || 'يصرف للمستفيد الأول')}</text>
         </svg></div>`);
       continue;
     }
@@ -55180,7 +55199,8 @@ function chqPrint(tpl, vals, mode){
   if(!w){ toast('❗ المتصفح منع النافذة — اسمح بالنوافذ المنبثقة', 'error'); return null; }
   w.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
 <title>${isCal ? 'ورقة معايرة' : 'شيك'} — ${escapeHtml(tpl.name)}</title>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=${
+  encodeURIComponent(tpl.font || 'Cairo')}:wght@400;700&display=swap" rel="stylesheet">
 <style>
   ${pageCss}
   *{box-sizing:border-box}
@@ -55220,8 +55240,19 @@ async function chqOpen(checkId){
   chqRenderUI();
 }
 
+function _chqFontLoad(name){
+  if(!name || name === 'Cairo') return;
+  const id = 'chqfont-' + name.replace(/\s+/g,'-');
+  if(document.getElementById(id)) return;
+  const l = document.createElement('link');
+  l.id = id; l.rel = 'stylesheet';
+  l.href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(name) + ':wght@400;700&display=swap';
+  document.head.appendChild(l);
+}
+
 function chqRenderUI(){
   const t = _chqTpl;
+  _chqFontLoad(t.font);
   const f = _chqForm;
   const warn = f.printedCount > 0
     ? `<div style="background:#fef2f2;border:1px solid #ef4444;color:#991b1b;border-radius:8px;
@@ -55243,10 +55274,19 @@ function chqRenderUI(){
         <input id="chq-payee" value="${escapeHtml(f.payee)}" oninput="chqOnInput()" placeholder="اسم المستفيد"></div>
       <div class="form-group" style="margin:0"><label>اسم الموقّع</label>
         <input id="chq-signer" value="${escapeHtml(f.signer)}" oninput="chqOnInput()" placeholder="الاسم اللي تحت التوقيع"></div>
-      <div class="form-group" style="margin:0"><label>التسطير</label>
-        <label style="display:flex;gap:7px;align-items:center;font-size:12.5px;font-weight:600;padding-top:5px">
-          <input type="checkbox" id="chq-cross" ${t.fields.cross?.on !== false ? 'checked' : ''}
-                 onchange="chqToggleCross(this.checked)"> يصرف للمستفيد الأول</label></div>
+      <div class="form-group" style="margin:0;grid-column:1/-1"><label>
+        <input type="checkbox" id="chq-cross" ${t.fields.cross?.on !== false ? 'checked' : ''}
+               onchange="chqToggleCross(this.checked)" style="margin-left:5px"> التسطير</label>
+        <select id="chq-crosstxt" onchange="chqSetCross(this.value)"
+                ${t.fields.cross?.on === false ? 'disabled' : ''}>
+          ${CHQ_CROSS.map(o => `<option ${o === t.crossText ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+          <option value="__c" ${CHQ_CROSS.includes(t.crossText) ? '' : 'selected'}>✏️ نص من عندي…</option>
+        </select></div>
+      <div class="form-group" style="margin:0;grid-column:1/-1"><label>
+        <input type="checkbox" ${t.fields.payfor?.on ? 'checked' : ''}
+               onchange="chqToggleField('payfor',this.checked)" style="margin-left:5px"> مدفوع لأجل</label>
+        <input id="chq-payfor" value="${escapeHtml(f.payfor || '')}" oninput="chqOnInput()"
+               placeholder="مثلاً: دفعة فاتورة ١٢٣" ${t.fields.payfor?.on ? '' : 'disabled'}></div>
     </div>
     <div id="chq-words" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;
          padding:8px 11px;font-size:12.5px;font-weight:700;margin-bottom:12px;min-height:34px"></div>
@@ -55292,7 +55332,7 @@ function chqPaint(){
     if(!f || f.on === false) continue;
     const sel = _chqCalib && _chqSel === key;
     const box = `position:absolute;left:${(Number(f.x)+ox)/t.w*100}%;top:${(Number(f.y)+oy)/t.h*100}%;`
-      + `width:${Number(f.w)/t.w*100}%;font-family:Cairo,sans-serif;color:#111;`
+      + `width:${Number(f.w)/t.w*100}%;font-family:'${t.font||'Cairo'}',Cairo,sans-serif;color:#111;`
       + `${f.bold ? 'font-weight:700;' : ''}font-size:${(Number(f.size)*ppm).toFixed(2)}px;line-height:1;`
       + (_chqCalib ? `outline:1.5px ${sel?'solid #2563eb':'dashed #94a3b8'};cursor:move;
            background:${sel?'rgba(37,99,235,.12)':'rgba(148,163,184,.08)'};` : '');
@@ -55323,6 +55363,7 @@ function chqOnInput(){
   if(g('chq-date'))   _chqForm.date = g('chq-date').value;
   if(g('chq-payee'))  _chqForm.payee = g('chq-payee').value;
   if(g('chq-amount')) _chqForm.amount = g('chq-amount').value;
+  if(g('chq-payfor')) _chqForm.payfor = g('chq-payfor').value;
   if(g('chq-signer')){ _chqForm.signer = g('chq-signer').value;
     try{ localStorage.setItem('chq_signer', _chqForm.signer); }catch(e){} }
   const w = g('chq-words');
@@ -55338,6 +55379,22 @@ function chqOnInput(){
   }
   chqPaint();
 }
+
+function chqSetCross(v){
+  if(v === '__c'){
+    const t = prompt('اكتب نص التسطير:', _chqTpl.crossText || '');
+    if(t == null) { chqRenderUI(); return; }
+    _chqTpl.crossText = t.trim() || CHQ_CROSS[0];
+  } else _chqTpl.crossText = v;
+  chqRenderUI(); chqSaveTpl();
+}
+function chqToggleField(k, on){
+  if(!_chqTpl.fields[k]) return;
+  _chqTpl.fields[k].on = !!on;
+  chqRenderUI(); chqSaveTpl();
+}
+function chqSetFont(v){ _chqTpl.font = v; chqRenderUI(); chqSaveTpl(); }
+function chqSetCur(v){ _chqTpl.currency = TFQ_CUR[v] ? v : 'EGP'; chqRenderUI(); chqSaveTpl(); }
 
 function chqToggleCross(on){
   _chqTpl.fields.cross.on = !!on;
@@ -55365,6 +55422,15 @@ function chqCalibHtml(){
       <input type="number" step="0.5" id="chq-ox" value="${t.offX}" onchange="chqSetOff()"></div>
     <div class="form-group" style="margin:0"><label>إزاحة الطابعة ↑ ↓ (مم)</label>
       <input type="number" step="0.5" id="chq-oy" value="${t.offY}" onchange="chqSetOff()"></div>
+    <div class="form-group" style="margin:0"><label>نوع الخط</label>
+      <select id="chq-font" onchange="chqSetFont(this.value)">
+        ${CHQ_FONTS.map(x => `<option ${x === t.font ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('')}
+      </select></div>
+    <div class="form-group" style="margin:0"><label>العملة والتفقيط</label>
+      <select id="chq-cur" onchange="chqSetCur(this.value)">
+        ${Object.keys(TFQ_CUR).map(c => `<option value="${c}" ${c === t.currency ? 'selected' : ''}
+          >${escapeHtml(TFQ_CUR[c].one)}</option>`).join('')}
+      </select></div>
     <div class="form-group" style="margin:0"><label>الطباعة على</label>
       <select id="chq-page" onchange="chqSetPage()">
         <option value="cheque" ${t.pageMode!=='a4'?'selected':''}>الشيك لوحده (${_chqMM(t.w)}×${_chqMM(t.h)} مم)</option>
