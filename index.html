@@ -11744,7 +11744,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v901';
+const UI_BUILD = 'v902';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -54984,6 +54984,14 @@ const CHQ_TPL_ID = 'ca-eg';
 // نصوص التسطير المتعارف عليها — واللي مش منهم يتكتب بالإيد
 const CHQ_CROSS = ['يصرف للمستفيد الأول', 'غير قابل للتداول', 'لا يصرف إلا بتاريخه'];
 const CHQ_FONTS = ['Cairo', 'Tajawal', 'Amiri', 'Noto Naskh Arabic', 'Almarai'];
+
+// العلامتين اللي بنقيس بيهم مكان الشيك على ورقة A4. مواضعهم على الشيك
+// نفسه معروفة بالمليمتر، فلو عرفنا وقعوا فين على الورقة نعرف الشيك
+// داخل إزاي — مكانه ودورانه — من غير ما حد يقيس بمسطرة.
+const CHQ_MARKS = [
+  { id:'date', name:'مربعات التاريخ', hint:'الـ ٨ مربعات اللي تحت كلمة DATE', x:144.65, y:9.0 },
+  { id:'acc',  name:'رقم الحساب',     hint:'سطر A/C No. تحت اسم الشركة',     x:22.0,  y:57.2 },
+];
 let _chqTpl = null;         // القالب الشغال
 let _chqForm = {};          // بيانات الشيك اللي بيتطبع
 let _chqCalib = false;      // إحنا في شاشة الظبط؟
@@ -54996,6 +55004,9 @@ function _chqDefaultTpl(){
     id: CHQ_TPL_ID, name: 'كريدي أجريكول مصر', bank: 'Crédit Agricole Egypt',
     w: 176, h: 83, bgUrl: 'cheque-bg.jpg', offX: 0, offY: 0, pageMode: 'cheque',
     font: 'Cairo', currency: 'EGP', crossText: 'يصرف للمستفيد الأول',
+    // مكان الشيك على ورقة A4 ودورانه — بيتحسبوا من ورقة الشبكة.
+    // sheetX/sheetY = فين وقع ركن الشيك (٠،٠) على الورقة بالمليمتر.
+    sheetX: 17, sheetY: 20, rotation: 0,
     // المواضع دي مقيسة من شيك كريدي أجريكول الحقيقي، مش تقدير:
     //   خانات التاريخ الوردي من ١٢٨٫٣ لـ ١٦١ مم (٨ خانات × ٤٫٠٩)
     //   سطر المستفيد عند ٢٧٫٩ مم · مربع التفقيط من ٣٥٫٩ لـ ٤٤٫١ (سطرين جواه)
@@ -55044,7 +55055,8 @@ async function chqSaveTpl(){
     await apiFetch('/api/cheque-templates/' + encodeURIComponent(t.id), 'PUT', {
       name:t.name, bank:t.bank, w:t.w, h:t.h, bgUrl:t.bgUrl, bg:t.bg || null,
       fields:t.fields, offX:t.offX, offY:t.offY, pageMode:t.pageMode, isDefault:true,
-      font:t.font, currency:t.currency, crossText:t.crossText });
+      font:t.font, currency:t.currency, crossText:t.crossText,
+      sheetX:t.sheetX, sheetY:t.sheetY, rotation:t.rotation });
     toast('✅ المقاسات اتحفظت', 'success');
     return true;
   }catch(e){ toast('❌ الحفظ فشل: ' + e.message, 'error'); return false; }
@@ -55150,11 +55162,32 @@ function _chqFieldsHtml(tpl, vals, opts){
 }
 
 // ── الطباعة الحقيقية ──────────────────────────────────────────────
+// 🗺️ ورقة الشبكة: A4 كاملة وكل تقاطع مكتوب عليه إحداثياته بالمليمتر.
+//    بتتطبع والشيك في الطابعة، فاللي بيظهر على الشيك بيقول مكانه على
+//    الورقة بالظبط — مهما كان داخل بأي اتجاه. ده أدق من أي تخمين.
+function _chqGridSheet(){
+  const W = 210, H = 297, STEP = 10;
+  const out = [];
+  for(let x = 0; x <= W; x += 5)
+    out.push(`<div style="position:absolute;left:${x}mm;top:0;width:${x % STEP ? 0.1 : 0.2}mm;
+      height:${H}mm;background:${x % 50 ? (x % STEP ? '#d8d8d8' : '#9aa0a6') : '#d93025'}"></div>`);
+  for(let y = 0; y <= H; y += 5)
+    out.push(`<div style="position:absolute;top:${y}mm;left:0;height:${y % STEP ? 0.1 : 0.2}mm;
+      width:${W}mm;background:${y % 50 ? (y % STEP ? '#d8d8d8' : '#9aa0a6') : '#d93025'}"></div>`);
+  for(let x = 0; x <= W - STEP; x += STEP)
+    for(let y = 0; y <= H - STEP; y += STEP)
+      out.push(`<div style="position:absolute;left:${x + 0.6}mm;top:${y + 0.5}mm;font-size:1.9mm;
+        line-height:1;font-family:Arial,sans-serif;color:${(x % 50 || y % 50) ? '#5f6368' : '#d93025'};
+        white-space:nowrap">${x},${y}</div>`);
+  return out.join('');
+}
+
 function chqPrint(tpl, vals, mode){
   const isCal = mode === 'calib';
-  const a4 = tpl.pageMode === 'a4';
+  const isGrid = mode === 'grid';
+  const a4 = tpl.pageMode === 'a4' || isGrid;
   const pageCss = a4
-    ? `@page{size:A4 landscape;margin:0}`
+    ? `@page{size:A4 portrait;margin:0}`
     : `@page{size:${tpl.w}mm ${tpl.h}mm;margin:0}`;
 
   // 📏 مسطرة ١٠٠ مم: لو طلعت أقل من ١٠٠ بالمسطرة الحقيقية يبقى
@@ -55192,29 +55225,39 @@ function chqPrint(tpl, vals, mode){
         height:${f.kind==='cross'?(f.h||16):(Number(f.size)*1.25)}mm;
         border:0.25mm dashed #e11d48"></div>`).join('') : '';
 
-  const body = `<div class="sheet">${grid}${outlines}
+  const inner = `<div class="sheet">${grid}${outlines}
       ${_chqFieldsHtml(tpl, vals, { cross: true, outline: isCal })}${ruler}</div>`;
+  // على A4 الشيك بيتحط في مكانه وبدورانه — transform-origin عند ٠،٠
+  // عشان (sheetX, sheetY) تبقى هي ركن الشيك نفسه مش مركزه.
+  const body = isGrid
+    ? `<div class="page">${_chqGridSheet()}</div>`
+    : (a4
+      ? `<div class="page"><div style="position:absolute;left:${Number(tpl.sheetX) || 0}mm;
+           top:${Number(tpl.sheetY) || 0}mm;transform:rotate(${Number(tpl.rotation) || 0}deg);
+           transform-origin:0 0">${inner}</div></div>`
+      : inner);
 
   const w = window.open('', '_blank', 'width=1100,height=700');
   if(!w){ toast('❗ المتصفح منع النافذة — اسمح بالنوافذ المنبثقة', 'error'); return null; }
   w.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
-<title>${isCal ? 'ورقة معايرة' : 'شيك'} — ${escapeHtml(tpl.name)}</title>
+<title>${isGrid ? 'ورقة الشبكة' : isCal ? 'ورقة معايرة' : 'شيك'} — ${escapeHtml(tpl.name)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=${
   encodeURIComponent(tpl.font || 'Cairo')}:wght@400;700&display=swap" rel="stylesheet">
 <style>
   ${pageCss}
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:#fff}
-  .sheet{position:relative;width:${tpl.w}mm;height:${tpl.h}mm;overflow:hidden;
-         ${a4 ? 'margin:0;' : ''}}
+  .sheet{position:relative;width:${tpl.w}mm;height:${tpl.h}mm;overflow:hidden}
+  .page{position:relative;width:210mm;height:297mm;overflow:hidden}
   .hint{font-family:Cairo,Arial;font-size:13px;background:#fffbeb;border:1px solid #f59e0b;
         color:#92400e;padding:10px 14px;margin:0 0 8px;line-height:1.9;border-radius:8px}
   @media print{ .hint{display:none} }
 </style></head><body>
 <div class="hint"><b>قبل ما تدوس Print:</b> خلّي <b>Margins = None</b> و<b>Scale = 100%</b>
  (مش Fit to page)، وشيل علامة <b>Headers and footers</b>.
- ${isCal ? 'ودي ورقة معايرة — اطبعها على ورق عادي وحط الشيك فوقها على الضوء.'
-         : 'حطّ الشيك في درج التغذية اليدوية.'}</div>
+ ${isGrid ? 'ودي ورقة الشبكة — حطّ <b>الشيك نفسه</b> في الطابعة زي ما بتحطه بالظبط واطبع عليه.'
+         : isCal ? 'ودي ورقة معايرة — اطبعها على ورق عادي وحط الشيك فوقها على الضوء.'
+         : 'حطّ الشيك في الطابعة.'}</div>
 ${body}
 <script>window.onload=function(){setTimeout(function(){window.print();},420);};<\/script>
 </body></html>`);
@@ -55298,7 +55341,8 @@ function chqRenderUI(){
 
   document.getElementById('m-chq-actions').innerHTML = _chqCalib ? `
     <button class="btn btn-ghost btn-sm" onclick="chqCalibDone()">✔️ خلصت الظبط</button>
-    <button class="btn btn-sm" onclick="chqPrintCalib()" style="background:#0ea5e9;color:#fff">📏 اطبع ورقة معايرة</button>
+    <button class="btn btn-sm" onclick="chqPrintGrid()" style="background:#7c3aed;color:#fff">🗺️ ورقة الشبكة</button>
+    <button class="btn btn-sm" onclick="chqPrintCalib()" style="background:#0ea5e9;color:#fff">📏 ورقة معايرة</button>
     <button class="btn btn-ghost btn-sm" onclick="chqResetTpl()" style="color:var(--danger)">↩️ رجّع الأصل</button>` : `
     <button class="btn btn-ghost btn-sm" onclick="chqCalibStart()">⚙️ ظبط المقاسات</button>
     <button class="btn btn-ghost btn-sm" onclick="chqPrintCalib()">📏 ورقة معايرة</button>
@@ -55437,6 +55481,35 @@ function chqCalibHtml(){
         <option value="a4" ${t.pageMode==='a4'?'selected':''}>ورقة A4 (الشيك في الركن)</option>
       </select></div>
   </div>
+  ${t.pageMode === 'a4' ? `
+  <div style="background:#f5f3ff;border:1px solid #a78bfa;border-radius:10px;padding:12px;margin-top:12px">
+    <div style="font-weight:800;font-size:13px;margin-bottom:7px">🗺️ مكان الشيك على ورقة الـ A4</div>
+    <div style="font-size:12px;line-height:2;color:#4c1d95;margin-bottom:10px">
+      ١) دوس <b>«اطبع ورقة الشبكة»</b> وحطّ <b>الشيك نفسه</b> في الطابعة زي ما بتحطه بالظبط.<br>
+      ٢) هتلاقي أرقام اتطبعت على الشيك — كل رقم بيقول مكانه على الورقة.<br>
+      ٣) اكتب تحت الرقم اللي وقع على كل علامة، ودوس «احسب».
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px">
+      ${CHQ_MARKS.map(m => `<div class="form-group" style="margin:0">
+        <label>${escapeHtml(m.name)} <span style="font-weight:400;color:var(--muted)">— ${escapeHtml(m.hint)}</span></label>
+        <input id="chq-mark-${m.id}" placeholder="مثلاً 40,160" inputmode="text"></div>`).join('')}
+    </div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px">
+      <button class="btn btn-sm" onclick="chqPrintGrid()" style="background:#7c3aed;color:#fff">🗺️ اطبع ورقة الشبكة</button>
+      <button class="btn btn-sm" onclick="chqApplyPlacement()" style="background:#16a34a;color:#fff">🧮 احسب مكان الشيك</button>
+    </div>
+    <div id="chq-solve-out"></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:9px;margin-top:11px">
+      <div class="form-group" style="margin:0"><label>ركن الشيك X (مم)</label>
+        <input type="number" step="0.5" id="chq-sx" value="${t.sheetX}" onchange="chqSetSheet()"></div>
+      <div class="form-group" style="margin:0"><label>ركن الشيك Y (مم)</label>
+        <input type="number" step="0.5" id="chq-sy" value="${t.sheetY}" onchange="chqSetSheet()"></div>
+      <div class="form-group" style="margin:0"><label>الدوران</label>
+        <select id="chq-rot" onchange="chqSetSheet()">
+          ${[0,90,180,270].map(d => `<option value="${d}" ${Number(t.rotation)===d?'selected':''}>${d}°</option>`).join('')}
+        </select></div>
+    </div>
+  </div>` : ''}
   <div id="chq-fsel" style="margin-top:12px"></div>`;
 }
 
@@ -55489,6 +55562,13 @@ function chqSetOff(){
 }
 function chqSetPage(){
   _chqTpl.pageMode = document.getElementById('chq-page').value === 'a4' ? 'a4' : 'cheque';
+  chqSaveTpl(); chqRenderUI(); chqFieldPanel();
+}
+function chqSetSheet(){
+  const g = id => document.getElementById(id);
+  if(g('chq-sx')) _chqTpl.sheetX = Number(g('chq-sx').value) || 0;
+  if(g('chq-sy')) _chqTpl.sheetY = Number(g('chq-sy').value) || 0;
+  if(g('chq-rot')) _chqTpl.rotation = Number(g('chq-rot').value) || 0;
   chqSaveTpl();
 }
 
@@ -55545,6 +55625,71 @@ async function chqResetTpl(){
 }
 
 // ── الطباعة ───────────────────────────────────────────────────────
+// ── حساب مكان الشيك من قراءتين على ورقة الشبكة ────────────────────
+// بياخد: العلامة دي على الشيك وقعت عند أنهي إحداثي على الورقة.
+// بيرجّع: مكان ركن الشيك ودورانه. الدوران بيتقرّب لأقرب ٩٠° لأن
+// الطابعة بتسحب الورق باتجاه ثابت — الزوايا الغريبة معناها قراءة غلط.
+function chqSolvePlacement(reads){
+  const m1 = CHQ_MARKS[0], m2 = CHQ_MARKS[1];
+  const q1 = reads[m1.id], q2 = reads[m2.id];
+  if(!q1 || !q2) return { error: 'محتاج القراءتين' };
+  const dpx = q2.x - q1.x, dpy = q2.y - q1.y;
+  const dlx = m2.x - m1.x, dly = m2.y - m1.y;
+  const dPage = Math.hypot(dpx, dpy), dChq = Math.hypot(dlx, dly);
+  if(dPage < 1) return { error: 'القراءتين على نفس المكان تقريبًا — راجعهم' };
+  // المسافة بين العلامتين معروفة. لو اللي على الورقة مختلفة كتير،
+  // يبقى إما قراءة غلط أو الطابعة بتصغّر — والاتنين لازم يتقالوا.
+  const scale = dPage / dChq;
+  const raw = Math.atan2(dpy, dpx) * 180 / Math.PI - Math.atan2(dly, dlx) * 180 / Math.PI;
+  let deg = ((Math.round(raw / 90) * 90) % 360 + 360) % 360;
+  const skew = Math.abs(((raw - deg + 540) % 360) - 180);
+  const r = deg * Math.PI / 180, cos = Math.cos(r), sin = Math.sin(r);
+  // ناخد متوسط التقديرين من العلامتين — أدق من واحدة
+  const ox = ((q1.x - (m1.x * cos - m1.y * sin)) + (q2.x - (m2.x * cos - m2.y * sin))) / 2;
+  const oy = ((q1.y - (m1.x * sin + m1.y * cos)) + (q2.y - (m2.x * sin + m2.y * cos))) / 2;
+  const warn = [];
+  if(Math.abs(scale - 1) > 0.04)
+    warn.push(`المسافة بين العلامتين طلعت ${Math.round(dPage)} مم والمفروض ${Math.round(dChq)} — `
+      + (scale < 1 ? 'يبدو إن الطابعة بتصغّر: خلّي Scale = 100%' : 'راجع القراءتين'));
+  if(skew > 4) warn.push(`الشيك مايل حوالي ${skew.toFixed(1)}° — لو ده صح هتحتاج تظبط بالأسهم بعدين`);
+  return { x: Math.round(ox * 10) / 10, y: Math.round(oy * 10) / 10, deg, scale, skew, warn };
+}
+
+// بيفهم «40,160» أو «40 160» أو «40 , 160»
+function _chqParseXY(t){
+  const m = /(-?\d+(?:\.\d+)?)\s*[,x\s]\s*(-?\d+(?:\.\d+)?)/.exec(String(t || '').trim());
+  if(!m) return null;
+  const x = Number(m[1]), y = Number(m[2]);
+  if(!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  if(x < -20 || x > 230 || y < -20 || y > 320) return null;   // برّه ورقة A4
+  return { x, y };
+}
+
+function chqApplyPlacement(){
+  const reads = {};
+  for(const m of CHQ_MARKS){
+    const v = _chqParseXY(document.getElementById('chq-mark-' + m.id)?.value);
+    if(!v){ toast('❗ اكتب إحداثي ' + m.name + ' بالشكل ده: 40,160', 'error'); return; }
+    reads[m.id] = v;
+  }
+  const r = chqSolvePlacement(reads);
+  if(r.error){ toast('❗ ' + r.error, 'error'); return; }
+  _chqTpl.pageMode = 'a4';
+  _chqTpl.sheetX = r.x; _chqTpl.sheetY = r.y; _chqTpl.rotation = r.deg;
+  chqSaveTpl();
+  chqRenderUI(); chqFieldPanel();
+  toast(`✅ الشيك عند ${r.x},${r.y} مم ودورانه ${r.deg}°`
+    + (r.warn.length ? ' — بس بُص على التنبيه' : ''), r.warn.length ? 'warn' : 'success', 7000);
+  const box = document.getElementById('chq-solve-out');
+  if(box) box.innerHTML = `<div style="background:${r.warn.length?'#fffbeb':'#f0fdf4'};
+    border:1px solid ${r.warn.length?'#f59e0b':'#16a34a'};border-radius:8px;padding:9px 12px;
+    font-size:12px;line-height:1.9;margin-top:9px">
+    ✅ ركن الشيك عند <b>${r.x},${r.y}</b> مم · الدوران <b>${r.deg}°</b>
+    ${r.warn.map(w => `<div style="color:#92400e">⚠️ ${escapeHtml(w)}</div>`).join('')}</div>`;
+}
+
+function chqPrintGrid(){ chqPrint(_chqTpl, chqRender(_chqForm), 'grid'); }
+
 function chqPrintCalib(){ chqPrint(_chqTpl, chqRender(_chqForm), 'calib'); }
 
 async function chqDoPrint(){
