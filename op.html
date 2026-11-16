@@ -11731,7 +11731,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v895';
+const UI_BUILD = 'v896';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -39267,11 +39267,21 @@ if(!document.getElementById('cg-sub-css')){
                           font-family:Cairo,sans-serif }
     #cg-body tr.sub .amt{ font-family:Roboto,sans-serif; font-weight:800;
                           color:var(--text); font-size:11px; text-align:center }
-    #cg-body tr.sub.back .amt, #cg-body tr.sub.back .src{ color:#dc2626 }`;
+    #cg-body tr.sub.back .amt, #cg-body tr.sub.back .src{ color:#dc2626 }
+    /* 📊 v896: أعمدة التوريدات والقطعات — ضيقة ومميّزة بخلفية خفيفة
+       عشان العين تفرق بينها وبين أعمدة الحساب */
+    #cg-body th.dyn{ width:62px; padding:5px 3px !important; line-height:1.25 }
+    #cg-body th.dyn .no{ display:block; font-family:Roboto,sans-serif; font-size:10px }
+    #cg-body th.dyn .dt{ display:block; font-size:9px; opacity:.7; font-weight:400 }
+    #cg-body th.dyn.deliv, #cg-body td.dyn.deliv{ background:#f5f3ff }
+    #cg-body th.dyn.stl,   #cg-body td.dyn.stl{ background:#f0fdf4 }
+    #cg-body td.dyn{ text-align:center; font-family:Roboto,sans-serif; font-size:12px }
+    #cg-body td.dyn .nil{ color:var(--muted); opacity:.45 }`;
   document.head.appendChild(st);
 }
 function cgRenderReport(){
   const r = _cgRep, items = r.items || [];
+  const _cols = _cgCols(r);
   if(!items.length){
     document.getElementById('cg-body').innerHTML = `
       <div class="card" style="padding:26px;text-align:center;color:var(--muted)">
@@ -39292,15 +39302,17 @@ function cgRenderReport(){
         ${x.sku ? `<div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(x.sku)}</div>` : ''}
       </td>
       <td class="cgn">${_cgN(x.opening_qty)}</td>
+      ${_cgColCells(x, _cols.deliv, 'deliv')}
       <td class="cgn">${_cgN(x.delivered_qty)}</td>
       <td class="cgn" style="font-weight:800">${_cgN(x.closing_qty)}</td>
+      ${_cgColCells(x, _cols.stl, 'stl')}
       <td class="cgn" style="font-weight:900;color:${warn?'#dc2626':'#166534'}">${_cgN(x.sold_qty)}${warn?' ⚠️':''}</td>
       <td class="cgn" style="color:${diff?'#b45309':'var(--muted)'};font-weight:${diff?800:400}"
           title="${diff?'الفرق '+(x.sold_qty-(x.system_sold||0)):''}">${x.system_sold == null ? '—' : _cgN(x.system_sold)}</td>
       <td class="cgn">${_cgM(x.sale_price)}${x.had_offer?' <span title="عليه عرض صلاحية — ده السعر الحقيقي">🏷️</span>':''}</td>
       <td class="cgn" style="padding:4px" data-cg-cost-cell="${x.item_id}">${_cgCostCell(x)}</td>
       <td class="cgn" style="font-weight:800" data-cg-total="${x.item_id}">${x.sold_qty > 0 ? _cgM(x.line_total) : '—'}</td>
-    </tr>${_cgDelivRows(x, { lead:0, gap:1, tail:6 })}`;
+    </tr>`;
   }).join('');
 
   document.getElementById('cg-body').innerHTML = `
@@ -39340,8 +39352,10 @@ function cgRenderReport(){
         <thead><tr style="background:var(--bg);border-bottom:2px solid var(--border);font-size:11px">
           <th style="padding:8px;text-align:right">الصنف</th>
           <th style="padding:8px;width:80px">أول الفترة</th>
+          ${_cgColHeads(_cols.deliv, 'deliv', 'th')}
           <th style="padding:8px;width:80px">توريدات</th>
           <th style="padding:8px;width:90px">الرصيد الحالي</th>
+          ${_cgColHeads(_cols.stl, 'stl', 'th')}
           <th style="padding:8px;width:80px">باع</th>
           <th style="padding:8px;width:90px">مبيعات النظام</th>
           <th style="padding:8px;width:90px">سعر البيع</th>
@@ -39351,7 +39365,8 @@ function cgRenderReport(){
         <tbody>${rows}</tbody>
         <tfoot><tr style="background:var(--bg);border-top:2px solid var(--border);font-weight:900">
           <td style="padding:9px">${items.length} صنف</td>
-          <td colspan="3"></td>
+          <td></td>${_cgColTotals(items, _cols.deliv, 'deliv', 'cgn')}<td></td>
+          <td></td>${_cgColTotals(items, _cols.stl, 'stl', 'cgn')}
           <td class="cgn" style="font-weight:900">${_cgN(t.sold)}</td>
           <td colspan="3"></td>
           <td id="cg-due-foot" class="cgn" style="font-weight:900;font-size:14px;color:#dc2626">${_cgM(t.amount)}</td>
@@ -39724,6 +39739,16 @@ function _cgSheetCss(opt){
                        color:var(--ink); font-size:10px }
     tbody tr.sub.back .amt{ color:#9B2C14 }
     tbody tr.sub.back .src{ color:#9B2C14 }
+    /* 📊 v896: أعمدة التوريدات والقطعات — ضيقة، والعنوان سطرين */
+    th.dyn{ width:54px; padding:5px 3px !important; line-height:1.25 }
+    th.dyn .no{ display:block; font-family:Roboto,sans-serif; font-size:9px }
+    th.dyn .dt{ display:block; font-size:8px; opacity:.75; font-weight:400 }
+    th.dyn.deliv{ background:#5B4030 } th.dyn.stl{ background:#3C4A32 }
+    tbody td.dyn{ width:54px; text-align:center; font-family:Roboto,sans-serif; font-size:11px }
+    tbody td.dyn.deliv{ background:#FAF7F3 } tbody td.dyn.stl{ background:#F5F8F3 }
+    tbody tr:nth-child(even) td.dyn.deliv{ background:#F6F1EC }
+    tbody tr:nth-child(even) td.dyn.stl{ background:#F0F5EE }
+    td.dyn .nil{ color:#BDB5AE }
     .deliv{ margin-top:5px; text-align:start }
     .deliv .ln{ display:block; font-size:8px; color:var(--mute); line-height:1.5;
                 margin-top:3px; padding-inline-start:4px;
@@ -39783,6 +39808,7 @@ function cgPrintReport(){
   const r = _cgRep;
   if(!r || !(r.items||[]).length) return toast('❌ مفيش تقرير مفتوح');
   const items = r.items, t = r.totals || {};
+  const cols = _cgCols(r);
   const sup = (_cgSups||[]).find(x => String(x.id) === String(_cgSup));
   const from = r.period_from
     ? new Date(r.period_from).toLocaleDateString('ar-EG',{day:'numeric',month:'long',year:'numeric'})
@@ -39796,14 +39822,16 @@ function cgPrintReport(){
         ${x.sku?`<span class="sku">${escapeHtml(x.sku)}</span>`:''}
       </td>
       <td class="q">${_cgN(x.opening_qty)}</td>
+      ${_cgColCells(x, cols.deliv, 'deliv')}
       <td class="q">${_cgN(x.delivered_qty)}</td>
       <td class="q">${_cgN(x.closing_qty)}</td>
+      ${_cgColCells(x, cols.stl, 'stl')}
       <td class="q sold">${x.sold_qty < 0 ? '−' : ''}${_cgN(Math.abs(x.sold_qty))}${
         x.negative?'<span class="bang">؟</span>':''}</td>
       <td class="q money">${_cgM(x.sale_price)}${x.had_offer?'<span class="bang" title="سعر عرض">★</span>':''}</td>
       <td class="q money">${_cgM(x.unit_price)}</td>
       <td class="q sold money">${x.sold_qty>0?_cgM(x.line_total):'—'}</td></tr>`
-    + _cgDelivRows(x, { lead:1, gap:1, tail:5 })).join('');
+    ).join('');
 
   const flagged = items.filter(x => x.negative).length;
 
@@ -39825,13 +39853,15 @@ function cgPrintReport(){
     <table>
       <thead><tr>
         <th>#</th><th style="text-align:start">الصنف</th>
-        <th>أول الفترة</th><th>توريدات</th><th>الرصيد الحالي</th><th>باع</th>
+        <th>أول الفترة</th>${_cgColHeads(cols.deliv, 'deliv', 'th')}<th>توريدات</th>
+        <th>الرصيد الحالي</th>${_cgColHeads(cols.stl, 'stl', 'th')}<th>باع</th>
         <th>سعر البيع</th><th>التكلفة</th><th>الإجمالي</th>
       </tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr>
         <td colspan="2" class="lbl">إجمالي ${_cgN(items.length)} صنف</td>
-        <td class="q"></td><td class="q"></td><td class="q"></td>
+        <td class="q"></td>${_cgColTotals(items, cols.deliv, 'deliv', 'q')}<td class="q"></td>
+        <td class="q"></td>${_cgColTotals(items, cols.stl, 'stl', 'q')}
         <td class="q">${_cgN(t.sold)}</td><td class="q money"></td><td class="q money"></td>
         <td class="q sold money">${_cgM(t.amount)} ج</td></tr></tfoot>
     </table>
@@ -39857,6 +39887,51 @@ function cgPrintReport(){
 //   خانة واحدة ضيقة فبيلفوا ويصعب قراءتهم.
 //   lead = خانات قبل خانة الصنف · gap = خانات بين الصنف والتوريدات
 //   tail = خانات بعد التوريدات
+// 📊 v896: الأعمدة الأفقية — كل أمر شراء عمود وكل قطعة سابقة عمود،
+//   زي شيت الإكسيل اللي أنس شغّال عليه. الصنف سطر واحد وكل حاجة
+//   جنب بعضها بدل ما تفتح كل قطعة لوحدها أو تقرا سطور فرعية.
+function _cgCols(r){
+  return { deliv: r?.delivery_cols || [], stl: r?.settlement_cols || [] };
+}
+function _cgShortDate(d){
+  if(!d) return '';
+  return new Date(d + 'T00:00:00').toLocaleDateString('ar-EG',{day:'numeric',month:'short'});
+}
+// عناوين الأعمدة: رقم الأمر/القطعة فوق وتاريخه تحته
+function _cgColHeads(cols, kind, th){
+  // الترتيب أوضح من الرقم الطويل — «توريدة ١» بدل «PO-20261021-0412».
+  //   الرقم الكامل في الـ tooltip لو حد محتاجه.
+  const word = kind === 'deliv' ? 'توريدة' : 'قطعة';
+  return cols.map((c, i) => `<${th} class="dyn ${kind}" title="${escapeHtml(
+      (c.po_number || c.settlement_number || '') + (c.date ? ' — ' + c.date : ''))}">
+    <span class="no">${word} ${_cgN(i + 1)}</span>
+    <span class="dt">${escapeHtml(_cgShortDate(c.date))}</span></${th}>`).join('');
+}
+
+// مجموع العمود — مفيد تعرف التوريدة دي كانت كام قطعة إجمالاً
+function _cgColTotals(items, cols, kind, cls){
+  return cols.map(c => {
+    let n = 0;
+    for(const x of items){
+      if(kind === 'deliv'){ for(const l of (x.deliveries || [])) if(l.po_id === c.id) n += l.qty; }
+      else n += (x.sold_by_settlement || {})[c.id] || 0;
+    }
+    return `<td class="${cls} dyn ${kind}">${n ? _cgN(n) : ''}</td>`;
+  }).join('');
+}
+// خانات الصنف في الأعمدة دي — الفاضي شرطة عشان العين تعدّي بسرعة
+function _cgColCells(x, cols, kind){
+  if(kind === 'deliv'){
+    const by = {};
+    for(const l of (x.deliveries || [])) by[l.po_id] = (by[l.po_id] || 0) + l.qty;
+    return cols.map(c => { const q = by[c.id];
+      return `<td class="q dyn deliv">${q ? _cgN(q) : '<span class="nil">·</span>'}</td>`; }).join('');
+  }
+  const by = x.sold_by_settlement || {};
+  return cols.map(c => { const q = by[c.id];
+    return `<td class="q dyn stl">${q ? _cgN(q) : '<span class="nil">·</span>'}</td>`; }).join('');
+}
+
 function _cgDelivRows(x, o){
   const d = x.deliveries || [];
   if(!d.length) return '';
@@ -39896,6 +39971,7 @@ function cgPrintMovement(){
   const r = _cgRep;
   if(!r || !(r.items||[]).length) return toast('❌ مفيش تقرير مفتوح');
   const items = r.items, t = r.totals || {};
+  const cols = _cgCols(r);
   const sup = (_cgSups||[]).find(x => String(x.id) === String(_cgSup));
   const from = r.period_from
     ? new Date(r.period_from).toLocaleDateString('ar-EG',{day:'numeric',month:'long',year:'numeric'})
@@ -39913,12 +39989,13 @@ function cgPrintMovement(){
         ${x.sku?`<span class="sku">${escapeHtml(x.sku)}</span>`:''}
       </td>
       <td class="q">${_cgN(x.opening_qty)}</td>
+      ${_cgColCells(x, cols.deliv, 'deliv')}
       <td class="q">${_cgN(x.delivered_qty)}</td>
       <td class="q">${_cgN(x.closing_qty)}</td>
+      ${_cgColCells(x, cols.stl, 'stl')}
       <td class="q sold">${x.sold_qty < 0 ? '−' : ''}${_cgN(Math.abs(x.sold_qty))}${
         x.negative?'<span class="bang">؟</span>':''}</td>
-      <td class="count"></td></tr>`
-    + _cgDelivRows(x, { lead:1, gap:1, tail:3 })).join('');
+      <td class="count"></td></tr>`).join('');
 
   // الصنف اللي رقمه مش مظبوط لازم يبان قدام الاتنين — الورقة دي
   //   بتتراجع مع المورد، فتخبية المشكلة بتأجّلها لحد ما تبقى خلاف
@@ -39951,14 +40028,19 @@ function cgPrintMovement(){
     <table>
       <thead><tr>
         <th>#</th><th style="text-align:start">الصنف</th>
-        <th>أول الفترة</th><th>توريدات</th><th>الرصيد الحالي</th><th>باع</th>
+        <th>أول الفترة</th>${_cgColHeads(cols.deliv, 'deliv', 'th')}<th>توريدات</th>
+        <th>الرصيد الحالي</th>${_cgColHeads(cols.stl, 'stl', 'th')}<th>باع</th>
         <th class="hcount">جرد المورد</th>
       </tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr>
         <td colspan="2" class="lbl">إجمالي ${_cgN(items.length)} صنف</td>
-        <td class="q">${_cgN(totOpen)}</td><td class="q">${_cgN(totDeliv)}</td>
-        <td class="q">${_cgN(totClose)}</td><td class="q">${_cgN(t.sold)}</td>
+        <td class="q">${_cgN(totOpen)}</td>
+        ${_cgColTotals(items, cols.deliv, 'deliv', 'q')}
+        <td class="q">${_cgN(totDeliv)}</td>
+        <td class="q">${_cgN(totClose)}</td>
+        ${_cgColTotals(items, cols.stl, 'stl', 'q')}
+        <td class="q">${_cgN(t.sold)}</td>
         <td class="count"></td></tr></tfoot>
     </table>
 
