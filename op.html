@@ -8423,6 +8423,41 @@ tr:hover td{background:#fafbff}
 
 <!-- PO Detail Modal -->
 <!-- 🖨️ v900: طباعة الشيكات -->
+<!-- 🔒📅 v907: قفل أول المدة بتاريخ -->
+<div id="m-cg-lock" class="modal-overlay" style="display:none">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <h3 style="margin:0">🔒 حفظ نهائي لرصيد أول المدة</h3>
+      <button class="modal-close" onclick="closeM('m-cg-lock')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#f0fdfa;border:1px solid #0f766e;color:#115e59;border-radius:9px;
+           padding:10px 13px;font-size:12.5px;line-height:1.95;margin-bottom:13px">
+        هتقفل <b id="cg-lock-n">0</b> صنف. بعدها الأرقام مايتغيّروش إلا بزرار 🔓 وبيتسجّل مين فتحه.
+      </div>
+      <div class="form-group">
+        <label>الأرقام دي صحيحة لغاية تاريخ إيه؟</label>
+        <input type="date" id="cg-lock-date">
+        <div style="font-size:11.5px;color:var(--muted);line-height:1.9;margin-top:6px">
+          ده تاريخ الجرد اللي اتفقت عليه مع المورد — مش النهارده بالضرورة.
+          لو عددتوا البضاعة من أسبوع، حط تاريخ العد.
+          <b>التوريدات اللي قبل التاريخ ده مش هتتحسب تاني</b>، لأنها أصلاً جوه الرصيد.
+        </div>
+      </div>
+      <div style="background:#fffbeb;border:1px solid #fcd34d;color:#92400e;border-radius:8px;
+           padding:8px 12px;font-size:11.5px;line-height:1.9">
+        💡 لسه ماراجعتش مع المورد؟ اقفل المودال ودوس <b>«🖨️ مسودة أول المدة»</b> —
+        ورقة من غير فلوس فيها خانة يكتب فيها رقمه.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeM('m-cg-lock')">إلغاء</button>
+      <button class="btn btn-sm" onclick="cgLockConfirm()"
+              style="background:#0f766e;border-color:#0f766e;color:#fff;font-weight:800">🔒 اقفل</button>
+    </div>
+  </div>
+</div>
+
 <div id="m-chq" class="modal-overlay" style="display:none">
   <div class="modal" style="max-width:860px">
     <div class="modal-header">
@@ -11745,7 +11780,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v906';
+const UI_BUILD = 'v907';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -39604,6 +39639,7 @@ async function cgLoadItems(){
     const r = await apiFetch(`/api/consignment/${_cgSup}/items`);
     if(r?.error) throw new Error(r.error);
     _cgItems = r.items || [];
+    const _cgAsOf = (_cgRep?.supplier?.opening_as_of) || r.openingAsOf || null;
     // 🔒 v892: عدّاد المقفول والمفتوح — الزرار بيفضل شغّال للأصناف الجديدة
     const _cgLocked = _cgItems.filter(x => x.opening_locked).length;
     const _cgOpen   = _cgItems.length - _cgLocked;
@@ -39614,11 +39650,18 @@ async function cgLoadItems(){
           بعد أول قطع، النظام بياخد رصيد الإقفال أوتوماتيك ومش بيبص للرقم ده تاني.
         </div>
         <button class="btn btn-sm" onclick="cgOpenAdd()" style="background:#6366f1;border-color:#6366f1;color:#fff;font-weight:700">➕ ضيف أصناف</button>
+        <button class="btn btn-sm btn-ghost" onclick="cgPrintOpening()"
+            title="اطبعها وراجعها مع المورد قبل ما تقفل — فيها خانة فاضية يكتب فيها رقمه"
+            style="font-weight:700">🖨️ مسودة أول المدة</button>
         ${_cgOpen ? `<button class="btn btn-sm" onclick="cgLockOpening()"
             title="بعد ما تراجع الأرقام — بتتقفل فمحدش يغيّرها بالغلط"
             style="background:#0f766e;border-color:#0f766e;color:#fff;font-weight:800">🔒 حفظ نهائي (${_cgOpen})</button>`
           : `<span style="font-size:12px;color:#0f766e;font-weight:700">🔒 كله متقفل</span>`}
       </div>
+      ${_cgAsOf ? `<div style="background:#f0fdfa;border:1px solid #0f766e;border-radius:9px;
+        padding:9px 13px;margin-bottom:11px;font-size:12px;color:#115e59;line-height:1.9">
+        📅 رصيد أول المدة صحيح لغاية <b>${escapeHtml(_cgFmtDate(_cgAsOf))}</b> —
+        والتوريدات اللي بعد التاريخ ده بس هي اللي بتتحسب في الفترة الحالية.</div>` : ''}
       ${_cgOpen && _cgLocked ? `<div style="background:#f0fdfa;border:1px solid #0f766e;border-radius:9px;padding:9px 13px;margin-bottom:11px;font-size:12px;color:#115e59">
         <b>${_cgLocked}</b> صنف متقفل · <b>${_cgOpen}</b> لسه مفتوح</div>` : ''}
       ${!_cgItems.length ? `<div class="card" style="padding:26px;text-align:center;color:var(--muted)">مفيش أصناف لسه</div>` : `
@@ -39658,18 +39701,96 @@ async function cgLoadItems(){
 
 // 🔒 v892: اقفل رصيد أول المدة. الرقم ده أساس حساب «باع» — أول المدة
 //   + التوريدات − الرصيد الحالي — فأي تغيير فيه بيغيّر المستحق للمورد.
-async function cgLockOpening(){
+const _cgFmtDate = d => {
+  if(!d) return '';
+  const x = new Date(String(d).slice(0,10) + 'T00:00:00');
+  return isNaN(x) ? String(d) : x.toLocaleDateString('ar-EG', { dateStyle:'medium' });
+};
+
+// 🔒📅 v907: القفل بقى بتاريخ. أنس بيطبع المسودة ويراجعها مع المورد
+//   وبيقفل بعدها بأيام — فالتاريخ اللي بيتفقوا عليه (ممكن يكون فات)
+//   هو اللي بيحدد التوريدات اللي بعده، مش يوم ما ضغط الزرار.
+function cgLockOpening(){
   const open = (_cgItems || []).filter(x => !x.opening_locked);
   if(!open.length) return toast('كله متقفل خلاص');
-  if(!confirm(`هتقفل رصيد أول المدة لـ ${open.length} صنف.\n\n`
-    + `بعدها مايتغيّرش ولا الصنف يتمسح من الشاشة دي.\n`
-    + `لو احتجت تصلّح واحد، فيه زرار 🔓 جنبه بيتسجّل مين فتحه.\n\nتمام؟`)) return;
+  openM('m-cg-lock');
+  const inp = document.getElementById('cg-lock-date');
+  if(inp){ inp.value = _todayCairo(); inp.max = _todayCairo(); }
+  const n = document.getElementById('cg-lock-n');
+  if(n) n.textContent = _cgN ? _cgN(open.length) : open.length;
+}
+
+async function cgLockConfirm(){
+  const open = (_cgItems || []).filter(x => !x.opening_locked);
+  const asOf = (document.getElementById('cg-lock-date')?.value || '').trim();
+  if(!asOf) return toast('❗ اختار التاريخ الأول', 'error');
+  if(asOf > _todayCairo()) return toast('❗ مينفعش تاريخ في المستقبل', 'error');
+  if(!confirm(`هتقفل رصيد أول المدة لـ ${open.length} صنف بتاريخ ${_cgFmtDate(asOf)}.\n\n`
+    + `بعدها الأرقام مايتغيّروش، والتوريدات اللي قبل التاريخ ده مش هتتحسب تاني.\n`
+    + `لو احتجت تصلّح صنف، فيه زرار 🔓 جنبه بيتسجّل مين فتحه.\n\nتمام؟`)) return;
   try{
-    const r = await apiFetch(`/api/consignment/${_cgSup}/lock-opening`, 'POST', {});
-    if(r?.error) return toast('❌ ' + r.error);
-    toast(`🔒 اتقفل ${r.locked} صنف`, 'success');
+    const r = await apiFetch(`/api/consignment/${_cgSup}/lock-opening`, 'POST', { asOf });
+    if(r?.error) return toast('❌ ' + r.error, 'error');
+    closeM('m-cg-lock');
+    toast(`🔒 اتقفل ${r.locked} صنف بتاريخ ${_cgFmtDate(r.asOf || asOf)}`, 'success', 6000);
     cgLoadItems();
-  }catch(e){ toast('❌ ' + e.message); }
+    if(_cgTab === 'report') cgLoadReport();
+  }catch(e){ toast('❌ ' + e.message, 'error'); }
+}
+
+// 🖨️ مسودة أول المدة — الورقة اللي بيراجع بيها مع المورد قبل القفل.
+//   من غير فلوس خالص، وفيها خانة فاضية المورد يكتب فيها رقمه عشان
+//   الفرق يبان قبل ما يتقفل على حاجة غلط.
+function cgPrintOpening(){
+  const items = (_cgItems || []).slice()
+    .sort((a,b) => String(a.product_title||'').localeCompare(String(b.product_title||''),'ar'));
+  if(!items.length) return toast('مفيش أصناف');
+  const sup = _cgRep?.supplier || { name: '' };
+  const locked = items.filter(x => x.opening_locked).length;
+  const rows = items.map((x,i) => `<tr>
+      <td class="n">${_cgN(i+1)}</td>
+      <td class="t">${x.opening_locked ? '<span class="lk" title="متقفل">🔒</span> ' : ''}${
+        escapeHtml(x.product_title||'')}${x.variant_title && x.variant_title!=='Default Title'
+        ? ' — ' + escapeHtml(x.variant_title) : ''}
+        <div class="sku">${escapeHtml(x.sku||'')}</div></td>
+      <td class="q">${_cgN(x.opening_qty || 0)}</td>
+      <td class="w"><span class="ln"></span></td>
+      <td class="w"><span class="ln"></span></td>
+    </tr>`).join('');
+  const w = window.open('', '_blank', 'width=1000,height=720');
+  if(!w) return toast('❗ المتصفح منع النافذة', 'error');
+  w.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
+<title>مسودة رصيد أول المدة — ${escapeHtml(sup.name||'')}</title>
+<style>${_cgSheetCss({ landscape:false })}
+  .draft{background:#fffbeb;border:1.5px solid #d97706;color:#92400e;border-radius:8px;
+         padding:8px 12px;margin:0 0 10px;font-size:11.5px;line-height:1.9;font-weight:700}
+  td.q{text-align:center;font-family:Roboto,sans-serif;font-weight:800;font-size:13px;width:72px}
+  /* خانة الكتابة: السطر جوه الخلية في النص مش تحتها */
+  td.w{width:86px;vertical-align:middle;padding:9px 6px}
+  td.w .ln{display:block;height:0;border-bottom:1px solid #9a9a9a}
+  td.n{text-align:center;width:30px;color:#888;font-size:10.5px}
+  .lk{font-size:10px}
+  .sku{font-size:10px;color:#777;font-family:Roboto,sans-serif;letter-spacing:.3px}
+  .sign{display:flex;gap:30px;margin-top:26px;font-size:12px}
+  .sign div{flex:1;border-top:1px solid #333;padding-top:5px;text-align:center}
+</style></head><body>
+${_cgSheetHead(sup, 'مسودة رصيد أول المدة — للمراجعة مع المورد')}
+<div class="draft">✏️ دي <b>مسودة</b> للمراجعة — مش كشف نهائي ومالهاش أي قيمة مالية.
+  راجع كل صنف مع المورد، واكتبوا رقمه في خانة «رصيد المورد»، والفرق في خانة «فرق».
+  بعد ما تتفقوا، يتقفل في النظام بتاريخ الاتفاق.</div>
+<table>
+  <thead><tr>
+    <th>#</th><th>الصنف</th><th>رصيدنا</th><th>رصيد المورد</th><th>فرق</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<div style="margin-top:11px;font-size:11px;color:#555;line-height:1.9">
+  <div>عدد الأصناف: <b>${_cgN(items.length)}</b>${locked ? ` — منهم <b>${_cgN(locked)}</b> متقفل 🔒` : ''}</div>
+  <div>طُبعت ${new Date().toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'})}</div></div>
+<div class="sign"><div>توقيع المورد</div><div>توقيع CAFELAX</div></div>
+<script>window.onload=function(){setTimeout(function(){window.print();},350);};<\/script>
+</body></html>`);
+  w.document.close();
 }
 
 // 🔓 مخرج الطوارئ — رصيد أول مدة غلط معناه مستحق غلط للمورد
