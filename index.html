@@ -10008,7 +10008,7 @@ tr:hover td{background:#fafbff}
   <div id="cg-tabs" style="display:none;gap:7px;flex-wrap:wrap;margin-bottom:12px">
     <button class="btn btn-sm" id="cg-tab-report"  onclick="cgTab('report')">📊 التقرير</button>
     <button class="btn btn-sm" id="cg-tab-items"   onclick="cgTab('items')">📦 الأصناف ورصيد أول مدة</button>
-    <button class="btn btn-sm" id="cg-tab-history" onclick="cgTab('history')">✂️ القطوعات</button>
+    <button class="btn btn-sm" id="cg-tab-history" onclick="cgTab('history')">✂️ القطوعات <span id="cg-draft-badge"></span></button>
   </div>
 
   <div id="cg-body"></div>
@@ -11731,7 +11731,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v897';
+const UI_BUILD = 'v898';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -40107,9 +40107,20 @@ function cgRenderStl(){
   const st = _cgStl.settlement, items = (_cgStl.items || []).filter(x => x.sold_qty > 0);
   const draft = st.status === 'draft';
   document.getElementById('cg-stl-title').textContent = '✂️ ' + st.settlement_number;
+  // 💾 v897: المسودة بتتحفظ لوحدها مع كل تعديل — بس مكانش فيه حاجة
+  //   بتقول كده، فالناس بتفتكر إن القفل بيضيّع شغلها.
   document.getElementById('cg-stl-actions').innerHTML = draft
-    ? `<button class="btn btn-sm" onclick="cgConfirmStl()" style="background:#16a34a;border-color:#16a34a;color:#fff;font-weight:800">✅ أكّد واعمل أمر الشراء</button>`
+    ? `<button class="btn btn-sm btn-ghost" onclick="cgStlKeepDraft()"
+         title="تعديلاتك محفوظة — تلاقيها في «القطوعات»">💾 سيبها مسودة واقفل</button>
+       <button class="btn btn-sm" onclick="cgConfirmStl()" style="background:#16a34a;border-color:#16a34a;color:#fff;font-weight:800">✅ أكّد واعمل أمر الشراء</button>`
     : `<span style="background:#dcfce7;color:#166534;border-radius:99px;padding:3px 10px;font-size:11px;font-weight:800">✅ متأكّد</span>`;
+
+  const hint = draft
+    ? `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;
+         margin-bottom:11px;font-size:11.5px;color:#92400e">
+        ✏️ <b>مسودة</b> — كل تعديل بتعمله بيتحفظ على طول. تقدر تقفل وترجعلها من تبويبة
+        <b>«✂️ القطوعات»</b>. الفترة مابتتقفلش غير لما تدوس <b>أكّد</b>.</div>`
+    : '';
 
   const rows = items.map(x => `
     <tr style="border-bottom:1px solid var(--border)">
@@ -40139,6 +40150,7 @@ function cgRenderStl(){
 
   document.getElementById('cg-stl-body').innerHTML = `
     <style>#cg-stl-body .cgn2{padding:7px;text-align:center;font-family:Roboto,sans-serif;font-size:12px}</style>
+    ${hint}
     ${draft ? `<div style="background:#eef2ff;border:1px solid #6366f1;border-radius:9px;padding:9px 12px;margin-bottom:11px;font-size:11.5px;color:#3730a3;line-height:1.8">
       غيّر <b>النسبة</b> فالتكلفة تتحسب لوحدها، أو اكتب <b>التكلفة</b> مباشرة والبند يخرج من المعادلة (✍️).
       الكميات تتعدّل كمان لو الجرد طلع مختلف.</div>` : ''}
@@ -40191,6 +40203,14 @@ async function cgStlAllPct(){
   }catch(e){ toast('❌ ' + e.message); }
 }
 
+// 💾 v897: قفل من غير تأكيد. مفيش حاجة بتتحفظ هنا — كل تعديل
+//   اتحفظ وقته — بس بنأكّدله إنها مش ضايعة وبنوريه مكانها.
+function cgStlKeepDraft(){
+  closeM('m-cg-stl');
+  toast('💾 اتحفظت كمسودة — تلاقيها في «✂️ القطوعات»', 'success', 5000);
+  if(_cgTab === 'history') cgLoadHistory(); else cgOnOpen();
+}
+
 async function cgConfirmStl(){
   const st = _cgStl.settlement;
   if(!confirm(`هتأكّد ${st.settlement_number} بـ ${_cgM(st.subtotal)} ج.\n\n`
@@ -40212,6 +40232,12 @@ async function cgLoadHistory(){
     const r = await apiFetch(`/api/consignment/${_cgSup}/settlements`);
     if(r?.error) throw new Error(r.error);
     const list = r.settlements || [];
+    // 💾 v897: المسودة المفتوحة سهل تتنسي — والقطع الجديد بيتمنع لحد
+    //   ما تتقفل. فالتبويبة بتقول فيه كام مستنية.
+    const _dr = list.filter(x => x.status !== 'confirmed').length;
+    const _b = document.getElementById('cg-draft-badge');
+    if(_b) _b.innerHTML = _dr
+      ? `<span style="background:#f59e0b;color:#fff;border-radius:99px;padding:1px 7px;font-size:10px;font-weight:800">${_cgN(_dr)}</span>` : '';
     if(!list.length){ b.innerHTML = '<div class="card" style="padding:26px;text-align:center;color:var(--muted)">مفيش قطوعات لسه</div>'; return; }
     b.innerHTML = `<div class="card" style="padding:0;overflow-x:auto">
       <table style="width:100%;min-width:640px;border-collapse:collapse">
@@ -40221,8 +40247,10 @@ async function cgLoadHistory(){
           <th style="padding:8px">الإجمالي</th><th style="padding:8px">الحالة</th>
         </tr></thead>
         <tbody>${list.map(x => `
-          <tr onclick="cgOpenStl(${x.id})" style="border-bottom:1px solid var(--border);cursor:pointer"
-              onmouseover="this.style.background='var(--hover,#f1f5f9)'" onmouseout="this.style.background=''">
+          <tr onclick="cgOpenStl(${x.id})" style="border-bottom:1px solid var(--border);cursor:pointer${
+              x.status !== 'confirmed' ? ';background:#fffbeb' : ''}"
+              onmouseover="this.style.background='var(--hover,#f1f5f9)'" onmouseout="this.style.background='${
+              x.status !== 'confirmed' ? '#fffbeb' : ''}'">
             <td style="padding:8px;font-weight:800;font-family:Roboto,sans-serif;font-size:12px">${escapeHtml(x.settlement_number)}</td>
             <td style="padding:8px;text-align:center;font-size:11.5px">${new Date(x.period_to).toLocaleDateString('ar-EG',{dateStyle:'medium'})}</td>
             <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif">${x.items_count}</td>
