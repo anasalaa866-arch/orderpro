@@ -11744,7 +11744,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v902';
+const UI_BUILD = 'v903';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -54989,8 +54989,17 @@ const CHQ_FONTS = ['Cairo', 'Tajawal', 'Amiri', 'Noto Naskh Arabic', 'Almarai'];
 // نفسه معروفة بالمليمتر، فلو عرفنا وقعوا فين على الورقة نعرف الشيك
 // داخل إزاي — مكانه ودورانه — من غير ما حد يقيس بمسطرة.
 const CHQ_MARKS = [
-  { id:'date', name:'مربعات التاريخ', hint:'الـ ٨ مربعات اللي تحت كلمة DATE', x:144.65, y:9.0 },
-  { id:'acc',  name:'رقم الحساب',     hint:'سطر A/C No. تحت اسم الشركة',     x:22.0,  y:57.2 },
+  { id:'date',  name:'مربعات التاريخ',   hint:'الـ ٨ مربعات تحت DATE',        x:144.6, y:9.0  },
+  { id:'dateA', name:'كلمة «التاريخ»',    hint:'أقصى اليمين فوق',             x:166.2, y:7.9  },
+  { id:'payA',  name:'«إدفعوا بموجب…»',   hint:'السطر العربي فوق سطر المستفيد', x:153.3, y:25.9 },
+  { id:'egp',   name:'خانة EGP',         hint:'المربع المكتوب فيه EGP',       x:134.1, y:39.6 },
+  { id:'sumA',  name:'«مبلغ وقدره»',      hint:'جنب خانة EGP على اليمين',      x:118.0, y:34.4 },
+  { id:'signA', name:'«إسم الموقع»',      hint:'أقصى اليمين تحت خانة EGP',     x:164.0, y:46.0 },
+  { id:'sigN',  name:'SIGNATORY NAME',   hint:'بالإنجليزي في النص تحت',       x:108.0, y:50.9 },
+  { id:'sumE',  name:'THE SUM OF',       hint:'بالإنجليزي أقصى الشمال',       x:11.7,  y:36.1 },
+  { id:'payE',  name:'PAY TO',           hint:'بالإنجليزي أقصى الشمال فوق',   x:9.2,   y:28.4 },
+  { id:'acc',   name:'رقم الحساب',        hint:'سطر A/C No. تحت اسم الشركة',   x:22.0,  y:57.2 },
+  { id:'logo',  name:'شعار كريدي أجريكول', hint:'أقصى الشمال فوق',             x:25.0,  y:7.0  },
 ];
 let _chqTpl = null;         // القالب الشغال
 let _chqForm = {};          // بيانات الشيك اللي بيتطبع
@@ -55487,12 +55496,13 @@ function chqCalibHtml(){
     <div style="font-size:12px;line-height:2;color:#4c1d95;margin-bottom:10px">
       ١) دوس <b>«اطبع ورقة الشبكة»</b> وحطّ <b>الشيك نفسه</b> في الطابعة زي ما بتحطه بالظبط.<br>
       ٢) هتلاقي أرقام اتطبعت على الشيك — كل رقم بيقول مكانه على الورقة.<br>
-      ٣) اكتب تحت الرقم اللي وقع على كل علامة، ودوس «احسب».
+      ٣) املا <b>اتنين على الأقل</b> من الخانات تحت — بالرقم اللي وقع جنب كل علامة.
+      سيب الباقي فاضي لو مفيش أرقام عليه. كل ما تملا علامتين أبعد عن بعض، النتيجة أدق.
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px">
       ${CHQ_MARKS.map(m => `<div class="form-group" style="margin:0">
         <label>${escapeHtml(m.name)} <span style="font-weight:400;color:var(--muted)">— ${escapeHtml(m.hint)}</span></label>
-        <input id="chq-mark-${m.id}" placeholder="مثلاً 40,160" inputmode="text"></div>`).join('')}
+        <input id="chq-mark-${m.id}" placeholder="فاضي لو مفيش رقم" inputmode="text"></div>`).join('')}
     </div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:10px">
       <button class="btn btn-sm" onclick="chqPrintGrid()" style="background:#7c3aed;color:#fff">🗺️ اطبع ورقة الشبكة</button>
@@ -55630,9 +55640,16 @@ async function chqResetTpl(){
 // بيرجّع: مكان ركن الشيك ودورانه. الدوران بيتقرّب لأقرب ٩٠° لأن
 // الطابعة بتسحب الورق باتجاه ثابت — الزوايا الغريبة معناها قراءة غلط.
 function chqSolvePlacement(reads){
-  const m1 = CHQ_MARKS[0], m2 = CHQ_MARKS[1];
+  // بناخد أبعد علامتين اتملوا — كل ما يبعدوا كل ما الزاوية تطلع أدق
+  const have = CHQ_MARKS.filter(m => reads[m.id]);
+  if(have.length < 2) return { error: 'محتاج قراءتين على الأقل من علامتين مختلفتين' };
+  let m1 = have[0], m2 = have[1], best = -1;
+  for(let i = 0; i < have.length; i++)
+    for(let j = i + 1; j < have.length; j++){
+      const d = Math.hypot(have[i].x - have[j].x, have[i].y - have[j].y);
+      if(d > best){ best = d; m1 = have[i]; m2 = have[j]; }
+    }
   const q1 = reads[m1.id], q2 = reads[m2.id];
-  if(!q1 || !q2) return { error: 'محتاج القراءتين' };
   const dpx = q2.x - q1.x, dpy = q2.y - q1.y;
   const dlx = m2.x - m1.x, dly = m2.y - m1.y;
   const dPage = Math.hypot(dpx, dpy), dChq = Math.hypot(dlx, dly);
@@ -55652,7 +55669,9 @@ function chqSolvePlacement(reads){
     warn.push(`المسافة بين العلامتين طلعت ${Math.round(dPage)} مم والمفروض ${Math.round(dChq)} — `
       + (scale < 1 ? 'يبدو إن الطابعة بتصغّر: خلّي Scale = 100%' : 'راجع القراءتين'));
   if(skew > 4) warn.push(`الشيك مايل حوالي ${skew.toFixed(1)}° — لو ده صح هتحتاج تظبط بالأسهم بعدين`);
-  return { x: Math.round(ox * 10) / 10, y: Math.round(oy * 10) / 10, deg, scale, skew, warn };
+  if(dChq < 60) warn.push(`العلامتين قريبين من بعض (${Math.round(dChq)} مم) — لو لقيت أرقام على علامة أبعد املاها كمان، النتيجة هتبقى أدق`);
+  return { x: Math.round(ox * 10) / 10, y: Math.round(oy * 10) / 10, deg, scale, skew, warn,
+           used: [m1.name, m2.name] };
 }
 
 // بيفهم «40,160» أو «40 160» أو «40 , 160»
@@ -55666,12 +55685,14 @@ function _chqParseXY(t){
 }
 
 function chqApplyPlacement(){
-  const reads = {};
+  const reads = {}; const bad = [];
   for(const m of CHQ_MARKS){
-    const v = _chqParseXY(document.getElementById('chq-mark-' + m.id)?.value);
-    if(!v){ toast('❗ اكتب إحداثي ' + m.name + ' بالشكل ده: 40,160', 'error'); return; }
-    reads[m.id] = v;
+    const raw = (document.getElementById('chq-mark-' + m.id)?.value || '').trim();
+    if(!raw) continue;                      // سايبها فاضية = مفيش أرقام عليها
+    const v = _chqParseXY(raw);
+    if(!v) bad.push(m.name); else reads[m.id] = v;
   }
+  if(bad.length){ toast('❗ الإحداثي لازم يبقى بالشكل ده 40,160 — راجع: ' + bad.join(' · '), 'error'); return; }
   const r = chqSolvePlacement(reads);
   if(r.error){ toast('❗ ' + r.error, 'error'); return; }
   _chqTpl.pageMode = 'a4';
@@ -55685,6 +55706,7 @@ function chqApplyPlacement(){
     border:1px solid ${r.warn.length?'#f59e0b':'#16a34a'};border-radius:8px;padding:9px 12px;
     font-size:12px;line-height:1.9;margin-top:9px">
     ✅ ركن الشيك عند <b>${r.x},${r.y}</b> مم · الدوران <b>${r.deg}°</b>
+    <div style="color:var(--muted);font-size:11px">اتحسبت من: ${escapeHtml((r.used||[]).join(' و '))}</div>
     ${r.warn.map(w => `<div style="color:#92400e">⚠️ ${escapeHtml(w)}</div>`).join('')}</div>`;
 }
 
