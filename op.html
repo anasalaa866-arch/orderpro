@@ -11745,7 +11745,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v904';
+const UI_BUILD = 'v905';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -35076,6 +35076,7 @@ async function tpAnalyze(){
     if(!r) apiNN(r, '/api/transfer-plan?');   // 🚑 v797
     _tpData = r;
     _tpSelected = {};
+    _tpRemoved = {};                 // 🗑️ v905: خطة جديدة → المتشالين يتصفّروا
 
     // افتراضياً: حدد كل اللي محتاج تحويل وعنده مصدر كافي
     (r.plan || []).forEach(p => {
@@ -35193,9 +35194,46 @@ function tpRowValue(p, useSelected){
 }
 const tpMoney = v => Math.round(Number(v) || 0).toLocaleString('ar-EG') + ' ج';
 
+// 🗑️ v905: أصناف اتشالت من التحويل ده. بتتشال من الشاشة كمان مش بس
+//   من التحديد — القايمة فيها مئات الأصناف والمهم اللي فاضل قدامك.
+//   والشيل رجّاع: فيه شريط بيعدّهم وزرار يرجّعهم.
+let _tpRemoved = {};
+
+function tpRemove(variantId){
+  const p = (_tpData?.plan || []).find(x => String(x.variant_id) === String(variantId));
+  delete _tpSelected[variantId];
+  _tpRemoved[variantId] = true;
+  // بنشيل الصف نفسه بدل ما نعيد رسم مئات الصفوف — الشاشة مابترجعش لفوق
+  const row = document.getElementById('tp-qty-' + variantId)?.closest('.tp-row');
+  if(row) row.remove();
+  tpUpdateSelectionUI();
+  tpRemovedBar();
+  toast('🗑️ اتشال من التحويل: ' + (p ? p.product_title : variantId), 'info', 4000);
+}
+
+function tpRestoreRemoved(){
+  const n = Object.keys(_tpRemoved).length;
+  if(!n) return;
+  _tpRemoved = {};
+  tpRender();
+  toast('↩️ رجّعنا ' + n + ' صنف', 'success');
+}
+
+function tpRemovedBar(){
+  const bar = document.getElementById('tp-removed-bar');
+  if(!bar) return;
+  const n = Object.keys(_tpRemoved).length;
+  bar.innerHTML = n ? `<div style="margin-bottom:10px;background:#fef2f2;border:1px solid #fca5a5;
+      color:#991b1b;border-radius:9px;padding:8px 12px;font-size:12px;display:flex;gap:9px;
+      align-items:center;flex-wrap:wrap">
+      🗑️ اتشال <b>${n}</b> صنف من التحويل ده
+      <button class="btn btn-ghost btn-xs" onclick="tpRestoreRemoved()"
+        style="border-color:#991b1b;color:#991b1b">↩️ رجّعهم</button></div>` : '';
+}
+
 function tpVisiblePlan(){
   if(!_tpData) return [];
-  let plan = _tpData.plan || [];
+  let plan = (_tpData.plan || []).filter(p => !_tpRemoved[p.variant_id]);
   const search = (document.getElementById('tp-search')?.value || '').trim().toLowerCase();
   if(search){
     plan = plan.filter(p =>
@@ -35303,12 +35341,19 @@ function tpRender(){
       ? `<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;margin-right:4px">⚠️ المصدر مش كفاية</span>` : '';
 
     return `
-      <div class="tp-row" style="display:grid;grid-template-columns:30px 1fr 90px 90px 120px 100px 1fr;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);background:${isSelected?'#f0f9ff':'transparent'}">
+      <div class="tp-row" style="display:grid;grid-template-columns:30px 44px 1fr 90px 90px 150px 100px 1fr;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);background:${isSelected?'#f0f9ff':'transparent'}">
         <div style="text-align:center">
           <input type="checkbox" id="tp-cb-${p.variant_id}" ${isSelected?'checked':''}
                  onchange="tpToggleProduct('${p.variant_id}', ${p.suggested_qty > 0 ? p.suggested_qty : Math.max(1,p.needed_qty)})"
                  style="width:17px;height:17px;cursor:pointer">
         </div>
+        <div>${p.image_url
+          ? `<img src="${escapeHtml(_shopThumb(p.image_url, 88))}" alt="" loading="lazy"
+                 style="width:40px;height:40px;object-fit:contain;background:#f3f4f6;border-radius:6px;
+                        border:1px solid var(--border);display:block"
+                 onerror="this.replaceWith(Object.assign(document.createElement('div'),{style:'width:40px;height:40px;background:#f3f4f6;border-radius:6px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:17px',textContent:'📦'}))">`
+          : `<div style="width:40px;height:40px;background:#f3f4f6;border-radius:6px;border:1px solid var(--border);
+                 display:flex;align-items:center;justify-content:center;font-size:17px">📦</div>`}</div>
         <div style="min-width:0">
           <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(p.product_title)}${p.variant_title ? ' - '+escapeHtml(p.variant_title) : ''}</div>
           <div style="font-size:10px;color:var(--muted);font-family:monospace">${p.sku ? escapeHtml(p.sku) : ''}</div>
@@ -35331,6 +35376,9 @@ function tpRender(){
                    oninput="tpSetQty('${p.variant_id}', this.value); document.getElementById('tp-cb-${p.variant_id}').checked = (parseInt(this.value)||0)>0"
                    style="width:48px;text-align:center;font-weight:800;padding:4px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif">
             <button class="btn btn-ghost btn-sm" onclick="tpQtyStep('${p.variant_id}',1)" style="padding:2px 8px;font-size:14px">+</button>
+            <button class="btn btn-ghost btn-sm" onclick="tpRemove('${p.variant_id}')"
+                    title="امسح الصنف ده من التحويل"
+                    style="padding:2px 7px;font-size:13px;color:var(--danger);border-color:var(--danger);margin-right:7px">🗑️</button>
           </div>
         </div>
         <div style="text-align:center" id="tp-val-${p.variant_id}">${tpRowValueHtml(p, qty)}</div>
@@ -35339,8 +35387,10 @@ function tpRender(){
   }).join('');
 
   results.innerHTML = `
+    <div id="tp-removed-bar"></div>
     <div class="card" style="overflow:hidden">
-      <div style="display:grid;grid-template-columns:30px 1fr 90px 90px 120px 100px 1fr;gap:10px;padding:10px 12px;background:var(--bg);font-size:10px;color:var(--muted);font-weight:700;border-bottom:2px solid var(--border)">
+      <div style="display:grid;grid-template-columns:30px 44px 1fr 90px 90px 150px 100px 1fr;gap:10px;padding:10px 12px;background:var(--bg);font-size:10px;color:var(--muted);font-weight:700;border-bottom:2px solid var(--border)">
+        <div></div>
         <div></div>
         <div>المنتج</div>
         <div style="text-align:center">رصيد المصدر</div>
@@ -35351,6 +35401,7 @@ function tpRender(){
       </div>
       ${rows}
     </div>`;
+  tpRemovedBar();
 }
 
 async function tpCreateBulkTransfer(){
