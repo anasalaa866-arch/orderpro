@@ -11731,7 +11731,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v894';
+const UI_BUILD = 'v895';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -39253,6 +39253,23 @@ function _cgDelivLines(x, opt){
   return `<div style="font-size:9.5px;color:var(--muted);line-height:1.7;margin-top:2px">${body}</div>`;
 }
 
+// 📦 v895: ستايل السطر الفرعي على الشاشة — مرة واحدة مش مع كل سطر
+if(!document.getElementById('cg-sub-css')){
+  const st = document.createElement('style'); st.id = 'cg-sub-css';
+  st.textContent = `
+    #cg-body tr.sub td{ background:var(--elev); border-bottom:1px dotted var(--border);
+                        padding:3px 7px; font-size:10px; color:var(--muted) }
+    #cg-body tr.sub .src{ padding-inline-start:22px }
+    #cg-body tr.sub .src .po{ display:inline-block; direction:ltr; unicode-bidi:isolate;
+                          font-family:Roboto,sans-serif; letter-spacing:.2px }
+    #cg-body tr.sub .src .when{ display:inline-block; margin-inline-start:11px;
+                          padding-inline-start:11px; border-inline-start:1px solid var(--border);
+                          font-family:Cairo,sans-serif }
+    #cg-body tr.sub .amt{ font-family:Roboto,sans-serif; font-weight:800;
+                          color:var(--text); font-size:11px; text-align:center }
+    #cg-body tr.sub.back .amt, #cg-body tr.sub.back .src{ color:#dc2626 }`;
+  document.head.appendChild(st);
+}
 function cgRenderReport(){
   const r = _cgRep, items = r.items || [];
   if(!items.length){
@@ -39275,7 +39292,7 @@ function cgRenderReport(){
         ${x.sku ? `<div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(x.sku)}</div>` : ''}
       </td>
       <td class="cgn">${_cgN(x.opening_qty)}</td>
-      <td class="cgn">${_cgN(x.delivered_qty)}${_cgDelivLines(x)}</td>
+      <td class="cgn">${_cgN(x.delivered_qty)}</td>
       <td class="cgn" style="font-weight:800">${_cgN(x.closing_qty)}</td>
       <td class="cgn" style="font-weight:900;color:${warn?'#dc2626':'#166534'}">${_cgN(x.sold_qty)}${warn?' ⚠️':''}</td>
       <td class="cgn" style="color:${diff?'#b45309':'var(--muted)'};font-weight:${diff?800:400}"
@@ -39283,7 +39300,7 @@ function cgRenderReport(){
       <td class="cgn">${_cgM(x.sale_price)}${x.had_offer?' <span title="عليه عرض صلاحية — ده السعر الحقيقي">🏷️</span>':''}</td>
       <td class="cgn" style="padding:4px" data-cg-cost-cell="${x.item_id}">${_cgCostCell(x)}</td>
       <td class="cgn" style="font-weight:800" data-cg-total="${x.item_id}">${x.sold_qty > 0 ? _cgM(x.line_total) : '—'}</td>
-    </tr>`;
+    </tr>${_cgDelivRows(x, { lead:0, gap:1, tail:6 })}`;
   }).join('');
 
   document.getElementById('cg-body').innerHTML = `
@@ -39645,103 +39662,220 @@ async function cgSaveAdd(){
 // 🖨️ v807: طباعة التقرير قبل القطع. بتتبني من _cgRep اللي على
 //   الشاشة — نفس الأرقام اللي بتشوفها بالظبط، مش نداء تاني ممكن
 //   يرجّع أرقام اتغيّرت في الوقت ده.
+// 🎨 v895: ستايل واحد للورقتين — كشف الجرد وكشف المحاسبة. لما كان
+//   كل واحد ليه ستايل لوحده، أي تعديل في واحد بيسيب التاني وراه.
+function _cgSheetCss(opt){
+  const land = opt && opt.landscape;
+  return `
+    @page{ size:A4${land?' landscape':''}; margin:${land?'11mm 12mm 14mm':'14mm 13mm 17mm'} }
+    :root{
+      --ink:#17120F; --roast:#4A3222; --crema:#C9A227;
+      --paper:#FBF9F7; --rule:#D8D0C9; --mute:#6B5E55;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0}
+    body{ font-family:Cairo,'Segoe UI',Tahoma,sans-serif; color:var(--ink);
+          font-size:${land?'11px':'12px'}; line-height:1.5; background:#EFECE8 }
+    .sheet{ background:#fff; max-width:${land?'282mm':'200mm'}; margin:14px auto;
+            padding:${land?'12mm':'16mm 14mm'}; box-shadow:0 18px 44px rgba(23,18,15,.14) }
+    .top{ display:flex; justify-content:space-between; align-items:flex-start; gap:18px }
+    .brand img{ height:34px; display:block }
+    .brand .role{ margin-top:5px; font-size:10px; color:var(--mute); letter-spacing:.2px }
+    .title{ text-align:left }
+    .title h1{ margin:0; font-size:21px; font-weight:800; letter-spacing:-.2px }
+    .title .who{ font-size:13px; color:var(--roast); font-weight:700; margin-top:1px }
+    .meta{ display:grid; grid-template-columns:repeat(${land?4:3},auto); gap:0 26px;
+           margin:14px 0 0; padding:9px 0 10px;
+           border-top:2px solid var(--roast); border-bottom:1px solid var(--rule) }
+    .meta dt{ font-size:9px; color:var(--mute); margin:0 0 1px }
+    .meta dd{ margin:0; font-size:12px; font-weight:700 }
+    .lead{ margin:12px 0 13px; font-size:11px; color:var(--mute); max-width:86% }
+    .lead b{ color:var(--ink) }
+    table{ width:100%; border-collapse:collapse }
+    thead th{ background:var(--roast); color:#fff; font-size:10px; font-weight:700;
+              padding:7px 6px; border:none }
+    thead th:first-child{ border-start-start-radius:5px }
+    thead th:last-child{ border-start-end-radius:5px }
+    tbody td{ padding:7px 6px; border-bottom:1px solid var(--rule); vertical-align:top }
+    tbody tr:nth-child(even) td{ background:var(--paper) }
+    .idx{ width:26px; text-align:center; color:var(--mute); font-size:10px }
+    .item .nm{ display:block; font-weight:700; font-size:11px; line-height:1.45 }
+    .item .sku{ display:block; font-size:9px; color:var(--mute); letter-spacing:.3px;
+                font-family:Roboto,Consolas,monospace; margin-top:1px }
+    .q{ width:62px; text-align:center; font-family:Roboto,sans-serif;
+        font-variant-numeric:tabular-nums; font-size:12px }
+    .q.sold{ font-weight:800; font-size:13px }
+    .q.in{ width:118px }
+    /* أعمدة الفلوس أعرض — من غير كده العملة والنجمة بيلفوا لسطر تاني */
+    .q.money{ width:92px; white-space:nowrap }
+    .bang{ display:inline-block; margin-inline-start:3px; color:#9B2C14; font-weight:800 }
+    .flag td{ background:#FDF2EE !important }
+    /* السطر الفرعي للتوريدة — خفيف ومزاح لجوّه عشان يبان تابع للصنف */
+    tbody tr.sub td{ background:#FCFAF8; border-bottom:1px dotted var(--rule);
+                     padding:3px 6px; font-size:9px; color:var(--mute) }
+    tbody tr.sub .src{ padding-inline-start:20px }
+    /* كل جزء صندوق معزول — من غير كده الاتجاه بيقلب مكان الفاصل */
+    tbody tr.sub .src .po{ display:inline-block; direction:ltr; unicode-bidi:isolate;
+                           font-family:Roboto,sans-serif; letter-spacing:.2px; color:#6B5E55 }
+    tbody tr.sub .src .when{ display:inline-block; margin-inline-start:11px;
+                             padding-inline-start:11px; border-inline-start:1px solid var(--rule);
+                             font-family:Cairo,sans-serif; color:var(--mute) }
+    tbody tr.sub .amt{ font-family:Roboto,sans-serif; font-weight:800;
+                       color:var(--ink); font-size:10px }
+    tbody tr.sub.back .amt{ color:#9B2C14 }
+    tbody tr.sub.back .src{ color:#9B2C14 }
+    .deliv{ margin-top:5px; text-align:start }
+    .deliv .ln{ display:block; font-size:8px; color:var(--mute); line-height:1.5;
+                margin-top:3px; padding-inline-start:4px;
+                border-inline-start:2px solid var(--rule) }
+    .deliv .qt{ display:inline-block; min-width:18px; padding:1px 4px; border-radius:3px;
+                background:#EFE7DF; text-align:center; font-family:Roboto,sans-serif;
+                font-weight:800; color:var(--ink); font-size:9px }
+    .deliv .dt{ white-space:nowrap; margin-inline-start:5px }
+    .deliv .po{ display:block; font-family:Roboto,sans-serif; font-size:7px;
+                letter-spacing:.3px; color:#9A8F86 }
+    .deliv .back{ border-inline-start-color:#E8B4A0 }
+    .deliv .back .qt{ color:#9B2C14; background:#FBE6DE }
+    tfoot td{ background:#F2EEEA; font-weight:800; padding:8px 6px; border-top:2px solid var(--roast) }
+    tfoot .lbl{ text-align:start; font-size:11px }
+    .note{ margin-top:11px; font-size:10px; color:#8A3A1E; background:#FDF2EE;
+           border-inline-start:3px solid #C2410C; padding:7px 10px; border-radius:0 5px 5px 0 }
+    .sign{ margin-top:26px; display:flex; gap:40px }
+    .sign div{ flex:1 }
+    .sign .line{ border-top:1px solid var(--ink); margin-top:34px; padding-top:5px;
+                 font-size:10px; color:var(--mute) }
+    .fine{ margin-top:16px; padding-top:8px; border-top:1px solid var(--rule);
+           font-size:9px; color:var(--mute) }
+    .bar{ max-width:${land?'282mm':'200mm'}; margin:0 auto 26px; display:flex; gap:9px; justify-content:center }
+    .bar button{ font-family:Cairo,sans-serif; font-size:13px; font-weight:700; cursor:pointer;
+                 border:none; border-radius:7px; padding:10px 24px; background:var(--roast); color:#fff }
+    .bar .ghost{ background:#fff; color:var(--roast); border:1px solid var(--rule) }
+    @media screen and (prefers-reduced-motion:no-preference){
+      .sheet{ animation:rise .45s cubic-bezier(.2,.7,.3,1) both }
+      @keyframes rise{ from{ opacity:0; transform:translateY(9px) } to{ opacity:1; transform:none } }
+    }
+    @media print{
+      body{ background:#fff }
+      .sheet{ box-shadow:none; margin:0; padding:0; max-width:none; animation:none }
+      .bar{ display:none }
+      thead{ display:table-header-group }
+      tr{ break-inside:avoid }
+    }`;
+}
+
+function _cgSheetHead(sup, role){
+  return `<div class="top">
+      <div class="brand">
+        <img src="${LOGO_B64}" alt="CAFELAX">
+        <div class="role">${escapeHtml(role)}</div>
+      </div>
+      <div class="title">
+        <h1>${escapeHtml(role.split(' — ')[0] || role)}</h1>
+        <div class="who">${escapeHtml(sup?.name||'')}</div>
+      </div>
+    </div>`;
+}
+
+// 💵 v895: كشف المحاسبة — ده اللي بتتحاسب بيه مع المورد.
+//   «مبيعات النظام» اتشالت منه: دي مراجعتنا الداخلية عشان نكشف
+//   التالف والفاقد، والمورد مالوش دعوة بيها. لسه ظاهرة على الشاشة.
 function cgPrintReport(){
   const r = _cgRep;
   if(!r || !(r.items||[]).length) return toast('❌ مفيش تقرير مفتوح');
   const items = r.items, t = r.totals || {};
   const sup = (_cgSups||[]).find(x => String(x.id) === String(_cgSup));
   const from = r.period_from
-    ? new Date(r.period_from).toLocaleDateString('ar-EG',{day:'numeric',month:'short',year:'numeric'})
-    : 'البداية';
-  const now = new Date().toLocaleString('ar-EG',
-    {day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    ? new Date(r.period_from).toLocaleDateString('ar-EG',{day:'numeric',month:'long',year:'numeric'})
+    : 'بداية التعامل';
+  const today = new Date().toLocaleDateString('ar-EG',{day:'numeric',month:'long',year:'numeric'});
 
-  const rows = items.map((x,i) => {
-    const diff = x.system_sold != null && x.system_sold !== x.sold_qty;
-    return `<tr${x.negative?' class="neg"':''}>
-      <td class="c">${i+1}</td>
-      <td>${escapeHtml(x.product_title||'')}${
-        x.sku?`<div class="sku">${escapeHtml(x.sku)}</div>`:''}</td>
-      <td class="n">${_cgN(x.opening_qty)}</td>
-      <td class="n">${_cgN(x.delivered_qty)}${_cgDelivPrint(x)}</td>
-      <td class="n">${_cgN(x.closing_qty)}</td>
-      <td class="n b">${_cgN(x.sold_qty)}${x.negative?' ⚠️':''}</td>
-      <td class="n${diff?' warn':''}">${x.system_sold==null?'—':_cgN(x.system_sold)}</td>
-      <td class="n">${_cgM(x.sale_price)}</td>
-      <td class="n">${_cgM(x.unit_price)}</td>
-      <td class="n b">${x.sold_qty>0?_cgM(x.line_total):'—'}</td></tr>`;
-  }).join('');
+  const rows = items.map((x,i) => `<tr${x.negative?' class="flag"':''}>
+      <td class="idx">${_cgN(i+1)}</td>
+      <td class="item">
+        <span class="nm">${escapeHtml(x.product_title||'')}</span>
+        ${x.sku?`<span class="sku">${escapeHtml(x.sku)}</span>`:''}
+      </td>
+      <td class="q">${_cgN(x.opening_qty)}</td>
+      <td class="q">${_cgN(x.delivered_qty)}</td>
+      <td class="q">${_cgN(x.closing_qty)}</td>
+      <td class="q sold">${x.sold_qty < 0 ? '−' : ''}${_cgN(Math.abs(x.sold_qty))}${
+        x.negative?'<span class="bang">؟</span>':''}</td>
+      <td class="q money">${_cgM(x.sale_price)}${x.had_offer?'<span class="bang" title="سعر عرض">★</span>':''}</td>
+      <td class="q money">${_cgM(x.unit_price)}</td>
+      <td class="q sold money">${x.sold_qty>0?_cgM(x.line_total):'—'}</td></tr>`
+    + _cgDelivRows(x, { lead:1, gap:1, tail:5 })).join('');
 
-  // ⚠️ التحذيرات بتتطبع كمان — التقرير المطبوع لازم يقول نفس اللي
-  //   الشاشة بتقوله، مش نسخة أنضف بتخفي المشاكل
-  const warn = [
-    t.negatives ? `<div class="w red">⚠️ <b>${t.negatives}</b> صنف رصيده أكبر من المتوقع — مش داخل في المبلغ.</div>` : '',
-    t.mismatch  ? `<div class="w amber">📊 <b>${t.mismatch}</b> صنف مختلف عن مبيعات النظام — تالف أو فاقد أو جرد.</div>` : '',
-  ].join('');
+  const flagged = items.filter(x => x.negative).length;
 
-  const w = window.open('', '_blank', 'width=1000,height=1100');
+  const w = window.open('', '_blank', 'width=1180,height=1120');
   if(!w) return toast('❌ المتصفح منع النافذة — اسمح بالنوافذ المنبثقة');
   w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
-  <title>بضاعة تحت البيع — ${escapeHtml(sup?.name||'')}</title>
-  <style>
-    @page{size:A4 landscape;margin:11mm}
-    *{box-sizing:border-box}
-    body{font-family:Cairo,Tahoma,sans-serif;margin:0;color:#111;font-size:12px}
-    h1{font-size:17px;margin:0 0 2px}
-    .sub{color:#555;font-size:11px;margin-bottom:9px}
-    .hd{display:flex;justify-content:space-between;align-items:flex-start;
-        border-bottom:2px solid #111;padding-bottom:7px;margin-bottom:9px}
-    .box{text-align:center;border:1.5px solid #111;border-radius:7px;padding:7px 15px}
-    .box .lbl{font-size:10px;color:#555}
-    .box .val{font-size:19px;font-weight:800;font-family:Roboto,sans-serif}
-    table{width:100%;border-collapse:collapse}
-    th,td{border:1px solid #bbb;padding:4px 5px;vertical-align:middle}
-    th{background:#eee;font-size:10px}
-    .n{text-align:center;font-family:Roboto,sans-serif}
-    .c{text-align:center;color:#666}
-    .b{font-weight:800}
-    .warn{color:#92400e;font-weight:700}
-    .neg{background:#fdeaea}
-    .sku{font-size:9px;color:#777;font-family:Roboto,sans-serif}
-    .deliv{font-size:8.5px;color:#555;line-height:1.55;margin-top:2px;font-family:Roboto,sans-serif}
-    .w{padding:6px 9px;border-radius:5px;margin-bottom:6px;font-size:11px}
-    .red{background:#fdeaea;border:1px solid #e11}
-    .amber{background:#fff7e6;border:1px solid #d97706}
-    tfoot td{background:#eee;font-weight:800}
-    .sign{margin-top:22px;display:flex;gap:50px}
-    .sign div{flex:1;border-top:1px solid #111;padding-top:5px;font-size:11px;text-align:center}
-    @media print{.noprint{display:none}}
-  </style></head><body>
-  <div class="hd">
-    <div><h1>بضاعة تحت البيع — ${escapeHtml(sup?.name||'')}</h1>
-      <div class="sub">الفترة: ${escapeHtml(from)} → دلوقتي &nbsp;·&nbsp; اتطبع: ${escapeHtml(now)}
-        &nbsp;·&nbsp; خصم ${_cgN(items[0]?.discount_pct ?? 0)}% من سعر البيع</div>
-      <div class="sub"><b>تقرير مبدئي — الفترة لسه مقفلتش</b></div></div>
-    <div class="box"><div class="lbl">المستحق للمورد</div>
-      <div class="val">${_cgM(t.amount)} ج</div>
-      <div class="lbl">${_cgN(t.sold)} قطعة · ${items.length} صنف</div></div>
+  <title>كشف محاسبة — ${escapeHtml(sup?.name||'')}</title>
+  <style>${_cgSheetCss({ landscape:true })}</style></head><body>
+  <div class="sheet">
+    ${_cgSheetHead(sup, 'كشف محاسبة — بضاعة تحت البيع')}
+    <dl class="meta">
+      <div><dt>الفترة من</dt><dd>${escapeHtml(from)}</dd></div>
+      <div><dt>تاريخ الكشف</dt><dd>${escapeHtml(today)}</dd></div>
+      <div><dt>عدد الأصناف</dt><dd>${_cgN(items.length)}</dd></div>
+      <div><dt>المستحق للمورد</dt><dd style="font-size:16px;color:#9B2C14">${_cgM(t.amount)} ج</dd></div>
+    </dl>
+    <p class="lead">الفترة لسه <b>مقفلتش</b> — ده كشف مبدئي للمراجعة.
+      المبلغ محسوب على <b>${_cgN(t.sold)} قطعة</b> اتباعت فعلاً.</p>
+    <table>
+      <thead><tr>
+        <th>#</th><th style="text-align:start">الصنف</th>
+        <th>أول الفترة</th><th>توريدات</th><th>الرصيد الحالي</th><th>باع</th>
+        <th>سعر البيع</th><th>التكلفة</th><th>الإجمالي</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr>
+        <td colspan="2" class="lbl">إجمالي ${_cgN(items.length)} صنف</td>
+        <td class="q"></td><td class="q"></td><td class="q"></td>
+        <td class="q">${_cgN(t.sold)}</td><td class="q money"></td><td class="q money"></td>
+        <td class="q sold money">${_cgM(t.amount)} ج</td></tr></tfoot>
+    </table>
+    ${flagged ? `<div class="note"><b>${_cgN(flagged)}</b> صنف علامته «؟» —
+      الرصيد الموجود أكبر من المتوقع، <b>ومش داخل في المبلغ</b>. محتاج مراجعة قبل الإقفال.</div>` : ''}
+    <div class="sign">
+      <div><div class="line">عن ${escapeHtml(sup?.name||'المورد')} — الاسم والتوقيع</div></div>
+      <div><div class="line">عن CAFELAX — الاسم والتوقيع</div></div>
+    </div>
+    <div class="fine">★ جنب سعر البيع معناه إن الصنف كان عليه عرض، والحساب اتعمل بسعر العرض الحقيقي.</div>
   </div>
-  ${warn}
-  <table><thead><tr>
-    <th>#</th><th>الصنف</th><th>أول الفترة</th><th>توريدات</th><th>الرصيد الحالي</th>
-    <th>باع</th><th>مبيعات النظام</th><th>سعر البيع</th><th>التكلفة</th><th>الإجمالي</th>
-  </tr></thead><tbody>${rows}</tbody>
-  <tfoot><tr><td colspan="5" class="c">${items.length} صنف</td>
-    <td class="n">${_cgN(t.sold)}</td><td></td><td></td><td></td>
-    <td class="n">${_cgM(t.amount)} ج</td></tr></tfoot></table>
-  <div class="sign"><div>المستلم</div><div>المورد</div></div>
-  <div class="noprint" style="margin-top:14px;text-align:center">
-    <button onclick="window.print()" style="padding:8px 22px;font-family:Cairo,sans-serif;font-size:13px">🖨️ اطبع</button></div>
+  <div class="bar">
+    <button onclick="window.print()">اطبع الكشف</button>
+    <button class="ghost" onclick="window.close()">اقفل</button>
+  </div>
   </body></html>`);
   w.document.close();
-  setTimeout(() => { try{ w.focus(); w.print(); }catch(e){} }, 400);
+  setTimeout(() => { try{ w.focus(); }catch(e){} }, 250);
 }
 
-// 📄 v893: نموذج حركة الأصناف — من غير أي رقم فلوس.
-//   ده اللي بتدّيه للمورد عشان يراجع الكميات: كام كان عنده، كام ورّد،
-//   كام فاضل، وكام باع. أسعارك وهوامشك مالهاش لازمة في الورقة دي،
-//   وكمان بتنفع للجرد مع المورد وهو واقف قدامك.
-// 📦 v895: نفس التفصيل بس بستايل الطباعة (مفيش متغيّرات CSS للصفحة)
+// 📦 v895: كل توريدة سطر فرعي على نفس أعمدة الجدول — رقم أمر الشراء
+//   وتاريخه تحت «الصنف»، والكمية تحت «توريدات». كانوا متكدّسين جوّه
+//   خانة واحدة ضيقة فبيلفوا ويصعب قراءتهم.
+//   lead = خانات قبل خانة الصنف · gap = خانات بين الصنف والتوريدات
+//   tail = خانات بعد التوريدات
+function _cgDelivRows(x, o){
+  const d = x.deliveries || [];
+  if(!d.length) return '';
+  const cell = (n, cls) => n > 0 ? `<td${cls?` class="${cls}"`:''}></td>`.repeat(n) : '';
+  return d.map(l => {
+    const when = l.date
+      ? new Date(l.date + 'T00:00:00').toLocaleDateString('ar-EG',{day:'numeric',month:'long'})
+      : '';
+    const back = l.qty < 0;
+    return `<tr class="sub${back?' back':''}">`
+      + cell(o.lead)
+      + `<td class="src"><span class="po">${escapeHtml(l.po_number || '—')}</span>`
+        + (when ? `<span class="when">${escapeHtml(when)}</span>` : '') + `</td>`
+      + cell(o.gap)
+      + `<td class="q amt">${back?'−':''}${_cgN(Math.abs(l.qty))}</td>`
+      + cell(o.tail) + `</tr>`;
+  }).join('');
+}
+
 function _cgDelivPrint(x){
   const d = x.deliveries || [];
   if(!d.length) return '';
@@ -39779,11 +39913,12 @@ function cgPrintMovement(){
         ${x.sku?`<span class="sku">${escapeHtml(x.sku)}</span>`:''}
       </td>
       <td class="q">${_cgN(x.opening_qty)}</td>
-      <td class="q in">${_cgN(x.delivered_qty)}${_cgDelivPrint(x)}</td>
+      <td class="q">${_cgN(x.delivered_qty)}</td>
       <td class="q">${_cgN(x.closing_qty)}</td>
       <td class="q sold">${x.sold_qty < 0 ? '−' : ''}${_cgN(Math.abs(x.sold_qty))}${
         x.negative?'<span class="bang">؟</span>':''}</td>
-      <td class="count"></td></tr>`).join('');
+      <td class="count"></td></tr>`
+    + _cgDelivRows(x, { lead:1, gap:1, tail:3 })).join('');
 
   // الصنف اللي رقمه مش مظبوط لازم يبان قدام الاتنين — الورقة دي
   //   بتتراجع مع المورد، فتخبية المشكلة بتأجّلها لحد ما تبقى خلاف
@@ -39793,122 +39928,16 @@ function cgPrintMovement(){
   if(!w) return toast('❌ المتصفح منع النافذة — اسمح بالنوافذ المنبثقة');
   w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
   <title>جرد بضاعة — ${escapeHtml(sup?.name||'')}</title>
-  <style>
-    @page{ size:A4; margin:14mm 13mm 17mm }
-    :root{
-      --ink:#17120F;        /* نص */
-      --roast:#4A3222;      /* بُنّي محمّص — لون العلامة الوحيد */
-      --crema:#C9A227;      /* ذهبي خفيف، للمسات بس */
-      --paper:#FBF9F7;      /* تظليل سطر خفيف يطلع في الطباعة بالأبيض والأسود */
-      --rule:#D8D0C9;
-      --mute:#6B5E55;
-    }
-    *{box-sizing:border-box}
-    html,body{margin:0;padding:0}
-    body{ font-family:Cairo,'Segoe UI',Tahoma,sans-serif; color:var(--ink);
-          font-size:12px; line-height:1.5; background:#EFECE8 }
-    .sheet{ background:#fff; max-width:200mm; margin:14px auto; padding:16mm 14mm;
-            box-shadow:0 18px 44px rgba(23,18,15,.14) }
-
-    /* ترويسة: العلامة فوق على اليمين (أول حاجة العين تشوفها بالعربي) */
-    .top{ display:flex; justify-content:space-between; align-items:flex-start; gap:18px }
-    .brand img{ height:34px; display:block }
-    .brand .role{ margin-top:5px; font-size:10px; color:var(--mute); letter-spacing:.2px }
-    .title{ text-align:left }
-    .title h1{ margin:0; font-size:21px; font-weight:800; letter-spacing:-.2px }
-    .title .who{ font-size:13px; color:var(--roast); font-weight:700; margin-top:1px }
-
-    /* البيانات كشبكة تعريفات — مش سطر مربوط بنقط */
-    .meta{ display:grid; grid-template-columns:repeat(3,auto); gap:0 26px;
-           margin:14px 0 0; padding:9px 0 10px;
-           border-top:2px solid var(--roast); border-bottom:1px solid var(--rule) }
-    .meta dt{ font-size:9px; color:var(--mute); margin:0 0 1px }
-    .meta dd{ margin:0; font-size:12px; font-weight:700 }
-
-    .lead{ margin:12px 0 13px; font-size:11px; color:var(--mute); max-width:86% }
-    .lead b{ color:var(--ink) }
-
-    table{ width:100%; border-collapse:collapse }
-    thead th{ background:var(--roast); color:#fff; font-size:10px; font-weight:700;
-              padding:7px 6px; border:none }
-    thead th:first-child{ border-start-start-radius:5px }
-    thead th:last-child{ border-start-end-radius:5px }
-    tbody td{ padding:7px 6px; border-bottom:1px solid var(--rule); vertical-align:top }
-    tbody tr:nth-child(even) td{ background:var(--paper) }
-    .idx{ width:26px; text-align:center; color:var(--mute); font-size:10px }
-    .item .nm{ display:block; font-weight:700; font-size:11px; line-height:1.45 }
-    .item .sku{ display:block; font-size:9px; color:var(--mute); letter-spacing:.3px;
-                font-family:Roboto,Consolas,monospace; margin-top:1px }
-    .q{ width:62px; text-align:center; font-family:Roboto,sans-serif;
-        font-variant-numeric:tabular-nums; font-size:12px }
-    .q.sold{ font-weight:800; font-size:13px }
-    .q.in{ width:118px }
-    .bang{ display:inline-block; margin-inline-start:3px; color:#9B2C14; font-weight:800 }
-    .flag td{ background:#FDF2EE !important }
-
-    /* سجل التوريد: ده تسلسل زمني حقيقي، فالترقيم هنا بيقول معلومة */
-    .deliv{ margin-top:5px; text-align:start }
-    .deliv .ln{ display:block; font-size:8px; color:var(--mute); line-height:1.5;
-                margin-top:3px; padding-inline-start:4px;
-                border-inline-start:2px solid var(--rule) }
-    /* الكمية في خانة لوحدها — من غيرها بتلزق في رقم التاريخ وتتقري رقم واحد */
-    .deliv .qt{ display:inline-block; min-width:18px; padding:1px 4px; border-radius:3px;
-                background:#EFE7DF; text-align:center; font-family:Roboto,sans-serif;
-                font-weight:800; color:var(--ink); font-size:9px }
-    .deliv .dt{ white-space:nowrap; margin-inline-start:5px }
-    .deliv .po{ display:block; font-family:Roboto,sans-serif; font-size:7px;
-                letter-spacing:.3px; color:#9A8F86 }
-    .deliv .back{ border-inline-start-color:#E8B4A0 }
-    .deliv .back .qt{ color:#9B2C14; background:#FBE6DE }
-
+  <style>${_cgSheetCss({ landscape:false })}
     /* خانة الجرد — دي الوحيدة اللي حد هيكتب فيها، فهي بطلة الورقة */
     thead th.hcount{ background:var(--crema); color:#2A1E12 }
     .count{ width:96px; background:#FFFDF4;
             border-inline-start:2px solid var(--crema) !important;
             background-image:repeating-linear-gradient(to bottom,transparent 0 17px,#E6DCBF 17px 18px);
             background-position:0 6px }
-    tfoot td{ background:#F2EEEA; font-weight:800; padding:8px 6px; border-top:2px solid var(--roast) }
-    tfoot .lbl{ text-align:start; font-size:11px }
-
-    .note{ margin-top:11px; font-size:10px; color:#8A3A1E; background:#FDF2EE;
-           border-inline-start:3px solid #C2410C; padding:7px 10px; border-radius:0 5px 5px 0 }
-
-    .sign{ margin-top:26px; display:flex; gap:40px }
-    .sign div{ flex:1 }
-    .sign .line{ border-top:1px solid var(--ink); margin-top:34px; padding-top:5px;
-                 font-size:10px; color:var(--mute) }
-    .fine{ margin-top:16px; padding-top:8px; border-top:1px solid var(--rule);
-           font-size:9px; color:var(--mute) }
-
-    .bar{ max-width:200mm; margin:0 auto 26px; display:flex; gap:9px; justify-content:center }
-    .bar button{ font-family:Cairo,sans-serif; font-size:13px; font-weight:700; cursor:pointer;
-                 border:none; border-radius:7px; padding:10px 24px; background:var(--roast); color:#fff }
-    .bar .ghost{ background:#fff; color:var(--roast); border:1px solid var(--rule) }
-
-    /* لحظة واحدة عند الفتح — مش تأثير على كل عنصر */
-    @media screen and (prefers-reduced-motion:no-preference){
-      .sheet{ animation:rise .45s cubic-bezier(.2,.7,.3,1) both }
-      @keyframes rise{ from{ opacity:0; transform:translateY(9px) } to{ opacity:1; transform:none } }
-    }
-    @media print{
-      body{ background:#fff }
-      .sheet{ box-shadow:none; margin:0; padding:0; max-width:none; animation:none }
-      .bar{ display:none }
-      thead{ display:table-header-group }
-      tr{ break-inside:avoid }
-    }
   </style></head><body>
   <div class="sheet">
-    <div class="top">
-      <div class="brand">
-        <img src="${LOGO_B64}" alt="CAFELAX">
-        <div class="role">كشف جرد بضاعة تحت البيع</div>
-      </div>
-      <div class="title">
-        <h1>جرد بضاعة</h1>
-        <div class="who">${escapeHtml(sup?.name||'')}</div>
-      </div>
-    </div>
+    ${_cgSheetHead(sup, 'جرد بضاعة — كشف كميات')}
 
     <dl class="meta">
       <div><dt>الفترة من</dt><dd>${escapeHtml(from)}</dd></div>
