@@ -11888,7 +11888,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v913';
+const UI_BUILD = 'v914';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -26848,9 +26848,13 @@ async function swRun(exec){
     const n = _SW_BUCKETS.filter(b => b.act)
       .reduce((s,b) => s + (_swReport.counts[b.k] || 0), 0);
     if(!n){ toast('مفيش حاجة تتنفّذ'); return; }
+    const w = _swReport.warn || {};
     if(!confirm(`هيتغيّر ${n} طلب:\n\n`
       + _SW_BUCKETS.filter(b => b.act && _swReport.counts[b.k])
           .map(b => `• ${_swReport.counts[b.k]} — ${b.t}`).join('\n')
+      + (w.restock_units
+          ? `\n\n⚠️ وهيرجع ${w.restock_units} قطعة للمخزون من ${w.restock_orders} طلب ملغي.`
+          : '')
       + `\n\nالطلبات المتوزّعة مش بتتلمس. تنفّذ؟`)) return;
   }
 
@@ -26897,6 +26901,21 @@ function swRender(r, exec){
       +     (did != null ? `<span style="font-size:11px;font-weight:700;color:var(--muted)"> · اتعمل ${did}</span>` : '')
       +   `</div>`
       + `</div>`
+      + (r.span && r.span[b.k]
+          ? `<div style="font-size:11px;color:var(--muted);margin-top:3px">`
+            + `من ${_swEsc(_swDate(r.span[b.k].from))} لـ ${_swEsc(_swDate(r.span[b.k].to))}</div>`
+          : '')
+      // 🚨 v914: الإلغاء بيرجّع البضاعة للمخزون — لازم يبان بالأرقام
+      //    قبل التنفيذ، مش يتكتشف بعده في الجرد.
+      + (b.k === 'cancelled' && r.warn && r.warn.restock_units
+          ? `<div style="margin-top:6px;padding:8px;background:#fef3c7;border:1px solid #f59e0b;`
+            + `border-radius:6px;font-size:11px;color:#78350f;line-height:1.7">`
+            + `⚠️ <strong>الإلغاء بيرجّع البضاعة للمخزون.</strong> `
+            + `${r.warn.restock_orders} طلب من دول لسه عليه خصم مخزون — `
+            + `التنفيذ هيرجّع <strong>${r.warn.restock_units} قطعة</strong> لرصيدك.`
+            + (r.warn.invoiced ? ` و${r.warn.invoiced} منهم عليه فاتورة زوهو.` : '')
+            + `</div>`
+          : '')
       + `<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.9">`
       +   list.map(o => `<span style="display:inline-block;background:var(--bg);`
       +     `border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin:0 2px 2px 0">`
