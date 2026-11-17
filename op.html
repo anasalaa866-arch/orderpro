@@ -11888,7 +11888,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v914';
+const UI_BUILD = 'v915';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -26821,7 +26821,9 @@ let _swReport = null;
 const _SW_BUCKETS = [
   { k:'handover',  act:1, i:'📦', t:'اتعمله Fulfil — هيتقفل «تسليم مباشر»',       c:'#059669' },
   { k:'bosta',     act:1, i:'🚚', t:'عليه تاج بوسطة — هيتعلّم إنه راح بوسطة',     c:'#0284c7' },
-  { k:'cancelled', act:1, i:'🚫', t:'اتلغى على شوبيفاي — هيتلغي عندنا',           c:'#dc2626' },
+  // 🧹 v915: للمراجعة بس. إلغاء الطلب في أوردر برو بيرجّع بضاعته
+  //   للمخزون — ده تغيير مخزون مش تنضيف شاشة، فمش بيتنفّذ تلقائياً.
+  { k:'cancelled', act:0, i:'🚫', t:'اتلغى على شوبيفاي — للمراجعة بس',            c:'#dc2626' },
   { k:'partial',   act:0, i:'🧩', t:'نصّه اتشحن — مش هنلمسه، راجعه بنفسك',        c:'#d97706' },
   { k:'skipped',   act:0, i:'🛡️', t:'متخطّى — متوزّع عندنا، الحماية حمته',         c:'#7c3aed' },
   { k:'missing',   act:0, i:'❓', t:'مش موجود على شوبيفاي',                        c:'#6b7280' },
@@ -26848,14 +26850,11 @@ async function swRun(exec){
     const n = _SW_BUCKETS.filter(b => b.act)
       .reduce((s,b) => s + (_swReport.counts[b.k] || 0), 0);
     if(!n){ toast('مفيش حاجة تتنفّذ'); return; }
-    const w = _swReport.warn || {};
-    if(!confirm(`هيتغيّر ${n} طلب:\n\n`
+    if(!confirm(`هيتشال ${n} طلب من التوزيع:\n\n`
       + _SW_BUCKETS.filter(b => b.act && _swReport.counts[b.k])
           .map(b => `• ${_swReport.counts[b.k]} — ${b.t}`).join('\n')
-      + (w.restock_units
-          ? `\n\n⚠️ وهيرجع ${w.restock_units} قطعة للمخزون من ${w.restock_orders} طلب ملغي.`
-          : '')
-      + `\n\nالطلبات المتوزّعة مش بتتلمس. تنفّذ؟`)) return;
+      + `\n\nمفيش مخزون بيتحرك، ومفيش حاجة بتتكتب على شوبيفاي.`
+      + `\nوالطلبات المتوزّعة مش بتتلمس. تنفّذ؟`)) return;
   }
 
   box.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:12px">'
@@ -26904,17 +26903,6 @@ function swRender(r, exec){
       + (r.span && r.span[b.k]
           ? `<div style="font-size:11px;color:var(--muted);margin-top:3px">`
             + `من ${_swEsc(_swDate(r.span[b.k].from))} لـ ${_swEsc(_swDate(r.span[b.k].to))}</div>`
-          : '')
-      // 🚨 v914: الإلغاء بيرجّع البضاعة للمخزون — لازم يبان بالأرقام
-      //    قبل التنفيذ، مش يتكتشف بعده في الجرد.
-      + (b.k === 'cancelled' && r.warn && r.warn.restock_units
-          ? `<div style="margin-top:6px;padding:8px;background:#fef3c7;border:1px solid #f59e0b;`
-            + `border-radius:6px;font-size:11px;color:#78350f;line-height:1.7">`
-            + `⚠️ <strong>الإلغاء بيرجّع البضاعة للمخزون.</strong> `
-            + `${r.warn.restock_orders} طلب من دول لسه عليه خصم مخزون — `
-            + `التنفيذ هيرجّع <strong>${r.warn.restock_units} قطعة</strong> لرصيدك.`
-            + (r.warn.invoiced ? ` و${r.warn.invoiced} منهم عليه فاتورة زوهو.` : '')
-            + `</div>`
           : '')
       + `<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.9">`
       +   list.map(o => `<span style="display:inline-block;background:var(--bg);`
