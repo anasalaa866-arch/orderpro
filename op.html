@@ -11802,7 +11802,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v910';
+const UI_BUILD = 'v911';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -13642,7 +13642,8 @@ function updateStats(){
 
 function renderDash(){
   $('dash-orders').innerHTML=orders.slice(0,6).map(o=>`<tr><td><strong>${o.id}</strong></td><td>${o.name}</td><td>📍 ${o.area}</td><td><strong>${o.total.toLocaleString()} ج</strong></td><td>${sBadge(o.status)}</td></tr>`).join('');
-  $('dash-couriers').innerHTML=couriers.filter(c => (c.role || 'courier') !== 'preparer').map(c=>`<tr><td><strong>${c.name}</strong></td><td><span class="badge b-go">${oByC(c.id,'جاري التوصيل').length}</span></td><td><span class="badge b-done">${oByC(c.id,'مكتمل').length}</span></td></tr>`).join('');
+  $('dash-couriers').innerHTML=couriers.filter(c => cDeliverable(c)
+      || oByC(c.id,'جاري التوصيل').length || oByC(c.id,'مكتمل').length).map(c=>`<tr><td><strong>${c.name}</strong></td><td><span class="badge b-go">${oByC(c.id,'جاري التوصيل').length}</span></td><td><span class="badge b-done">${oByC(c.id,'مكتمل').length}</span></td></tr>`).join('');
 
   // تحصيلات مع المناديب (COD فقط — غير مدفوع)
   const activeOrders = orders.filter(o => o.status==='جاري التوصيل' && !o.paid && o.courierId && o.courierId!=='bosta' && !o.isBosta);
@@ -14331,22 +14332,32 @@ function _renderCdashChart(daily){
   }).join('');
 }
 
+let _cShowOff = false;   // 🚫 v911: نعرض المعطّلين؟
+
 function renderCouriers(){
   // 🆕 v274: فلترة محسّنة - بس المناديب والمحلات (الكاشيرز والباقي في صفحات تانية)
-  const visibleCouriers = couriers.filter(c => {
-    const r = c.role || 'courier';
-    return r === 'courier' || r === 'shop';
-  });
-  $('courier-count').textContent=visibleCouriers.length+' مندوب';
+  const roleOk = c => { const r = c.role || 'courier'; return r === 'courier' || r === 'shop'; };
+  const all = couriers.filter(roleOk);
+  const off = all.filter(c => c.active === false);
+  const visibleCouriers = _cShowOff ? all : all.filter(c => c.active !== false);
+  $('courier-count').innerHTML = visibleCouriers.length + ' مندوب'
+    + (off.length ? ` · <button class="btn btn-ghost btn-xs" onclick="_cShowOff=!_cShowOff;renderCouriers()"
+        style="color:#991b1b;border-color:#fca5a5">${_cShowOff ? 'اخفي' : 'ورّيني'} ${off.length} معطّل</button>` : '');
   $('couriers-grid').innerHTML=visibleCouriers.map((c,i)=>{
     const active=oByC(c.id,'جاري التوصيل').length,done=oByC(c.id,'مكتمل').length,tot=active+done,rate=tot?Math.round(done/tot*100):0;
     const hasStarsAccount = c.username ? '⭐' : '';
     const role = c.role || 'courier';
     const roleLabel = role === 'preparer' ? '📦 محضر' : role === 'shop' ? '🏪 محل' : role === 'stocktaker' ? '🔍 جرد' : role === 'cashier' ? '💰 كاشير' : role === 'store_manager' ? '👨‍💼 مدير محل' : '🛵 مندوب';
     const roleColor = role === 'preparer' ? '#7c3aed' : role === 'shop' ? '#0891b2' : role === 'stocktaker' ? '#16a34a' : role === 'cashier' ? '#d4af37' : role === 'store_manager' ? '#ea580c' : '#64748b';
-    return`<div class="cc"><div class="cc-av" style="background:${COLORS[i%COLORS.length]}">${c.name[0]}</div><div class="cc-name">${c.name} ${hasStarsAccount}</div><div class="cc-info"><span style="background:${roleColor}20;color:${roleColor};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">${roleLabel}</span></div><div class="cc-info">📱 ${c.phone}</div><div class="cc-info">📍 ${c.zone}</div><div class="cc-info">🚗 ${c.vehicle}</div><div class="cc-info">💰 شحن: <strong>${c.ship} ج</strong></div><div class="cc-info" style="margin-top:5px">📦 نشط: <strong>${active}</strong> | مكتمل: <strong>${done}</strong></div><div class="pbar"><div class="pbar-f" style="width:${rate}%"></div></div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+    const isOff = c.active === false;
+    return`<div class="cc" style="${isOff ? 'opacity:.6;background:#fef2f2;border-color:#fca5a5' : ''}"><div class="cc-av" style="background:${isOff ? '#9ca3af' : COLORS[i%COLORS.length]}">${c.name[0]}</div><div class="cc-name">${c.name} ${hasStarsAccount}${
+      isOff ? ' <span style="background:#991b1b;color:#fff;font-size:9px;padding:2px 7px;border-radius:10px;font-weight:700">🚫 مشي</span>' : ''}</div><div class="cc-info"><span style="background:${roleColor}20;color:${roleColor};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">${roleLabel}</span></div><div class="cc-info">📱 ${c.phone}</div><div class="cc-info">📍 ${c.zone}</div><div class="cc-info">🚗 ${c.vehicle}</div><div class="cc-info">💰 شحن: <strong>${c.ship} ج</strong></div><div class="cc-info" style="margin-top:5px">📦 نشط: <strong>${active}</strong> | مكتمل: <strong>${done}</strong></div><div class="pbar"><div class="pbar-f" style="width:${rate}%"></div></div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
         <span class="cc-status s-active">${c.status}</span>
         <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-xs" onclick="toggleCourierActive(${c.id})"
+            style="color:${isOff ? '#15803d' : '#991b1b'};border-color:${isOff ? '#86efac' : '#fca5a5'}"
+            title="${isOff ? 'رجّعه للشغل' : 'المندوب مشي — يختفي من التوزيع من غير ما تتمسح طلباته القديمة'}"
+            >${isOff ? '✅ رجّعه' : '🚫 مشي'}</button>
           <button class="btn btn-ghost btn-xs" onclick="changeCourierRole(${c.id})" style="color:#7c3aed;border-color:#7c3aed" title="تغيير الدور">🎭 الدور</button>
           ${role === 'store_manager' ? `<button class="btn btn-ghost btn-xs" onclick="setManagerPin(${c.id})" style="color:#ef4444;border-color:#ef4444" title="تعيين PIN">🔐 PIN</button>` : ''}
           <button class="btn btn-ghost btn-xs" onclick="openStarsCredentials(${c.id})" style="color:#d4af37;border-color:#d4af37" title="Cafelax Stars — حساب دخول التطبيق">⭐ ${c.username?'تعديل دخول':'إنشاء دخول'}</button>
@@ -14711,6 +14722,19 @@ async function resetShopUserPassword(username){
   }
 }
 
+// 🛵 v911: مين يظهر في التوزيع؟ المناديب والمحل بس — والمعطّل بره.
+//   قبل كده كان الفلتر «أي حد مش محضّر»، فكان بيطلع ٢٢ اسم فيهم
+//   كاشيرز وجرد ومديرين — ومحدش فيهم بيوصّل.
+//   المعطّل بيفضل ظاهر لو الطلب متعيّن له أصلاً، عشان الاسم مايختفيش
+//   من طلب قديم.
+function cDeliverable(c, keepId){
+  if(!c) return false;
+  if(keepId != null && String(c.id) === String(keepId)) return true;
+  const r = c.role || 'courier';
+  if(r !== 'courier' && r !== 'shop') return false;
+  return c.active !== false;
+}
+
 function renderAssignPage(){
   updateBatchIndicator();
   // 🔧 v215 FIX: السماح للطلبات pickup بالظهور في صفحة التوزيع
@@ -14728,7 +14752,7 @@ function renderAssignPage(){
   const probBtn=$('assign-prob-btn');
   if(probBtn){probBtn.style.display=probCount?'inline-flex':'none';probBtn.textContent='⚠️ '+probCount+' طلب مشكلة';}
   $('assign-tbody').innerHTML=u.map(o=>{
-    const rankedCouriers=couriers.filter(c => (c.role || 'courier') !== 'preparer').map(c=>{
+    const rankedCouriers=couriers.filter(c => cDeliverable(c)).map(c=>{
       const zm=zoneMatchScore(o.area,c.zone);
       const active=oByC(c.id,'جاري التوصيل').length;
       return{...c,zs:zm.score,zm:zm.matched,zr:zm.reason,active};
@@ -14944,10 +14968,7 @@ function renderAssignGrid(){
   }
   const suggested=suggestCourier(o);
   // 🆕 اعرض المناديب بس (courier) — أي دور تاني يختفي. بوسطة كزرار منفصل تحت
-  const assignableCouriers = couriers.filter(c => {
-    const r = c.role || 'courier';
-    return r === 'courier';
-  });
+  const assignableCouriers = couriers.filter(c => cDeliverable(c));
   g.innerHTML=assignableCouriers.map((c,i)=>{
     const active=oByC(c.id,'جاري التوصيل').length;
     const isSugg=suggested&&suggested.id===c.id;
@@ -16750,7 +16771,7 @@ function openEditOrder(id){
   set('eo-status', o.status||'في الانتظار');
   const sel = document.getElementById('eo-courier');
   sel.innerHTML = '<option value="">— بدون تعيين —</option>'
-    + couriers.filter(c => (c.role || 'courier') !== 'preparer' || String(o.courierId)===String(c.id)).map(c=>`<option value="${c.id}" ${String(o.courierId)===String(c.id)?'selected':''}>${c.name}</option>`).join('');
+    + couriers.filter(c => cDeliverable(c, o.courierId)).map(c=>`<option value="${c.id}" ${String(o.courierId)===String(c.id)?'selected':''}>${c.name}</option>`).join('');
   openM('m-edit-order');
 }
 
@@ -16917,6 +16938,26 @@ async function addCourier(){
   newC.id=Math.max(0,...couriers.map(c=>+c.id||0))+1;
   couriers.push(newC);saveCouriers();renderCouriers();
   toast('✅ تم إضافة المندوب '+name);
+}
+
+// 🚫 v911: المندوب مشي. مابنمسحوش — اسمه متعلّق بطلبات قديمة وتصفيات،
+//   والمسح بيضيّع التاريخ. بنعطّله فيختفي من التوزيع بس يفضل في الأرشيف.
+async function toggleCourierActive(id){
+  const c = couriers.find(x => String(x.id) === String(id));
+  if(!c) return;
+  const turnOn = c.active === false;
+  if(!turnOn){
+    const act = orders.filter(o => String(o.courierId) === String(id) && o.status === 'جاري التوصيل');
+    if(act.length) return toast(`❗ ${c.name} شايل ${act.length} طلب لسه جاري التوصيل — حوّلهم لحد تاني الأول`, 'error', 7000);
+    if(!confirm(`${c.name} مشي؟\n\nهيختفي من التوزيع، بس طلباته القديمة وتصفياته هتفضل زي ما هي.\nتقدر ترجّعه في أي وقت.`)) return;
+  }
+  try{
+    const r = await apiFetch('/api/couriers/' + id + '/active', 'PATCH', { active: turnOn });
+    if(r?.error) return toast('❌ ' + r.error, 'error', 7000);
+    c.active = turnOn;
+    saveCouriers(); refreshAll();
+    toast(turnOn ? `✅ ${c.name} رجع` : `🚫 ${c.name} اتعطّل`, 'success');
+  }catch(e){ toast('❌ ' + e.message, 'error'); }
 }
 
 async function delCourier(id){
@@ -65021,7 +65062,7 @@ _registerPolling('shipping-transfers', () => {
   }
 }, 120000);
 
-function refreshSelects(){const opts='<option value="">— بدون تعيين الآن —</option>'+couriers.filter(c => (c.role || 'courier') !== 'preparer').map(c=>`<option value="${c.id}">${c.name} (${c.zone})</option>`).join('');$('o-courier').innerHTML=opts}
+function refreshSelects(){const opts='<option value="">— بدون تعيين الآن —</option>'+couriers.filter(c => cDeliverable(c)).map(c=>`<option value="${c.id}">${c.name} (${c.zone})</option>`).join('');$('o-courier').innerHTML=opts}
 function ordToggleAll(val){
   document.querySelectorAll('.ord-chk').forEach(c=>c.checked=val);
   updateOrdersBulk();
