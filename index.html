@@ -11044,7 +11044,11 @@ tr:hover td{background:#fafbff}
       </div>
       <div class="fg">
         <label style="margin-bottom:8px;display:block">الصفحات المتاحة *</label>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px">
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+          <!-- 🔎 v932: بحث في الصفحات — «تحديد/إلغاء الكل» بيشتغلوا على اللي ظاهر بس -->
+          <input id="au-pages-q" type="search" placeholder="🔎 دوّر على صفحة..." oninput="auFilterPages()"
+                 style="flex:1;min-width:160px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12.5px">
+          <span id="au-pages-count" style="font-size:11px;color:var(--muted)"></span>
           <button type="button" class="btn btn-ghost btn-xs" onclick="auSelectAll(true)">تحديد الكل</button>
           <button type="button" class="btn btn-ghost btn-xs" onclick="auSelectAll(false)">إلغاء الكل</button>
         </div>
@@ -11985,7 +11989,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v931';
+const UI_BUILD = 'v932';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -28902,7 +28906,29 @@ function renderUsersAdmin(){
 }
 
 function auSelectAll(checked){
-  document.querySelectorAll('[name="au-page"]').forEach(cb=>cb.checked=checked);
+  // 🔎 v932: لو فيه بحث، التحديد على اللي ظاهر بس
+  document.querySelectorAll('[name="au-page"]').forEach(cb=>{
+    if(cb.closest('label')?.style.display !== 'none') cb.checked=checked;
+  });
+  auPagesCount();
+}
+function _auNorm(t){
+  return String(t||'').toLowerCase().replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/\s+/g,' ').trim();
+}
+function auFilterPages(){
+  const q = _auNorm(document.getElementById('au-pages-q')?.value);
+  document.querySelectorAll('#au-pages-grid label').forEach(l => {
+    const hay = _auNorm(l.textContent + ' ' + (l.querySelector('input')?.value || ''));
+    l.style.display = !q || q.split(' ').every(w => hay.includes(w)) ? 'flex' : 'none';
+  });
+  auPagesCount();
+}
+function auPagesCount(){
+  const all = document.querySelectorAll('[name="au-page"]');
+  const on = [...all].filter(c => c.checked).length;
+  const shown = [...document.querySelectorAll('#au-pages-grid label')].filter(l => l.style.display !== 'none').length;
+  const el = document.getElementById('au-pages-count');
+  if(el) el.textContent = `${on} محددة` + (shown < all.length ? ` · ظاهر ${shown} من ${all.length}` : '');
 }
 
 // يولّد الـ checkboxes تلقائياً من الـ sidebar items — أي صفحة جديدة تتضاف للـ sidebar
@@ -28933,10 +28959,12 @@ function buildPermissionsGrid(checkedPages){
   grid.innerHTML = items.map(it => {
     const isChecked = checkedPages.includes(it.page) ? 'checked' : '';
     return `<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;border:1px solid transparent" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">
-      <input type="checkbox" name="au-page" value="${it.page}" style="width:15px;height:15px;accent-color:var(--accent)" ${isChecked}>
+      <input type="checkbox" name="au-page" value="${it.page}" onchange="auPagesCount()" style="width:15px;height:15px;accent-color:var(--accent)" ${isChecked}>
       ${it.icon} ${it.label}
     </label>`;
   }).join('');
+  const q = document.getElementById('au-pages-q'); if(q) q.value = '';   // 🔎 v932: كل فتحة تبدأ من غير بحث
+  auPagesCount();
 }
 
 function openAddUser(){
