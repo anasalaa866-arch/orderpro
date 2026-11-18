@@ -10883,6 +10883,23 @@ tr:hover td{background:#fafbff}
         <!-- Search -->
         <input id="exp-search" placeholder="🔍 ابحث عن منتج..." oninput="renderBatchesPage()"
           style="padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;width:240px">
+        <!-- 🔎 v927: فلاتر -->
+        <select id="exp-f-win" onchange="renderBatchesPage()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px">
+          <option value="">📅 كل التواريخ</option><option value="expired">🔴 منتهية</option>
+          <option value="7">خلال 7 أيام</option><option value="30">خلال 30 يوم</option>
+          <option value="60">خلال 60 يوم</option><option value="90">خلال 90 يوم</option>
+          <option value="gt90">أكتر من 90 يوم</option></select>
+        <select id="exp-f-state" onchange="renderBatchesPage()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px">
+          <option value="">كل الحالات</option><option value="stock">فيه رصيد</option>
+          <option value="pending">فيه منتظرة تأكيد</option></select>
+        <select id="exp-f-offer" onchange="renderBatchesPage()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px">
+          <option value="">🏷️ العروض: الكل</option><option value="yes">عليه عرض شغّال</option>
+          <option value="no">مالوش عرض</option></select>
+        <select id="exp-f-vendor" onchange="renderBatchesPage()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px"><option value="">🏭 كل الموردين</option></select>
+        <select id="exp-f-sort" onchange="renderBatchesPage()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px">
+          <option value="exp">⏳ الأقرب انتهاءً</option><option value="name">🔤 الاسم</option>
+          <option value="qty">📦 الكمية</option></select>
+        <button class="btn btn-ghost btn-sm" onclick="expClearFilters()">✖️ مسح</button>
         <span id="exp-count" style="font-size:11px;color:var(--muted)"></span>
         <div style="margin-right:auto;display:flex;gap:6px">
           <button class="btn btn-ghost btn-sm" onclick="loadBatchesPage()">🔄 تحديث</button>
@@ -11933,7 +11950,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v926';
+const UI_BUILD = 'v927';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -58621,22 +58638,68 @@ async function expBadFixAll(){
   }
 }
 
+// 🔎 v927: فلاتر صفحة الصلاحية — كلها على البيانات المحمّلة، مفيش نداء جديد
+function _expDays(p){
+  // أقرب صلاحية فيها رصيد فعلاً (نفس nearest_exp بتاع السيرفر)
+  const ds = (Array.isArray(p.batches) ? p.batches : [])
+    .filter(b => b.status === 'active' && Number(b.currentQuantity) > 0 && b.daysLeft != null)
+    .map(b => Number(b.daysLeft));
+  return ds.length ? Math.min(...ds) : null;
+}
+function _expFilter(list, search){
+  const win = $('exp-f-win')?.value || '', st = $('exp-f-state')?.value || '';
+  const off = $('exp-f-offer')?.value || '', ven = $('exp-f-vendor')?.value || '';
+  const sort = $('exp-f-sort')?.value || 'exp';
+  let out = list.filter(p => {
+    if(search && !((p.product_title || '').toLowerCase().includes(search) ||
+                   (p.sku || '').toLowerCase().includes(search) ||
+                   (p.barcode || '').toLowerCase().includes(search))) return false;
+    if(win){
+      const d = _expDays(p);
+      if(d == null) return false;
+      if(win === 'expired'){ if(d >= 0) return false; }
+      else if(win === 'gt90'){ if(d <= 90) return false; }
+      else if(d < 0 || d > Number(win)) return false;
+    }
+    if(st === 'stock' && !(Number(p.total_tracked) > 0)) return false;
+    if(st === 'pending' && !(Number(p.pending_batches) > 0)) return false;
+    if(off === 'yes' && !p.has_offer) return false;
+    if(off === 'no' && p.has_offer) return false;
+    if(ven && (p.vendor || '') !== ven) return false;
+    return true;
+  });
+  if(sort === 'name') out = out.slice().sort((a,b) => String(a.product_title||'').localeCompare(String(b.product_title||''), 'en'));
+  else if(sort === 'qty') out = out.slice().sort((a,b) => (Number(b.total_tracked)||0) - (Number(a.total_tracked)||0));
+  else out = out.slice().sort((a,b) => { const x = _expDays(a), y = _expDays(b);
+    return (x == null ? 1e9 : x) - (y == null ? 1e9 : y); });
+  return out;
+}
+function _expFillVendors(list){
+  const sel = $('exp-f-vendor'); if(!sel) return;
+  const vs = [...new Set(list.map(p => p.vendor).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'en'));
+  const sig = vs.join('|'); if(sel.dataset.sig === sig) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">🏭 كل الموردين</option>' +
+    vs.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+  sel.value = vs.includes(cur) ? cur : '';
+  sel.dataset.sig = sig;
+}
+function expClearFilters(){
+  for(const id of ['exp-search','exp-f-win','exp-f-state','exp-f-offer','exp-f-vendor']){ const e = $(id); if(e) e.value = ''; }
+  if($('exp-f-sort')) $('exp-f-sort').value = 'exp';
+  renderBatchesPage();
+}
 function renderBatchesPage(){
   const container = document.getElementById('exp-products-container');
   if(!container) return;
   
   const search = ($('exp-search')?.value || '').toLowerCase().trim();
-  let products = _batchesData.products || [];
+  const all = _batchesData.products || [];
+  _expFillVendors(all);
+  let products = _expFilter(all, search);
   
-  if(search){
-    products = products.filter(p => 
-      (p.product_title || '').toLowerCase().includes(search) ||
-      (p.sku || '').toLowerCase().includes(search) ||
-      (p.barcode || '').toLowerCase().includes(search)
-    );
-  }
-  
-  if($('exp-count')) $('exp-count').textContent = products.length + ' منتج';
+  if($('exp-count')) $('exp-count').textContent = products.length === all.length
+    ? products.length + ' منتج' : `${products.length} من ${all.length} منتج`;
   
   if(!products.length){
     container.innerHTML = `
