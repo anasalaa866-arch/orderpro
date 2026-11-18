@@ -11933,7 +11933,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v922';
+const UI_BUILD = 'v923';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -48467,13 +48467,14 @@ async function returnsLookup(){
   try{
     const r=await apiFetch(`/api/returns/lookup?q=${encodeURIComponent(q)}`,'GET');
     if(!r || r.error){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(r?.error||'مالقتش الأوردر')}</div></div>`; return; }
-    _ret={ shopify_id:r.shopify_id, name:r.name, items:r.items||[], locations:r.locations||[], defaultLoc:r.default_location_id, defaultLocName:r.default_location_name };
+    _ret={ shopify_id:r.shopify_id, name:r.name, items:r.items||[], locations:r.locations||[], defaultLoc:r.default_location_id, defaultLocName:r.default_location_name,
+           canCancel:!!r.can_cancel, paidAmount:Number(r.paid_amount)||0, defaultLocNameShip:r.default_location_name||'' };
     renderReturnOrder(r);
   }catch(e){ box.innerHTML=`<div class="card"><div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div></div>`; }
 }
 function renderReturnOrder(r){
   const box=$('ret-order'); const items=r.items||[];
-  if(!items.length){ box.innerHTML=`<div class="card"><div style="padding:20px;text-align:center;color:var(--muted)">أوردر ${escapeHtml(r.name||'')} مفيهوش أصناف قابلة للإرجاع</div></div>`; return; }
+  if(!items.length){ box.innerHTML=`<div class="card"><div style="padding:20px;text-align:center;color:var(--muted)">أوردر ${escapeHtml(r.name||'')} ${r.cancelled?'ملغي على شوبيفاي':'مفيهوش أصناف قابلة للإرجاع'}</div></div>`; return; }
   const locs=r.locations||[];
   const locOpts=locs.map(l=>`<option value="${escapeHtml(l.id)}" ${l.id===r.default_location_id?'selected':''}>${escapeHtml(l.name)}</option>`).join('');
   const rows=items.map(it=>{
@@ -48497,6 +48498,13 @@ function renderReturnOrder(r){
       <div style="font-weight:800">أوردر ${escapeHtml(r.name||'')}</div>
       <div style="font-size:11px;color:var(--muted)">${escapeHtml(r.financial_status||'')} · ${escapeHtml(r.fulfillment_status||'')}</div>
     </div>
+    ${r.can_cancel ? `<div style="padding:12px 14px;border-bottom:1px solid var(--border);background:#fef2f2">
+      <div style="font-weight:800;margin-bottom:4px">❌ العميل مااستلمش — الأوردر كله رجع</div>
+      <div style="font-size:11px;color:#7f1d1d;margin-bottom:8px">بيعمل Cancel order على شوبيفاي: المخزون بيرجع لـ«${escapeHtml(r.default_location_name||'مخزن الشحن')}»، من غير رد فلوس ولا إشعار للعميل. في أوردر برو بيبقى «مرتجع».</div>
+      ${Number(r.paid_amount)>0.01 ? `<div style="font-size:12px;font-weight:800;color:#b91c1c;margin-bottom:8px">⚠️ الطلب ده مدفوع ${Number(r.paid_amount).toLocaleString('ar-EG')} ج — الفلوس مش هترجع لوحدها، رجّعها بإيدك.</div>` : ''}
+      <button class="btn" style="background:#7f1d1d;color:#fff;border:none" onclick="returnsCancelOrder()">❌ إلغاء الأوردر كله</button>
+    </div>` : ''}
+    <div style="padding:10px 14px 0;font-weight:800">↩️ العميل استلم ورجّع — مرتجع جزء أو كل</div>
     ${rows}
     <div style="padding:12px 14px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
@@ -48530,6 +48538,25 @@ async function returnsExecute(){
     returnsLookup(); returnsHistory();
   }catch(e){ toast('❌ '+e.message); }
 }
+// ❌ v923: العميل مااستلمش — إلغاء الأوردر كله على شوبيفاي
+async function returnsCancelOrder(){
+  if(!_ret || !_ret.shopify_id) return;
+  const qty=(_ret.items||[]).reduce((s,i)=>s+(Number(i.currentQuantity)||0),0);
+  const paid=Number(_ret.paidAmount)||0;
+  const msg=`إلغاء أوردر ${_ret.name} كله على شوبيفاي؟\n\n• ${qty} قطعة هترجع لـ«${_ret.defaultLocNameShip||'مخزن الشحن'}»\n• مفيش رد فلوس ومفيش إشعار للعميل\n• في أوردر برو هيبقى «مرتجع»`
+    + (paid>0.01 ? `\n\n⚠️ الطلب مدفوع ${paid.toLocaleString('ar-EG')} ج — لازم ترجّع الفلوس بإيدك.` : '')
+    + `\n\nالإلغاء على شوبيفاي مابيترجعش فيه.`;
+  if(!confirm(msg)) return;
+  const note=($('ret-note')?.value||'').trim();
+  try{
+    toast('⏳ جاري الإلغاء على شوبيفاي...');
+    const r=await apiFetch(`/api/returns/${_ret.shopify_id}/cancel-order`,'POST',{ note });
+    if(!r || r.error){ toast('❌ '+(r?.error||'فشل الإلغاء')); return; }
+    toast('✅ '+(r.message||'اتلغى'));
+    if(r.paid) setTimeout(()=>alert(`⚠️ أوردر ${r.orderName} مدفوع ${Number(r.paidAmount).toLocaleString('ar-EG')} ج.\n\nالإلغاء مارجّعش فلوس — رجّعها للعميل بإيدك.`), 300);
+    returnsLookup(); returnsHistory();
+  }catch(e){ toast('❌ '+e.message); }
+}
 async function returnsHistory(){
   const box=$('ret-history'); if(!box) return;
   try{
@@ -48538,7 +48565,8 @@ async function returnsHistory(){
     if(!list.length){ box.innerHTML=''; return; }
     const rows=list.map(x=>{
       let items=[]; try{ items=JSON.parse(x.items_json||'[]'); }catch(e){}
-      const names=items.map(i=>`${escapeHtml(i.title||'')} ×${i.returnedQuantity}`).join('، ');
+      const names=(x.kind==='cancel'?'<span style="font-size:10px;background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:99px;margin-inline-end:4px">❌ إلغاء — مااستلمش</span>':'')
+        + items.map(i=>`${escapeHtml(i.title||'')} ×${i.returnedQuantity}`).join('، ');
       return `<tr><td style="font-size:12px;font-weight:700">${escapeHtml(x.order_name||('SH-'+x.shopify_id))}</td><td style="font-size:12px">${names}</td><td style="text-align:center">${x.qty_total}</td><td style="font-size:11px;color:var(--muted)">${escapeHtml(x.returned_by||'')}</td><td style="font-size:11px;color:var(--muted);white-space:nowrap">${_retDate(x.created_at)}</td></tr>`;
     }).join('');
     box.innerHTML=`<div class="card"><div style="padding:12px 14px;font-weight:800;border-bottom:1px solid var(--border)">📜 سجل المرتجعات</div><div style="padding:6px 14px;overflow-x:auto"><table style="width:100%;font-size:13px"><thead><tr><th style="text-align:right">الأوردر</th><th style="text-align:right">الأصناف</th><th>قطع</th><th>بواسطة</th><th>التاريخ</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
