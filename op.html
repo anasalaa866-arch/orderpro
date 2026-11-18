@@ -2018,6 +2018,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="stocktake" onclick="goPage(this,'stocktake')"><span class="ni-icon">🔍</span><span class="ni-label">الجرد</span></div>
         <div class="ni" data-p="stk-report" onclick="goPage(this,'stk-report')"><span class="ni-icon">📋</span><span class="ni-label">تقرير الجرد</span></div>
         <div class="ni" data-p="transfers" onclick="goPage(this,'transfers')"><span class="ni-icon">🔄</span><span class="ni-label">تحويلات المخازن</span><span class="nbadge" id="nb-transfers" style="background:var(--warn)">0</span></div>
+        <div class="ni" data-p="shopify-transfers" onclick="goPage(this,'shopify-transfers')"><span class="ni-icon">🚚</span><span class="ni-label">ترانسفيرات شوبيفاي</span></div>
         <div class="ni" data-p="transfer-suggestions" onclick="goPage(this,'transfer-suggestions')"><span class="ni-icon">🧠</span><span class="ni-label">ذكاء التحويلات</span><span class="nbadge" id="nb-transfer-suggestions" style="background:var(--danger)"></span></div>
         <div class="ni" data-p="purchase-suggestions" onclick="goPage(this,'purchase-suggestions')"><span class="ni-icon">🛒</span><span class="ni-label">ذكاء الشراء</span><span class="nbadge" id="nb-purchase-suggestions" style="background:var(--danger)"></span></div>
         <div class="ni" data-p="sales-velocity" onclick="goPage(this,'sales-velocity')"><span class="ni-icon">📊</span><span class="ni-label">سرعة المبيعات</span></div>
@@ -7674,6 +7675,33 @@ tr:hover td{background:#fafbff}
     </div>
   </div>
 </div>
+<div class="page" id="page-shopify-transfers">
+  <!-- 🚚 v933: ترانسفيرات شوبيفاي — عرض بس، بتتملى بالويب هوك -->
+  <div class="card" style="margin-bottom:16px">
+    <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span style="font-weight:900">🚚 ترانسفيرات شوبيفاي</span>
+      <span style="color:var(--muted);font-size:12px" id="st-sub">بتتحدث لوحدها مع كل تغيير على شوبيفاي</span>
+      <span style="margin-inline-start:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-sm btn-ghost" onclick="stBackfill()" title="يسحب الترانسفيرات القديمة من شوبيفاي مرة واحدة">⬇️ سحب القديم</button>
+        <button class="btn btn-sm btn-ghost" onclick="stLoad()">🔄 حدّث</button>
+      </span>
+    </div>
+    <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px">
+      <input id="st-q" type="search" placeholder="🔎 رقم الترانسفير / صنف / SKU / باركود / ملاحظة..." oninput="stRender()"
+             style="flex:1;min-width:220px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
+      <span style="color:var(--muted)">من</span><input type="date" id="st-from" onchange="stLoad()" style="padding:6px;border:1px solid var(--border);border-radius:8px">
+      <span style="color:var(--muted)">لـ</span><input type="date" id="st-to" onchange="stLoad()" style="padding:6px;border:1px solid var(--border);border-radius:8px">
+      <select id="st-status" onchange="stRender()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"></select>
+      <select id="st-origin" onchange="stRender()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"></select>
+      <select id="st-dest" onchange="stRender()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"></select>
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="st-diff" onchange="stRender()"> فيها فرق بس</label>
+      <button class="btn btn-xs btn-ghost" onclick="stClear()">✖ مسح</button>
+    </div>
+    <div id="st-summary" style="padding:10px 16px;display:flex;gap:8px;flex-wrap:wrap;font-size:12px"></div>
+  </div>
+  <div class="card"><div id="st-list" style="overflow-x:auto"><div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div></div></div>
+</div>
+
 <div class="page" id="page-tz">
   <!-- 🧾 v931: الخزنة ← زوهو — كل حركة بتتراجع وتتنفّذ بإيدك -->
   <div class="card" style="margin-bottom:16px">
@@ -11984,12 +12012,12 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','shopify-transfers':'🚚 ترانسفيرات شوبيفاي','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v932';
+const UI_BUILD = 'v933';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -30014,6 +30042,194 @@ const _tzSt = { new:['جديدة','#475569','#f1f5f9'], failed:['❌ فشلت','
                 manual:['✍️ يدوي','#1e40af','#dbeafe'], skipped:['🚫 اتجاهلت','#6b7280','#f3f4f6'],
                 before_cutoff:['قبل البداية','#6b7280','#f3f4f6'], posting:['⏳','#92400e','#fef3c7'] };
 function _tzToday(off){ return new Date(Date.now() + (off||0) * 86400000).toLocaleDateString('en-CA', { timeZone:'Africa/Cairo' }); }
+// ═══ 🚚 v933: ترانسفيرات شوبيفاي — عرض بس ═══
+let _stRows = [], _stOpenId = null, _stPoll = null;
+const _ST_STATUS = {
+  DRAFT:         ['📝 مسودة',        '#f1f5f9', '#475569'],
+  READY_TO_SHIP: ['📦 جاهز للشحن',   '#e0e7ff', '#3730a3'],
+  IN_PROGRESS:   ['🚚 في الطريق',     '#fef3c7', '#92400e'],
+  TRANSFERRED:   ['✅ اتستلم',        '#d1fae5', '#065f46'],
+  CANCELED:      ['🚫 ملغي',          '#fee2e2', '#991b1b'],
+  OTHER:         ['• تانية',          '#f1f5f9', '#475569'],
+};
+const _ST_SHIP = { DRAFT:'📝 مسودة', IN_TRANSIT:'🚚 في الطريق', PARTIALLY_RECEIVED:'🟡 استلام جزئي', RECEIVED:'✅ اتستلمت', OTHER:'• تانية' };
+function _stBadge(st){
+  const b = _ST_STATUS[st] || [st || '—', '#f1f5f9', '#475569'];
+  return `<span class="badge" style="background:${b[1]};color:${b[2]};white-space:nowrap">${b[0]}</span>`;
+}
+function _stDate(v, withTime){
+  if(!v) return '—';
+  const d = new Date(v); if(isNaN(d)) return '—';
+  const o = { timeZone:'Africa/Cairo', year:'numeric', month:'2-digit', day:'2-digit' };
+  if(withTime){ o.hour = '2-digit'; o.minute = '2-digit'; }
+  return d.toLocaleString('en-GB', o).replace(',', '');
+}
+// فرق الصنف = اللي اتشحن − (المستلم + المرفوض). مجهول لو الاستلام مش معروف.
+function _stItemGap(l){ return l.received == null ? null : (l.shipped || 0) - (l.received || 0) - (l.rejected || 0); }
+function _stHasDiff(t){
+  const items = t.line_items || [];
+  if(items.some(l => (l.rejected || 0) > 0)) return true;
+  if(t.status === 'TRANSFERRED' && (t.received_qty || 0) < (t.total_qty || 0)) return true;
+  return items.some(l => { const g = _stItemGap(l); return g != null && g > 0 && t.status === 'TRANSFERRED'; });
+}
+async function stOpen(){
+  if($('st-from') && !$('st-from').value) $('st-from').value = _tzToday(-29);
+  if($('st-to') && !$('st-to').value) $('st-to').value = _tzToday(0);
+  stLoad();
+}
+function stClear(){
+  ['st-q','st-status','st-origin','st-dest'].forEach(id => { if($(id)) $(id).value = ''; });
+  if($('st-diff')) $('st-diff').checked = false;
+  $('st-from').value = _tzToday(-29); $('st-to').value = _tzToday(0);
+  stLoad();
+}
+async function stLoad(){
+  const box = $('st-list'); if(!box) return;
+  try{
+    const qs = new URLSearchParams();
+    if($('st-from')?.value) qs.set('from', $('st-from').value);
+    if($('st-to')?.value) qs.set('to', $('st-to').value);
+    const r = await apiFetch('/api/shopify-transfers?' + qs.toString());
+    _stRows = r?.transfers || [];
+    const bf = r?.backfill || {};
+    const sub = $('st-sub');
+    if(sub){
+      sub.textContent = bf.running
+        ? `⏳ بيسحب القديم من شوبيفاي: ${bf.done}/${bf.total || '…'}`
+        : (r?.last_event ? `آخر تحديث من شوبيفاي: ${_stDate(r.last_event, true)}` : 'بتتحدث لوحدها مع كل تغيير على شوبيفاي')
+          + (bf.error ? ` · ⚠️ ${bf.error}` : '');
+    }
+    clearTimeout(_stPoll);
+    if(bf.running) _stPoll = setTimeout(() => { if($('page-shopify-transfers')?.classList.contains('active')) stLoad(); }, 4000);
+    _stFillSelects();
+    stRender();
+  }catch(e){ box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`; }
+}
+function _stFillSelects(){
+  const fill = (id, label, vals) => {
+    const sel = $(id); if(!sel) return; const cur = sel.value;
+    sel.innerHTML = `<option value="">${label}</option>` + vals.map(v => `<option value="${escapeHtml(v[0])}">${escapeHtml(v[1])}</option>`).join('');
+    if(vals.some(v => v[0] === cur)) sel.value = cur;
+  };
+  const uniq = k => [...new Set(_stRows.map(t => t[k]).filter(Boolean))].sort().map(v => [v, v]);
+  fill('st-status', 'كل الحالات', Object.keys(_ST_STATUS).map(k => [k, _ST_STATUS[k][0]]));
+  fill('st-origin', '📤 من: كل المخازن', uniq('origin_name'));
+  fill('st-dest', '📥 لـ: كل المخازن', uniq('dest_name'));
+}
+function _stFiltered(){
+  const q = (typeof _auNorm === 'function' ? _auNorm : (x => String(x || '').toLowerCase()))($('st-q')?.value || '');
+  const st = $('st-status')?.value || '', o = $('st-origin')?.value || '', d = $('st-dest')?.value || '';
+  const diff = $('st-diff')?.checked;
+  const norm = typeof _auNorm === 'function' ? _auNorm : (x => String(x || '').toLowerCase());
+  return _stRows.filter(t => {
+    if(st && t.status !== st) return false;
+    if(o && t.origin_name !== o) return false;
+    if(d && t.dest_name !== d) return false;
+    if(diff && !_stHasDiff(t)) return false;
+    if(q){
+      const hay = norm([t.name, t.reference_name, t.note, (t.tags || []).join(' '), t.po_number, t.origin_name, t.dest_name,
+        ...(t.line_items || []).map(l => [l.title, l.sku, l.barcode].join(' '))].join(' '));
+      if(!q.split(' ').every(w => hay.includes(w))) return false;
+    }
+    return true;
+  });
+}
+function stRender(){
+  const box = $('st-list'); if(!box) return;
+  const rows = _stFiltered();
+  // ملخص بالحالة على اللي ظاهر بالتاريخ
+  const sum = $('st-summary');
+  if(sum){
+    const by = {}; _stRows.forEach(t => { by[t.status] = (by[t.status] || 0) + 1; });
+    const nDiff = _stRows.filter(_stHasDiff).length;
+    sum.innerHTML = `<span style="color:var(--muted)">${_stRows.length} ترانسفير في المدة:</span>` +
+      Object.keys(_ST_STATUS).filter(k => by[k]).map(k =>
+        `<span style="cursor:pointer" onclick="$('st-status').value='${k}';stRender()">${_stBadge(k)} <b>${by[k]}</b></span>`).join('') +
+      (nDiff ? `<span style="cursor:pointer" onclick="$('st-diff').checked=true;stRender()"><span class="badge" style="background:#fee2e2;color:#991b1b">⚠️ فيها فرق</span> <b>${nDiff}</b></span>` : '');
+  }
+  if(!rows.length){
+    box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">${_stRows.length ? 'مفيش ترانسفيرات تطابق الفلتر' : 'مفيش ترانسفيرات في المدة دي'}</div>`;
+    return;
+  }
+  const th = 'padding:9px 10px;font-size:11px;color:var(--muted);font-weight:700;text-align:start;white-space:nowrap';
+  box.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12.5px">
+    <thead><tr style="background:var(--bg);border-bottom:1px solid var(--border)">
+      <th style="${th}">الترانسفير</th><th style="${th}">التاريخ</th><th style="${th}">من ← لـ</th><th style="${th}">الحالة</th>
+      <th style="${th}">المستلم / الإجمالي</th><th style="${th}">الأصناف</th><th style="${th}">الشحنات</th><th style="${th}">مرجع / ملاحظة</th>
+    </tr></thead><tbody>${rows.map(_stRow).join('')}</tbody></table>`;
+}
+function _stRow(t){
+  const tot = t.total_qty || 0, rec = t.received_qty || 0;
+  const pct = tot ? Math.min(100, Math.round(rec / tot * 100)) : 0;
+  const open = _stOpenId === t.transfer_id;
+  const diff = _stHasDiff(t);
+  const ships = t.shipments || [];
+  return `<tr onclick="stToggle('${escapeHtml(t.transfer_id)}')" style="border-bottom:1px solid var(--border);cursor:pointer;${open ? 'background:#f8fafc' : ''}">
+    <td style="padding:9px 10px;white-space:nowrap"><b>${escapeHtml(t.name || '#' + t.transfer_id)}</b>
+      ${t.po_number ? `<span class="badge" style="background:#ede9fe;color:#5b21b6;font-size:10px">📋 ${escapeHtml(t.po_number)}</span>` : ''}
+      ${diff ? '<span title="فيه فرق بين المبعوت والمستلم" style="color:#dc2626">⚠️</span>' : ''}</td>
+    <td style="padding:9px 10px;white-space:nowrap">${_stDate(t.created_at, true)}</td>
+    <td style="padding:9px 10px">${escapeHtml(t.origin_name || '—')} <span style="color:var(--muted)">←</span> ${escapeHtml(t.dest_name || '—')}</td>
+    <td style="padding:9px 10px">${_stBadge(t.status)}</td>
+    <td style="padding:9px 10px;min-width:120px"><b>${rec}</b> / ${tot}
+      <div style="height:5px;background:#e2e8f0;border-radius:4px;margin-top:3px"><div style="height:100%;width:${pct}%;background:${pct >= 100 ? '#16a34a' : '#f59e0b'};border-radius:4px"></div></div></td>
+    <td style="padding:9px 10px">${(t.line_items || []).length}</td>
+    <td style="padding:9px 10px">${ships.length ? ships.map(s => escapeHtml(_ST_SHIP[s.status] || s.status)).join('<br>') : '—'}</td>
+    <td style="padding:9px 10px;max-width:240px;color:var(--muted);font-size:11.5px">${escapeHtml([t.reference_name, t.note].filter(Boolean).join(' · ') || '—')}</td>
+  </tr>${open ? `<tr><td colspan="8" style="padding:0 10px 14px;background:#f8fafc">${_stDetail(t)}</td></tr>` : ''}`;
+}
+function _stDetail(t){
+  const items = t.line_items || [];
+  const th = 'padding:7px 8px;font-size:11px;color:var(--muted);font-weight:700;text-align:center';
+  const num = (v, color) => `<td style="padding:7px 8px;text-align:center;font-weight:700;${color ? 'color:' + color : ''}">${v == null ? '<span style="color:var(--muted)">—</span>' : v}</td>`;
+  const itemRows = items.map(l => {
+    const g = _stItemGap(l);
+    const img = l.image ? `<img src="${escapeHtml(typeof _shopThumb === 'function' ? _shopThumb(l.image, 64) : l.image)}" loading="lazy" style="width:32px;height:32px;border-radius:6px;object-fit:cover;background:#fff">`
+                        : '<div style="width:32px;height:32px;border-radius:6px;background:#e2e8f0"></div>';
+    return `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:7px 8px"><div style="display:flex;gap:8px;align-items:center">${img}<div>
+        <div style="font-weight:700">${escapeHtml(l.product_title || l.title || '—')}${l.variant_title ? ' - ' + escapeHtml(l.variant_title) : ''}</div>
+        <div style="font-size:10.5px;color:var(--muted)">${escapeHtml(l.sku || '—')}${l.barcode ? ' · ' + escapeHtml(l.barcode) : ''}</div></div></div></td>
+      ${num(l.qty)}${num(l.shipped)}${num(l.received, '#16a34a')}${num(l.rejected || (l.rejected === 0 ? 0 : null), (l.rejected || 0) > 0 ? '#dc2626' : '')}
+      ${num(g, g > 0 ? '#d97706' : '')}</tr>`;
+  }).join('');
+  const ships = (t.shipments || []).map(s => `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:#fff;font-size:12px">
+      <b>${escapeHtml(s.name || '')}</b> · ${escapeHtml(_ST_SHIP[s.status] || s.status || '')}
+      · ${s.received}/${s.qty} مستلم${s.rejected ? ` · <span style="color:#dc2626">${s.rejected} مرفوض</span>` : ''}
+      <div style="color:var(--muted);font-size:11px;margin-top:3px">
+        اتعملت ${_stDate(s.created_at, true)}${s.shipped_at ? ` · اتشحنت ${_stDate(s.shipped_at, true)}` : ''}${s.received_at ? ` · اتستلمت ${_stDate(s.received_at, true)}` : ''}
+        ${s.arrives_at ? ` · الوصول المتوقع ${_stDate(s.arrives_at)}` : ''}
+        ${s.company || s.tracking_number ? ` · 📦 ${escapeHtml(s.company || '')} ${s.tracking_url
+            ? `<a href="${escapeHtml(s.tracking_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${escapeHtml(s.tracking_number || 'تتبع')}</a>`
+            : escapeHtml(s.tracking_number || '')}` : ''}
+      </div></div>`).join('');
+  return `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:10px 0;font-size:12px">
+      ${t.tags?.length ? t.tags.map(x => `<span class="badge" style="background:#e0f2fe;color:#075985">🏷️ ${escapeHtml(x)}</span>`).join('') : ''}
+      ${t.note ? `<span>📝 ${escapeHtml(t.note)}</span>` : ''}
+      ${t.degraded ? `<span style="color:#b45309" title="${escapeHtml(t.degraded)}">⚠️ الاستلام لكل صنف مش متاح (صلاحية الشحنات ناقصة في تطبيق شوبيفاي)</span>` : ''}
+      <span style="margin-inline-start:auto;color:var(--muted);font-size:11px">آخر سحب ${_stDate(t.synced_at, true)}</span>
+      <button class="btn btn-xs btn-ghost" onclick="event.stopPropagation();stRefresh('${escapeHtml(t.transfer_id)}')">🔄 حدّث من شوبيفاي</button>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;border:1px solid var(--border);border-radius:8px">
+      <thead><tr style="background:var(--bg)"><th style="${th};text-align:start">الصنف</th><th style="${th}">المطلوب</th><th style="${th}">المشحون</th>
+        <th style="${th}">المستلم</th><th style="${th}">المرفوض</th><th style="${th}">لسه/الفرق</th></tr></thead>
+      <tbody>${itemRows || '<tr><td colspan="6" style="padding:12px;text-align:center;color:var(--muted)">مفيش أصناف</td></tr>'}</tbody></table>
+    ${ships ? `<div style="display:grid;gap:6px;margin-top:10px">${ships}</div>` : ''}`;
+}
+function stToggle(id){ _stOpenId = _stOpenId === id ? null : id; stRender(); }
+async function stRefresh(id){
+  try{ await apiFetch(`/api/shopify-transfers/${encodeURIComponent(id)}/refresh`, 'POST', {}); toast('✅ اتحدث'); stLoad(); }
+  catch(e){ toast('❌ ' + e.message); }
+}
+async function stBackfill(){
+  const d = prompt('اسحب ترانسفيرات آخر كام يوم من شوبيفاي؟', '180');
+  if(d == null) return;
+  const n = Number(d);
+  if(!Number.isFinite(n) || n <= 0){ toast('❌ رقم أيام غلط'); return; }
+  try{ await apiFetch('/api/shopify-transfers/backfill', 'POST', { days: n }); toast('⏳ بدأ السحب'); stLoad(); }
+  catch(e){ toast('❌ ' + e.message); }
+}
+
 async function tzOpen(){
   if($('tz-from') && !$('tz-from').value) $('tz-from').value = _tzToday(-29);
   if($('tz-to') && !$('tz-to').value) $('tz-to').value = _tzToday(0);
@@ -60585,6 +60801,7 @@ function goPage(el,page){
   if(page==='settings')vcOpen();               // 🧾 v760
   if(page==='bank')bkOpen();                   // 🏦 v770 — صفحة مستقلة
   if(page==='tz')tzOpen();                     // 🧾 v931
+  if(page==='shopify-transfers')stOpen();      // 🚚 v933
   if(page==='promo')promoOpen();               // 🎟️ v783
   if(page==='settings')chOpen();               // 📡 v738
   if(page==='settings')tgOpen();               // 🤖 v739
