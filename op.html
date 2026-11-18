@@ -1986,6 +1986,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="checks" onclick="goPage(this,'checks')"><span class="ni-icon">📋</span><span class="ni-label">الشيكات</span><span class="nbadge" id="nb-checks" style="background:var(--danger)"></span></div>
         <div class="ni" data-p="payables" onclick="goPage(this,'payables')"><span class="ni-icon">💸</span><span class="ni-label">الدفعات</span><span class="nbadge" id="nb-payables" style="background:var(--danger)"></span></div>
         <div class="ni" data-p="bank" onclick="goPage(this,'bank')"><span class="ni-icon">🏦</span><span class="ni-label">كشف البنك</span></div>
+        <div class="ni" data-p="tz" onclick="goPage(this,'tz')"><span class="ni-icon">🧾</span><span class="ni-label">الخزنة ← زوهو</span></div>
         <div class="ni" data-p="settlements-receipts" onclick="goPage(this,'settlements-receipts')"><span class="ni-icon">📥</span><span class="ni-label">استلام التصفيات</span><span class="nbadge" id="nb-settlements-receipts" style="background:var(--danger)"></span></div>
         <div class="ni" data-p="statements" onclick="goPage(this,'statements')"><span class="ni-icon">💳</span><span class="ni-label">كشوف الفيزا</span></div>
         <div class="ni" data-p="settle-history" onclick="goPage(this,'settle-history')"><span class="ni-icon">📚</span><span class="ni-label">سجل التسويات</span></div>
@@ -4389,6 +4390,11 @@ tr:hover td{background:#fafbff}
             <option value="in">وارد بس</option>
             <option value="out">منصرف بس</option>
           </select>
+          <!-- 📅 v931: الفترة — افتراضي آخر ٣٠ يوم -->
+          <span style="font-size:12px;color:var(--muted)">من</span>
+          <input type="date" id="treasury-from" onchange="treasurySearch()" style="padding:7px;border:1px solid var(--border);border-radius:8px">
+          <span style="font-size:12px;color:var(--muted)">لـ</span>
+          <input type="date" id="treasury-to" onchange="treasurySearch()" style="padding:7px;border:1px solid var(--border);border-radius:8px">
           <button class="btn btn-ghost btn-sm" onclick="treasurySearchClear()">مسح</button>
           <span id="treasury-search-info" style="font-size:12px;color:var(--muted)"></span>
         </div>
@@ -7668,6 +7674,34 @@ tr:hover td{background:#fafbff}
     </div>
   </div>
 </div>
+<div class="page" id="page-tz">
+  <!-- 🧾 v931: الخزنة ← زوهو — كل حركة بتتراجع وتتنفّذ بإيدك -->
+  <div class="card" style="margin-bottom:16px">
+    <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span style="font-weight:900">🧾 الخزنة ← زوهو</span>
+      <span style="color:var(--muted);font-size:12px">راجع كل حركة → نفّذها في Zoho</span>
+      <span style="margin-inline-start:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-sm btn-ghost" onclick="tzCutoffOpen()">📅 تاريخ البداية <span id="tz-cutoff-lbl" style="color:var(--muted)"></span></button>
+        <button class="btn btn-sm btn-ghost" onclick="tzMapOpen()">🗺️ خريطة الحسابات</button>
+        <button class="btn btn-sm btn-ghost" onclick="tzLoad()">🔄 حدّث</button>
+      </span>
+    </div>
+    <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px">
+      <span style="color:var(--muted)">من</span><input type="date" id="tz-from" onchange="tzLoad()" style="padding:6px;border:1px solid var(--border);border-radius:8px">
+      <span style="color:var(--muted)">لـ</span><input type="date" id="tz-to" onchange="tzLoad()" style="padding:6px;border:1px solid var(--border);border-radius:8px">
+      <select id="tz-tre" onchange="tzLoad()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"><option value="">🏦 كل الخزن</option></select>
+      <select id="tz-cat" onchange="tzRender()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"><option value="">🏷️ كل الأقسام</option></select>
+      <select id="tz-st" onchange="tzRender()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
+        <option value="todo">⏳ لسه (جديدة + فشلت)</option><option value="">الكل</option>
+        <option value="new">جديدة</option><option value="failed">❌ فشلت</option><option value="posted">✅ اتنفّذت</option>
+        <option value="manual">✍️ يدوي</option><option value="skipped">🚫 اتجاهلت</option><option value="before_cutoff">قبل البداية</option></select>
+      <span id="tz-counts" style="color:var(--muted)"></span>
+      <button class="btn btn-sm btn-primary" id="tz-bulk" onclick="tzPostSelected()" style="margin-inline-start:auto;display:none">⚡ نفّذ المحدد</button>
+    </div>
+    <div id="tz-body" style="padding:10px 16px;overflow-x:auto"><div style="color:var(--muted);padding:20px;text-align:center">⏳</div></div>
+  </div>
+</div>
+
 <div class="page" id="page-bank">
   <!-- 🏦 v770: بقت صفحة مستقلة — كانت كارت جوه الإعدادات -->
   <!-- 🏦 v763: كشف البنك -->
@@ -11946,12 +11980,12 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v930';
+const UI_BUILD = 'v931';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -29944,6 +29978,220 @@ var _activeTreasuryId = null;
 var _txType = 'in';
 var _editingTxId = null;
 
+// ═══ 🧾 v931: الخزنة ← زوهو ═══
+//   زي كشف البنك: الحركة بتظهر بالقيد اللي هيتعمل، وإنت اللي بتنفّذ.
+//   مفيش حاجة بتتبعت لوحدها.
+let _tzRows = [], _tzMeta = null;
+const _tzSt = { new:['جديدة','#475569','#f1f5f9'], failed:['❌ فشلت','#991b1b','#fee2e2'], posted:['✅ اتنفّذت','#166534','#dcfce7'],
+                manual:['✍️ يدوي','#1e40af','#dbeafe'], skipped:['🚫 اتجاهلت','#6b7280','#f3f4f6'],
+                before_cutoff:['قبل البداية','#6b7280','#f3f4f6'], posting:['⏳','#92400e','#fef3c7'] };
+function _tzToday(off){ return new Date(Date.now() + (off||0) * 86400000).toLocaleDateString('en-CA', { timeZone:'Africa/Cairo' }); }
+async function tzOpen(){
+  if($('tz-from') && !$('tz-from').value) $('tz-from').value = _tzToday(-29);
+  if($('tz-to') && !$('tz-to').value) $('tz-to').value = _tzToday(0);
+  if(!_tzMeta) tzMeta().catch(()=>{});   // الموردين والخزن للقوايم — في الخلفية
+  tzLoad();
+}
+async function tzMeta(force){
+  if(_tzMeta && !force) return _tzMeta;
+  _tzMeta = await apiFetch('/api/tz/map');
+  const sel = $('tz-tre');
+  if(sel && _tzMeta?.treasuries){
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">🏦 كل الخزن</option>' + _tzMeta.treasuries.map(t =>
+      `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('');
+    sel.value = cur;
+  }
+  if(_tzRows.length) tzRender();
+  return _tzMeta;
+}
+async function tzLoad(){
+  const body = $('tz-body'); if(!body) return;
+  body.innerHTML = '<div style="color:var(--muted);padding:20px;text-align:center">⏳ جاري التحميل...</div>';
+  const q = new URLSearchParams({ from: $('tz-from')?.value || '', to: $('tz-to')?.value || '' });
+  if($('tz-tre')?.value) q.set('treasury', $('tz-tre').value);
+  try{
+    const r = await apiFetch('/api/tz/tx?' + q.toString());
+    if(!r?.ok) throw new Error(r?.error || 'فشل التحميل');
+    _tzRows = r.rows || [];
+    if($('tz-cutoff-lbl')) $('tz-cutoff-lbl').textContent = r.cutoff ? '(' + r.cutoff + ')' : '(مش متحدد)';
+    const cats = [...new Set(_tzRows.map(x => x.category).filter(Boolean))].sort();
+    const cs = $('tz-cat'), cur = cs.value;
+    cs.innerHTML = '<option value="">🏷️ كل الأقسام</option>' + cats.map(c => `<option>${escapeHtml(c)}</option>`).join('');
+    cs.value = cats.includes(cur) ? cur : '';
+    tzRender();
+  }catch(e){ body.innerHTML = `<div style="color:var(--danger);padding:20px">❌ ${escapeHtml(e.message)}</div>`; }
+}
+function _tzFiltered(){
+  const st = $('tz-st')?.value ?? 'todo', cat = $('tz-cat')?.value || '';
+  return _tzRows.filter(x => (!cat || x.category === cat) &&
+    (st === '' ? true : st === 'todo' ? (x.status === 'new' || x.status === 'failed') : x.status === st));
+}
+function _tzInput(x){
+  const p = x.plan; if(!p) return '';
+  const st = 'padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:11.5px;font-family:Cairo,sans-serif;max-width:190px';
+  if(p.mode === 'vendor'){
+    const sp = _tzMeta?.suppliers || [];
+    return `<select id="tz-in-${x.id}" style="${st}"><option value="">— اختار المورد —</option>${sp.map(v =>
+      `<option value="${escapeHtml(v.id)}">${escapeHtml(v.name)}</option>`).join('')}</select>`;
+  }
+  if(p.mode === 'order')
+    return `<input id="tz-in-${x.id}" placeholder="رقم الأوردر" value="${escapeHtml(x.order_guess || '')}" style="${st};width:110px">`;
+  if(p.mode === 'pair'){
+    const c = x.pair_candidates || [];
+    if(!c.length) return '<span style="color:#b45309;font-size:11px">⚠️ مفيش حركة مقابلة في خزنة تانية</span>';
+    return `<select id="tz-in-${x.id}" style="${st}">${c.map(o =>
+      `<option value="${escapeHtml(o.id)}">${escapeHtml(o.treasury_name || '')} · ${o.date} · ${escapeHtml((o.reason||'').slice(0,30))}</option>`).join('')}</select>`;
+  }
+  return '';
+}
+function _tzBody(x){
+  const v = $('tz-in-' + x.id)?.value || '';
+  const m = x.plan?.mode;
+  return m === 'vendor' ? { supplier_id: v } : m === 'order' ? { order_id: v } : m === 'pair' ? { pair_tx_id: v } : {};
+}
+function tzRender(){
+  const body = $('tz-body'); if(!body) return;
+  const rows = _tzFiltered();
+  const cnt = {}; for(const x of _tzRows) cnt[x.status] = (cnt[x.status] || 0) + 1;
+  if($('tz-counts')) $('tz-counts').innerHTML = Object.keys(_tzSt).filter(k => cnt[k])
+    .map(k => `${_tzSt[k][0]} <b>${cnt[k]}</b>`).join(' · ');
+  if(!rows.length){ body.innerHTML = '<div style="color:var(--muted);padding:30px;text-align:center">مفيش حركات في الاختيار ده</div>'; tzSelChanged(); return; }
+  const f = n => Number(n).toLocaleString();
+  body.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead style="background:var(--elev)"><tr>
+      <th style="padding:7px;width:28px"><input type="checkbox" onchange="tzSelAll(this.checked)"></th>
+      <th style="padding:7px;text-align:right">التاريخ</th><th style="padding:7px;text-align:right">الخزنة</th>
+      <th style="padding:7px;text-align:right">البيان</th><th style="padding:7px">القسم</th>
+      <th style="padding:7px;color:#16a34a">وارد</th><th style="padding:7px;color:#dc2626">منصرف</th>
+      <th style="padding:7px;text-align:right">هيتعمل في زوهو</th><th style="padding:7px">الحالة</th><th style="padding:7px"></th></tr></thead>
+    <tbody>${rows.map(x => {
+      const todo = x.status === 'new' || x.status === 'failed';
+      const p = x.plan, s = _tzSt[x.status] || [x.status,'#475569','#f1f5f9'];
+      const plan = todo && p
+        ? `<div><b>${escapeHtml(p.mode_label)}</b>${p.account_name ? ` ← ${escapeHtml(p.account_name)}` : ''}${p.cash_name ? ` <span style="color:var(--muted)">(${escapeHtml(p.cash_name)})</span>` : ''}</div>
+           ${p.ready ? _tzInput(x) : `<div style="color:#dc2626;font-size:11px">⚠️ ${escapeHtml(p.why)}</div>`}
+           ${x.status === 'failed' && x.error ? `<div style="color:#991b1b;font-size:10.5px;margin-top:3px">${escapeHtml(x.error)}</div>` : ''}`
+        : x.status === 'posted' ? `<span style="font-size:11px;color:var(--muted)">${escapeHtml(x.zoho_type || '')} ${escapeHtml(x.zoho_id || '')}${x.link_id ? ' · ' + escapeHtml(x.link_id) : ''}</span>`
+        : `<span style="font-size:11px;color:var(--muted)">${escapeHtml(x.note || '')}</span>`;
+      const act = todo
+        ? `<button class="btn btn-xs btn-primary" ${p && p.ready ? '' : 'disabled'} onclick="tzPost('${x.id}')">نفّذ</button>
+           <button class="btn btn-xs btn-ghost" onclick="tzMark('${x.id}','manual')" title="اتسجّلت في زوهو بإيدك">✍️</button>
+           <button class="btn btn-xs btn-ghost" onclick="tzMark('${x.id}','skipped')" title="مش لزوهو">🚫</button>`
+        : (x.status === 'skipped' || x.status === 'manual') ? `<button class="btn btn-xs btn-ghost" onclick="tzMark('${x.id}','new')">↩️ رجّعها</button>` : '';
+      return `<tr id="tz-r-${x.id}" style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px;text-align:center">${todo && p && p.ready ? `<input type="checkbox" class="tz-sel" value="${escapeHtml(x.id)}" onchange="tzSelChanged()">` : ''}</td>
+        <td style="padding:6px;white-space:nowrap">${x.date}</td>
+        <td style="padding:6px;font-size:11px">${escapeHtml(x.treasury_name || '')}</td>
+        <td style="padding:6px">${escapeHtml(x.reason || '')}</td>
+        <td style="padding:6px;text-align:center"><span style="font-size:10.5px;padding:2px 8px;border-radius:999px;background:rgba(37,99,235,.09);color:#2563eb">${escapeHtml(x.category || '—')}</span></td>
+        <td style="padding:6px;text-align:center;font-weight:700;color:#16a34a">${x.is_in ? f(x.amount) : '—'}</td>
+        <td style="padding:6px;text-align:center;font-weight:700;color:#dc2626">${x.is_in ? '—' : f(x.amount)}</td>
+        <td style="padding:6px">${plan}</td>
+        <td style="padding:6px;text-align:center"><span style="font-size:10.5px;padding:2px 8px;border-radius:999px;color:${s[1]};background:${s[2]};white-space:nowrap">${s[0]}</span></td>
+        <td style="padding:6px;white-space:nowrap">${act}</td></tr>`;
+    }).join('')}</tbody></table>`;
+  tzSelChanged();
+}
+function tzSelAll(on){ document.querySelectorAll('.tz-sel').forEach(c => c.checked = on); tzSelChanged(); }
+function tzSelChanged(){
+  const n = document.querySelectorAll('.tz-sel:checked').length, b = $('tz-bulk');
+  if(b){ b.style.display = n ? '' : 'none'; b.textContent = `⚡ نفّذ المحدد (${n})`; }
+}
+async function tzPost(id){
+  const x = _tzRows.find(r => String(r.id) === String(id)); if(!x) return;
+  try{
+    const r = await apiFetch(`/api/tz/tx/${encodeURIComponent(id)}/post`, 'POST', _tzBody(x));
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    toast('✅ اتنفّذت في زوهو'); tzLoad();
+  }catch(e){ toast('❌ ' + e.message); tzLoad(); }
+}
+async function tzPostSelected(){
+  const ids = [...document.querySelectorAll('.tz-sel:checked')].map(c => c.value);
+  if(!ids.length) return;
+  if(!confirm(`تنفيذ ${ids.length} حركة في زوهو؟`)) return;
+  const items = ids.map(id => ({ id, body: _tzBody(_tzRows.find(r => String(r.id) === id) || {}) }));
+  try{
+    const r = await apiFetch('/api/tz/post-batch', 'POST', { items });
+    toast(`✅ ${r?.ok || 0} اتنفّذت` + (r?.failed ? ` · ❌ ${r.failed} فشلت` : '') + (r?.stopped ? ` · ${r.stopped}` : ''));
+  }catch(e){ toast('❌ ' + e.message); }
+  tzLoad();
+}
+async function tzMark(id, status){
+  let note = '';
+  if(status === 'skipped'){ note = prompt('سبب التجاهل:'); if(note === null) return; if(!note.trim()) { toast('❌ السبب مطلوب'); return; } }
+  if(status === 'manual'){ note = prompt('ملاحظة (اختياري) — اتسجّلت في زوهو بإيدك:', ''); if(note === null) return; }
+  try{
+    const r = await apiFetch(`/api/tz/tx/${encodeURIComponent(id)}/mark`, 'POST', { status, note });
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    tzLoad();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+async function tzCutoffOpen(){
+  const cur = (await apiFetch('/api/tz/cutoff').catch(()=>null))?.cutoff || '';
+  const v = prompt('تاريخ البداية (YYYY-MM-DD) — أي حركة قبله اتسجّلت في زوهو بإيدك ومش هتتنفّذ من هنا.\nسيبه فاضي عشان تلغيه:', cur);
+  if(v === null) return;
+  try{
+    const r = await apiFetch('/api/tz/cutoff', 'POST', { cutoff: v.trim() });
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    toast('✅ ' + (r.cutoff ? 'تاريخ البداية ' + r.cutoff : 'اتلغى تاريخ البداية')); tzLoad();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+// خريطة الحسابات: كل خزنة ← حساب كاش، وكل قسم ← طريقة + حساب
+async function tzMapOpen(){
+  let m;
+  try{ m = await tzMeta(true); }catch(e){ toast('❌ ' + e.message); return; }
+  const acc = m.accounts || [];
+  const accSel = (id, cur, kind, key, mode) => `<select data-k="${kind}" data-key="${escapeHtml(key)}" data-role="acc" onchange="tzMapSave(this)"
+      style="padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:11.5px;max-width:240px;font-family:Cairo,sans-serif">
+      <option value="">— مش متحدد —</option>${acc.map(a => `<option value="${escapeHtml(a.id)}" ${a.id === cur ? 'selected' : ''}>${escapeHtml(a.name)} · ${escapeHtml(a.type || '')}</option>`).join('')}</select>`;
+  const modes = kind => Object.entries(m.modes).filter(([k]) =>
+    kind === 'cat_in' ? !['expense','vendor'].includes(k) : k !== 'order');
+  const catRow = (c, kind) => {
+    const cur = m.maps[kind][c.name] || {}, mode = cur.mode || c.def_mode;
+    const needAcc = mode === 'expense' || mode === 'transfer';
+    return `<tr style="border-bottom:1px solid var(--border)"><td style="padding:6px">${escapeHtml(c.name)}</td>
+      <td style="padding:6px"><select data-k="${kind}" data-key="${escapeHtml(c.name)}" data-role="mode" onchange="tzMapSave(this)"
+        style="padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-size:11.5px;font-family:Cairo,sans-serif">
+        ${modes(kind).map(([k,l]) => `<option value="${k}" ${k === mode ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
+      <td style="padding:6px">${needAcc ? accSel(c.name, cur.account_id, kind, c.name, mode) : '<span style="color:var(--muted);font-size:11px">بيتحدد مع كل حركة</span>'}</td></tr>`;
+  };
+  const ov = document.createElement('div');
+  ov.id = 'tz-map-ov';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 10px';
+  ov.onclick = e => { if(e.target === ov){ ov.remove(); tzLoad(); } };
+  ov.innerHTML = `<div class="card" style="max-width:820px;width:100%;padding:0">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center">
+      <b>🗺️ خريطة الحسابات — الخزنة ← زوهو</b>
+      <button class="btn btn-sm btn-ghost" style="margin-inline-start:auto" onclick="document.getElementById('tz-map-ov').remove();tzLoad()">✕</button></div>
+    ${m.zoho_error ? `<div style="padding:10px 16px;color:#991b1b;font-size:12px">⚠️ ماقدرتش أجيب الحسابات من زوهو: ${escapeHtml(m.zoho_error)}</div>` : ''}
+    <div style="padding:12px 16px">
+      <div style="font-weight:800;margin-bottom:6px">🏦 كل خزنة ← حساب الكاش بتاعها في زوهو</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse">${(m.treasuries || []).map(t => `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px">${escapeHtml(t.name)}</td><td style="padding:6px">${accSel(t.id, m.maps.treasury[t.id]?.account_id, 'treasury', t.id)}</td></tr>`).join('')}</table>
+      <div style="font-weight:800;margin:16px 0 6px">📤 أقسام المنصرف</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse">${(m.categories || []).filter(c => c.kind === 'out' && c.active).map(c => catRow(c, 'cat_out')).join('')}</table>
+      <div style="font-weight:800;margin:16px 0 6px">📥 أقسام الوارد</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse">${(m.categories || []).filter(c => c.kind === 'in' && c.active).map(c => catRow(c, 'cat_in')).join('')}</table>
+      <div style="font-size:11px;color:var(--muted);margin-top:12px">مصروف = Expense من حساب الخزنة · قيد تحويل = Journal بين الخزنة والحساب (سلف، جاري الشركاء، البنك، تحت التحصيل…) · دفعة لمورد/أوردر = بتختار المورد أو تكتب الأوردر مع كل حركة · تحويل بين الخزن = قيد واحد والحركة المقابلة بتتعلّم لوحدها.</div>
+    </div></div>`;
+  document.body.appendChild(ov);
+}
+async function tzMapSave(el){
+  const kind = el.dataset.k, key = el.dataset.key;
+  const row = el.closest('tr');
+  const modeEl = row.querySelector('[data-role="mode"]'), accEl = row.querySelector('[data-role="acc"]');
+  const mode = modeEl ? modeEl.value : null;
+  const accId = accEl ? accEl.value : '';
+  const accName = accEl && accEl.selectedIndex > 0 ? accEl.options[accEl.selectedIndex].text.split(' · ')[0] : '';
+  try{
+    const r = await apiFetch('/api/tz/map', 'POST', { kind, key, mode, account_id: accId, account_name: accName });
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    toast('✅ اتحفظ');
+    if(el.dataset.role === 'mode'){ document.getElementById('tz-map-ov')?.remove(); tzMapOpen(); }
+  }catch(e){ toast('❌ ' + e.message); }
+}
+
 async function loadTreasury(){
   if(!API_URL){ return; }
   try{
@@ -30013,7 +30261,21 @@ function treasurySearch(){ if(_activeTreasuryId) renderTreasuryTx(_activeTreasur
 function treasurySearchClear(){
   const i=document.getElementById('treasury-search'); if(i) i.value='';
   const t=document.getElementById('treasury-search-type'); if(t) t.value='';
+  _treRangeDefault(true);
   treasurySearch();
+}
+// 📅 v931: الصفحة بتفتح على آخر ٣٠ يوم — التاريخ بتوقيت القاهرة
+function _treYmd(d){
+  const v = String(d || '');
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const x = new Date(v);
+  return isNaN(x) ? v.slice(0,10) : x.toLocaleDateString('en-CA', { timeZone:'Africa/Cairo' });
+}
+function _treRangeDefault(force){
+  const f = document.getElementById('treasury-from'), t = document.getElementById('treasury-to');
+  if(!f || !t) return;
+  if(force || !f.value){ const d = new Date(Date.now() - 29 * 86400000); f.value = _treYmd(d.toISOString()); }
+  if(force || !t.value) t.value = _treYmd(new Date().toISOString());
 }
 function renderTreasuryTx(tId){
   const el=document.getElementById('treasury-tx-list');
@@ -30042,6 +30304,19 @@ function renderTreasuryTx(tId){
 
   // اعرض الأحدث في الأول (descending)
   let txsDesc = [...txsWithBal].reverse();
+
+  // 📅 v931: الفترة — الرصيد التراكمي اتحسب على كل الحركات فوق، فبيفضل صح.
+  //   رصيد أول المدة = الرصيد بعد آخر حركة قبل «من».
+  _treRangeDefault(false);
+  const _from = document.getElementById('treasury-from')?.value || '';
+  const _to   = document.getElementById('treasury-to')?.value || '';
+  let _periodOpen = (t && t.opening) ? parseFloat(t.opening) || 0 : 0;
+  if(_from){
+    const before = txsWithBal.filter(x => _treYmd(x.date) < _from);
+    if(before.length) _periodOpen = before[before.length - 1]._balance;
+    txsDesc = txsDesc.filter(x => _treYmd(x.date) >= _from);
+  }
+  if(_to) txsDesc = txsDesc.filter(x => _treYmd(x.date) <= _to);
 
   // 🆕 v512: الفلترة بعد حساب الرصيد التراكمي — عشان عمود "الرصيد"
   //   يفضل صح ومايتغيرش مع البحث (هو رصيد الخزنة وقتها مش مجموع المعروض)
@@ -30127,16 +30402,17 @@ function renderTreasuryTx(tId){
       + '</tr>';
   });
 
-  // صف رصيد أول المدة في الآخر (لأنه الـ baseline)
-  if(t && t.opening){
+  // صف رصيد أول المدة في الآخر (لأنه الـ baseline) — 📅 v931: أول الفترة المختارة
+  if(_from || (t && t.opening)){
     html += '<tr style="background:#f0fdf4;border-top:2px solid #86efac">'
       + '<td style="padding:8px 6px;text-align:center;color:#166534">0</td>'
-      + '<td style="padding:8px 6px;font-size:11px;color:#166534">—</td>'
+      + '<td style="padding:8px 6px;font-size:11px;color:#166534">'+(_from ? fmtDate(_from) : '—')+'</td>'
       + '<td style="padding:8px 6px;color:#166534"><strong>رصيد أول المدة</strong></td>'
+      + '<td></td>'
       + '<td style="padding:8px 6px;text-align:center"><span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">افتتاحي</span></td>'
-      + '<td style="padding:8px 6px;text-align:center;font-weight:700;color:#16a34a">'+parseFloat(t.opening).toLocaleString()+' ج</td>'
       + '<td style="padding:8px 6px;text-align:center;color:var(--muted)">—</td>'
-      + '<td style="padding:8px 6px;text-align:center;font-weight:700;color:#16a34a">'+parseFloat(t.opening).toLocaleString()+' ج</td>'
+      + '<td style="padding:8px 6px;text-align:center;color:var(--muted)">—</td>'
+      + '<td style="padding:8px 6px;text-align:center;font-weight:700;color:'+(_periodOpen>=0?'#16a34a':'#dc2626')+'">'+_periodOpen.toLocaleString()+' ج</td>'
       + '<td></td>'
       + '</tr>';
   }
@@ -60280,6 +60556,7 @@ function goPage(el,page){
   if(page==='settings')pmOpen();               // 🔑 v755
   if(page==='settings')vcOpen();               // 🧾 v760
   if(page==='bank')bkOpen();                   // 🏦 v770 — صفحة مستقلة
+  if(page==='tz')tzOpen();                     // 🧾 v931
   if(page==='promo')promoOpen();               // 🎟️ v783
   if(page==='settings')chOpen();               // 📡 v738
   if(page==='settings')tgOpen();               // 🤖 v739
