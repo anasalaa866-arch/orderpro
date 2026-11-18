@@ -4154,6 +4154,14 @@ tr:hover td{background:#fafbff}
     <div class="modal">
       <div class="mhd"><h3 id="chk-modal-title">شيك جديد</h3><button class="xbtn" onclick="closeM('m-chk')">✕</button></div>
       <div class="mbody">
+        <!-- 🗑️ v921: ورقة اتكتبت غلط واتقطعت — رقم + صورة إجبارية، وبتستنى المدير -->
+        <div id="chk-kind-row" style="display:flex;gap:6px;margin-bottom:12px">
+          <button type="button" id="chk-kind-normal" class="chip on" onclick="chkSetKind('')" style="flex:1">📝 شيك عادي</button>
+          <button type="button" id="chk-kind-spoiled" class="chip" onclick="chkSetKind('spoiled')" style="flex:1">🗑️ ورقة هالكة</button>
+        </div>
+        <div id="chk-spoiled-hint" style="display:none;background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:8px 10px;font-size:12px;color:#92400e;margin-bottom:12px">
+          ورقة اتكتبت غلط واتقطعت. الصورة إجبارية، وهتروح للمدير يوافق أو يرفض في «🟡 بانتظار موافقة».
+        </div>
         <div class="fg">
           <label>الدفتر *</label>
           <select id="chk-book-sel" onchange="onChkBookChange()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px">
@@ -4166,6 +4174,7 @@ tr:hover td{background:#fafbff}
             <option value="">— اختر الدفتر أولاً —</option>
           </select>
         </div>
+        <div id="chk-regular-fields">
         <div class="fg">
           <label>المورد *</label>
           <div style="display:flex;gap:6px">
@@ -4184,9 +4193,10 @@ tr:hover td{background:#fafbff}
           <div class="fg"><label>تاريخ الاستحقاق *</label><input id="chk-date" type="date"></div>
         </div>
         <div class="fg"><label>رقم الفاتورة</label><input id="chk-invoice" placeholder="اختياري"></div>
-        <div class="fg"><label>ملاحظات</label><textarea id="chk-note" rows="2" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px"></textarea></div>
+        </div>
+        <div class="fg"><label id="chk-note-lbl">ملاحظات</label><textarea id="chk-note" rows="2" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:13px"></textarea></div>
         <div class="fg">
-          <label>صورة الشيك</label>
+          <label id="chk-img-lbl">صورة الشيك</label>
           <div id="chk-img-preview" onclick="document.getElementById('chk-img-input').click()" style="border:2px dashed var(--border);border-radius:8px;padding:16px;text-align:center;cursor:pointer;min-height:80px;display:flex;align-items:center;justify-content:center">
             <span id="chk-img-placeholder" style="color:var(--muted);font-size:13px">اضغط لإضافة صورة</span>
             <img id="chk-img-show" style="display:none;max-width:100%;max-height:200px;border-radius:6px">
@@ -11923,7 +11933,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v920';
+const UI_BUILD = 'v921';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -24970,6 +24980,8 @@ async function loadChks(force){
         img:c.img||'', status:c.status||'pending',
         doneAt:c.doneAt||c.done_at||null,
         createdAt:c.createdAt||c.created_at||null,
+        kind:c.kind||'', voidReason:c.voidReason||'',   // 🗑️ v921
+        voidRequestedBy:c.voidRequestedBy||'', voidDecidedBy:c.voidDecidedBy||'',
       }));
       // ارفع الدفاتر المحلية تاني للـ DB عشان الحالة دي ما تتكررش
       console.log('🔄 رفع الدفاتر المحلية تاني للـ DB...');
@@ -25008,6 +25020,8 @@ async function loadChks(force){
         img:c.img||'', status:c.status||'pending',
         doneAt:c.doneAt||c.done_at||null,
         createdAt:c.createdAt||c.created_at||null,
+        kind:c.kind||'', voidReason:c.voidReason||'',   // 🗑️ v921
+        voidRequestedBy:c.voidRequestedBy||'', voidDecidedBy:c.voidDecidedBy||'',
       }));
       if(dbVendors.length) chkSuppliers = dbVendors.map(s=>({
         id: s.id || ('v_'+Date.now()),
@@ -27283,7 +27297,9 @@ function renderChecksPage(){
   if(dr) dr.style.display = period==='custom' ? 'flex' : 'none';
 
   // ابني الفلتر
-  let list=[...chkList];
+  // 🗑️ v921: الورق الهالك ليه مكانه — «🟡 بانتظار موافقة» و«⛔ هالك» بس
+  let list=(chkStatusFilter==='void'||chkStatusFilter==='void_requested')
+    ? [...chkList] : chkList.filter(c=>!_chkIsSpoiled(c));
   if(chkStatusFilter==='pending')list=list.filter(c=>c.status==='pending');
   if(chkStatusFilter==='done')list=list.filter(c=>c.status==='done');
   if(chkStatusFilter==='overdue')list=list.filter(c=>chkIsOverdue(c));
@@ -27335,6 +27351,8 @@ function renderChecksPage(){
     const days=chkDaysUntil(c.date);
     const dayLbl=c.status==='pending'?(days<0?`<span style="color:var(--danger);font-size:10px">(${Math.abs(days)} يوم تأخير)</span>`:days<=7?`<span style="color:var(--warn);font-size:10px">(بعد ${days} أيام)</span>`:''):'';
     const book=chkBooks.find(b=>b.id===c.bookId);
+    const sp=_chkIsSpoiled(c);   // 🗑️ v921
+    if(sp) return _chkSpoiledRow(c, book);
     return`<tr style="${chkIsOverdue(c)?'background:#fff5f5':''}${c.status==='void'?'background:#f3f4f6;opacity:.6':''}">
       <td><strong>${c.num}</strong></td>
       <td><strong>${c.payee}</strong>${c.note?`<br><span style="font-size:10px;color:var(--muted)">${c.note}</span>`:''}</td>
@@ -27346,7 +27364,7 @@ function renderChecksPage(){
       <td style="text-align:center">${c.img?`<button class="btn btn-ghost btn-xs" onclick="viewChkImg('${c.id}')">🖼️</button>`:'—'}</td>
       <td><div style="display:flex;gap:3px;flex-wrap:wrap">
         ${c.status==='pending'?`<button class="btn btn-xs" style="background:var(--success);color:#fff;border:none" onclick="chkMarkDone('${c.id}')">✅ صُرف</button> <button class="btn btn-ghost btn-xs" style="color:#a16207" onclick="requestChkVoid('${c.id}')" title="طلب جعل الشيك هالك">⚠️ هالك</button>`:''}
-        ${c.status==='void_requested'?`<button class="btn btn-xs" style="background:#dc2626;color:#fff;border:none" onclick="approveChkVoid('${c.id}')">✅ موافقة على الهالك</button> <button class="btn btn-ghost btn-xs" onclick="rejectChkVoid('${c.id}')">❌ رفض</button>`:''}
+        ${c.status==='void_requested'?(canApproveChkVoid()?`<button class="btn btn-xs" style="background:#dc2626;color:#fff;border:none" onclick="approveChkVoid('${c.id}')">✅ موافقة على الهالك</button> <button class="btn btn-ghost btn-xs" onclick="rejectChkVoid('${c.id}')">❌ رفض</button>`:_CHK_WAIT_MGR):''}
         ${c.status==='done'?`<button class="btn btn-ghost btn-xs" onclick="chkMarkPending('${c.id}')">↩️ إلغاء</button>`:''}
         ${c.status==='void'?`<button class="btn btn-ghost btn-xs" onclick="chkMarkPending('${c.id}')">↩️ إرجاع</button>`:''}
         <button class="btn btn-ghost btn-xs" style="color:#7c3aed" onclick="chqOpen('${c.id}')" title="${c.printedCount ? 'اتطبع '+c.printedCount+' مرة' : 'اطبع الشيك'}">🖨️${c.printedCount ? '<sup style="color:#dc2626">'+c.printedCount+'</sup>' : ''}</button>
@@ -27358,6 +27376,29 @@ function renderChecksPage(){
   const total=list.reduce((s,c)=>s+Number(c.amount),0);
   $('chk-sum-row').textContent=`إجمالي ${list.length} شيك: ${chkFmtAmount(total)} ج`;
   $('chk-sum-row').style.display='block';
+}
+// 🗑️ v921: صف الورقة الهالكة — رقم وسبب وصورة، ومراجعة المدير
+function _chkSpoiledRow(c, book){
+  const pend = c.status==='void_requested';
+  const who = c.voidRequestedBy ? ` · سجّلها ${escapeHtml(c.voidRequestedBy)}` : '';
+  const dec = c.voidDecidedBy ? ` · راجعها ${escapeHtml(c.voidDecidedBy)}` : '';
+  return `<tr style="background:${pend?'#fffbeb':'#f3f4f6'}">
+      <td><strong>${escapeHtml(String(c.num||''))}</strong></td>
+      <td><strong>🗑️ ورقة هالكة</strong>${c.voidReason?`<br><span style="font-size:10px;color:var(--muted)">${escapeHtml(c.voidReason)}</span>`:''}
+        <br><span style="font-size:10px;color:var(--muted)">${who}${dec}</span></td>
+      <td style="color:var(--muted)">—</td>
+      <td>${chkFmtDate(c.date)}</td>
+      <td style="font-size:11px;color:var(--muted)">${book?escapeHtml(book.name):'—'}</td>
+      <td style="font-size:11px;color:var(--muted)">—</td>
+      <td>${chkGetBadge(c)}</td>
+      <td style="text-align:center">${c.img?`<button class="btn btn-ghost btn-xs" onclick="viewChkImg('${c.id}')">🖼️</button>`:'—'}</td>
+      <td><div style="display:flex;gap:3px;flex-wrap:wrap">
+        ${pend?`${canApproveChkVoid()?`<button class="btn btn-xs" style="background:#dc2626;color:#fff;border:none" onclick="approveChkVoid('${c.id}')">✅ موافقة</button>
+                <button class="btn btn-ghost btn-xs" onclick="rejectChkVoid('${c.id}')">❌ رفض</button>`:_CHK_WAIT_MGR}
+                <button class="btn btn-ghost btn-xs" onclick="openEditChk('${c.id}')">✏️</button>
+                <button class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="deleteChk('${c.id}')">🗑️</button>`:''}
+      </div></td>
+    </tr>`;
 }
 function getFilteredChkList(){
   const now=new Date(new Date().toDateString());
@@ -27374,7 +27415,9 @@ function getFilteredChkList(){
   const m1=new Date(now.getFullYear(),now.getMonth()+1,0);
   const period=$('chk-period-filter')?.value||'all';
   const q=($('chk-search')?.value||'').toLowerCase();
-  let list=[...chkList];
+  // 🗑️ v921: الورق الهالك ليه مكانه — «🟡 بانتظار موافقة» و«⛔ هالك» بس
+  let list=(chkStatusFilter==='void'||chkStatusFilter==='void_requested')
+    ? [...chkList] : chkList.filter(c=>!_chkIsSpoiled(c));
   if(chkStatusFilter==='pending')list=list.filter(c=>c.status==='pending');
   if(chkStatusFilter==='done')list=list.filter(c=>c.status==='done');
   if(chkStatusFilter==='overdue')list=list.filter(c=>chkIsOverdue(c));
@@ -27524,8 +27567,30 @@ function calcChkUntil(){
   $('chk-until-result').textContent=chkFmtAmount(total)+' ج';
   $('chk-until-count').textContent=list.length+' شيك غير مصروف حتى '+chkFmtDate(d);
 }
+// 🗑️ v921: نوع الشيك في الشاشة — عادي أو ورقة هالكة (رقم + صورة بس)
+let chkKind='';
+var CHK_VOID_APPROVE_PERM = 'checks-void-approve';   // var: مفيش TDZ لو اتنادى بدري
+// المدير بس: admin، أو اللي متدّيله الصلاحية صراحةً (السيرفر بيقفل نفس الشرط)
+function canApproveChkVoid(){
+  const u = currentUser; if(!u) return false;
+  if(u.username === 'admin' || u.role === 'admin') return true;
+  return Array.isArray(u.pages) && u.pages.includes(CHK_VOID_APPROVE_PERM);
+}
+const _CHK_WAIT_MGR = '<span style="font-size:11px;color:#92400e">🟡 مستنية المدير</span>';
+function _chkIsSpoiled(c){ return !!c && c.kind==='spoiled'; }
+function chkSetKind(k){
+  chkKind = k==='spoiled' ? 'spoiled' : '';
+  const sp = chkKind==='spoiled';
+  $('chk-kind-normal')?.classList.toggle('on', !sp);
+  $('chk-kind-spoiled')?.classList.toggle('on', sp);
+  if($('chk-regular-fields')) $('chk-regular-fields').style.display = sp ? 'none' : '';
+  if($('chk-spoiled-hint')) $('chk-spoiled-hint').style.display = sp ? 'block' : 'none';
+  if($('chk-note-lbl')) $('chk-note-lbl').textContent = sp ? 'السبب' : 'ملاحظات';
+  if($('chk-img-lbl')) $('chk-img-lbl').textContent = sp ? 'صورة الورقة *' : 'صورة الشيك';
+}
 function openAddChk(){
   editingChkId=null;chkImgData='';
+  chkSetKind(''); if($('chk-kind-row')) $('chk-kind-row').style.display='flex';
   document.getElementById('chk-modal-title').textContent='شيك جديد';
   ['chk-payee','chk-amount','chk-invoice','chk-note'].forEach(id=>$(id)&&($(id).value=''));
   $('chk-date').value='';
@@ -27541,7 +27606,10 @@ function openAddChk(){
 }
 async function openEditChk(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
+  // 🗑️ v921: الورقة الهالكة بتتعدّل بس وهي لسه مستنية المدير
+  if(_chkIsSpoiled(c) && c.status!=='void_requested'){ toast('🔒 الورقة الهالكة اتراجعت خلاص — مابتتعدّلش'); return; }
   editingChkId=id;
+  chkSetKind(_chkIsSpoiled(c)?'spoiled':''); if($('chk-kind-row')) $('chk-kind-row').style.display='none';
   
   // 🆕 v291: لو الصورة lazy، حملها من الـ backend
   if(c.hasImg && (c.img === '__lazy__' || !c.img)){
@@ -27604,8 +27672,32 @@ async function openEditChk(id){
 function fillChkBookSel(){
   $('chk-book-sel').innerHTML='<option value="">بدون دفتر</option>'+chkBooks.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
 }
+async function _chkSaveSpoiled(num){
+  if(!num){toast('❗ اختر رقم الشيك');return;}
+  if(!$('chk-book-sel')?.value){toast('❗ اختر الدفتر');return;}
+  const old = editingChkId ? chkList.find(x=>x.id===editingChkId) : null;
+  const hasOldImg = !!(old && (old.hasImg || old.img));   // img='__lazy__' = فيه صورة على السيرفر
+  if(!_isRealImg(chkImgData) && !hasOldImg){toast('❗ صورة الورقة الهالكة إجبارية');return;}
+  const data={ id: editingChkId||(Date.now()+'_'+Math.random().toString(36).slice(2,5)),
+    kind:'spoiled', num, bookId:$('chk-book-sel').value,
+    note:$('chk-note').value.trim(), date:(old&&old.date)||'' };
+  if(_isRealImg(chkImgData)) data.img = chkImgData;
+  // السيرفر هو اللي بيتأكد من الصورة والرقم — فمستنيين رده قبل ما نقفل
+  let r;
+  try{ r = await apiFetch('/api/checks','POST',data); }
+  catch(e){ toast('❌ '+(e.message||'فشل الحفظ')); return; }
+  if(!r || !r.check){ toast('❌ مفيش اتصال بالسيرفر — الورقة الهالكة لازم تتسجّل أونلاين'); return; }
+  const row = { ...r.check, payee:'', amount:0, invoice:'', img:'__lazy__', hasImg:true,
+                kind:'spoiled', status:'void_requested',
+                createdAt:(old&&old.createdAt)||new Date().toISOString() };
+  if(old) Object.assign(old, row); else chkList.push(row);
+  saveChks(false);
+  closeM('m-chk'); chkRenderActive();
+  toast(old ? '✅ اتعدّلت الورقة الهالكة' : '✅ اتسجّلت الورقة الهالكة — مستنية موافقة المدير');
+}
 function saveChk(){
   const num=($('chk-num-sel')?.value)||($('chk-num')?.value?.trim())||'';
+  if(chkKind==='spoiled') return _chkSaveSpoiled(num);
   // 🆕 v194: لازم اختيار من الـ dropdown — مفيش إدخال يدوي
   const payee=$('chk-payee-sel')?.value?.trim()||'';
   const amount=parseFloat($('chk-amount').value),date=$('chk-date').value;
@@ -27738,18 +27830,45 @@ async function deleteChk(id){
   }
 }
 
+// 🗑️ v921: اختيار صورة من الجهاز وترجع dataURL (أو '' لو لغى)
+function _chkPickImage(){
+  return new Promise(resolve => {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/*';
+    let done = false;
+    const fin = v => { if(!done){ done = true; resolve(v); } };
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0]; if(!f) return fin('');
+      const rd = new FileReader();
+      rd.onload = e => fin(String(e.target.result || ''));
+      rd.onerror = () => fin('');
+      rd.readAsDataURL(f);
+    };
+    window.addEventListener('focus', () => setTimeout(() => { if(!inp.files || !inp.files.length) fin(''); }, 800), { once:true });
+    inp.click();
+  });
+}
 // 🆕 v250: workflow الشيك الهالك
 async function requestChkVoid(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
   const reason = prompt(`جعل الشيك "${c.num}" (${c.payee}) - ${c.amount} ج هالك\n\nاكتب السبب (مثلاً: اتقطع، ضاع، اتكتب غلط):`);
   if(reason === null) return;
   if(!reason.trim()) { toast('❌ السبب مطلوب'); return; }
+  // 🗑️ v921: الهالك لازم له صورة — لو الشيك مالوش صورة متسجّلة، اطلبها دلوقتي
+  const body = { reason };
+  if(!(c.hasImg || _isRealImg(c.img) || c.img === '__lazy__')){
+    toast('📷 الهالك لازم له صورة — اختار صورة الشيك');
+    const img = await _chkPickImage();
+    if(!img){ toast('❌ ماينفعش هالك من غير صورة'); return; }
+    body.img = img;
+  }
   
   try{
-    const r = await apiFetch('/api/checks/'+id+'/request-void','POST',{reason});
+    const r = await apiFetch('/api/checks/'+id+'/request-void','POST',body);
     if(r && r.ok){
       c.status = 'void_requested';
       c.note = (c.note || '') + (c.note ? '\n' : '') + `🟡 طلب جعله هالك: ${reason}`;
+      if(body.img){ c.img = body.img; c.hasImg = true; }
       saveChks(true);
       chkRenderActive();
       toast('✅ تم إرسال الطلب - في انتظار موافقة المدير');
@@ -27761,7 +27880,10 @@ async function requestChkVoid(id){
 
 async function approveChkVoid(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
-  if(!confirm(`الموافقة على جعل الشيك "${c.num}" (${c.payee}) - ${c.amount} ج هالك؟\n\n⚠️ ده هيلغي الشيك من الحسابات`)) return;
+  const _q = _chkIsSpoiled(c)   // 🗑️ v921
+    ? `الموافقة على الورقة الهالكة رقم "${c.num}"؟\n\nبعد الموافقة مابتتعدّلش ولا تتمسح.`
+    : `الموافقة على جعل الشيك "${c.num}" (${c.payee}) - ${c.amount} ج هالك؟\n\n⚠️ ده هيلغي الشيك من الحسابات`;
+  if(!confirm(_q)) return;
   
   try{
     const r = await apiFetch('/api/checks/'+id+'/approve-void','POST',{});
@@ -27778,11 +27900,19 @@ async function approveChkVoid(id){
 
 async function rejectChkVoid(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
-  if(!confirm(`رفض طلب جعل الشيك "${c.num}" هالك؟\n\nالشيك هيرجع لحالة "لم يُصرف"`)) return;
+  const _sp = _chkIsSpoiled(c);   // 🗑️ v921
+  if(!confirm(_sp
+      ? `رفض الورقة الهالكة رقم "${c.num}"؟\n\nهتختفي ورقمها هيرجع متاح في الدفتر.`
+      : `رفض طلب جعل الشيك "${c.num}" هالك؟\n\nالشيك هيرجع لحالة "لم يُصرف"`)) return;
   
   try{
     const r = await apiFetch('/api/checks/'+id+'/reject-void','POST',{});
-    if(r && r.ok){
+    if(r && r.ok && _sp){
+      chkList = chkList.filter(x => x.id !== id);
+      saveChks(false);
+      chkRenderActive();
+      toast('✅ اترفضت — الرقم رجع متاح في الدفتر');
+    } else if(r && r.ok){
       c.status = 'pending';
       saveChks(true);
       chkRenderActive();
@@ -28632,7 +28762,7 @@ function getFirstAvailablePage(user){
     if(userPages.includes(page)) return page;
   }
   
-  return userPages[0]; // fallback لأول صفحة متاحة
+  return userPages.find(p => p !== 'checks-void-approve') || null; // fallback لأول صفحة متاحة (مش الصلاحيات)
 }
 
 async function doLogout(){
@@ -28740,6 +28870,8 @@ function buildPermissionsGrid(checkedPages){
   if(!items.length && typeof PAGE_T === 'object'){
     Object.keys(PAGE_T).forEach(page => items.push({ page, icon: '📄', label: PAGE_T[page] }));
   }
+  // 🗑️ v921: صلاحية مش صفحة — مين يوافق/يرفض الشيكات الهالكة
+  items.push({ page: 'checks-void-approve', icon: '🛡️', label: 'موافقة الشيكات الهالكة' });
 
   grid.innerHTML = items.map(it => {
     const isChecked = checkedPages.includes(it.page) ? 'checked' : '';
@@ -33595,7 +33727,7 @@ function chkRepSet(kind, v){
 
 // القايمة اللي التقرير بيتبني منها — البحث من الخانة اللي فوق
 function _chkRepList(){
-  let list = [...(chkList || [])];
+  let list = (chkList || []).filter(c => !_chkIsSpoiled(c));   // 🗑️ v921
   if(_chkRepStatus === 'pending') list = list.filter(c => c.status === 'pending');
   else if(_chkRepStatus === 'done') list = list.filter(c => c.status === 'done');
   else if(_chkRepStatus === 'overdue') list = list.filter(c => chkIsOverdue(c));
@@ -33986,6 +34118,7 @@ function openMonthChecksModal(monthNum, yearNum){
   
   // فلتر الشيكات بـ month + year
   const monthChecks = chkList.filter(c => {
+    if(_chkIsSpoiled(c)) return false;   // 🗑️ v921
     const d = new Date(c.date);
     return (d.getMonth() + 1 === monthNum) && (d.getFullYear() === yearNum);
   });
