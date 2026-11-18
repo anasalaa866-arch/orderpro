@@ -2134,9 +2134,6 @@ tr:hover td{background:#fafbff}
     <!-- 🏷️ v803: النسختين ظاهرين — عشان تعرف بنفسك إيه اللي شغّال
          من غير ما تسأل حد. الواجهة من الثابت، والسيرفر من /api/version
          اللي بيقرا الـ commit من Railway. -->
-    <div id="sb-ver" title="دوس للتفاصيل" onclick="verShow()"
-         style="font-size:10px;color:var(--muted);text-align:center;padding:3px 0 1px;cursor:pointer;opacity:.75">
-      …</div>
   </div>
 </aside>
 
@@ -2145,6 +2142,9 @@ tr:hover td{background:#fafbff}
     <button class="mobile-menu-btn" onclick="toggleSidebar()" title="القائمة">☰</button>
     <h1 class="topbar-title" id="ptitle">لوحة التحكم</h1>
     <div id="net-status" class="desktop-only" style="display:flex;align-items:center;gap:4px;padding:6px 12px;border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:700;background:var(--bg)"></div>
+    <!-- 🏷️ v928: النسختين اتنقلوا من أسفل القايمة الجانبية للشريط اللي فوق -->
+    <div id="sb-ver" class="desktop-only" title="دوس للتفاصيل" onclick="verShow()"
+         style="font-size:11px;color:var(--muted);padding:6px 10px;border:1px solid var(--border);border-radius:20px;background:var(--bg);cursor:pointer;white-space:nowrap;font-family:Roboto,Cairo,sans-serif">…</div>
     <div class="search-wrap"><span class="search-ic">🔍</span><input type="text" placeholder="بحث..." id="srch" oninput="onSearch(this.value)"></div>
     <div class="api-badge wait desktop-only" id="api-badge">⏳ جاري...</div>
     <button class="btn btn-ghost desktop-only" onclick="syncNow()">🔄 مزامنة</button>
@@ -10779,6 +10779,7 @@ tr:hover td{background:#fafbff}
       <button class="btn btn-ghost btn-sm" onclick="neoCheckNow()" title="شوف دلوقتي لو في عرض خلصت حصّته">🔄 فحص دلوقتي</button>
       <select id="neo-filter" class="form-input" style="max-width:150px" onchange="loadNeoPage()">
         <option value="active">الشغّالة</option>
+        <option value="review">✅ خلصت — للمراجعة</option>
         <option value="all">الكل</option>
         <option value="completed">خلصت الحصّة</option>
         <option value="expired">التاريخ عدّى</option>
@@ -11950,7 +11951,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v927';
+const UI_BUILD = 'v928';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -57724,6 +57725,7 @@ async function loadNeoPage(){
   if(!box) return;
   const status = document.getElementById('neo-filter')?.value || 'active';
   const seq = ++_neoLoadSeq;
+  if(status === 'review') return neoReviewLoad(box, seq);   // ✅ v928
   // أول مرة للحالة دي → أول صفحة بسرعة، وبعدها الكل في الخلفية
   if(box.dataset.loaded !== status){
     _neoPageNo = 1;
@@ -57747,6 +57749,63 @@ async function loadNeoPage(){
     }
   }
   return _neoLoadAll(status, seq);
+}
+// ✅ v928: «عروض خلصت» — الحصّة خلصت والصنف رجع عادي. بتتراجع وتتشال.
+async function neoReviewLoad(box, seq){
+  box.dataset.loaded = 'review';
+  box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div>';
+  const cnt = document.getElementById('neo-count');
+  try{
+    const r = await apiFetch('/api/near-expiry-offers/review');
+    if(seq !== _neoLoadSeq) return;
+    const rows = r?.offers || [];
+    if(cnt) cnt.textContent = rows.length + ' للمراجعة';
+    if(!rows.length){
+      box.innerHTML = `<div style="text-align:center;padding:50px;color:var(--muted)">
+        <div style="font-size:40px">✅</div><div style="font-weight:700;margin-top:8px">مفيش عروض خلصت مستنية مراجعة</div></div>`;
+      return;
+    }
+    const f = n => n == null ? '—' : Number(n).toFixed(2);
+    box.innerHTML = rows.map(o => {
+      const bad = o.price_ok === false;
+      return `<div class="card" id="neo-rev-${o.id}" style="padding:14px;margin-bottom:10px;border-right:4px solid ${bad ? '#dc2626' : '#6366f1'}">
+        <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+          ${_prodImg(o.image_url, 48)}
+          <div style="flex:1;min-width:220px">
+            <div style="font-weight:800;font-size:14px">${escapeHtml(o.product_title || '')}${o.variant_title && o.variant_title !== 'Default Title' ? ` · ${escapeHtml(o.variant_title)}` : ''}</div>
+            <div style="font-size:11px;color:var(--muted);font-family:monospace">${escapeHtml(o.sku || '')}</div>
+            <div style="margin-top:6px;font-size:12px">
+              اتباع <b>${parseInt(o.sold_qty) || 0}</b> من <b>${parseInt(o.qty_limit) || 0}</b>
+              · سعر العرض <b style="color:#dc2626;font-family:monospace">${f(o.offer_price)}</b>
+              · الأصلي <b style="font-family:monospace">${f(o.original_price)}</b>
+            </div>
+            <div style="margin-top:6px;font-size:12px;font-weight:800;color:${bad ? '#dc2626' : o.price_ok ? '#16a34a' : 'var(--muted)'}">
+              ${o.price_ok == null ? '❔ مقدرتش أقرا السعر الحالي من شوبيفاي'
+                : bad ? `⚠️ السعر على شوبيفاي دلوقتي ${f(o.current_price)} — مش الأصلي`
+                : `✅ السعر رجع ${f(o.current_price)} على شوبيفاي`}
+              ${o.stock_now != null ? `<span style="font-weight:600;color:var(--muted)"> · الرصيد ${o.stock_now}</span>` : ''}
+            </div>
+            ${o.marks_error ? `<div style="margin-top:6px;font-size:11px;color:#991b1b">🏷️ ${escapeHtml(o.marks_error)}</div>` : ''}
+            <div style="font-size:10px;color:var(--muted);margin-top:6px">خلص ${o.ended_at ? new Date(o.ended_at).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'}) : '—'}
+              · بدأ ${new Date(o.started_at).toLocaleDateString('ar-EG')}</div>
+          </div>
+          <button class="btn btn-sm" onclick="neoReviewed(${o.id})" style="background:#16a34a;border-color:#16a34a;color:#fff;font-weight:800;align-self:center">✅ خلاص اترجعت</button>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+  }
+}
+async function neoReviewed(id){
+  try{
+    const r = await apiFetch(`/api/near-expiry-offers/${id}/reviewed`, 'POST', {});
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    document.getElementById('neo-rev-' + id)?.remove();
+    const left = document.querySelectorAll('[id^="neo-rev-"]').length;
+    const cnt = document.getElementById('neo-count'); if(cnt) cnt.textContent = left + ' للمراجعة';
+    if(!left) loadNeoPage();
+  }catch(e){ toast('❌ ' + e.message); }
 }
 function _neoBadge(){
   const badge = document.getElementById('nb-neo');
@@ -58638,6 +58697,36 @@ async function expBadFixAll(){
   }
 }
 
+// 📄 v928: صفحات صفحة الصلاحية — ٥٠ في الصفحة (يتغيّر من تحت، ويتحفظ على الجهاز)
+var _expPageNo = 1, _expSig = '', _expPages = 1, _expTotal = 0;
+function _expPer(){
+  let v = 50; try{ v = parseInt(localStorage.getItem('exp_per'), 10); }catch(e){}
+  return [50, 100, 200].includes(v) ? v : 50;
+}
+function expSetPer(v){ try{ localStorage.setItem('exp_per', String(v)); }catch(e){} _expPageNo = 1; renderBatchesPage(); }
+function expGoPage(n){
+  _expPageNo = n; renderBatchesPage();
+  document.getElementById('exp-products-container')?.scrollIntoView({ block:'start', behavior:'smooth' });
+}
+function _expPagerHtml(pages, total, per){
+  const btn = (n, label, on) => `<button class="btn btn-sm ${on ? 'btn-primary' : 'btn-ghost'}" style="min-width:34px"
+      ${n < 1 || n > pages ? 'disabled' : `onclick="expGoPage(${n})"`}>${label}</button>`;
+  const nums = [];
+  for(let n = 1; n <= pages; n++){
+    if(n === 1 || n === pages || Math.abs(n - _expPageNo) <= 2) nums.push(n);
+    else if(nums[nums.length - 1] !== '…') nums.push('…');
+  }
+  return `<div style="display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;margin:14px 0 4px">
+    ${pages > 1 ? btn(_expPageNo - 1, '→ السابق', false) : ''}
+    ${pages > 1 ? nums.map(n => n === '…' ? '<span style="color:var(--muted)">…</span>' : btn(n, n, n === _expPageNo)).join('') : ''}
+    ${pages > 1 ? btn(_expPageNo + 1, 'التالي ←', false) : ''}
+    <span style="font-size:11px;color:var(--muted);margin-inline-start:10px">في الصفحة:</span>
+    <select onchange="expSetPer(this.value)" style="padding:3px 6px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+      ${[50, 100, 200].map(v => `<option value="${v}" ${v === per ? 'selected' : ''}>${v}</option>`).join('')}
+    </select>
+  </div>`;
+}
+
 // 🔎 v927: فلاتر صفحة الصلاحية — كلها على البيانات المحمّلة، مفيش نداء جديد
 function _expDays(p){
   // أقرب صلاحية فيها رصيد فعلاً (نفس nearest_exp بتاع السيرفر)
@@ -58700,6 +58789,15 @@ function renderBatchesPage(){
   
   if($('exp-count')) $('exp-count').textContent = products.length === all.length
     ? products.length + ' منتج' : `${products.length} من ${all.length} منتج`;
+  // 📄 v928: صفحات — ١٣٠٠ كارت مرة واحدة كانوا بيتقّلوا الصفحة
+  const sig = ['exp-search','exp-f-win','exp-f-state','exp-f-offer','exp-f-vendor','exp-f-sort']
+    .map(id => $(id)?.value || '').join('|');
+  if(sig !== _expSig){ _expSig = sig; _expPageNo = 1; }
+  const per = _expPer();
+  _expTotal = products.length;
+  _expPages = Math.max(1, Math.ceil(products.length / per));
+  _expPageNo = Math.min(Math.max(1, _expPageNo), _expPages);
+  products = products.slice((_expPageNo - 1) * per, _expPageNo * per);
   
   if(!products.length){
     container.innerHTML = `
@@ -58774,7 +58872,7 @@ function renderBatchesPage(){
         </div>
       </div>
     `;
-  }).join('');
+  }).join('') + _expPagerHtml(_expPages, _expTotal, _expPer());   // 📄 v928
 }
 
 async function loadBatchesPending(){
