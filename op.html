@@ -11933,7 +11933,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v923';
+const UI_BUILD = 'v924';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -57684,10 +57684,59 @@ function _neoTiming(ms, render, n){
   setTimeout(() => left && done(), 8000);
 }
 
+// 📄 v924: صفحات — أول تحميل بيجيب أول صفحة بس (سريع) ويفتح، والباقي
+//   بيتحمّل في الخلفية عشان البحث والفلاتر والترتيب يشتغلوا على الكل.
+//   عدد الصفحة بيتغيّر من تحت القايمة (بيتحفظ على الجهاز).
+let _neoPageNo = 1, _neoFull = true, _neoSig = '', _neoLoadSeq = 0;
+function _neoPer(){
+  let v = 30; try{ v = parseInt(localStorage.getItem('neo_per'), 10); }catch(e){}
+  return [30, 60, 100].includes(v) ? v : 30;
+}
+function neoSetPer(v){ try{ localStorage.setItem('neo_per', String(v)); }catch(e){} _neoPageNo = 1; renderNeoList(); }
+function neoGoPage(n){
+  _neoPageNo = n; renderNeoList();
+  document.getElementById('neo-list')?.scrollIntoView({ block:'start', behavior:'smooth' });
+}
 async function loadNeoPage(){
   const box = document.getElementById('neo-list');
   if(!box) return;
   const status = document.getElementById('neo-filter')?.value || 'active';
+  const seq = ++_neoLoadSeq;
+  // أول مرة للحالة دي → أول صفحة بسرعة، وبعدها الكل في الخلفية
+  if(box.dataset.loaded !== status){
+    _neoPageNo = 1;
+    box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div>';
+    try{
+      const _t0 = performance.now();
+      const r = await apiFetch('/api/near-expiry-offers?status=' + encodeURIComponent(status)
+                               + '&limit=' + _neoPer() + '&sort=exp');
+      if(seq !== _neoLoadSeq) return;            // اتطلب تحميل أحدث
+      const _tFetch = performance.now() - _t0;
+      _neoOffers = r?.offers || [];
+      _neoFull = _neoOffers.length < _neoPer();  // أقل من صفحة = ده الكل
+      const _t1 = performance.now();
+      renderNeoList();
+      _neoTiming(_tFetch, performance.now() - _t1, _neoOffers.length);
+      box.dataset.loaded = status;
+      if(_neoFull){ _neoBadge(); return; }
+    }catch(e){
+      box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+      return;
+    }
+  }
+  return _neoLoadAll(status, seq);
+}
+function _neoBadge(){
+  const badge = document.getElementById('nb-neo');
+  if(badge){
+    const n = _neoOffers.filter(o => o.status === 'active').length;
+    badge.textContent = n || '';
+    badge.style.display = n ? '' : 'none';
+  }
+}
+async function _neoLoadAll(status, seq){
+  const box = document.getElementById('neo-list');
+  if(!box) return;
   // 📍 v661: أول تحميل بس بيشيل المحتوى — التحديث التلقائي بيستبدل
   //   في مكانه من غير وميض
   if(!box.dataset.loaded)
@@ -57696,22 +57745,22 @@ async function loadNeoPage(){
     // ⏱️ v800: قياس كل مرحلة — الوقت رايح فين بالظبط؟
     //   بيطبع سطر واحد في الـ Console. مالوش أي تأثير على الشغل نفسه.
     const _t0 = performance.now();
+    if(!_neoOffers.length || box.dataset.loaded !== status) _neoFull = false;
     const r = await apiFetch('/api/near-expiry-offers?status=' + encodeURIComponent(status));
+    if(seq !== _neoLoadSeq) return;
     const _tFetch = performance.now() - _t0;
     _neoOffers = r?.offers || [];
+    _neoFull = true;
     const _t1 = performance.now();
     renderNeoList();
     const _tRender = performance.now() - _t1;
     _neoTiming(_tFetch, _tRender, _neoOffers.length);
-    box.dataset.loaded = '1';
-    const badge = document.getElementById('nb-neo');
-    if(badge){
-      const n = _neoOffers.filter(o => o.status === 'active').length;
-      badge.textContent = n || '';
-      badge.style.display = n ? '' : 'none';
-    }
+    box.dataset.loaded = status;
+    _neoBadge();
   }catch(e){
-    box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
+    // الصفحة الأولى ظاهرة — فشل الباقي مايمسحهاش
+    if(_neoOffers.length){ _neoFull = true; renderNeoList(); toast('⚠️ فشل تحميل باقي العروض: ' + e.message); }
+    else box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -57788,11 +57837,22 @@ function renderNeoList(){
     cancelled: { t: '🚫 أُنهي يدوي',   c: '#6d7175' }
   };
   // 🔎 v688
-  const rows = _neoFiltered();
+  const allRows = _neoFiltered();
+  // 📄 v924: أي تغيير في الفلاتر/البحث/الترتيب يرجّع لأول صفحة
+  const sig = ['neo-q','neo-f-kind','neo-f-risk','neo-f-sort']
+    .map(id => document.getElementById(id)?.value || '').join('|');
+  if(sig !== _neoSig){ _neoSig = sig; _neoPageNo = 1; }
+  const per = _neoPer();
+  const pages = Math.max(1, Math.ceil(allRows.length / per));
+  if(_neoPageNo > pages) _neoPageNo = pages;
+  if(_neoPageNo < 1) _neoPageNo = 1;
+  const rows = allRows.slice((_neoPageNo - 1) * per, _neoPageNo * per);
   const cnt = document.getElementById('neo-count');
-  if(cnt) cnt.textContent = rows.length === _neoOffers.length
-    ? `${_neoOffers.length} عرض`
-    : `${rows.length} من ${_neoOffers.length}`;
+  if(cnt) cnt.textContent = !_neoFull
+    ? `أول ${_neoOffers.length} عرض · ⏳ بيحمّل الباقي`
+    : allRows.length === _neoOffers.length
+      ? `${_neoOffers.length} عرض`
+      : `${allRows.length} من ${_neoOffers.length}`;
   if(!rows.length){
     box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">
       <div style="font-size:36px;opacity:.4">🔍</div>
@@ -57858,7 +57918,28 @@ function renderNeoList(){
           : ''}
       </div>
     </div>`;
-  }).join('');
+  }).join('') + _neoPagerHtml(pages, allRows.length, per);
+}
+
+function _neoPagerHtml(pages, total, per){
+  const btn = (n, label, on) => `<button class="btn btn-sm ${on ? 'btn-primary' : 'btn-ghost'}" style="min-width:34px"
+      ${n < 1 || n > pages ? 'disabled' : `onclick="neoGoPage(${n})"`}>${label}</button>`;
+  // أرقام حوالين الصفحة الحالية + الأولى والأخيرة
+  const nums = [];
+  for(let n = 1; n <= pages; n++){
+    if(n === 1 || n === pages || Math.abs(n - _neoPageNo) <= 2) nums.push(n);
+    else if(nums[nums.length - 1] !== '…') nums.push('…');
+  }
+  return `<div style="display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;margin:14px 0 4px">
+    ${pages > 1 ? btn(_neoPageNo - 1, '→ السابق', false) : ''}
+    ${pages > 1 ? nums.map(n => n === '…' ? '<span style="color:var(--muted)">…</span>' : btn(n, n, n === _neoPageNo)).join('') : ''}
+    ${pages > 1 ? btn(_neoPageNo + 1, 'التالي ←', false) : ''}
+    ${!_neoFull ? '<span style="font-size:11px;color:var(--muted)">⏳ بيحمّل باقي العروض...</span>' : ''}
+    <span style="font-size:11px;color:var(--muted);margin-inline-start:10px">في الصفحة:</span>
+    <select onchange="neoSetPer(this.value)" style="padding:3px 6px;border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
+      ${[30, 60, 100].map(v => `<option value="${v}" ${v === per ? 'selected' : ''}>${v}</option>`).join('')}
+    </select>
+  </div>`;
 }
 
 // 🔮 v656: كارت التوقع — هل البضاعة تخلص قبل الصلاحية بمعدل البيع ده
