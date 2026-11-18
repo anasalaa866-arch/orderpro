@@ -11951,7 +11951,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v929';
+const UI_BUILD = 'v930';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -66508,6 +66508,10 @@ function doPrint(){
   if(cId){
     dsLastPrintTimes[cId] = Date.now();
     try{localStorage.setItem('ds_last_print',JSON.stringify(dsLastPrintTimes));}catch(e){}
+    // 🏪 v930: آخر طباعة على السيرفر — «جديد» في ورقة المحل بيتحسب منها
+    if(API_URL) apiFetch('/api/delivery-sheet/printed', 'POST', { courierId: cId })
+      .then(r => { if(r?.at) _dsShopMeta[String(cId)] = { ...(_dsShopMeta[String(cId)] || {}), at: r.at, t: Date.now() }; })
+      .catch(()=>{});
 
     // ✨ Cafelax Stars: علّم طلبات المندوب اللي جاري توصيلها إنها اتسلمت (picked_up_at)
     // دا بيخلّيها تظهر في تبويب "معاي" في تطبيق المندوب
@@ -66529,6 +66533,110 @@ function doPrint(){
   window.print();
 }
 
+// ═══ 🏪 v930: ورقة توصيل المحل بالأقدمية ═══
+//   المحل كل طلباته بتتستلم من الفرع — التقسيم بالمناطق مالوش معنى.
+//   جديد = اتحط على المحل بعد آخر طباعة (الوقت على السيرفر، فالموبايل
+//   والكمبيوتر بيشوفوا نفس الحاجة)، وبعده حسب عمر الطلب من يوم ما اتعمل.
+//   الحدود (٣/٧/١٠) إعداد في «القيم والحدود».
+const _dsShopMeta = {};
+function _dsIsShop(cId){ return String(cId) === String(SHOP_COURIER_ID); }
+async function _dsShopLoad(cId){
+  const k = String(cId), m = _dsShopMeta[k];
+  try{
+    const r = await apiFetch('/api/delivery-sheet/last-print?courierId=' + encodeURIComponent(k));
+    _dsShopMeta[k] = { at: r?.at || null, ages: Array.isArray(r?.ages) ? r.ages : [3,7,10], t: Date.now() };
+  }catch(e){ _dsShopMeta[k] = { at: m?.at || null, ages: m?.ages || [3,7,10], t: Date.now() }; }
+  return _dsShopMeta[k];
+}
+function _dsAgeDays(o){
+  const t = new Date(o.createdAt || o.created_at || 0).getTime();
+  return t ? (Date.now() - t) / 86400000 : 0;
+}
+// الأقسام بالترتيب — كل قسم {key,label,orders}
+function _dsShopSections(list, lastPrintAt, ages){
+  const [a1, a2, a3] = (ages || [3,7,10]).map(Number);
+  const lp = lastPrintAt ? new Date(lastPrintAt).getTime() : null;
+  const isNew = o => lp != null && !!o.courierAssignedAt && new Date(o.courierAssignedAt).getTime() > lp;
+  const S = [
+    { key:'new', label:'🆕 جديد — اتضاف بعد آخر طباعة', orders:[] },
+    { key:'a1',  label:`⏱️ لحد ${a1} أيام`,           orders:[] },
+    { key:'a2',  label:`⏳ من ${a1} لـ ${a2} أيام`,    orders:[] },
+    { key:'a3',  label:`⚠️ من ${a2} لـ ${a3} أيام`,    orders:[] },
+    { key:'a4',  label:`🔴 ${a3} أيام فأكتر`,         orders:[] },
+  ];
+  for(const o of list){
+    if(isNew(o)){ S[0].orders.push(o); continue; }
+    const d = _dsAgeDays(o);
+    (d < a1 ? S[1] : d < a2 ? S[2] : d < a3 ? S[3] : S[4]).orders.push(o);
+  }
+  // الجديد بترتيب ما اتضاف، والباقي الأقدم الأول
+  S[0].orders.sort((x,y) => new Date(x.courierAssignedAt) - new Date(y.courierAssignedAt));
+  for(const sec of S.slice(1)) sec.orders.sort((x,y) => new Date(x.createdAt||0) - new Date(y.createdAt||0));
+  return S;
+}
+function _dsRenderShop(c, cId, list){
+  const meta = _dsShopMeta[String(cId)];
+  window._dsNoted = [];
+  if(!meta){                                   // أول مرة — هات آخر طباعة وارسم تاني
+    $('ds-sheet').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div>';
+    _dsShopLoad(cId).then(() => { if(String(window._dsCourierId) === String(cId)) dsRender(); });
+    return;
+  }
+  if(Date.now() - (meta.t || 0) > 60000)       // طباعة من جهاز تاني؟ — حدّث في الخلفية
+    _dsShopLoad(cId).then(m => { if(m.at !== meta.at && String(window._dsCourierId) === String(cId)) dsRender(); });
+  if(!list.length){ $('ds-sheet').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">لا توجد طلبات في هذا الاختيار</div>'; return; }
+  window._dsNoted = list.filter(o => dsNoteOf(o));
+  const ages = meta.ages || [3,7,10];
+  const secs = _dsShopSections(list, meta.at, ages);
+  const totalCod = list.reduce((s,o) => s + codOf(o), 0);
+  const shipFee = list.reduce((s,o) => s + getShipCost(o,c), 0);
+  let html = '';
+  for(const sec of secs){
+    if(!sec.orders.length) continue;
+    html += `
+      <div class="ds-sec" style="margin-top:6px"><div class="ds-sec-line"></div>
+        <span class="ds-sec-lbl ${sec.key === 'new' ? 'dsl-exp' : 'dsl-norm'}">${sec.label} — ${sec.orders.length} طلب</span>
+        <div class="ds-sec-line"></div></div>
+      <table class="ds-table">${DS_HEADERS}<tbody>${sec.orders.map(o => dsOrderRow(o, sec.key === 'new' ? 'ds-er' : 'ds-nr')).join('')}</tbody></table>`;
+  }
+  const today = new Date().toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const nowt = new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'});
+  const lpTxt = meta.at
+    ? new Date(meta.at).toLocaleString('ar-EG',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Africa/Cairo'})
+    : 'مفيش طباعة قبل كده';
+  $('ds-sheet').innerHTML = `
+    ${dsNotesPageHtml(window._dsNoted, c, today0())}
+    <div class="ds-hd">
+      <div>
+        <div class="ds-title">ورقة توصيل المحل — بالأقدمية</div>
+        <div class="ds-sub">OrderPro · نظام إدارة التوصيل</div>
+        <div style="margin-top:4px"><span class="ds-mode-badge ds-mb-full">آخر طباعة: ${lpTxt}</span></div>
+      </div>
+      <div>
+        <div class="ds-courier-name">${c.name}</div>
+        <div class="ds-date">${today}</div>
+        <div style="font-size:11px;color:var(--muted);text-align:right">📍 ${c.zone || 'المحل'}</div>
+      </div>
+    </div>
+    <div class="ds-sum">
+      <div class="ds-sbox"><div class="ds-snum" style="color:var(--accent)">${list.length}</div><div class="ds-slbl">إجمالي الطلبات</div></div>
+      <div class="ds-sbox"><div class="ds-snum" style="color:var(--danger)">${secs[0].orders.length}</div><div class="ds-slbl">🆕 جديد</div></div>
+      <div class="ds-sbox"><div class="ds-snum" style="color:var(--warn)">${secs[4].orders.length}</div><div class="ds-slbl">${ages[2]} أيام فأكتر</div></div>
+      <div class="ds-sbox"><div class="ds-snum" style="color:var(--success)">${totalCod.toLocaleString()} ج</div><div class="ds-slbl">إجمالي التحصيل</div></div>
+    </div>
+    ${html}
+    <div class="ds-foot">
+      <div>
+        <div class="ds-trow"><span>إجمالي COD</span><span>${totalCod.toLocaleString()} ج</span></div>
+        <div class="ds-trow"><span>تمن الشحن المستحق</span><span style="color:var(--warn)">${shipFee.toLocaleString()} ج</span></div>
+        <div class="ds-trow big"><span>صافي للمحل</span><span>${(totalCod-shipFee).toLocaleString()} ج</span></div>
+      </div>
+      <div><div class="ds-sig-line"></div><div class="ds-sig-lbl">توقيع المحل — استلام الطلبات</div></div>
+      <div><div class="ds-sig-line"></div><div class="ds-sig-lbl">توقيع المشرف — استلام الكاش</div></div>
+    </div>
+    <div class="ds-meta"><span>OrderPro · ${today} · ${nowt}</span><span>${list.length} طلبات · ${c.name}</span></div>`;
+}
+
 function dsRender(){
   const sel=$('ds-courier-sel');
   if(!sel||!sel.options.length){
@@ -66548,6 +66656,9 @@ function dsRender(){
     if(!o.courierId||o.courierId==='null'||o.courierId==='undefined') return false;
     return String(o.courierId)===String(cId)||Number(o.courierId)===Number(cId);
   });
+  // 🏪 v930: المحل — بالأقدمية بدل المناطق (كله بيستلم من المحل)
+  if($('ds-zone-pills')) $('ds-zone-pills').style.display = _dsIsShop(cId) ? 'none' : 'flex';
+  if(_dsIsShop(cId)) return _dsRenderShop(c, cId, courierOrders);
   const express=courierOrders.filter(o=>isSameDay(o));
   let normal=courierOrders.filter(o=>!isSameDay(o));
   normal.sort((a,b)=>(a.area||'').localeCompare((b.area||''),'ar'));
