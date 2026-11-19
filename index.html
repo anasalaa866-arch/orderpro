@@ -6288,9 +6288,31 @@ tr:hover td{background:#fafbff}
         <option value="low">منخفض</option>
         <option value="out">منتهي</option>
       </select>
-      <select id="inv-filter-warehouse" class="form-input" style="max-width:200px" onchange="invGoToPage(1)">
+      <select id="inv-filter-warehouse" class="form-input" style="max-width:200px" onchange="invWhChanged()">
         <option value="">كل المخازن</option>
       </select>
+      <!-- 🔎 v941: فلاتر وترتيب -->
+      <select id="inv-wh-mode" class="form-input" style="max-width:170px" onchange="invFiltersChanged()" title="الرصيد — في المخزن المختار، أو الإجمالي لو مفيش مخزن">
+        <option value="">كل الأرصدة</option>
+        <option value="has">فيه ستوك</option>
+        <option value="out">خلصان</option>
+        <option value="neg">رصيده سالب</option>
+      </select>
+      <select id="inv-vendor" class="form-input" style="max-width:190px" onchange="invFiltersChanged()"><option value="">🏭 كل الموردين/البراندات</option></select>
+      <select id="inv-type" class="form-input" style="max-width:170px" onchange="invFiltersChanged()"><option value="">🏷️ كل الأنواع</option></select>
+      <span style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted)">السعر
+        <input id="inv-price-min" type="number" min="0" placeholder="من" class="form-input" style="width:80px" oninput="invFiltersChangedDebounced()">
+        <input id="inv-price-max" type="number" min="0" placeholder="لـ" class="form-input" style="width:80px" oninput="invFiltersChangedDebounced()"></span>
+      <select id="inv-sort" class="form-input" style="max-width:190px" onchange="invSortPick(this.value)">
+        <option value="name:asc">↕️ الاسم (أ ← ي)</option>
+        <option value="total:desc">الإجمالي: الأكتر الأول</option>
+        <option value="total:asc">الإجمالي: الأقل الأول</option>
+        <option value="price:desc">السعر: الأغلى الأول</option>
+        <option value="price:asc">السعر: الأرخص الأول</option>
+        <option value="value:desc">قيمة المخزون: الأعلى الأول</option>
+        <option value="value:asc">قيمة المخزون: الأقل الأول</option>
+      </select>
+      <button class="btn btn-ghost btn-sm" onclick="invClearFilters()">✖ مسح الفلاتر</button>
       <span style="font-size:11px;color:var(--muted);margin-right:auto" id="inv-last-sync"></span>
     </div>
   </div>
@@ -12037,7 +12059,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v938';
+const UI_BUILD = 'v941';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -35636,6 +35658,7 @@ async function refreshInventoryItems(){
   try{
     const items = await apiFetch('/api/inventory/items') || [];
     _invItems = items;
+    _invFillFilterLists();   // 🔎 v941
     renderInventoryTable();
     renderInventoryStats();
   }catch(e){
@@ -35680,6 +35703,71 @@ function invDebouncedRender(){
   }, 250);
 }
 
+// ═══ 🔎 v941: فلاتر وترتيب المخزون ═══
+let _invSort = { key: 'name', dir: 'asc' }, _invFiltersLoaded = false, _invPriceTimer = null;
+const _INV_F_IDS = ['inv-filter-status','inv-filter-warehouse','inv-wh-mode','inv-vendor','inv-type','inv-price-min','inv-price-max'];
+function _invSortArrow(k){ return _invSort.key === k ? (_invSort.dir === 'asc' ? ' ▲' : ' ▼') : ''; }
+function invSortBy(k){
+  // دوسة على نفس العمود تعكس — والأرقام تبدأ بالأكبر
+  if(_invSort.key === k) _invSort.dir = _invSort.dir === 'asc' ? 'desc' : 'asc';
+  else _invSort = { key: k, dir: k === 'name' ? 'asc' : 'desc' };
+  _invSyncSortSelect(); invGoToPage(1);
+}
+function invSortPick(v){ const [key, dir] = String(v || 'name:asc').split(':'); _invSort = { key, dir: dir || 'asc' }; invGoToPage(1); }
+function _invSyncSortSelect(){
+  const sel = document.getElementById('inv-sort'); if(!sel) return;
+  const v = `${_invSort.key}:${_invSort.dir}`;
+  if(![...sel.options].some(o => o.value === v)){
+    let o = sel.querySelector('option[data-custom]');
+    if(!o){ o = document.createElement('option'); o.dataset.custom = '1'; sel.appendChild(o); }
+    const w = _invSort.key.startsWith('wh:') ? (_invWarehouses.find(x => String(x.id) === _invSort.key.slice(3))?.name || 'مخزن') : _invSort.key;
+    o.value = v; o.textContent = `${w}: ${_invSort.dir === 'desc' ? 'الأكتر الأول' : 'الأقل الأول'}`;
+  }
+  sel.value = v;
+}
+function invWhChanged(){
+  // اختيار مخزن = «فيه ستوك» زي الأول، إلا لو انت مختار حالة رصيد
+  const m = document.getElementById('inv-wh-mode');
+  if(m && !m.value && document.getElementById('inv-filter-warehouse')?.value) m.value = 'has';
+  invGoToPage(1);
+}
+function invFiltersChanged(){ invGoToPage(1); }
+function invFiltersChangedDebounced(){ clearTimeout(_invPriceTimer); _invPriceTimer = setTimeout(() => invGoToPage(1), 350); }
+function invClearFilters(){
+  _INV_F_IDS.forEach(id => { const el = document.getElementById(id); if(el) el.value = id === 'inv-filter-status' ? 'all' : ''; });
+  const s = document.getElementById('inv-search'); if(s) s.value = '';
+  _invSort = { key: 'name', dir: 'asc' }; _invSyncSortSelect();
+  invGoToPage(1);
+}
+function _invSaveFilters(){
+  if(!_invFiltersLoaded) return;
+  try{
+    const f = {}; _INV_F_IDS.forEach(id => { f[id] = document.getElementById(id)?.value || ''; });
+    f.sort = _invSort; localStorage.setItem('inv_filters', JSON.stringify(f));
+  }catch(e){}
+}
+// قوايم الموردين والأنواع من الداتا + رجّع آخر فلاتر
+function _invFillFilterLists(){
+  const fill = (id, label, vals) => {
+    const sel = document.getElementById(id); if(!sel) return; const cur = sel.value;
+    sel.innerHTML = `<option value="">${label}</option>` + vals.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+    if(vals.includes(cur)) sel.value = cur;
+  };
+  const uniq = k => [...new Set(_invItems.map(i => i[k]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  fill('inv-vendor', '🏭 كل الموردين/البراندات', uniq('vendor'));
+  fill('inv-type', '🏷️ كل الأنواع', uniq('productType'));
+  if(!_invFiltersLoaded){
+    try{
+      const f = JSON.parse(localStorage.getItem('inv_filters') || 'null');
+      if(f){
+        _INV_F_IDS.forEach(id => { const el = document.getElementById(id); if(el && f[id] != null && [...(el.options || [{ value: f[id] }])].some(o => o.value === f[id])) el.value = f[id]; });
+        if(f.sort && f.sort.key) _invSort = f.sort;
+      }
+    }catch(e){}
+    _invFiltersLoaded = true; _invSyncSortSelect();
+  }
+}
+
 function renderInventoryTable(){
   const container = document.getElementById('inv-table-container');
   if(!container) return;
@@ -35701,9 +35789,31 @@ function renderInventoryTable(){
     items = items.filter(i => i.status === filterStatus);
   }
   
-  if(filterWh){
-    items = items.filter(i => i.levels[filterWh] && i.levels[filterWh].qty > 0);
-  }
+  // 🔎 v941: حالة الرصيد — في المخزن المختار، أو الإجمالي لو مفيش مخزن
+  const whMode = document.getElementById('inv-wh-mode')?.value || '';
+  const qOf = i => filterWh ? (i.levels[filterWh]?.qty || 0) : (i.totalQty || 0);
+  if(whMode === 'has') items = items.filter(i => qOf(i) > 0);
+  else if(whMode === 'out') items = items.filter(i => qOf(i) <= 0);
+  else if(whMode === 'neg') items = items.filter(i => filterWh ? qOf(i) < 0 : Object.values(i.levels || {}).some(l => (l.qty || 0) < 0));
+  const vend = document.getElementById('inv-vendor')?.value || '';
+  if(vend) items = items.filter(i => (i.vendor || '') === vend);
+  const ptype = document.getElementById('inv-type')?.value || '';
+  if(ptype) items = items.filter(i => (i.productType || '') === ptype);
+  const pmin = parseFloat(document.getElementById('inv-price-min')?.value), pmax = parseFloat(document.getElementById('inv-price-max')?.value);
+  if(Number.isFinite(pmin)) items = items.filter(i => Number(i.price || 0) >= pmin);
+  if(Number.isFinite(pmax)) items = items.filter(i => Number(i.price || 0) <= pmax);
+  // الترتيب
+  const { key: sk, dir: sd } = _invSort, mul = sd === 'desc' ? -1 : 1;
+  const sv = i => sk === 'total' ? (i.totalQty || 0) : sk === 'price' ? Number(i.price || 0)
+                : sk === 'value' ? (i.totalQty || 0) * Number(i.price || 0)
+                : sk.startsWith('wh:') ? (i.levels[sk.slice(3)]?.qty || 0) : null;
+  const nm = i => ((i.productTitle || '') + ' ' + (i.variantTitle || '')).toLowerCase();
+  items.sort((a, b) => {
+    if(sk === 'name') return mul * nm(a).localeCompare(nm(b));
+    const d = (sv(a) - sv(b)) * mul;
+    return d || nm(a).localeCompare(nm(b));
+  });
+  _invSaveFilters();
   
   _invFilteredItems = items;
   
@@ -35723,7 +35833,7 @@ function renderInventoryTable(){
   
   // ابني الـ columns headers
   const whCols = _invWarehouses.map(w => 
-    `<th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);min-width:90px">${escapeHtml(w.name)}</th>`
+    `<th onclick="invSortBy('wh:${w.id}')" style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);min-width:90px;cursor:pointer" title="رتّب بالمخزن ده">${escapeHtml(w.name)}${_invSortArrow('wh:' + w.id)}</th>`
   ).join('');
   
   const rows = pageItems.map(item => {
@@ -35775,10 +35885,10 @@ function renderInventoryTable(){
     <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:700px">
       <thead style="background:var(--bg)">
         <tr>
-          <th style="text-align:right;padding:10px;font-size:11px;font-weight:700;color:var(--muted)">المنتج</th>
+          <th onclick="invSortBy('name')" style="text-align:right;padding:10px;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer">المنتج${_invSortArrow('name')}</th>
           ${whCols}
-          <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:80px">الإجمالي</th>
-          <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:90px">سعر الموقع</th>
+          <th onclick="invSortBy('total')" style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:80px;cursor:pointer">الإجمالي${_invSortArrow('total')}</th>
+          <th onclick="invSortBy('price')" style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:90px;cursor:pointer">سعر الموقع${_invSortArrow('price')}</th>
           <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:100px">الحالة</th>
           <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:60px">حركة</th>
         </tr>
