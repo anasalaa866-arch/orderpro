@@ -3333,6 +3333,7 @@ tr:hover td{background:#fafbff}
           <option value="dims">📐 محتاج أبعاد</option>
           <option value="size">🗜️ محتاج حجم</option>
           <option value="frame">🖼️ محتاج مساحة بيضا</option>
+          <option value="bg">⬜ خلفية رمادي</option>
           <option value="both">📐+🗜️ محتاج الاتنين</option>
           <option value="dims_only">📐 أبعاد بس</option>
           <option value="size_only">🗜️ حجم بس</option>
@@ -3362,6 +3363,7 @@ tr:hover td{background:#fafbff}
           <label style="display:flex;gap:4px;align-items:center;cursor:pointer" title="مربع 2048×2048 بخلفية بيضا"><input type="checkbox" id="imgfix-m-dims" onchange="imgfixModesSave()"> 📐 الأبعاد</label>
           <label style="display:flex;gap:4px;align-items:center;cursor:pointer" title="ضغط JPEG — والـ PNG يتحوّل لو أصغر"><input type="checkbox" id="imgfix-m-size" onchange="imgfixModesSave()"> 🗜️ الحجم</label>
           <label style="display:flex;gap:4px;align-items:center;cursor:pointer" title="يكبّر أو يصغّر المنتج لحد نسبة الأبيض اللي في الإعدادات"><input type="checkbox" id="imgfix-m-frame" onchange="imgfixModesSave()"> 🖼️ المساحة البيضا</label>
+          <label style="display:flex;gap:4px;align-items:center;cursor:pointer" title="الخلفية الرمادي الفاتحة تبقى بيضا — المنتج نفسه مايتلمسش"><input type="checkbox" id="imgfix-m-bg" onchange="imgfixModesSave()"> ⬜ تبييض الخلفية</label>
         </span>
         <button class="btn btn-secondary" id="imgfix-fixall-btn" onclick="imgfixStartAll()" style="display:none;background:#16a34a;color:#fff">✅ ظبّط الكل</button>
       </div>
@@ -12069,7 +12071,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v948';
+const UI_BUILD = 'v950';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -23799,6 +23801,7 @@ function imgfixRender(){
   else if(needF !== 'all'){
     list = list.filter(i => { const f = _imgfixFlags(i);
       if(needF === 'frame') return f.frame;
+      if(needF === 'bg') return f.bg;
       return needF === 'dims' ? f.dims : needF === 'size' ? f.size : needF === 'frame' ? f.frame : needF === 'both' ? (f.dims && f.size)
            : needF === 'dims_only' ? (f.dims && !f.size) : needF === 'size_only' ? (f.size && !f.dims) : true; });
   }
@@ -23870,8 +23873,10 @@ function imgfixRender(){
     const _na = _f.frameNA ? `<span title="الخلفية مش بيضا سادة — المساحة مش بتتظبط" style="font-size:9.5px;color:#64748b">خلفية مش سادة</span>` : '';
     const badge = !it.scanned && it.scanned !== undefined
       ? `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;align-items:center">${_chip('⏳ لسه ما اتفحصش', '#f1f5f9', '#64748b')}${_q}</div>${_qInfo}`
+      : _f.bg && !(_f.dims || _f.size || _f.frame)
+      ? `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;align-items:center">${_chip('⬜ خلفية رمادي', '#e5e7eb', '#374151')}${_q}</div>${_qInfo}`
       : (_f.dims || _f.size || _f.frame)
-      ? `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;align-items:center">${_f.dims ? _chip('📐 أبعاد', '#fef3c7', '#92400e') : ''}${_f.size ? _chip('🗜️ حجم', '#ffedd5', '#9a3412') : ''}${_f.frame ? _chip('🖼️ مساحة', '#e0e7ff', '#3730a3') : ''}${_q}${_na}</div>${_qInfo}`
+      ? `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;align-items:center">${_f.bg ? _chip('⬜ خلفية رمادي', '#e5e7eb', '#374151') : ''}${_f.dims ? _chip('📐 أبعاد', '#fef3c7', '#92400e') : ''}${_f.size ? _chip('🗜️ حجم', '#ffedd5', '#9a3412') : ''}${_f.frame ? _chip('🖼️ مساحة', '#e0e7ff', '#3730a3') : ''}${_q}${_na}</div>${_qInfo}`
       : `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;align-items:center">${_chip('✅ متظبط', '#dcfce7', '#166534')}${_q}${_na}</div>${_qInfo}`;
     const newBadge = it._isNew
       ? `<span style="background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:6px;font-size:9px;font-weight:700;margin-right:4px">🆕 جديد</span>`
@@ -24048,19 +24053,21 @@ async function imgfixScanSelected(){
 // ═══ 🖼️ v934: أوضاع التظبيط ═══
 let _imgfixVisible = [];
 function _imgfixFlags(it){
-  if(it.scanned === false) return { dims: false, size: false, frame: false };   // 🖼️ v937: لسه ما اتفحصش
+  if(it.scanned === false) return { dims: false, size: false, frame: false, bg: false };   // 🖼️ v937: لسه ما اتفحصش
   // فحص قديم من قبل v934 مالوش أسباب → «محتاج تظبيط» = أبعاد
-  if(it.needDims == null && it.needSize == null) return { dims: !!it.needsFix, size: false, frame: false };
+  if(it.needDims == null && it.needSize == null) return { dims: !!it.needsFix, size: false, frame: false, bg: false };
   // 🖼️ v938: المساحة البيضا — null = الخلفية مش سادة (ماتتظبطش)
-  return { dims: !!it.needDims, size: !!it.needSize, frame: it.needFrame === true, frameNA: it.needFrame === null && it.scanned !== false && 'needFrame' in it };
+  return { dims: !!it.needDims, size: !!it.needSize, frame: it.needFrame === true, bg: it.needBg === true,   // ⬜ v950
+           frameNA: it.needFrame === null && it.needBg !== true && it.scanned !== false && 'needFrame' in it };
 }
 function imgfixModes(){
   return { dims: !!document.getElementById('imgfix-m-dims')?.checked,
            size: !!document.getElementById('imgfix-m-size')?.checked,
-           frame: !!document.getElementById('imgfix-m-frame')?.checked };
+           frame: !!document.getElementById('imgfix-m-frame')?.checked,
+           bg: !!document.getElementById('imgfix-m-bg')?.checked };
 }
 function _imgfixModesLabel(m){
-  return [m.dims && '📐 الأبعاد', m.size && '🗜️ الحجم', m.frame && '🖼️ المساحة البيضا'].filter(Boolean).join(' + ');
+  return [m.bg && '⬜ تبييض الخلفية', m.dims && '📐 الأبعاد', m.size && '🗜️ الحجم', m.frame && '🖼️ المساحة البيضا'].filter(Boolean).join(' + ');
 }
 function imgfixModesSave(){
   try{ localStorage.setItem('imgfix_modes', JSON.stringify(imgfixModes())); }catch(e){}
@@ -24070,17 +24077,17 @@ function imgfixModesLoad(){
   let m = { dims: true, size: true, frame: false };
   try{ const x = JSON.parse(localStorage.getItem('imgfix_modes') || 'null'); if(x && typeof x === 'object') m = x; }catch(e){}
   const set = (id, v) => { const el = document.getElementById(id); if(el) el.checked = !!v; };
-  set('imgfix-m-dims', m.dims); set('imgfix-m-size', m.size); set('imgfix-m-frame', m.frame);
+  set('imgfix-m-dims', m.dims); set('imgfix-m-size', m.size); set('imgfix-m-frame', m.frame); set('imgfix-m-bg', m.bg);
 }
 // المنتج محتاج شغل في الأوضاع المختارة؟ (v938: المساحة البيضا بقت بتتعرف من الفحص)
 function _imgfixNeeds(it){
   const m = imgfixModes(), f = _imgfixFlags(it);
   if(!it.mediaGid) return false;
-  return (m.dims && f.dims) || (m.size && f.size) || (m.frame && f.frame);
+  return (m.dims && f.dims) || (m.size && f.size) || (m.frame && f.frame) || (m.bg && f.bg);
 }
 async function imgfixOne(btn, item){
   const modes = imgfixModes();
-  if(!modes.dims && !modes.size && !modes.frame){ toast('اختار يتظبّط إيه الأول'); return; }
+  if(!modes.dims && !modes.size && !modes.frame && !modes.bg){ toast('اختار يتظبّط إيه الأول'); return; }
   if(!confirm(`ظبّط صور "${item.title}"؟\n${_imgfixModesLabel(modes)}`)) return;
   btn.disabled = true; btn.textContent = '⏳';
   try {
@@ -24108,7 +24115,7 @@ async function imgfixOne(btn, item){
 
 async function imgfixStartAll(){
   const modes = imgfixModes();
-  if(!modes.dims && !modes.size && !modes.frame){ toast('اختار يتظبّط إيه الأول'); return; }
+  if(!modes.dims && !modes.size && !modes.frame && !modes.bg){ toast('اختار يتظبّط إيه الأول'); return; }
   // 🖼️ v937: المحدد لو فيه، وإلا اللي ظاهر ومحتاج
   const needed = _imgfixTargets();
   if(!needed.length){ toast(_imgfixSel.size ? 'المحدد مفيهوش صور' : 'مفيش صور محتاجة تظبيط — حدد اللي عايزه'); return; }
