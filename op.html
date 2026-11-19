@@ -12063,7 +12063,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v942';
+const UI_BUILD = 'v943';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -23987,8 +23987,17 @@ function _imgfixMerge(scannedItems){
 }
 // 🔍 v942: فحص الجودة — المحدد لو فيه، وإلا اللي ظاهر بالفلاتر
 async function imgfixQualityClick(){
-  const list = (_imgfixSel.size ? _imgfixItems.filter(i => _imgfixSel.has(i.productGid)) : _imgfixVisible).filter(i => i.hasImage !== false && i.imageUrl);
-  if(!list.length){ toast('مفيش صور تتفحص'); return; }
+  // 🐛 v943: فلتر «جودة ضعيفة» نتيجة الفحص نفسه — قبل أول فحص بيبقى فاضي، فالزرار
+  //   كان بيقول «مفيش صور تتفحص». مع الفلتر ده (أو لو اللي ظاهر فاضي) نفحص كل المنتجات
+  //   (بالبحث لو فيه)، وأي فلتر تاني بيتاخد زي ما هو.
+  const needF = document.getElementById('imgfix-need-filter')?.value || 'all';
+  const q = (document.getElementById('imgfix-search')?.value || '').trim().toLowerCase();
+  let base = _imgfixVisible;
+  if(!_imgfixSel.size && (needF === 'weak' || !_imgfixVisible.length)){
+    base = q ? _imgfixItems.filter(i => matchTokens(i.title, q)) : _imgfixItems;
+  }
+  const list = (_imgfixSel.size ? _imgfixItems.filter(i => _imgfixSel.has(i.productGid)) : base).filter(i => i.hasImage !== false && i.imageUrl);
+  if(!list.length){ toast('مفيش صور تتفحص — حدد منتجات أو غيّر البحث'); return; }
   if(!_imgfixSel.size && !confirm(`فحص جودة ${list.length} منتج بينزّل كل صورة بحجمها الكامل وبياخد وقت. نبدأ؟\n(لو عايز منتجات معيّنة، حددها الأول)`)) return;
   const btn = document.getElementById('imgfix-q-btn'), prog = document.getElementById('imgfix-scan-progress');
   if(btn){ btn.disabled = true; btn.textContent = '⏳ بيفحص الجودة...'; }
