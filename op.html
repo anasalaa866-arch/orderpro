@@ -7769,12 +7769,14 @@ tr:hover td{background:#fafbff}
       <span style="color:var(--muted)">لـ</span><input type="date" id="tz-to" onchange="tzLoad()" style="padding:6px;border:1px solid var(--border);border-radius:8px">
       <select id="tz-tre" onchange="tzLoad()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"><option value="">🏦 كل الخزن</option></select>
       <select id="tz-cat" onchange="tzRender()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"><option value="">🏷️ كل الأقسام</option></select>
-      <select id="tz-st" onchange="tzRender()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
+      <select id="tz-st" onchange="tzStChanged()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
         <option value="todo">⏳ لسه (جديدة + فشلت)</option><option value="">الكل</option>
+        <option value="q:manager">⏳ عند المدير</option><option value="q:replied">💬 المدير ردّ</option>
         <option value="new">جديدة</option><option value="failed">❌ فشلت</option><option value="posted">✅ اتنفّذت</option>
         <option value="manual">✍️ يدوي</option><option value="skipped">🚫 اتجاهلت</option><option value="before_cutoff">قبل البداية</option></select>
       <span id="tz-counts" style="color:var(--muted)"></span>
-      <button class="btn btn-sm btn-primary" id="tz-bulk" onclick="tzPostSelected()" style="margin-inline-start:auto;display:none">⚡ نفّذ المحدد</button>
+      <button class="btn btn-sm btn-ghost" id="tz-fq-bulk" onclick="fqSend('tz', [...document.querySelectorAll('.tz-sel:checked')].map(c => c.value))" style="margin-inline-start:auto;display:none;border:1px solid #f59e0b;color:#92400e">📨 ابعت للمدير</button>
+      <button class="btn btn-sm btn-primary" id="tz-bulk" onclick="tzPostSelected()" style="display:none">⚡ نفّذ المحدد</button>
     </div>
     <div id="tz-body" style="padding:10px 16px;overflow-x:auto"><div style="color:var(--muted);padding:20px;text-align:center">⏳</div></div>
   </div>
@@ -12067,7 +12069,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v946';
+const UI_BUILD = 'v947';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -29107,7 +29109,7 @@ function getFirstAvailablePage(user){
     if(userPages.includes(page)) return page;
   }
   
-  return userPages.find(p => p !== 'checks-void-approve') || null; // fallback لأول صفحة متاحة (مش الصلاحيات)
+  return userPages.find(p => p !== 'checks-void-approve' && p !== 'fin-manager-reply') || null; // fallback لأول صفحة متاحة (مش الصلاحيات)
 }
 
 async function doLogout(){
@@ -29243,6 +29245,8 @@ function buildPermissionsGrid(checkedPages){
   }
   // 🗑️ v921: صلاحية مش صفحة — مين يوافق/يرفض الشيكات الهالكة
   items.push({ page: 'checks-void-approve', icon: '🛡️', label: 'موافقة الشيكات الهالكة' });
+  // 📨 v947: مين يردّ على أسئلة المحاسب (كشف البنك / الخزنة ← زوهو)
+  items.push({ page: 'fin-manager-reply', icon: '👔', label: 'الرد على المحاسب (البنك/الخزنة)' });
 
   grid.innerHTML = items.map(it => {
     const isChecked = checkedPages.includes(it.page) ? 'checked' : '';
@@ -30621,15 +30625,90 @@ async function tzMeta(force){
   if(_tzRows.length) tzRender();
   return _tzMeta;
 }
+// ═══ 📨 v947: أسئلة المحاسب للمدير — مشتركة بين كشف البنك و«الخزنة ← زوهو» ═══
+const _FQ_ST = { manager: ['⏳ عند المدير', '#92400e', '#fef3c7'], replied: ['💬 المدير ردّ', '#1e40af', '#dbeafe'] };
+function _fqIsMgrUI(){
+  const u = currentUser || {};
+  return u.role === 'admin' || u.username === 'admin' || (u.pages || []).includes('fin-manager-reply');
+}
+function _fqBadge(q){
+  if(!q) return '';
+  const s = _FQ_ST[q.state] || [q.state, '#475569', '#f1f5f9'];
+  return `<span style="font-size:10px;padding:2px 7px;border-radius:999px;color:${s[1]};background:${s[2]};white-space:nowrap;font-weight:700">${s[0]}</span>`;
+}
+function _fqThread(q, source){
+  if(!q) return '';
+  const mgr = _fqIsMgrUI();
+  const msgs = (q.msgs || []).map(m => {
+    const isM = m.role === 'mgr';
+    return `<div style="margin:4px 0;padding:6px 9px;border-radius:8px;max-width:640px;
+        background:${isM ? '#eff6ff' : '#fff'};border:1px solid ${isM ? '#bfdbfe' : 'var(--border)'};${isM ? 'margin-inline-start:28px' : ''}">
+      <div style="font-size:10.5px;color:var(--muted)">${isM ? '👔' : '🧾'} <b>${escapeHtml(m.author || '')}</b> · ${escapeHtml(m.at || '')}</div>
+      <div style="font-size:12.5px;white-space:pre-wrap">${escapeHtml(m.body || '')}</div></div>`;
+  }).join('');
+  const inp = `id="fq-in-${q.id}" rows="1" style="flex:1;min-width:200px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px"`;
+  let act = '';
+  if(mgr && q.state === 'manager'){
+    act = `<textarea ${inp} placeholder="ملاحظتك للمحاسب..."></textarea>
+      <button class="btn btn-xs btn-primary" onclick="fqReply(${q.id},'${source}')">👔 ردّ</button>`;
+  }else{
+    act = `<textarea ${inp} placeholder="${q.state === 'replied' ? 'ردّ على المدير لو محتاج توضيح...' : 'زوّد كلام للمدير...'}"></textarea>
+      <button class="btn btn-xs btn-ghost" onclick="fqMsg(${q.id},'${source}')">📨 ابعت للمدير</button>`;
+  }
+  act += `<button class="btn btn-xs btn-ghost" onclick="fqClose(${q.id},'${source}')" title="بيتقفل لوحده لما الحركة تتنفّذ">✅ خلاص</button>`;
+  return `<div style="border-inline-start:3px solid ${q.state === 'replied' ? '#3b82f6' : '#f59e0b'};padding:6px 10px;margin:4px 0 2px">
+    ${_fqBadge(q)} ${msgs}
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:5px">${act}</div></div>`;
+}
+function _fqReload(source){ source === 'bank' ? bkLoad() : tzLoad(); }
+async function fqSend(source, ids){
+  ids = (ids || []).map(String).filter(Boolean);
+  if(!ids.length) return toast('حدد حركات الأول');
+  const text = prompt(`هتبعت ${ids.length} حركة للمدير.\nسؤالك أو ملاحظتك (اختياري):`, '');
+  if(text === null) return;
+  try{
+    const r = await apiFetch('/api/finq/send', 'POST', { source, ids, text });
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    toast(`📨 اتبعت ${r.n} للمدير` + (r.telegram_error ? ` · ⚠️ تيليجرام: ${r.telegram_error}` : ''));
+    _fqReload(source);
+  }catch(e){ toast('❌ ' + e.message); }
+}
+async function _fqPost(path, body, source, okMsg){
+  try{
+    const r = await apiFetch(path, 'POST', body);
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    toast(okMsg); _fqReload(source);
+  }catch(e){ toast('❌ ' + e.message); }
+}
+function fqReply(id, source){
+  const t = ($('fq-in-' + id)?.value || '').trim(); if(!t) return toast('اكتب الملاحظة');
+  _fqPost(`/api/finq/${id}/reply`, { text: t }, source, '✅ الرد وصل للمحاسب');
+}
+function fqMsg(id, source){
+  const t = ($('fq-in-' + id)?.value || '').trim(); if(!t) return toast('اكتب الرسالة');
+  _fqPost(`/api/finq/${id}/msg`, { text: t }, source, '📨 اتبعت للمدير');
+}
+function fqClose(id, source){
+  if(!confirm('تقفل السؤال ده؟ (بيتقفل لوحده لما الحركة تتنفّذ)')) return;
+  _fqPost(`/api/finq/${id}/close`, {}, source, '✅ اتقفل');
+}
+
 async function tzLoad(){
   const body = $('tz-body'); if(!body) return;
   body.innerHTML = '<div style="color:var(--muted);padding:20px;text-align:center">⏳ جاري التحميل...</div>';
   const q = new URLSearchParams({ from: $('tz-from')?.value || '', to: $('tz-to')?.value || '' });
   if($('tz-tre')?.value) q.set('treasury', $('tz-tre').value);
+  const _st = $('tz-st')?.value || '';
+  if(_st.startsWith('q:')) q.set('finq', _st.slice(2));   // 📨 v947
   try{
     const r = await apiFetch('/api/tz/tx?' + q.toString());
     if(!r?.ok) throw new Error(r?.error || 'فشل التحميل');
     _tzRows = r.rows || [];
+    // 📨 v947: العدادات على اختيارات «عند المدير» / «المدير ردّ»
+    const fc = r.fq_counts || {};
+    const om = document.querySelector('#tz-st option[value="q:manager"]'), orp = document.querySelector('#tz-st option[value="q:replied"]');
+    if(om) om.textContent = `⏳ عند المدير${fc.manager ? ` (${fc.manager})` : ''}`;
+    if(orp) orp.textContent = `💬 المدير ردّ${fc.replied ? ` (${fc.replied})` : ''}`;
     if($('tz-cutoff-lbl')) $('tz-cutoff-lbl').textContent = r.cutoff ? '(' + r.cutoff + ')' : '(مش متحدد)';
     const cats = [...new Set(_tzRows.map(x => x.category).filter(Boolean))].sort();
     const cs = $('tz-cat'), cur = cs.value;
@@ -30638,8 +30717,15 @@ async function tzLoad(){
     tzRender();
   }catch(e){ body.innerHTML = `<div style="color:var(--danger);padding:20px">❌ ${escapeHtml(e.message)}</div>`; }
 }
+// 📨 v947: الدخول/الخروج من «عند المدير» محتاج تحميل جديد (من غير فلتر تاريخ)
+let _tzLastQ = false;
+function tzStChanged(){
+  const isQ = ($('tz-st')?.value || '').startsWith('q:');
+  if(isQ || _tzLastQ){ _tzLastQ = isQ; tzLoad(); } else tzRender();
+}
 function _tzFiltered(){
   const st = $('tz-st')?.value ?? 'todo', cat = $('tz-cat')?.value || '';
+  if(st.startsWith('q:')) return _tzRows.filter(x => !cat || x.category === cat);
   return _tzRows.filter(x => (!cat || x.category === cat) &&
     (st === '' ? true : st === 'todo' ? (x.status === 'new' || x.status === 'failed') : x.status === st));
 }
@@ -30696,8 +30782,8 @@ function tzRender(){
            <button class="btn btn-xs btn-ghost" onclick="tzMark('${x.id}','skipped')" title="مش لزوهو">🚫</button>`
         : (x.status === 'skipped' || x.status === 'manual') ? `<button class="btn btn-xs btn-ghost" onclick="tzMark('${x.id}','new')">↩️ رجّعها</button>` : '';
       return `<tr id="tz-r-${x.id}" style="border-bottom:1px solid var(--border)">
-        <td style="padding:6px;text-align:center">${todo && p && p.ready ? `<input type="checkbox" class="tz-sel" value="${escapeHtml(x.id)}" onchange="tzSelChanged()">` : ''}</td>
-        <td style="padding:6px;white-space:nowrap">${x.date}</td>
+        <td style="padding:6px;text-align:center">${todo ? `<input type="checkbox" class="tz-sel" data-ready="${p && p.ready ? 1 : 0}" value="${escapeHtml(x.id)}" onchange="tzSelChanged()">` : ''}</td>
+        <td style="padding:6px;white-space:nowrap">${x.date}${x.finq ? '<div>' + _fqBadge(x.finq) + '</div>' : ''}</td>
         <td style="padding:6px;font-size:11px">${escapeHtml(x.treasury_name || '')}</td>
         <td style="padding:6px">${escapeHtml(x.reason || '')}</td>
         <td style="padding:6px;text-align:center"><span style="font-size:10.5px;padding:2px 8px;border-radius:999px;background:rgba(37,99,235,.09);color:#2563eb">${escapeHtml(x.category || '—')}</span></td>
@@ -30705,14 +30791,18 @@ function tzRender(){
         <td style="padding:6px;text-align:center;font-weight:700;color:#dc2626">${x.is_in ? '—' : f(x.amount)}</td>
         <td style="padding:6px">${plan}</td>
         <td style="padding:6px;text-align:center"><span style="font-size:10.5px;padding:2px 8px;border-radius:999px;color:${s[1]};background:${s[2]};white-space:nowrap">${s[0]}</span></td>
-        <td style="padding:6px;white-space:nowrap">${act}</td></tr>`;
+        <td style="padding:6px;white-space:nowrap">${act}</td></tr>
+        ${x.finq ? `<tr style="background:var(--bg)"><td></td><td colspan="9" style="padding:0 6px 6px">${_fqThread(x.finq, 'tz')}</td></tr>` : ''}`;
     }).join('')}</tbody></table>`;
   tzSelChanged();
 }
 function tzSelAll(on){ document.querySelectorAll('.tz-sel').forEach(c => c.checked = on); tzSelChanged(); }
 function tzSelChanged(){
-  const n = document.querySelectorAll('.tz-sel:checked').length, b = $('tz-bulk');
+  // 📨 v947: التحديد على كل اللي لسه — التنفيذ على الجاهز بس، والإرسال للمدير على الكل
+  const all = document.querySelectorAll('.tz-sel:checked').length;
+  const n = document.querySelectorAll('.tz-sel[data-ready="1"]:checked').length, b = $('tz-bulk');
   if(b){ b.style.display = n ? '' : 'none'; b.textContent = `⚡ نفّذ المحدد (${n})`; }
+  const fb = $('tz-fq-bulk'); if(fb){ fb.style.display = all ? '' : 'none'; fb.textContent = `📨 ابعت للمدير (${all})`; }
 }
 async function tzPost(id){
   const x = _tzRows.find(r => String(r.id) === String(id)); if(!x) return;
@@ -30723,7 +30813,7 @@ async function tzPost(id){
   }catch(e){ toast('❌ ' + e.message); tzLoad(); }
 }
 async function tzPostSelected(){
-  const ids = [...document.querySelectorAll('.tz-sel:checked')].map(c => c.value);
+  const ids = [...document.querySelectorAll('.tz-sel[data-ready="1"]:checked')].map(c => c.value);
   if(!ids.length) return;
   if(!confirm(`تنفيذ ${ids.length} حركة في زوهو؟`)) return;
   const items = ids.map(id => ({ id, body: _tzBody(_tzRows.find(r => String(r.id) === id) || {}) }));
@@ -68323,14 +68413,18 @@ async function bkLoad(page){
   box.innerHTML = '<span style="color:var(--muted)">⏳ ...</span>';
   try{
     const f = _BK.filter;
-    const d = await apiFetch(`/api/bank/tx?status=${encodeURIComponent(f.status)}`
-      + `&kind=${encodeURIComponent(f.kind)}&q=${encodeURIComponent(f.q)}&page=${_BK.page}`);
+    const _isQ = String(f.status || '').startsWith('q:');   // 📨 v947
+    const d = await apiFetch(`/api/bank/tx?status=${encodeURIComponent(_isQ ? '' : f.status)}`
+      + `&kind=${encodeURIComponent(f.kind)}&q=${encodeURIComponent(f.q)}&page=${_BK.page}`
+      + (_isQ ? `&finq=${f.status.slice(2)}` : ''));
     if(d?.error) throw new Error(d.error);
     _BK.rows = d.rows; _BK.kinds = d.kinds;
     const n = v => Number(v||0).toLocaleString('ar-EG');
     const tot = {}; for(const t of d.totals) tot[t.status] = t;
-    const tabs = [['new','🆕 محتاجة مراجعة'],['posted','✅ اتنفّذت'],
-                  ['skipped','🚫 متجاهلة'],['failed','❌ فشلت'],['','الكل']];
+    const tabs = [['new','🆕 محتاجة مراجعة'],['q:manager','⏳ عند المدير'],['q:replied','💬 المدير ردّ'],
+                  ['posted','✅ اتنفّذت'],['skipped','🚫 متجاهلة'],['failed','❌ فشلت'],['','الكل']];
+    const fqc = d.fq_counts || {}; tot['q:manager'] = { n: fqc.manager || 0 }; tot['q:replied'] = { n: fqc.replied || 0 };
+    const _fq = d.finq || {};
 
     box.innerHTML = `
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
@@ -68358,18 +68452,19 @@ async function bkLoad(page){
       ${d.pending_by_kind.length ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">
         المحتاج مراجعة: ${d.pending_by_kind.map(x =>
           `${escapeHtml(d.kinds[x.kind]||x.kind)} <b>${x.n}</b>`).join(' · ')}</div>` : ''}
-      ${f.status==='new' && d.rows.length ? `<div id="bk-bulk" style="display:none;position:sticky;top:0;z-index:5;
+      ${(f.status==='new' || _isQ) && d.rows.length ? `<div id="bk-bulk" style="display:none;position:sticky;top:0;z-index:5;
         background:var(--card);border:2px solid var(--primary);border-radius:10px;padding:9px 12px;
         margin-bottom:10px;align-items:center;gap:10px;flex-wrap:wrap">
         <b id="bk-bulk-n" style="font-size:13px"></b>
         <button class="btn btn-sm btn-primary" onclick="bkPostBatch()">⚡ نفّذ المحدد في Zoho</button>
+        <button class="btn btn-sm btn-ghost" style="border:1px solid #f59e0b;color:#92400e" onclick="fqSend('bank', bkPicked())">📨 ابعت للمدير</button>
         <button class="btn btn-sm btn-ghost" onclick="bkToggleAll(false)">شيل التحديد</button>
         <span id="bk-bulk-note" style="font-size:11.5px;color:var(--muted)"></span>
       </div>` : ''}
       ${!d.rows.length ? '<div style="padding:20px;text-align:center;color:var(--muted)">مفيش حركات</div>' : `
       <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="background:var(--bg)">
-          <th style="padding:7px;width:28px">${f.status==='new'?'<input type="checkbox" id="bk-all" onchange="bkToggleAll(this.checked)" title="حدد الكل">':''}</th>
+          <th style="padding:7px;width:28px">${f.status==='new'||_isQ?'<input type="checkbox" id="bk-all" onchange="bkToggleAll(this.checked)" title="حدد الكل">':''}</th>
           <th style="padding:7px">التاريخ</th><th style="padding:7px">المبلغ</th>
           <th style="padding:7px">النوع</th><th style="padding:7px">المرجع</th>
           <th style="padding:7px"></th></tr></thead>
@@ -68378,7 +68473,7 @@ async function bkLoad(page){
             <td style="padding:7px;text-align:center">${x.status==='new'
               ? `<input type="checkbox" class="bk-pick" data-id="${x.id}" onchange="bkPickChanged()">` : ''}</td>
             <td style="padding:7px;text-align:center;direction:ltr;white-space:nowrap">
-              ${escapeHtml(x.value_date)}
+              ${escapeHtml(x.value_date)}${_fq[x.id] ? '<div style="direction:rtl">' + _fqBadge(_fq[x.id]) + '</div>' : ''}
               ${x.late ? '<div style="font-size:9.5px;color:#92400e" title="ظهرت في كشف أحدث من تاريخها">⏰ متأخرة</div>' : ''}</td>
             <td style="padding:7px;text-align:center;font-weight:800;
                 color:${x.dc==='C'?'#16a34a':'#dc2626'};white-space:nowrap">
@@ -68405,12 +68500,15 @@ async function bkLoad(page){
           </tr>
           ${x.status==='new' ? `<tr id="bks-${x.id}" style="background:var(--bg)">
             <td colspan="6" style="padding:0 7px 7px 7px"><div id="bksg-${x.id}"
-              style="font-size:11.5px;color:var(--muted)">⏳</div></td></tr>` : ''}`).join('')}</tbody></table></div>
+              style="font-size:11.5px;color:var(--muted)">⏳</div></td></tr>` : ''}
+          ${_fq[x.id] ? `<tr id="bkq-${x.id}" style="background:var(--bg)"><td></td>
+            <td colspan="5" style="padding:0 7px 7px 7px">${_fqThread(_fq[x.id], 'bank')}</td></tr>` : ''}`).join('')}</tbody></table></div>
       <div style="display:flex;gap:8px;justify-content:center;margin-top:10px">
         ${_BK.page>0?`<button class="btn btn-sm btn-ghost" onclick="bkLoad(${_BK.page-1})">السابق</button>`:''}
         ${d.rows.length===60?`<button class="btn btn-sm btn-ghost" onclick="bkLoad(${_BK.page+1})">التالي</button>`:''}
       </div>`}`;
-    if(f.status==='new' && d.rows.length) bkSuggestAll(d.rows.map(x=>x.id));
+    const _newIds = d.rows.filter(x => x.status === 'new').map(x => x.id);
+    if((f.status==='new' || _isQ) && _newIds.length) bkSuggestAll(_newIds);
   }catch(e){ box.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
 }
 
