@@ -12071,7 +12071,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v951';
+const UI_BUILD = 'v952';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -22724,7 +22724,7 @@ function renderCombinedReport(payables, checks, year){
       date: c.date,
       amount: parseFloat(c.amount || 0),
       status: c.status, // pending or done
-      label: 'شيك ' + (c.num || '') + ' - ' + (c.payee || ''),
+      label: 'شيك ' + (chkNumShow(c) || '') + ' - ' + (c.payee || ''),
       payee: c.payee,
       category: 'check',
       num: c.num
@@ -27668,7 +27668,7 @@ function renderChecksPage(){
     if(fromV) list=list.filter(c=>c.date && c.date>=fromV);
     if(toV) list=list.filter(c=>c.date && c.date<=toV);
   }
-  if(q)list=list.filter(c=>(c.num+c.payee+(c.invoice||'')).toLowerCase().includes(q));
+  if(q)list=list.filter(c=>(chkNumShow(c)+' '+c.num+c.payee+(c.invoice||'')).toLowerCase().includes(q)||(/^\d{3,}$/.test(q)&&_chkNorm(c.num).includes(_chkNorm(q))));
   list.sort((a,b)=>new Date(a.date)-new Date(b.date));
 
   // 🆕 v250: الأرقام ديناميكية - من الـ filtered list
@@ -27708,7 +27708,7 @@ function renderChecksPage(){
     const sp=_chkIsSpoiled(c);   // 🗑️ v921
     if(sp) return _chkSpoiledRow(c, book);
     return`<tr style="${chkIsOverdue(c)?'background:#fff5f5':''}${c.status==='void'?'background:#f3f4f6;opacity:.6':''}">
-      <td><strong>${c.num}</strong></td>
+      <td><strong style="direction:ltr;display:inline-block">${escapeHtml(chkNumShow(c))}</strong></td>
       <td><strong>${c.payee}</strong>${c.note?`<br><span style="font-size:10px;color:var(--muted)">${c.note}</span>`:''}</td>
       <td style="font-weight:700;font-size:14px">${chkFmtAmount(c.amount)} ج</td>
       <td>${chkFmtDate(c.date)} ${dayLbl}</td>
@@ -27785,7 +27785,7 @@ function getFilteredChkList(){
     if(fromV) list=list.filter(c=>c.date && c.date>=fromV);
     if(toV) list=list.filter(c=>c.date && c.date<=toV);
   }
-  if(q)list=list.filter(c=>(c.num+c.payee+(c.invoice||'')).toLowerCase().includes(q));
+  if(q)list=list.filter(c=>(chkNumShow(c)+' '+c.num+c.payee+(c.invoice||'')).toLowerCase().includes(q)||(/^\d{3,}$/.test(q)&&_chkNorm(c.num).includes(_chkNorm(q))));
   list.sort((a,b)=>new Date(a.date)-new Date(b.date));
   return list;
 }
@@ -27881,7 +27881,7 @@ function exportChecksExcel(){
   const rows=list.map((c,i)=>{
     const book=chkBooks.find(b=>b.id===c.bookId);
     const status=c.status==='done'?'مصروف':chkIsOverdue(c)?'متأخر':'لم يُصرف';
-    return [i+1, c.num, c.payee||'', Number(c.amount)||0,
+    return [i+1, chkNumShow(c), c.payee||'', Number(c.amount)||0,
       c.date||'', book?book.name:'', c.invoice||'', status, c.note||''];
   });
 
@@ -27994,13 +27994,15 @@ async function openEditChk(id){
   const numSel=$('chk-num-sel');
   if(numSel){
     // أضف الرقم الحالي لو مش موجود في القائمة
-    const exists=[...numSel.options].some(o=>o.value==c.num);
-    if(!exists && c.num){
+    // 0️⃣ v952: الرقم بأصفاره — شيك قديم محفوظ من غير صفر يتعرض ويتحفظ صح
+    const shown=chkNumShow(c);
+    const hit=[...numSel.options].find(o=>o.value&&_chkNorm(o.value)===_chkNorm(c.num));
+    if(!hit && c.num){
       const opt=document.createElement('option');
-      opt.value=c.num;opt.textContent=c.num;
+      opt.value=shown;opt.textContent=shown;
       numSel.appendChild(opt);
     }
-    numSel.value=c.num||'';
+    numSel.value=hit?hit.value:(shown||'');
   }
 
   // المورد — حدد في select أو اكتب يدوي
@@ -28597,7 +28599,17 @@ async function diagnoseCheckBooks(){
 //   وأي مقارنة بتتم من غير الأصفار — «0012345» و«12345» نفس الشيك.
 function _chkDigits(n){ return String(n == null ? '' : n).replace(/\D/g, ''); }
 function _chkNorm(n){ return _chkDigits(n).replace(/^0+/, ''); }
-function _chkBookPad(b){ return (b && Number(b.padLen)) || 0; }
+function _chkBookPad(b){
+  if(!b) return 0;
+  if(Number(b.padLen)) return Number(b.padLen);
+  // 0️⃣ v952: دفتر قديم من قبل ما نحفظ عدد الخانات — خد خانات دفتر تاني من نفس البنك
+  //   بنفس طول الرقم أو أطول بخانة (الصفر اللي وقع). غير كده من غير تصفير.
+  const len = _chkDigits(b.firstNum).length;
+  const sib = (typeof chkBooks !== 'undefined' ? chkBooks : [])
+    .filter(x => x !== b && Number(x.padLen) && (!b.bank || !x.bank || x.bank === b.bank))
+    .map(x => Number(x.padLen)).filter(p => p === len || p === len + 1);
+  return sib.length ? Math.max(...sib) : 0;
+}
 function _chkPadNum(n, b){
   const d = _chkDigits(n); if(!d) return String(n == null ? '' : n);
   return d.padStart(_chkBookPad(b), '0');
@@ -28794,7 +28806,7 @@ function exportBookExcel(bookId){
     ['#','رقم الشيك','لصالح','القيمة','الاستحقاق','فاتورة','الحالة','ملاحظات'],
     ...checks.map((c,i)=>[
       i+1,
-      c.num||'',
+      chkNumShow(c)||'',
       c.payee||'',
       Number(c.amount||0),
       c.date||'',
@@ -33951,7 +33963,7 @@ function onChkBookChange(){
   }
   const first=book.firstNum||1;
   const pages=book.pages||48;
-  const padLen=book.padLen||String(first).length; // 🆕 v429: تصفير
+  const padLen=_chkBookPad(book)||String(first).length; // 🆕 v429: تصفير · v952: الدفاتر القديمة من دفتر شقيق
   // 0️⃣ v951: المقارنة من غير الأصفار — شيك اتحفظ «12345» قديم = «0012345» في الدفتر
   const used=new Set(chkList.filter(c=>c.bookId===bookId).map(c=>_chkNorm(c.num)));
   const opts=[];
@@ -35033,7 +35045,7 @@ function openWeekChecksModal(weekNum){
       : '';
     return `
       <tr style="background:${bg};border-bottom:1px solid var(--border)">
-        <td style="padding:8px;font-weight:700">${c.num || '—'}</td>
+        <td style="padding:8px;font-weight:700;direction:ltr;text-align:right">${escapeHtml(chkNumShow(c) || '—')}</td>
         <td style="padding:8px">
           <strong>${escapeHtml(c.payee || '—')}</strong>
           ${c.note ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(c.note)}</div>` : ''}
@@ -35198,7 +35210,7 @@ function openMonthChecksModal(monthNum, yearNum){
       : '';
     return `
       <tr style="background:${bg};border-bottom:1px solid var(--border)">
-        <td style="padding:8px;font-weight:700">${c.num || '—'}</td>
+        <td style="padding:8px;font-weight:700;direction:ltr;text-align:right">${escapeHtml(chkNumShow(c) || '—')}</td>
         <td style="padding:8px">
           <strong>${escapeHtml(c.payee || '—')}</strong>
           ${c.note ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(c.note)}</div>` : ''}
@@ -68811,7 +68823,7 @@ async function bkRow(id){
          ${d.items.map(c => `<label style="display:flex;gap:8px;align-items:center;padding:8px;
             border:1px solid ${c.amount_ok?'#86efac':'var(--border)'};border-radius:8px;margin-bottom:5px;cursor:pointer">
            <input type="radio" name="bk-pick" value="${escapeHtml(c.id)}" ${c.amount_ok?'checked':''}>
-           <span style="flex:1"><b>${escapeHtml(c.num)}</b> · ${escapeHtml(c.payee||'')}
+           <span style="flex:1"><b style="direction:ltr;display:inline-block">${escapeHtml(chkNumShow({ num: c.num, bookId: ((typeof chkBooks!=='undefined'?chkBooks:[]).find(b=>b.name===c.book)||{}).id }))}</b> · ${escapeHtml(c.payee||'')}
              <div style="font-size:11px;color:var(--muted)">${n(c.amount)} ج · ${escapeHtml(c.due||'')}
                · ${escapeHtml(c.how)} ${c.amount_ok?'· <span style="color:#166534">المبلغ مطابق</span>':'· <span style="color:#dc2626">المبلغ مختلف</span>'}
                ${c.status==='done'?'· <span style="color:#92400e">متعلّم مصروف قبل كده</span>':''}</div></span>
