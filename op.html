@@ -2019,6 +2019,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="stk-report" onclick="goPage(this,'stk-report')"><span class="ni-icon">📋</span><span class="ni-label">تقرير الجرد</span></div>
         <div class="ni" data-p="transfers" onclick="goPage(this,'transfers')"><span class="ni-icon">🔄</span><span class="ni-label">تحويلات المخازن</span><span class="nbadge" id="nb-transfers" style="background:var(--warn)">0</span></div>
         <div class="ni" data-p="shopify-transfers" onclick="goPage(this,'shopify-transfers')"><span class="ni-icon">🚚</span><span class="ni-label">ترانسفيرات شوبيفاي</span></div>
+        <div class="ni" data-p="abandoned" onclick="goPage(this,'abandoned')"><span class="ni-icon">🛒</span><span class="ni-label">سلات متسابة</span></div>
         <div class="ni" data-p="transfer-suggestions" onclick="goPage(this,'transfer-suggestions')"><span class="ni-icon">🧠</span><span class="ni-label">ذكاء التحويلات</span><span class="nbadge" id="nb-transfer-suggestions" style="background:var(--danger)"></span></div>
         <div class="ni" data-p="purchase-suggestions" onclick="goPage(this,'purchase-suggestions')"><span class="ni-icon">🛒</span><span class="ni-label">ذكاء الشراء</span><span class="nbadge" id="nb-purchase-suggestions" style="background:var(--danger)"></span></div>
         <div class="ni" data-p="sales-velocity" onclick="goPage(this,'sales-velocity')"><span class="ni-icon">📊</span><span class="ni-label">سرعة المبيعات</span></div>
@@ -7725,6 +7726,31 @@ tr:hover td{background:#fafbff}
     </div>
   </div>
 </div>
+<div class="page" id="page-abandoned">
+  <!-- 🛒 v955: السلات المتسابة من شوبيفاي -->
+  <div class="card" style="margin-bottom:16px">
+    <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span style="font-weight:900">🛒 سلات متسابة</span>
+      <span style="color:var(--muted);font-size:12px" id="ac-sub"></span>
+      <button class="btn btn-sm btn-ghost" style="margin-inline-start:auto" onclick="acSyncNow()">🔄 مزامنة دلوقتي</button>
+    </div>
+    <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px">
+      <input id="ac-q" type="search" placeholder="🔎 اسم / تليفون / صنف..." oninput="acRender()"
+             style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
+      <span style="color:var(--muted)">من</span><input type="date" id="ac-from" onchange="acLoad()" style="padding:6px;border:1px solid var(--border);border-radius:8px">
+      <span style="color:var(--muted)">لـ</span><input type="date" id="ac-to" onchange="acLoad()" style="padding:6px;border:1px solid var(--border);border-radius:8px">
+      <select id="ac-st" onchange="acRender()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
+        <option value="todo">📋 محتاجة متابعة</option><option value="open">🆕 لسه</option><option value="contacted">💬 اتكلّم</option>
+        <option value="no_answer">📵 مردّش</option><option value="not_interested">🚫 مش مهتم</option><option value="recovered">✅ اترجعت</option><option value="">الكل</option>
+      </select>
+      <span style="color:var(--muted)">من مبلغ</span><input type="number" id="ac-min" min="0" placeholder="0" oninput="acRender()" style="width:90px;padding:6px;border:1px solid var(--border);border-radius:8px">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="ac-phone" checked onchange="acRender()"> ليه تليفون بس</label>
+    </div>
+    <div id="ac-summary" style="padding:10px 16px;display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px"></div>
+  </div>
+  <div class="card"><div id="ac-list" style="overflow-x:auto"><div style="text-align:center;padding:40px;color:var(--muted)">⏳ جاري التحميل...</div></div></div>
+</div>
+
 <div class="page" id="page-shopify-transfers">
   <!-- 🚚 v933: ترانسفيرات شوبيفاي — عرض بس، بتتملى بالويب هوك -->
   <div class="card" style="margin-bottom:16px">
@@ -12066,12 +12092,12 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','shopify-transfers':'🚚 ترانسفيرات شوبيفاي','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','shopify-transfers':'🚚 ترانسفيرات شوبيفاي','abandoned':'🛒 سلات متسابة','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v954';
+const UI_BUILD = 'v955';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -30384,6 +30410,129 @@ const _tzSt = { new:['جديدة','#475569','#f1f5f9'], failed:['❌ فشلت','
                 manual:['✍️ يدوي','#1e40af','#dbeafe'], skipped:['🚫 اتجاهلت','#6b7280','#f3f4f6'],
                 before_cutoff:['قبل البداية','#6b7280','#f3f4f6'], posting:['⏳','#92400e','#fef3c7'] };
 function _tzToday(off){ return new Date(Date.now() + (off||0) * 86400000).toLocaleDateString('en-CA', { timeZone:'Africa/Cairo' }); }
+// ═══ 🛒 v955: السلات المتسابة ═══
+let _acRows = [], _acTpl = '', _acPoll = null;
+const _AC_ST = {
+  open:           ['🆕 لسه',      '#f1f5f9', '#475569'],
+  contacted:      ['💬 اتكلّم',    '#dbeafe', '#1e40af'],
+  no_answer:      ['📵 مردّش',     '#fef3c7', '#92400e'],
+  not_interested: ['🚫 مش مهتم',  '#fee2e2', '#991b1b'],
+  recovered:      ['✅ اترجعت',    '#d1fae5', '#065f46'],
+};
+const _acBadge = s => { const b = _AC_ST[s] || [s, '#f1f5f9', '#475569']; return `<span class="badge" style="background:${b[1]};color:${b[2]};white-space:nowrap">${b[0]}</span>`; };
+function acOpen(){
+  if($('ac-from') && !$('ac-from').value) $('ac-from').value = _tzToday(-6);
+  if($('ac-to') && !$('ac-to').value) $('ac-to').value = _tzToday(0);
+  acLoad();
+}
+async function acLoad(){
+  const box = $('ac-list'); if(!box) return;
+  try{
+    const qs = new URLSearchParams({ from: $('ac-from')?.value || '', to: $('ac-to')?.value || '' });
+    const r = await apiFetch('/api/abandoned?' + qs);
+    _acRows = r?.rows || []; _acTpl = r?.wa_template || '';
+    const s = r?.sync || {}, sub = $('ac-sub');
+    if(sub) sub.textContent = s.running ? '⏳ بيزامن مع شوبيفاي...'
+      : (s.error ? `⚠️ ${s.error}` : (s.last ? `آخر مزامنة ${_stDate(s.last, true)}` : 'بيتزامن لوحده كل شوية')) + (r?.tg_min ? ` · تنبيه تيليجرام من ${Number(r.tg_min).toLocaleString('en-US')} ج` : '');
+    clearTimeout(_acPoll);
+    if(s.running) _acPoll = setTimeout(() => { if($('page-abandoned')?.classList.contains('active')) acLoad(); }, 4000);
+    acRender();
+  }catch(e){ box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`; }
+}
+async function acSyncNow(){
+  try{ toast('⏳ بيزامن...'); const r = await apiFetch('/api/abandoned/sync', 'POST', {}); if(r?.error) toast('⚠️ ' + r.error); else toast(`✅ اتزامن${r?.added ? ` · ${r.added} جديدة` : ''}`); acLoad(); }
+  catch(e){ toast('❌ ' + e.message); }
+}
+function _acFiltered(){
+  const st = $('ac-st')?.value ?? 'todo', min = parseFloat($('ac-min')?.value), ph = $('ac-phone')?.checked;
+  const norm = typeof _auNorm === 'function' ? _auNorm : (x => String(x || '').toLowerCase());
+  const q = norm($('ac-q')?.value || '');
+  return _acRows.filter(a => {
+    if(st === 'todo'){ if(!['open','no_answer'].includes(a.status)) return false; }
+    else if(st && a.status !== st) return false;
+    if(Number.isFinite(min) && a.total < min) return false;
+    if(ph && !a.phone) return false;
+    if(q){
+      const hay = norm([a.customer_name, a.phone, a.email, a.city, ...(a.items || []).map(i => i.title + ' ' + (i.sku || ''))].join(' '));
+      if(!q.split(' ').every(w => hay.includes(w))) return false;
+    }
+    return true;
+  });
+}
+function acRender(){
+  const box = $('ac-list'); if(!box) return;
+  const rows = _acFiltered();
+  // ملخص على المدة كلها
+  const sum = $('ac-summary');
+  if(sum){
+    const n = _acRows.length, tot = _acRows.reduce((s, a) => s + a.total, 0);
+    const rec = _acRows.filter(a => a.status === 'recovered'), recV = rec.reduce((s, a) => s + a.total, 0);
+    const todo = _acRows.filter(a => ['open','no_answer'].includes(a.status) && a.phone).length;
+    const f = v => Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+    sum.innerHTML = `<span>🛒 <b>${n}</b> سلة · ${f(tot)} ج</span>
+      <span>📋 محتاجة متابعة <b>${todo}</b></span>
+      <span style="color:#065f46">✅ اترجعت <b>${rec.length}</b> · ${f(recV)} ج${n ? ` (${Math.round(rec.length / n * 100)}٪)` : ''}</span>`;
+  }
+  if(!rows.length){ box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">${_acRows.length ? 'مفيش سلات تطابق الفلتر' : 'مفيش سلات في المدة دي'}</div>`; return; }
+  const th = 'padding:9px 10px;font-size:11px;color:var(--muted);font-weight:700;text-align:start;white-space:nowrap';
+  box.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:var(--bg);border-bottom:1px solid var(--border)">
+      <th style="${th}">الوقت</th><th style="${th}">العميل</th><th style="${th}">الأصناف</th><th style="${th}">المبلغ</th><th style="${th}">الحالة</th><th style="${th}"></th>
+    </tr></thead><tbody>${rows.map(_acRow).join('')}</tbody></table>`;
+}
+function _acRow(a){
+  const items = a.items || [];
+  const thumbs = items.slice(0, 4).map(i => i.image
+    ? `<img src="${escapeHtml(typeof _shopThumb === 'function' ? _shopThumb(i.image, 64) : i.image)}" title="${escapeHtml(i.title)} ×${i.qty}" loading="lazy" style="width:30px;height:30px;border-radius:6px;object-fit:cover;border:1px solid var(--border);background:#fff">`
+    : '').join('');
+  const names = items.map(i => `${escapeHtml(i.title)}${i.variant ? ' — ' + escapeHtml(i.variant) : ''} ×${i.qty}`).join('<br>');
+  const who = a.contacted_by ? `<div style="font-size:10.5px;color:var(--muted)">${escapeHtml(a.contacted_by)} · ${_stDate(a.contacted_at, true)}</div>` : '';
+  const rec = a.status === 'recovered' ? `<div style="font-size:10.5px;color:#065f46">${a.recovered_order ? 'طلب ' + escapeHtml(a.recovered_order) : 'كمّل الدفع'} · ${_stDate(a.recovered_at, true)}</div>` : '';
+  const id = escapeHtml(a.id);
+  const acts = a.status === 'recovered' ? '' : `
+      ${a.phone ? `<button class="btn btn-xs btn-primary" style="background:#16a34a;border-color:#16a34a" onclick="acWhatsApp('${id}')">💬 واتساب</button>` : ''}
+      <button class="btn btn-xs btn-ghost" onclick="acSet('${id}','no_answer')" title="مردّش">📵</button>
+      <button class="btn btn-xs btn-ghost" onclick="acSet('${id}','not_interested')" title="مش مهتم">🚫</button>
+      ${a.status !== 'open' ? `<button class="btn btn-xs btn-ghost" onclick="acSet('${id}','open')" title="رجّعها لسه">↩️</button>` : ''}
+      <button class="btn btn-xs btn-ghost" onclick="acNote('${id}')" title="ملاحظة">📝</button>`;
+  return `<tr style="border-bottom:1px solid var(--border)">
+    <td style="padding:8px 10px;white-space:nowrap">${_stDate(a.created_at, true)}</td>
+    <td style="padding:8px 10px"><b>${escapeHtml(a.customer_name || '—')}</b>
+      <div style="font-size:11.5px;direction:ltr;text-align:right">${escapeHtml(a.phone || '—')}</div>
+      ${a.city ? `<div style="font-size:10.5px;color:var(--muted)">${escapeHtml(a.city)}</div>` : ''}</td>
+    <td style="padding:8px 10px"><div style="display:flex;gap:4px;margin-bottom:3px">${thumbs}</div><div style="font-size:11px;color:var(--muted);max-width:340px">${names}</div></td>
+    <td style="padding:8px 10px;white-space:nowrap"><b>${Number(a.total).toLocaleString('en-US')} ج</b>${(a.discount_codes || []).length ? `<div style="font-size:10px;color:var(--muted)">🏷️ ${escapeHtml(a.discount_codes.join(', '))}</div>` : ''}</td>
+    <td style="padding:8px 10px">${_acBadge(a.status)}${who}${rec}${a.note ? `<div style="font-size:11px;margin-top:3px">📝 ${escapeHtml(a.note)}</div>` : ''}</td>
+    <td style="padding:8px 10px;white-space:nowrap">${acts}
+      <a class="btn btn-xs btn-ghost" href="${escapeHtml(a.url)}" target="_blank" rel="noopener" title="لينك السلة">🔗</a></td></tr>`;
+}
+// رسالة الواتساب من الإعدادات — وبعد ما تتفتح السلة تتعلّم «اتكلّم»
+function _acWaText(a){
+  const items = (a.items || []).map(i => `- ${i.title}${i.variant ? ' (' + i.variant + ')' : ''} ×${i.qty}`).join('\n');
+  const first = String(a.customer_name || '').split(' ')[0] || '';
+  return String(_acTpl || '').replace(/\{name\}/g, first).replace(/\{total\}/g, Number(a.total).toLocaleString('en-US'))
+    .replace(/\{link\}/g, a.url || '').replace(/\{items\}/g, items);
+}
+function _acWaPhone(p){ let d = String(p || '').replace(/\D/g, ''); if(d.startsWith('0')) d = '2' + d; return d; }
+function acWhatsApp(id){
+  const a = _acRows.find(x => x.id === id); if(!a) return;
+  window.open(`https://wa.me/${_acWaPhone(a.phone)}?text=${encodeURIComponent(_acWaText(a))}`, '_blank');
+  if(a.status === 'open' || a.status === 'no_answer') acSet(id, 'contacted', null, true);
+}
+async function acSet(id, status, note, silent){
+  try{
+    const body = { status }; if(note != null) body.note = note;
+    await apiFetch(`/api/abandoned/${encodeURIComponent(id)}/status`, 'POST', body);
+    const a = _acRows.find(x => x.id === id);
+    if(a){ a.status = status; if(note != null) a.note = note; a.contacted_by = status === 'open' ? null : ((currentUser && (currentUser.name || currentUser.username)) || ''); a.contacted_at = status === 'open' ? null : new Date().toISOString(); }
+    acRender(); if(!silent) toast('✅ اتحدّث');
+  }catch(e){ toast('❌ ' + e.message); }
+}
+function acNote(id){
+  const a = _acRows.find(x => x.id === id); if(!a) return;
+  const n = prompt('ملاحظة على السلة:', a.note || ''); if(n == null) return;
+  acSet(id, a.status === 'open' ? 'contacted' : a.status, n);
+}
+
 // ═══ 🚚 v933: ترانسفيرات شوبيفاي — عرض بس ═══
 let _stRows = [], _stOpenId = null, _stPoll = null, _stDestDefaulted = false;
 const _ST_STATUS = {
@@ -61459,6 +61608,7 @@ function goPage(el,page){
   if(page==='bank')bkOpen();                   // 🏦 v770 — صفحة مستقلة
   if(page==='tz')tzOpen();                     // 🧾 v931
   if(page==='shopify-transfers')stOpen();      // 🚚 v933
+  if(page==='abandoned')acOpen();              // 🛒 v955
   if(page==='promo')promoOpen();               // 🎟️ v783
   if(page==='settings')chOpen();               // 📡 v738
   if(page==='settings')tgOpen();               // 🤖 v739
@@ -69099,8 +69249,12 @@ async function cfgLoad(){
               ${r.note?`<div style="font-size:10.5px;color:var(--muted)">${escapeHtml(r.note)}</div>`:''}
               ${r.expires?`<div style="font-size:10.5px;color:var(--muted)">لحد ${escapeHtml(r.expires)}</div>`:''}
             </span>
-            ${r.type==='text'
-              ? `<input class="form-input" type="text" maxlength="60" placeholder="فاضي = مقفول"
+            ${r.type==='text' && (r.max||0) > 100
+              ? `<textarea class="form-input" rows="4" maxlength="${r.max}" placeholder="فاضي = مقفول"
+                   style="width:min(420px,90vw);padding:6px 8px;font-family:Cairo,sans-serif;font-size:12.5px"
+                   onchange="cfgSave('${r.key}', this)">${escapeHtml(r.value ?? '')}</textarea>`
+              : r.type==='text'
+              ? `<input class="form-input" type="text" maxlength="${r.max||60}" placeholder="فاضي = مقفول"
                    style="width:200px;padding:4px 7px;direction:ltr" value="${escapeHtml(r.value ?? '')}"
                    onchange="cfgSave('${r.key}', this)">`
               : `<input class="form-input" type="number" step="any" inputmode="decimal"
