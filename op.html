@@ -12071,7 +12071,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v952';
+const UI_BUILD = 'v953';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -25364,6 +25364,7 @@ async function loadChks(force){
         pages:b.pages||48, note:b.note||'',
         firstNum:b.firstNum||b.first_num||1,
         lastNum:b.lastNum||b.last_num||null,
+        padLen:Number(b.padLen??b.pad_len)||0,   // 🐛 v953: كان بيقع هنا — فالأصفار كانت بتختفي بعد أي تحميل من السيرفر
       }));
       chkList = filteredChecks.map(c=>({
         id:c.id, bookId:c.bookId||c.book_id, num:c.num,
@@ -28605,6 +28606,10 @@ function _chkBookPad(b){
   // 0️⃣ v952: دفتر قديم من قبل ما نحفظ عدد الخانات — خد خانات دفتر تاني من نفس البنك
   //   بنفس طول الرقم أو أطول بخانة (الصفر اللي وقع). غير كده من غير تصفير.
   const len = _chkDigits(b.firstNum).length;
+  // شيك في الدفتر ده متسجّل بالصفر؟ خد طوله
+  const own = (typeof chkList !== 'undefined' ? chkList : []).filter(c => c.bookId === b.id)
+    .map(c => _chkDigits(c.num)).filter(d => /^0/.test(d)).map(d => d.length);
+  if(own.length) return Math.max(...own);
   const sib = (typeof chkBooks !== 'undefined' ? chkBooks : [])
     .filter(x => x !== b && Number(x.padLen) && (!b.bank || !x.bank || x.bank === b.bank))
     .map(x => Number(x.padLen)).filter(p => p === len || p === len + 1);
