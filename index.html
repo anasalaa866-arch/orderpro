@@ -3329,6 +3329,7 @@ tr:hover td{background:#fafbff}
           <option value="unscanned">⏳ لسه ما اتفحصش</option>
           <option value="dims">📐 محتاج أبعاد</option>
           <option value="size">🗜️ محتاج حجم</option>
+          <option value="frame">🖼️ محتاج مساحة بيضا</option>
           <option value="both">📐+🗜️ محتاج الاتنين</option>
           <option value="dims_only">📐 أبعاد بس</option>
           <option value="size_only">🗜️ حجم بس</option>
@@ -12036,7 +12037,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v937';
+const UI_BUILD = 'v938';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -23763,7 +23764,8 @@ function imgfixRender(){
   if(needF === 'unscanned') list = list.filter(i => !i.scanned);
   else if(needF !== 'all'){
     list = list.filter(i => { const f = _imgfixFlags(i);
-      return needF === 'dims' ? f.dims : needF === 'size' ? f.size : needF === 'both' ? (f.dims && f.size)
+      if(needF === 'frame') return f.frame;
+      return needF === 'dims' ? f.dims : needF === 'size' ? f.size : needF === 'frame' ? f.frame : needF === 'both' ? (f.dims && f.size)
            : needF === 'dims_only' ? (f.dims && !f.size) : needF === 'size_only' ? (f.size && !f.dims) : true; });
   }
 
@@ -23823,11 +23825,12 @@ function imgfixRender(){
       + (_alsoBigger ? `<div style="font-size:9.5px;color:#b45309">أكبر صورة ${imgfixFmtSize(it.maxFileSize)}</div>` : '');
     // 🖼️ v934: السبب بالظبط بدل «محتاج تظبيط»
     const _f = _imgfixFlags(it), _chip = (t, bg, c) => `<span style="background:${bg};color:${c};padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700;white-space:nowrap">${t}</span>`;
+    const _na = _f.frameNA ? `<span title="الخلفية مش بيضا سادة — المساحة مش بتتظبط" style="font-size:9.5px;color:#64748b">خلفية مش سادة</span>` : '';
     const badge = !it.scanned && it.scanned !== undefined
       ? _chip('⏳ لسه ما اتفحصش', '#f1f5f9', '#64748b')
-      : (_f.dims || _f.size)
-      ? `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap">${_f.dims ? _chip('📐 أبعاد', '#fef3c7', '#92400e') : ''}${_f.size ? _chip('🗜️ حجم', '#ffedd5', '#9a3412') : ''}</div>`
-      : _chip('✅ متظبط', '#dcfce7', '#166534');
+      : (_f.dims || _f.size || _f.frame)
+      ? `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;align-items:center">${_f.dims ? _chip('📐 أبعاد', '#fef3c7', '#92400e') : ''}${_f.size ? _chip('🗜️ حجم', '#ffedd5', '#9a3412') : ''}${_f.frame ? _chip('🖼️ مساحة', '#e0e7ff', '#3730a3') : ''}${_na}</div>`
+      : `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;align-items:center">${_chip('✅ متظبط', '#dcfce7', '#166534')}${_na}</div>`;
     const newBadge = it._isNew
       ? `<span style="background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:6px;font-size:9px;font-weight:700;margin-right:4px">🆕 جديد</span>`
       : '';
@@ -23969,10 +23972,11 @@ async function imgfixScanSelected(){
 // ═══ 🖼️ v934: أوضاع التظبيط ═══
 let _imgfixVisible = [];
 function _imgfixFlags(it){
-  if(it.scanned === false) return { dims: false, size: false };   // 🖼️ v937: لسه ما اتفحصش
+  if(it.scanned === false) return { dims: false, size: false, frame: false };   // 🖼️ v937: لسه ما اتفحصش
   // فحص قديم من قبل v934 مالوش أسباب → «محتاج تظبيط» = أبعاد
-  if(it.needDims == null && it.needSize == null) return { dims: !!it.needsFix, size: false };
-  return { dims: !!it.needDims, size: !!it.needSize };
+  if(it.needDims == null && it.needSize == null) return { dims: !!it.needsFix, size: false, frame: false };
+  // 🖼️ v938: المساحة البيضا — null = الخلفية مش سادة (ماتتظبطش)
+  return { dims: !!it.needDims, size: !!it.needSize, frame: it.needFrame === true, frameNA: it.needFrame === null && it.scanned !== false && 'needFrame' in it };
 }
 function imgfixModes(){
   return { dims: !!document.getElementById('imgfix-m-dims')?.checked,
@@ -23992,11 +23996,11 @@ function imgfixModesLoad(){
   const set = (id, v) => { const el = document.getElementById(id); if(el) el.checked = !!v; };
   set('imgfix-m-dims', m.dims); set('imgfix-m-size', m.size); set('imgfix-m-frame', m.frame);
 }
-// المنتج محتاج شغل في الأوضاع المختارة؟ المساحة البيضا مابتتعرفش غير بعد التنزيل → أي صورة
+// المنتج محتاج شغل في الأوضاع المختارة؟ (v938: المساحة البيضا بقت بتتعرف من الفحص)
 function _imgfixNeeds(it){
   const m = imgfixModes(), f = _imgfixFlags(it);
   if(!it.mediaGid) return false;
-  return (m.dims && f.dims) || (m.size && f.size) || m.frame;
+  return (m.dims && f.dims) || (m.size && f.size) || (m.frame && f.frame);
 }
 async function imgfixOne(btn, item){
   const modes = imgfixModes();
