@@ -10577,7 +10577,7 @@ tr:hover td{background:#fafbff}
       <select id="lv-f-status" class="form-input" style="max-width:150px" onchange="loadHrLeaves()">
         <option value="">كل الحالات</option><option value="pending">مستنية</option><option value="approved">مقبولة</option><option value="rejected">مرفوضة</option>
       </select>
-      <input type="number" id="lv-f-year" class="form-input" style="max-width:110px" placeholder="السنة" onchange="loadHrLeaves()">
+      <input type="number" id="lv-f-year" class="form-input" style="max-width:110px" placeholder="السنة (كلها)" min="2020" max="2100" onchange="loadHrLeaves()">
       <button class="btn btn-ghost btn-sm" onclick="loadHrLeaves()">🔄 تحديث</button>
     </div>
     <div id="lv-list" style="padding:8px 14px;overflow-x:auto"></div>
@@ -12063,7 +12063,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v944';
+const UI_BUILD = 'v945';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -58040,12 +58040,13 @@ async function loadHrLeaves(){
   const list=$('lv-list'); if(!list) return;
   // حمّل الموظفين مرة
   if(!_lvEmployees.length){
-    try{ const er=await apiFetch('/api/hr/employees','GET'); _lvEmployees=(er.employees||er||[]).filter(e=>e.active!==false);
+    // 🐛 v945: الأسماء من مسار الإجازات نفسه — «الموظفين» ممكن تبقى مقفولة بباسورد
+    try{ const er=await apiFetch('/api/hr/leaves/employees','GET'); _lvEmployees=(er.employees||er||[]).filter(e=>e.active!==false);
       const sel=$('lv-emp'); if(sel){ sel.innerHTML='<option value="">— الموظف —</option>'+_lvEmployees.map(e=>`<option value="${e.id}">${escapeHtml(e.name_ar||e.name||('#'+e.id))}</option>`).join(''); }
       if(!$('lv-emp').dataset.bound){ $('lv-emp').dataset.bound='1'; $('lv-emp').addEventListener('change', lvLoadBalance); }
     }catch(e){}
   }
-  const status=$('lv-f-status')?.value||''; const year=$('lv-f-year')?.value||'';
+  const status=$('lv-f-status')?.value||''; const _yv=parseInt($('lv-f-year')?.value,10); const year=(_yv>=2000&&_yv<=2100)?_yv:'';   // 🐛 v945: «0» = كل السنين
   list.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted)">⏳...</div>';
   try{
     const qs=[]; if(status)qs.push('status='+status); if(year)qs.push('year='+year);
