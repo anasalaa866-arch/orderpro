@@ -12063,7 +12063,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v943';
+const UI_BUILD = 'v944';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -35754,6 +35754,17 @@ function invDebouncedRender(){
 // ═══ 🔎 v941: فلاتر وترتيب المخزون ═══
 let _invSort = { key: 'name', dir: 'asc' }, _invFiltersLoaded = false, _invPriceTimer = null;
 const _INV_F_IDS = ['inv-filter-status','inv-filter-warehouse','inv-wh-mode','inv-vendor','inv-type','inv-price-min','inv-price-max'];
+// 🔤 v944: ترتيب بالاسم الحقيقي — أسماء كتير على شوبيفاي بتبدأ بـ «" BB: 29-10-2026"» أو
+//   «EX: 1-11-2026"» أو «100- » أو علامات، والعلامات بتترتب قبل الحروف، فاللستة كانت باينة مش مترتبة.
+function _invSortName(t){
+  let s = String(t || '').toLowerCase();
+  for(let k = 0; k < 3; k++){
+    s = s.replace(/^[\s"'“”«»\-–—_*.,:;!()\[\]]+/, '')
+         .replace(/^(b\.?\s*b|ex|exp|best before)\s*[:.]?\s*["'“”]?\s*\d{1,2}\s*[-/.]\s*\d{1,2}\s*[-/.]\s*\d{2,4}\s*["'“”]?/, '')
+         .replace(/^\d+\s*[-–]\s*/, '');
+  }
+  return s.trim();
+}
 function _invSortArrow(k){ return _invSort.key === k ? (_invSort.dir === 'asc' ? ' ▲' : ' ▼') : ''; }
 function invSortBy(k){
   // دوسة على نفس العمود تعكس — والأرقام تبدأ بالأكبر
@@ -35855,9 +35866,9 @@ function renderInventoryTable(){
   const sv = i => sk === 'total' ? (i.totalQty || 0) : sk === 'price' ? Number(i.price || 0)
                 : sk === 'value' ? (i.totalQty || 0) * Number(i.price || 0)
                 : sk.startsWith('wh:') ? (i.levels[sk.slice(3)]?.qty || 0) : null;
-  const nm = i => ((i.productTitle || '') + ' ' + (i.variantTitle || '')).toLowerCase();
+  const nm = i => _invSortName((i.productTitle || '') + ' ' + (i.variantTitle && i.variantTitle !== 'Default Title' ? i.variantTitle : ''));
   items.sort((a, b) => {
-    if(sk === 'name') return mul * nm(a).localeCompare(nm(b));
+    if(sk === 'name') return mul * nm(a).localeCompare(nm(b), 'en', { numeric: true, sensitivity: 'base' });
     const d = (sv(a) - sv(b)) * mul;
     return d || nm(a).localeCompare(nm(b));
   });
