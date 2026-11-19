@@ -3323,6 +3323,15 @@ tr:hover td{background:#fafbff}
           <input type="checkbox" id="imgfix-only-needed" checked onchange="imgfixRender()" style="width:15px;height:15px">
           اعرض اللي محتاج تظبيط بس
         </label>
+        <select id="imgfix-need-filter" onchange="imgfixRender()" title="محتاج إيه"
+                style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;cursor:pointer">
+          <option value="all">كل الأسباب</option>
+          <option value="dims">📐 محتاج أبعاد</option>
+          <option value="size">🗜️ محتاج حجم</option>
+          <option value="both">📐+🗜️ محتاج الاتنين</option>
+          <option value="dims_only">📐 أبعاد بس</option>
+          <option value="size_only">🗜️ حجم بس</option>
+        </select>
         <select id="imgfix-size-filter" onchange="imgfixRender()" title="فلتر بالحجم"
                 style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;cursor:pointer">
           <option value="all">كل الأحجام</option>
@@ -3341,6 +3350,13 @@ tr:hover td{background:#fafbff}
           <option value="title">الاسم (أ-ي)</option>
         </select>
         <div style="flex:1"></div>
+        <!-- 🖼️ v934: يتظبّط إيه — أي اختيار لوحده أو مع غيره -->
+        <span style="display:flex;gap:10px;align-items:center;font-size:12px;border:1px dashed var(--border);border-radius:8px;padding:5px 10px">
+          <b style="color:var(--muted)">يتظبّط:</b>
+          <label style="display:flex;gap:4px;align-items:center;cursor:pointer" title="مربع 2048×2048 بخلفية بيضا"><input type="checkbox" id="imgfix-m-dims" onchange="imgfixModesSave()"> 📐 الأبعاد</label>
+          <label style="display:flex;gap:4px;align-items:center;cursor:pointer" title="ضغط JPEG — والـ PNG يتحوّل لو أصغر"><input type="checkbox" id="imgfix-m-size" onchange="imgfixModesSave()"> 🗜️ الحجم</label>
+          <label style="display:flex;gap:4px;align-items:center;cursor:pointer" title="يكبّر أو يصغّر المنتج لحد نسبة الأبيض اللي في الإعدادات"><input type="checkbox" id="imgfix-m-frame" onchange="imgfixModesSave()"> 🖼️ المساحة البيضا</label>
+        </span>
         <button class="btn btn-secondary" id="imgfix-fixall-btn" onclick="imgfixStartAll()" style="display:none;background:#16a34a;color:#fff">✅ ظبّط الكل</button>
       </div>
       <div id="imgfix-scan-progress" style="padding:0 14px 12px;font-size:12px;color:var(--muted)"></div>
@@ -12017,7 +12033,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v933';
+const UI_BUILD = 'v934';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -23640,6 +23656,7 @@ let _imgfixScanning = false;
 let _imgfixJobPoll = null;    // interval للـ progress
 
 function imgfixOnOpen(){
+  imgfixModesLoad();   // 🖼️ v934
   // لو فيه job شغّال، استأنف المتابعة
   imgfixCheckActiveJob();
   // 🆕 v399: حمّل المنتجات الجديدة (review queue) تلقائياً
@@ -23733,8 +23750,15 @@ function imgfixRender(){
   const onlyNeeded = document.getElementById('imgfix-only-needed')?.checked;
   const search = (document.getElementById('imgfix-search')?.value || '').trim().toLowerCase();
   let list = _imgfixItems.slice();
-  if(onlyNeeded) list = list.filter(i => i.needsFix);
+  if(onlyNeeded) list = list.filter(i => _imgfixNeeds(i));
   if(search) list = list.filter(i => matchTokens(i.title, search));
+  // 🖼️ v934: فلتر بالسبب
+  const needF = document.getElementById('imgfix-need-filter')?.value || 'all';
+  if(needF !== 'all'){
+    list = list.filter(i => { const f = _imgfixFlags(i);
+      return needF === 'dims' ? f.dims : needF === 'size' ? f.size : needF === 'both' ? (f.dims && f.size)
+           : needF === 'dims_only' ? (f.dims && !f.size) : needF === 'size_only' ? (f.size && !f.dims) : true; });
+  }
 
   // 🆕 v396: فلتر بالحجم (KB)
   const sizeFilter = document.getElementById('imgfix-size-filter')?.value || 'all';
@@ -23763,6 +23787,13 @@ function imgfixRender(){
   else if(sortBy === 'size-asc') list.sort((a,b) => _bytes(a) - _bytes(b));
   else if(sortBy === 'title') list.sort((a,b) => (a.title||'').localeCompare(b.title||'', 'ar'));
 
+  _imgfixVisible = list;   // 🖼️ v934: «ظبّط الكل» بيشتغل على اللي ظاهر
+  const _fa = document.getElementById('imgfix-fixall-btn');
+  if(_fa && _imgfixItems.length){
+    const n = list.filter(_imgfixNeeds).length;
+    _fa.style.display = n ? 'inline-flex' : 'none';
+    _fa.textContent = `✅ ظبّط الكل (${n})`;
+  }
   if(!list.length){
     let msg, sub;
     if(search){ msg = '🔎 مفيش نتائج للبحث'; sub = 'جرّب كلمة تانية'; }
@@ -23781,9 +23812,11 @@ function imgfixRender(){
     const _alsoBigger = it.maxFileSize && it.fileSize && it.maxFileSize > it.fileSize * 1.05;
     const sizeStr = `<span style="${_over ? 'color:#b45309;font-weight:800' : ''}">${imgfixFmtSize(it.fileSize)}</span>`
       + (_alsoBigger ? `<div style="font-size:9.5px;color:#b45309">أكبر صورة ${imgfixFmtSize(it.maxFileSize)}</div>` : '');
-    const badge = it.needsFix
-      ? `<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700">⚠️ محتاج تظبيط</span>`
-      : `<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700">✅ متظبط</span>`;
+    // 🖼️ v934: السبب بالظبط بدل «محتاج تظبيط»
+    const _f = _imgfixFlags(it), _chip = (t, bg, c) => `<span style="background:${bg};color:${c};padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700;white-space:nowrap">${t}</span>`;
+    const badge = (_f.dims || _f.size)
+      ? `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap">${_f.dims ? _chip('📐 أبعاد', '#fef3c7', '#92400e') : ''}${_f.size ? _chip('🗜️ حجم', '#ffedd5', '#9a3412') : ''}</div>`
+      : _chip('✅ متظبط', '#dcfce7', '#166534');
     const newBadge = it._isNew
       ? `<span style="background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:6px;font-size:9px;font-weight:700;margin-right:4px">🆕 جديد</span>`
       : '';
@@ -23795,7 +23828,7 @@ function imgfixRender(){
         <td style="text-align:center;font-size:11px;font-family:monospace;color:var(--muted)">${sizeStr}</td>
         <td style="text-align:center">${badge}</td>
         <td style="text-align:center">
-          ${it.needsFix ? `<button class="btn btn-ghost btn-xs" onclick='imgfixOne(this, ${JSON.stringify(it).replace(/'/g,"&#39;")})' style="color:#16a34a">🖼️ ظبّط</button>` : '—'}
+          ${_imgfixNeeds(it) ? `<button class="btn btn-ghost btn-xs" onclick='imgfixOne(this, ${JSON.stringify(it).replace(/'/g,"&#39;")})' style="color:#16a34a">🖼️ ظبّط</button>` : '—'}
         </td>
       </tr>`;
   }).join('');
@@ -23830,16 +23863,51 @@ function imgfixFmtSize(bytes){
   return (bytes/(1024*1024)).toFixed(1) + ' MB';
 }
 
+// ═══ 🖼️ v934: أوضاع التظبيط ═══
+let _imgfixVisible = [];
+function _imgfixFlags(it){
+  // فحص قديم من قبل v934 مالوش أسباب → «محتاج تظبيط» = أبعاد
+  if(it.needDims == null && it.needSize == null) return { dims: !!it.needsFix, size: false };
+  return { dims: !!it.needDims, size: !!it.needSize };
+}
+function imgfixModes(){
+  return { dims: !!document.getElementById('imgfix-m-dims')?.checked,
+           size: !!document.getElementById('imgfix-m-size')?.checked,
+           frame: !!document.getElementById('imgfix-m-frame')?.checked };
+}
+function _imgfixModesLabel(m){
+  return [m.dims && '📐 الأبعاد', m.size && '🗜️ الحجم', m.frame && '🖼️ المساحة البيضا'].filter(Boolean).join(' + ');
+}
+function imgfixModesSave(){
+  try{ localStorage.setItem('imgfix_modes', JSON.stringify(imgfixModes())); }catch(e){}
+  imgfixRender();
+}
+function imgfixModesLoad(){
+  let m = { dims: true, size: true, frame: false };
+  try{ const x = JSON.parse(localStorage.getItem('imgfix_modes') || 'null'); if(x && typeof x === 'object') m = x; }catch(e){}
+  const set = (id, v) => { const el = document.getElementById(id); if(el) el.checked = !!v; };
+  set('imgfix-m-dims', m.dims); set('imgfix-m-size', m.size); set('imgfix-m-frame', m.frame);
+}
+// المنتج محتاج شغل في الأوضاع المختارة؟ المساحة البيضا مابتتعرفش غير بعد التنزيل → أي صورة
+function _imgfixNeeds(it){
+  const m = imgfixModes(), f = _imgfixFlags(it);
+  if(!it.mediaGid) return false;
+  return (m.dims && f.dims) || (m.size && f.size) || m.frame;
+}
 async function imgfixOne(btn, item){
-  if(!confirm(`ظبّط صورة "${item.title}"؟`)) return;
+  const modes = imgfixModes();
+  if(!modes.dims && !modes.size && !modes.frame){ toast('اختار يتظبّط إيه الأول'); return; }
+  if(!confirm(`ظبّط صور "${item.title}"؟\n${_imgfixModesLabel(modes)}`)) return;
   btn.disabled = true; btn.textContent = '⏳';
   try {
     const r = await apiFetch('/api/image-fix/single', 'POST', {
       mediaGid: item.mediaGid, imageUrl: item.imageUrl, title: item.title,
       productId: item.productId || item.productGid,  // 🆕 v399: عشان العلم يتشال
+      productGid: item.productGid, modes,            // 🖼️ v934
     });
     if(r && r.success){
-      toast('✅ اتظبطت: ' + (r.filename || ''));
+      const note = (r.notes && r.notes.length) ? ' · ' + r.notes.join(' · ') : '';
+      toast(r.fixed === 0 ? ('ℹ️ مفيش حاجة اتغيّرت' + note) : ('✅ اتظبطت' + (r.fixed > 1 ? ` ${r.fixed} صور` : (r.filename ? ': ' + r.filename : '')) + note));
       // 🆕 v399: شيل الصف من القايمة (اتظبط خلاص)، والباقي يفضل
       _imgfixItems = _imgfixItems.filter(x => x.mediaGid !== item.mediaGid);
       imgfixRender();
@@ -23854,15 +23922,18 @@ async function imgfixOne(btn, item){
 }
 
 async function imgfixStartAll(){
-  const needed = _imgfixItems.filter(i => i.needsFix);
+  const modes = imgfixModes();
+  if(!modes.dims && !modes.size && !modes.frame){ toast('اختار يتظبّط إيه الأول'); return; }
+  // 🖼️ v934: اللي ظاهر بالفلاتر بس، وفي الأوضاع المختارة
+  const needed = (_imgfixVisible.length ? _imgfixVisible : _imgfixItems).filter(_imgfixNeeds);
   if(!needed.length){ toast('مفيش صور محتاجة تظبيط'); return; }
-  if(!confirm(`هتظبّط ${needed.length} صورة. العملية بتشتغل في الخلفية وممكن تاخد وقت. نبدأ؟`)) return;
+  if(!confirm(`هتظبّط ${needed.length} منتج: ${_imgfixModesLabel(modes)}.\nالعملية بتشتغل في الخلفية وممكن تاخد وقت. نبدأ؟`)) return;
 
   try {
     const items = needed.map(i => ({
       productGid: i.productGid, mediaGid: i.mediaGid, title: i.title, imageUrl: i.imageUrl,
     }));
-    const r = await apiFetch('/api/image-fix/jobs', 'POST', { items });
+    const r = await apiFetch('/api/image-fix/jobs', 'POST', { items, modes });
     if(r && r.success){
       toast(`✅ بدأ تظبيط ${r.total} صورة`);
       imgfixTrackJob(r.jobId);
@@ -28968,9 +29039,13 @@ function buildPermissionsGrid(checkedPages){
 
   // اجمع كل الـ sidebar items + الـ labels من النصوص بتاعتها
   const items = [];
+  // 🐛 v934: الصفحات المتعلّمة ⭐ بتتكرر في «المفضلة» — من غير المنع ده
+  //   كان بيطلع لها خانتين، تشيل واحدة والتانية تفضل متعلّمة فترجع تتحفظ.
+  const _seen = new Set();
   document.querySelectorAll('.ni[data-p]').forEach(ni => {
     const page = ni.dataset.p;
-    if(!page) return;
+    if(!page || _seen.has(page)) return;
+    _seen.add(page);
     // خد الـ icon + الـ label
     const icon = ni.querySelector('.ni-icon')?.textContent?.trim() || '📄';
     const label = ni.querySelector('.ni-label')?.textContent?.trim() || page;
@@ -29036,7 +29111,7 @@ async function saveUser(){
     toast('❗ اسم المستخدم موجود مسبقاً');return;
   }
 
-  const pages=[...document.querySelectorAll('[name="au-page"]:checked')].map(cb=>cb.value);
+  const pages=[...new Set([...document.querySelectorAll('[name="au-page"]:checked')].map(cb=>cb.value))];   // 🐛 v934: من غير تكرار
   if(!pages.length){toast('❗ اختر صفحة واحدة على الأقل');return;}
 
   let passHash;
@@ -30043,7 +30118,7 @@ const _tzSt = { new:['جديدة','#475569','#f1f5f9'], failed:['❌ فشلت','
                 before_cutoff:['قبل البداية','#6b7280','#f3f4f6'], posting:['⏳','#92400e','#fef3c7'] };
 function _tzToday(off){ return new Date(Date.now() + (off||0) * 86400000).toLocaleDateString('en-CA', { timeZone:'Africa/Cairo' }); }
 // ═══ 🚚 v933: ترانسفيرات شوبيفاي — عرض بس ═══
-let _stRows = [], _stOpenId = null, _stPoll = null;
+let _stRows = [], _stOpenId = null, _stPoll = null, _stDestDefaulted = false;
 const _ST_STATUS = {
   DRAFT:         ['📝 مسودة',        '#f1f5f9', '#475569'],
   READY_TO_SHIP: ['📦 جاهز للشحن',   '#e0e7ff', '#3730a3'],
@@ -30079,6 +30154,7 @@ async function stOpen(){
 }
 function stClear(){
   ['st-q','st-status','st-origin','st-dest'].forEach(id => { if($(id)) $(id).value = ''; });
+  _stDestDefaulted = false;   // المسح بيرجّع تريفيوم
   if($('st-diff')) $('st-diff').checked = false;
   $('st-from').value = _tzToday(-29); $('st-to').value = _tzToday(0);
   stLoad();
@@ -30115,6 +30191,11 @@ function _stFillSelects(){
   fill('st-status', 'كل الحالات', Object.keys(_ST_STATUS).map(k => [k, _ST_STATUS[k][0]]));
   fill('st-origin', '📤 من: كل المخازن', uniq('origin_name'));
   fill('st-dest', '📥 لـ: كل المخازن', uniq('dest_name'));
+  // 🏪 v934: «لـ» افتراضي تريفيوم — أول مرة بس، لو اخترت غيره بيتساب
+  if(!_stDestDefaulted){
+    const sel = $('st-dest'), tri = [...(sel?.options || [])].find(o => /trivium/i.test(o.value));
+    if(tri){ sel.value = tri.value; _stDestDefaulted = true; }
+  }
 }
 function _stFiltered(){
   const q = (typeof _auNorm === 'function' ? _auNorm : (x => String(x || '').toLowerCase()))($('st-q')?.value || '');
@@ -30155,7 +30236,7 @@ function stRender(){
   box.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12.5px">
     <thead><tr style="background:var(--bg);border-bottom:1px solid var(--border)">
       <th style="${th}">الترانسفير</th><th style="${th}">التاريخ</th><th style="${th}">من ← لـ</th><th style="${th}">الحالة</th>
-      <th style="${th}">المستلم / الإجمالي</th><th style="${th}">الأصناف</th><th style="${th}">الشحنات</th><th style="${th}">مرجع / ملاحظة</th>
+      <th style="${th}">المستلم / الإجمالي</th><th style="${th}">الأصناف</th><th style="${th}">الشحنات</th><th style="${th}">مرجع / ملاحظة</th><th style="${th}"></th>
     </tr></thead><tbody>${rows.map(_stRow).join('')}</tbody></table>`;
 }
 function _stRow(t){
@@ -30176,7 +30257,8 @@ function _stRow(t){
     <td style="padding:9px 10px">${(t.line_items || []).length}</td>
     <td style="padding:9px 10px">${ships.length ? ships.map(s => escapeHtml(_ST_SHIP[s.status] || s.status)).join('<br>') : '—'}</td>
     <td style="padding:9px 10px;max-width:240px;color:var(--muted);font-size:11.5px">${escapeHtml([t.reference_name, t.note].filter(Boolean).join(' · ') || '—')}</td>
-  </tr>${open ? `<tr><td colspan="8" style="padding:0 10px 14px;background:#f8fafc">${_stDetail(t)}</td></tr>` : ''}`;
+    <td style="padding:9px 6px"><button class="btn btn-xs btn-ghost" title="طباعة / PDF" onclick="event.stopPropagation();stPrint('${escapeHtml(t.transfer_id)}')">🖨️</button></td>
+  </tr>${open ? `<tr><td colspan="9" style="padding:0 10px 14px;background:#f8fafc">${_stDetail(t)}</td></tr>` : ''}`;
 }
 function _stDetail(t){
   const items = t.line_items || [];
@@ -30209,12 +30291,84 @@ function _stDetail(t){
       ${t.degraded ? `<span style="color:#b45309" title="${escapeHtml(t.degraded)}">⚠️ الاستلام لكل صنف مش متاح (صلاحية الشحنات ناقصة في تطبيق شوبيفاي)</span>` : ''}
       <span style="margin-inline-start:auto;color:var(--muted);font-size:11px">آخر سحب ${_stDate(t.synced_at, true)}</span>
       <button class="btn btn-xs btn-ghost" onclick="event.stopPropagation();stRefresh('${escapeHtml(t.transfer_id)}')">🔄 حدّث من شوبيفاي</button>
+      <button class="btn btn-xs btn-primary" onclick="event.stopPropagation();stPrint('${escapeHtml(t.transfer_id)}')">🖨️ طباعة / PDF</button>
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;border:1px solid var(--border);border-radius:8px">
       <thead><tr style="background:var(--bg)"><th style="${th};text-align:start">الصنف</th><th style="${th}">المطلوب</th><th style="${th}">المشحون</th>
         <th style="${th}">المستلم</th><th style="${th}">المرفوض</th><th style="${th}">لسه/الفرق</th></tr></thead>
       <tbody>${itemRows || '<tr><td colspan="6" style="padding:12px;text-align:center;color:var(--muted)">مفيش أصناف</td></tr>'}</tbody></table>
     ${ships ? `<div style="display:grid;gap:6px;margin-top:10px">${ships}</div>` : ''}`;
+}
+// 🖨️ v934: ورقة الترانسفير — بخانتين فاضيين لكل صنف: تحضير واستلام.
+//   بتفتح في نافذة وتطبع؛ «Save as PDF» من نافذة الطباعة بيطلّعها PDF.
+function _stPrintHtml(t){
+  const items = (t.line_items || []).slice().sort((a, b) =>
+    String(a.product_title || a.title || '').localeCompare(String(b.product_title || b.title || ''), 'en'));
+  const box = '<span class="bx"></span>';
+  const rows = items.map((l, i) => `<tr>
+      <td class="c">${i + 1}</td>
+      <td><div class="nm">${escapeHtml(l.product_title || l.title || '—')}${l.variant_title ? ' - ' + escapeHtml(l.variant_title) : ''}</div>
+          <div class="sk">${escapeHtml(l.sku || '')}${l.barcode ? ' · ' + escapeHtml(l.barcode) : ''}</div></td>
+      <td class="c q">${l.qty || 0}</td>
+      <td class="c">${box}</td>
+      <td class="c">${box}</td>
+      <td class="w"></td>
+    </tr>`).join('');
+  const totalQty = items.reduce((s, l) => s + (l.qty || 0), 0);
+  const st = (_ST_STATUS[t.status] || [t.status || ''])[0];
+  return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
+<title>${escapeHtml(t.name || 'Transfer')}</title>
+<style>
+  @page { size: A4; margin: 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: Cairo, Tahoma, Arial, sans-serif; color: #111; font-size: 12px; margin: 0; }
+  .hd { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 10px; }
+  .hd h1 { margin: 0; font-size: 20px; } .muted { color: #555; }
+  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; margin-bottom: 10px; font-size: 12.5px; }
+  .meta b { display: inline-block; min-width: 70px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #333; padding: 6px 6px; vertical-align: middle; }
+  th { background: #eee; font-size: 11.5px; }
+  tr { page-break-inside: avoid; }
+  thead { display: table-header-group; }
+  .c { text-align: center; } .q { font-weight: 800; font-size: 14px; }
+  .nm { font-weight: 700; } .sk { font-size: 10px; color: #555; direction: ltr; text-align: right; }
+  .bx { display: inline-block; width: 20px; height: 20px; border: 1.6px solid #111; border-radius: 3px; }
+  .w { width: 90px; }
+  .sig { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 26px; font-size: 12.5px; }
+  .sig div { border-top: 1px solid #111; padding-top: 6px; }
+  .note { margin: 6px 0 10px; padding: 6px 8px; border: 1px dashed #777; }
+</style></head><body>
+  <div class="hd">
+    <div><h1>🚚 ترانسفير ${escapeHtml(t.name || '')}</h1>
+      <div class="muted">${escapeHtml(st)}${t.po_number ? ' · أمر شراء ' + escapeHtml(t.po_number) : ''}</div></div>
+    <div style="text-align:left"><b>CAFELAX</b><div class="muted">اتطبع ${_stDate(new Date().toISOString(), true)}</div></div>
+  </div>
+  <div class="meta">
+    <div><b>من:</b> ${escapeHtml(t.origin_name || '—')}</div>
+    <div><b>لـ:</b> ${escapeHtml(t.dest_name || '—')}</div>
+    <div><b>التاريخ:</b> ${_stDate(t.created_at, true)}</div>
+    <div><b>المرجع:</b> ${escapeHtml(t.reference_name || '—')}</div>
+    <div><b>الأصناف:</b> ${items.length}</div>
+    <div><b>إجمالي الكمية:</b> ${totalQty}</div>
+  </div>
+  ${t.note ? `<div class="note">📝 ${escapeHtml(t.note)}</div>` : ''}
+  <table>
+    <thead><tr><th style="width:30px">#</th><th>الصنف</th><th style="width:60px">الكمية</th>
+      <th style="width:62px">تحضير ✓</th><th style="width:62px">استلام ✓</th><th class="w">ملاحظات</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="6" class="c">مفيش أصناف</td></tr>'}</tbody>
+  </table>
+  <div class="sig"><div>المحضّر: ........................ التوقيع: ............</div>
+                   <div>المستلم: ........................ التوقيع: ............</div></div>
+  <script>window.onload = () => setTimeout(() => window.print(), 300);<\/script>
+</body></html>`;
+}
+function stPrint(id){
+  const t = _stRows.find(x => x.transfer_id === id);
+  if(!t){ toast('❌ الترانسفير مش موجود'); return; }
+  const w = window.open('', '_blank');
+  if(!w){ toast('❌ المتصفح منع النافذة — اسمح بالـ popups'); return; }
+  w.document.open(); w.document.write(_stPrintHtml(t)); w.document.close();
 }
 function stToggle(id){ _stOpenId = _stOpenId === id ? null : id; stRender(); }
 async function stRefresh(id){
