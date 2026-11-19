@@ -4249,7 +4249,7 @@ tr:hover td{background:#fafbff}
           <div class="fg" style="margin:0"><label>رقم الحساب</label><input id="bk-account"></div>
           <div class="fg" style="margin:0"><label>عدد الأوراق</label><input id="bk-pages" type="number" value="48" min="1"></div>
           <div class="fg" style="margin:0"><label>رقم أول شيك *</label><input id="bk-first-num" type="text" inputmode="numeric" placeholder="مثال: 0001001" pattern="[0-9]*"></div>
-          <div class="fg" style="margin:0"><label>رقم آخر شيك</label><input id="bk-last-num" type="number" placeholder="يُحسب تلقائياً" readonly style="background:var(--bg);color:var(--muted)"></div>
+          <div class="fg" style="margin:0"><label>رقم آخر شيك</label><input id="bk-last-num" type="text" placeholder="يُحسب تلقائياً" readonly style="background:var(--bg);color:var(--muted);direction:ltr"></div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="saveChkBook()" style="width:100%;margin-bottom:12px">+ إضافة دفتر</button>
         <div id="chk-books-list"></div>
@@ -12071,7 +12071,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v950';
+const UI_BUILD = 'v951';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -27737,7 +27737,7 @@ function _chkSpoiledRow(c, book){
   const who = c.voidRequestedBy ? ` · سجّلها ${escapeHtml(c.voidRequestedBy)}` : '';
   const dec = c.voidDecidedBy ? ` · راجعها ${escapeHtml(c.voidDecidedBy)}` : '';
   return `<tr style="background:${pend?'#fffbeb':'#f3f4f6'}">
-      <td><strong>${escapeHtml(String(c.num||''))}</strong></td>
+      <td><strong style="direction:ltr;display:inline-block">${escapeHtml(chkNumShow(c))}</strong></td>
       <td><strong>🗑️ ورقة هالكة</strong>${c.voidReason?`<br><span style="font-size:10px;color:var(--muted)">${escapeHtml(c.voidReason)}</span>`:''}
         <br><span style="font-size:10px;color:var(--muted)">${who}${dec}</span></td>
       <td style="color:var(--muted)">—</td>
@@ -27819,7 +27819,7 @@ function printChecksReport(){
     const rowBg=isOverdue?'background:#fff5f5':c.status==='done'?'background:#f0fdf4':'';
     return `<tr style="${rowBg}">
       <td style="text-align:center">${i+1}</td>
-      <td><strong>${c.num}</strong></td>
+      <td><strong style="direction:ltr;display:inline-block">${escapeHtml(chkNumShow(c))}</strong></td>
       <td>${c.payee||'—'}</td>
       <td style="font-weight:700">${chkFmtAmount(c.amount)} ج</td>
       <td>${fmtDate(c.date)}</td>
@@ -28205,7 +28205,7 @@ function _chkPickImage(){
 // 🆕 v250: workflow الشيك الهالك
 async function requestChkVoid(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
-  const reason = prompt(`جعل الشيك "${c.num}" (${c.payee}) - ${c.amount} ج هالك\n\nاكتب السبب (مثلاً: اتقطع، ضاع، اتكتب غلط):`);
+  const reason = prompt(`جعل الشيك "${chkNumShow(c)}" (${c.payee}) - ${c.amount} ج هالك\n\nاكتب السبب (مثلاً: اتقطع، ضاع، اتكتب غلط):`);
   if(reason === null) return;
   if(!reason.trim()) { toast('❌ السبب مطلوب'); return; }
   // 🗑️ v921: الهالك لازم له صورة — لو الشيك مالوش صورة متسجّلة، اطلبها دلوقتي
@@ -28235,8 +28235,8 @@ async function requestChkVoid(id){
 async function approveChkVoid(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
   const _q = _chkIsSpoiled(c)   // 🗑️ v921
-    ? `الموافقة على الورقة الهالكة رقم "${c.num}"؟\n\nبعد الموافقة مابتتعدّلش ولا تتمسح.`
-    : `الموافقة على جعل الشيك "${c.num}" (${c.payee}) - ${c.amount} ج هالك؟\n\n⚠️ ده هيلغي الشيك من الحسابات`;
+    ? `الموافقة على الورقة الهالكة رقم "${chkNumShow(c)}"؟\n\nبعد الموافقة مابتتعدّلش ولا تتمسح.`
+    : `الموافقة على جعل الشيك "${chkNumShow(c)}" (${c.payee}) - ${c.amount} ج هالك؟\n\n⚠️ ده هيلغي الشيك من الحسابات`;
   if(!confirm(_q)) return;
   
   try{
@@ -28256,8 +28256,8 @@ async function rejectChkVoid(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
   const _sp = _chkIsSpoiled(c);   // 🗑️ v921
   if(!confirm(_sp
-      ? `رفض الورقة الهالكة رقم "${c.num}"؟\n\nهتختفي ورقمها هيرجع متاح في الدفتر.`
-      : `رفض طلب جعل الشيك "${c.num}" هالك؟\n\nالشيك هيرجع لحالة "لم يُصرف"`)) return;
+      ? `رفض الورقة الهالكة رقم "${chkNumShow(c)}"؟\n\nهتختفي ورقمها هيرجع متاح في الدفتر.`
+      : `رفض طلب جعل الشيك "${chkNumShow(c)}" هالك؟\n\nالشيك هيرجع لحالة "لم يُصرف"`)) return;
   
   try{
     const r = await apiFetch('/api/checks/'+id+'/reject-void','POST',{});
@@ -28504,7 +28504,7 @@ function saveChkBook(){
   }
   
   renderChkBooks();
-  toast('✅ تم إضافة الدفتر — الأرقام من '+firstNum+' إلى '+lastNum);
+  toast('✅ تم إضافة الدفتر — الأرقام من '+_chkPadNum(firstNum,{padLen})+' إلى '+_chkPadNum(lastNum,{padLen}));
   ['bk-name','bk-bank','bk-account','bk-first-num','bk-last-num'].forEach(id=>$(id)&&($(id).value=''));
   $('bk-pages').value = 48;
 }
@@ -28592,16 +28592,34 @@ async function diagnoseCheckBooks(){
   }
 }
 
+// 0️⃣ v951: أرقام الشيكات بالأصفار اللي على الشمال — زي ما هي مطبوعة على الورقة وفي كشف البنك.
+//   الدفتر بيحفظ أول رقم كرقم (فالصفر بيقع) + عدد الخانات (padLen). أي عرض بيرجّع الأصفار،
+//   وأي مقارنة بتتم من غير الأصفار — «0012345» و«12345» نفس الشيك.
+function _chkDigits(n){ return String(n == null ? '' : n).replace(/\D/g, ''); }
+function _chkNorm(n){ return _chkDigits(n).replace(/^0+/, ''); }
+function _chkBookPad(b){ return (b && Number(b.padLen)) || 0; }
+function _chkPadNum(n, b){
+  const d = _chkDigits(n); if(!d) return String(n == null ? '' : n);
+  return d.padStart(_chkBookPad(b), '0');
+}
+// رقم الشيك للعرض: بأصفار دفتره لو الرقم المحفوظ أقصر
+function chkNumShow(c){
+  if(!c) return '';
+  const raw = String(c.num == null ? '' : c.num);
+  if(!/^\s*\d+\s*$/.test(raw)) return raw;
+  const b = (typeof chkBooks !== 'undefined' ? chkBooks : []).find(x => x.id === c.bookId);
+  return _chkPadNum(raw, b);
+}
 function renderChkBooks(){
   const el=$('chk-books-list');if(!el)return;
   if(!chkBooks.length){el.innerHTML='<div style="text-align:center;color:var(--muted);padding:12px;font-size:13px">لا توجد دفاتر</div>';return;}
   el.innerHTML=chkBooks.map(b=>{
     const used=chkList.filter(c=>c.bookId===b.id).length,rem=Math.max(0,b.pages-used);
-    const first=b.firstNum||1, last=b.lastNum||(first+b.pages-1);
+    const first=_chkPadNum(b.firstNum||1, b), last=_chkPadNum(b.lastNum||((b.firstNum||1)+b.pages-1), b);
     return`<div style="display:flex;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;font-size:13px">
       <div style="flex:1">
         <strong>${b.name}</strong>${b.bank?' — '+b.bank:''}
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">أرقام: ${first} إلى ${last}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;direction:ltr;text-align:right">${first} → ${last}</div>
       </div>
       <div style="text-align:center;min-width:60px"><div style="font-weight:700;color:${rem<5?'var(--danger)':rem<10?'var(--warn)':'var(--success)'}">${rem}</div><div style="font-size:10px;color:var(--muted)">من ${b.pages}</div></div>
       <button class="btn btn-ghost btn-xs" style="color:var(--success);margin-right:8px;border-color:var(--success)" onclick="openBookDetails('${b.id}')" title="فتح وعرض الشيكات">📋 فتح</button>
@@ -28682,7 +28700,7 @@ function openBookDetails(bookId){
               ${checks.map(c=>{
                 const overdue=chkIsOverdue(c);
                 return `<tr style="border-bottom:1px solid var(--border);${overdue?'background:#fff5f5':''}">
-                  <td style="padding:8px"><strong>${c.num||'—'}</strong></td>
+                  <td style="padding:8px"><strong style="direction:ltr;display:inline-block">${escapeHtml(chkNumShow(c)||'—')}</strong></td>
                   <td style="padding:8px"><strong>${c.payee||'—'}</strong>${c.note?`<br><span style="font-size:10px;color:var(--muted)">${c.note}</span>`:''}</td>
                   <td style="padding:8px;font-weight:700">${fmt(c.amount)} ج</td>
                   <td style="padding:8px">${chkFmtDate(c.date)}</td>
@@ -28737,7 +28755,7 @@ tr.done td{background:#f0fdf4;color:#666;text-decoration:line-through}
 <div class="hdr">
   <div>
     <h1>📚 تقرير دفتر شيكات: ${b.name}</h1>
-    <div class="meta">${b.bank?b.bank+' · ':''}أرقام: ${b.firstNum||1} → ${b.lastNum||((b.firstNum||1)+b.pages-1)} · ${checks.length} شيك من ${b.pages}</div>
+    <div class="meta">${b.bank?b.bank+' · ':''}أرقام: ${_chkPadNum(b.firstNum||1, b)} → ${_chkPadNum(b.lastNum||((b.firstNum||1)+b.pages-1), b)} · ${checks.length} شيك من ${b.pages}</div>
   </div>
   <div class="meta">${today}<br>CAFELAX</div>
 </div>
@@ -28752,7 +28770,7 @@ ${checks.length ? `<table>
     const overdue = c.status!=='done' && c.date && new Date(c.date)<new Date(new Date().toDateString());
     const cls = c.status==='done'?'done':overdue?'overdue':'';
     const status = c.status==='done'?'✅ مصروف':overdue?'⚠️ متأخر':'⏳ لم يُصرف';
-    return `<tr class="${cls}"><td>${i+1}</td><td><strong>${c.num||'—'}</strong></td><td><strong>${c.payee||'—'}</strong></td><td>${fmt(c.amount)} ج</td><td>${fmtDate(c.date)}</td><td>${c.invoice||'—'}</td><td>${status}</td><td style="font-size:10px;color:#666">${c.note||''}</td></tr>`;
+    return `<tr class="${cls}"><td>${i+1}</td><td><strong style="direction:ltr;display:inline-block">${escapeHtml(chkNumShow(c)||'—')}</strong></td><td><strong>${c.payee||'—'}</strong></td><td>${fmt(c.amount)} ج</td><td>${fmtDate(c.date)}</td><td>${c.invoice||'—'}</td><td>${status}</td><td style="font-size:10px;color:#666">${c.note||''}</td></tr>`;
   }).join('')}</tbody>
 </table>
 <div class="totals"><span>الإجمالي · ${checks.length} شيك</span><span>${fmt(totalAmt)} ج</span></div>` : '<div style="text-align:center;padding:40px;color:#666">📭 لا توجد شيكات في هذا الدفتر</div>'}
@@ -28796,7 +28814,7 @@ function exportBookExcel(bookId){
 function openEditChkBook(id){
   const b = chkBooks.find(x=>x.id===id);
   if(!b){ toast('❗ الدفتر غير موجود'); return; }
-  const first = b.firstNum||1, last = b.lastNum||(first+b.pages-1);
+  const first = _chkPadNum(b.firstNum||1, b), last = _chkPadNum(b.lastNum||((b.firstNum||1)+b.pages-1), b);   // 0️⃣ v951
   const used = chkList.filter(c=>c.bookId===id).length;
 
   // modal بسيط inline
@@ -28816,7 +28834,7 @@ function openEditChkBook(id){
           <div class="fg" style="margin:0"><label>رقم الحساب</label><input id="ebk-account" value="${b.account||''}"></div>
           <div class="fg" style="margin:0"><label>عدد الأوراق</label><input id="ebk-pages" type="number" value="${b.pages||48}" min="1"></div>
           <div class="fg" style="margin:0"><label>رقم أول شيك *</label><input id="ebk-first-num" type="text" inputmode="numeric" value="${first}" pattern="[0-9]*"></div>
-          <div class="fg" style="margin:0"><label>رقم آخر شيك</label><input id="ebk-last-num" type="number" value="${last}" readonly style="background:var(--bg);color:var(--muted)"></div>
+          <div class="fg" style="margin:0"><label>رقم آخر شيك</label><input id="ebk-last-num" type="text" value="${last}" readonly style="background:var(--bg);color:var(--muted);direction:ltr"></div>
         </div>
         ${used > 0 ? `<div style="background:#fef3c7;border:1px solid #fde047;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400e;margin-bottom:12px">⚠️ في ${used} شيك محفوظ على الدفتر ده. لو غيرت رقم أول شيك هتتأكد الأرقام متطابقة.</div>`: ''}
         <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -28832,9 +28850,10 @@ function openEditChkBook(id){
   const pagesInput = document.getElementById('ebk-pages');
   const lastInput = document.getElementById('ebk-last-num');
   const updateLast = () => {
-    const f = parseInt(firstInput.value)||1;
+    const d = (firstInput.value||'').replace(/\D/g,'');
+    const f = parseInt(d,10)||1;
     const p = parseInt(pagesInput.value)||48;
-    lastInput.value = f + p - 1;
+    lastInput.value = String(f + p - 1).padStart(d.length, '0');   // 0️⃣ v951
   };
   firstInput.addEventListener('input', updateLast);
   pagesInput.addEventListener('input', updateLast);
@@ -28889,7 +28908,7 @@ function saveEditChkBook(id){
 
   document.getElementById('edit-book-popup')?.remove();
   renderChkBooks();
-  toast('✅ تم تعديل الدفتر — الأرقام من '+firstNum+' إلى '+lastNum);
+  toast('✅ تم تعديل الدفتر — الأرقام من '+_chkPadNum(firstNum,{padLen})+' إلى '+_chkPadNum(lastNum,{padLen}));
 }
 
 function deleteChkBook(id){
@@ -33902,9 +33921,10 @@ function clearOrderNote(){
 
 document.addEventListener('input', function(e){
   if(e.target.id==='bk-first-num'||e.target.id==='bk-pages'){
-    const first=parseInt($('bk-first-num')?.value)||0;
+    const d=($('bk-first-num')?.value||'').replace(/\D/g,'');
+    const first=parseInt(d,10)||0;
     const pages=parseInt($('bk-pages')?.value)||48;
-    if($('bk-last-num')&&first>0) $('bk-last-num').value=first+pages-1;
+    if($('bk-last-num')&&first>0) $('bk-last-num').value=String(first+pages-1).padStart(d.length,'0');   // 0️⃣ v951
   }
 });
 
@@ -33932,11 +33952,12 @@ function onChkBookChange(){
   const first=book.firstNum||1;
   const pages=book.pages||48;
   const padLen=book.padLen||String(first).length; // 🆕 v429: تصفير
-  const used=chkList.filter(c=>c.bookId===bookId).map(c=>String(c.num));
+  // 0️⃣ v951: المقارنة من غير الأصفار — شيك اتحفظ «12345» قديم = «0012345» في الدفتر
+  const used=new Set(chkList.filter(c=>c.bookId===bookId).map(c=>_chkNorm(c.num)));
   const opts=[];
   for(let i=0;i<pages;i++){
     const num=String(first+i).padStart(padLen,'0');
-    if(!used.includes(num)){
+    if(!used.has(_chkNorm(num))){
       opts.push(`<option value="${num}">${num}</option>`);
     }
   }
@@ -34746,8 +34767,11 @@ function _chkRepList(){
   else if(_chkRepStatus === 'void') list = list.filter(c => c.status === 'void' || c.status === 'void_requested');
   if(_chkRepYear) list = list.filter(c => new Date(c.date).getFullYear() === +_chkRepYear);
   const q = ($('chk-search')?.value || '').trim().toLowerCase();
+  // 0️⃣ v951: «0012345» يلاقي «12345» والعكس
+  const qn = _chkNorm(q);
   if(q) list = list.filter(c =>
-    ((c.num||'') + (c.payee||'') + (c.invoice||'') + (c.notes||'')).toLowerCase().includes(q));
+    ((chkNumShow(c)||'') + ' ' + (c.num||'') + (c.payee||'') + (c.invoice||'') + (c.notes||'')).toLowerCase().includes(q)
+    || (qn.length >= 3 && /^\d+$/.test(q.replace(/\s/g,'')) && _chkNorm(c.num).includes(qn)));
   return list;
 }
 
@@ -35371,7 +35395,7 @@ function showSupplierDetails(supplierName){
   <tbody>${checks.map(c=>{
     const book=chkBooks.find(b=>b.id===c.bookId);
     const st=c.status==='done'?'✅ صُرف':chkIsOverdue(c)?'⚠️ متأخر':'⏳ لم يُصرف';
-    return`<tr><td>${c.num}</td><td>${Number(c.amount).toLocaleString()} ج</td><td>${chkFmtDate(c.date)}</td><td>${book?book.name:'—'}</td><td>${c.invoice||'—'}</td><td>${st}</td></tr>`;
+    return`<tr><td style="direction:ltr">${escapeHtml(chkNumShow(c))}</td><td>${Number(c.amount).toLocaleString()} ج</td><td>${chkFmtDate(c.date)}</td><td>${book?book.name:'—'}</td><td>${c.invoice||'—'}</td><td>${st}</td></tr>`;
   }).join('')}</tbody>
   <tfoot><tr><td colspan="5">الإجمالي</td><td>${total.toLocaleString()} ج</td></tr></tfoot>
   </table><scr`+'ipt>window.onload=()=>window.print()</sc'+'ript></body></html>');
