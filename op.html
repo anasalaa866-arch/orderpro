@@ -6309,11 +6309,15 @@ tr:hover td{background:#fafbff}
         <input id="inv-price-max" type="number" min="0" placeholder="لـ" class="form-input" style="width:80px" oninput="invFiltersChangedDebounced()"></span>
       <select id="inv-sort" class="form-input" style="max-width:190px" onchange="invSortPick(this.value)">
         <option value="name:asc">↕️ الاسم (أ ← ي)</option>
-        <option value="total:desc">الإجمالي: الأكتر الأول</option>
+        <option value="value:desc">💰 بالقيمة (الأعلى الأول)</option>
+        <option value="created:desc">🆕 الأحدث تسجيلاً</option>
+        <option value="total:desc">📦 الأكتر عدداً</option>
+        <option value="changed:desc">🕒 الأحدث تغيّراً في الكمية</option>
+        <option value="created:asc">الأقدم تسجيلاً</option>
+        <option value="changed:asc">الأقدم تغيّراً</option>
         <option value="total:asc">الإجمالي: الأقل الأول</option>
         <option value="price:desc">السعر: الأغلى الأول</option>
         <option value="price:asc">السعر: الأرخص الأول</option>
-        <option value="value:desc">قيمة المخزون: الأعلى الأول</option>
         <option value="value:asc">قيمة المخزون: الأقل الأول</option>
       </select>
       <button class="btn btn-ghost btn-sm" onclick="invClearFilters()">✖ مسح الفلاتر</button>
@@ -12063,7 +12067,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v945';
+const UI_BUILD = 'v946';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -35863,11 +35867,23 @@ function renderInventoryTable(){
   if(Number.isFinite(pmax)) items = items.filter(i => Number(i.price || 0) <= pmax);
   // الترتيب
   const { key: sk, dir: sd } = _invSort, mul = sd === 'desc' ? -1 : 1;
+  // 🕒 v946: التاريخ كرقم — اللي مالوش تاريخ آخر حاجة في الاتجاهين
+  const _ts = v => { const t = v ? Date.parse(v) : NaN; return Number.isFinite(t) ? t : null; };
+  if(sk === 'created' || sk === 'changed'){
+    const f = sk === 'created' ? (i => _ts(i.createdAt)) : (i => _ts(i.changedAt));
+    const pid = i => Number(String(i.productId || '').replace(/\D/g, '')) || 0;   // أرقام شوبيفاي بتزيد مع الوقت
+    items.sort((a, b) => {
+      const x = f(a), y = f(b);
+      if(x == null && y == null) return mul * (pid(a) - pid(b));
+      if(x == null) return 1; if(y == null) return -1;
+      return (mul * (x - y)) || (mul * (pid(a) - pid(b)));
+    });
+  }
   const sv = i => sk === 'total' ? (i.totalQty || 0) : sk === 'price' ? Number(i.price || 0)
                 : sk === 'value' ? (i.totalQty || 0) * Number(i.price || 0)
                 : sk.startsWith('wh:') ? (i.levels[sk.slice(3)]?.qty || 0) : null;
   const nm = i => _invSortName((i.productTitle || '') + ' ' + (i.variantTitle && i.variantTitle !== 'Default Title' ? i.variantTitle : ''));
-  items.sort((a, b) => {
+  if(sk !== 'created' && sk !== 'changed') items.sort((a, b) => {
     if(sk === 'name') return mul * nm(a).localeCompare(nm(b), 'en', { numeric: true, sensitivity: 'base' });
     const d = (sv(a) - sv(b)) * mul;
     return d || nm(a).localeCompare(nm(b));
