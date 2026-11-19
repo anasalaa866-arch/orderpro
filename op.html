@@ -3317,6 +3317,7 @@ tr:hover td{background:#fafbff}
     <div class="card" style="margin-bottom:14px">
       <div style="padding:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-primary" id="imgfix-scan-btn" onclick="imgfixScanClick()">🔍 افحص الكتالوج</button>
+        <button class="btn btn-secondary" id="imgfix-q-btn" onclick="imgfixQualityClick()" title="بينزّل الصورة كاملة ويقيس دقة المنتج وحدّته — أبطأ من الفحص العادي">🔬 فحص الجودة</button>
         <input id="imgfix-search" placeholder="🔎 ابحث باسم المنتج..." oninput="imgfixRender()"
                style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;min-width:220px">
         <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
@@ -3327,6 +3328,8 @@ tr:hover td{background:#fafbff}
                 style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;cursor:pointer">
           <option value="all">كل الأسباب</option>
           <option value="unscanned">⏳ لسه ما اتفحصش</option>
+          <option value="weak">🔍 جودة ضعيفة</option>
+          <option value="q_unchecked">🔬 جودته لسه ما اتفحصتش</option>
           <option value="dims">📐 محتاج أبعاد</option>
           <option value="size">🗜️ محتاج حجم</option>
           <option value="frame">🖼️ محتاج مساحة بيضا</option>
@@ -3350,6 +3353,7 @@ tr:hover td{background:#fafbff}
           <option value="size-desc">الحجم: الأكبر أولاً</option>
           <option value="size-asc">الحجم: الأصغر أولاً</option>
           <option value="title">الاسم (أ-ي)</option>
+          <option value="quality">🔍 الجودة: الأضعف الأول</option>
         </select>
         <div style="flex:1"></div>
         <!-- 🖼️ v934: يتظبّط إيه — أي اختيار لوحده أو مع غيره -->
@@ -12059,7 +12063,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v941';
+const UI_BUILD = 'v942';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -23784,6 +23788,8 @@ function imgfixRender(){
   // 🖼️ v934: فلتر بالسبب
   const needF = document.getElementById('imgfix-need-filter')?.value || 'all';
   if(needF === 'unscanned') list = list.filter(i => !i.scanned);
+  else if(needF === 'weak') list = list.filter(i => i.qWeak === true);
+  else if(needF === 'q_unchecked') list = list.filter(i => i.qWeak == null && i.hasImage !== false);
   else if(needF !== 'all'){
     list = list.filter(i => { const f = _imgfixFlags(i);
       if(needF === 'frame') return f.frame;
@@ -23817,6 +23823,11 @@ function imgfixRender(){
   if(sortBy === 'size-desc') list.sort((a,b) => _bytes(b) - _bytes(a));
   else if(sortBy === 'size-asc') list.sort((a,b) => _bytes(a) - _bytes(b));
   else if(sortBy === 'title') list.sort((a,b) => (a.title||'').localeCompare(b.title||'', 'ar'));
+  else if(sortBy === 'quality'){
+    // 🔍 v942: الضعيف الأول، وجوّاه الأقل حدّة — واللي ماتفحصش آخر حاجة
+    const k = i => i.qWeak == null ? 2 : i.qWeak ? 0 : 1;
+    list.sort((a,b) => (k(a) - k(b)) || ((a.qSharp ?? 1e9) - (b.qSharp ?? 1e9)) || ((a.qPx ?? 1e9) - (b.qPx ?? 1e9)));
+  }
 
   // 🖼️ v937: أي تغيير في البحث/الفلاتر يرجّع لأول صفحة
   const _sig = [search, onlyNeeded, needF, sizeFilter, sortBy].join('|');
@@ -23847,12 +23858,15 @@ function imgfixRender(){
       + (_alsoBigger ? `<div style="font-size:9.5px;color:#b45309">أكبر صورة ${imgfixFmtSize(it.maxFileSize)}</div>` : '');
     // 🖼️ v934: السبب بالظبط بدل «محتاج تظبيط»
     const _f = _imgfixFlags(it), _chip = (t, bg, c) => `<span style="background:${bg};color:${c};padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700;white-space:nowrap">${t}</span>`;
+    // 🔍 v942: الجودة
+    const _q = it.qWeak === true ? `<span title="${escapeHtml(it.qReasons || '')}" style="background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700;white-space:nowrap">🔍 جودة ضعيفة</span>` : '';
+    const _qInfo = it.qPx != null ? `<div style="font-size:9.5px;color:${it.qWeak ? '#991b1b' : 'var(--muted)'};white-space:nowrap">دقة ${it.qPx}px · حدّة ${it.qSharp}</div>` : '';
     const _na = _f.frameNA ? `<span title="الخلفية مش بيضا سادة — المساحة مش بتتظبط" style="font-size:9.5px;color:#64748b">خلفية مش سادة</span>` : '';
     const badge = !it.scanned && it.scanned !== undefined
-      ? _chip('⏳ لسه ما اتفحصش', '#f1f5f9', '#64748b')
+      ? `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;align-items:center">${_chip('⏳ لسه ما اتفحصش', '#f1f5f9', '#64748b')}${_q}</div>${_qInfo}`
       : (_f.dims || _f.size || _f.frame)
-      ? `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;align-items:center">${_f.dims ? _chip('📐 أبعاد', '#fef3c7', '#92400e') : ''}${_f.size ? _chip('🗜️ حجم', '#ffedd5', '#9a3412') : ''}${_f.frame ? _chip('🖼️ مساحة', '#e0e7ff', '#3730a3') : ''}${_na}</div>`
-      : `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;align-items:center">${_chip('✅ متظبط', '#dcfce7', '#166534')}${_na}</div>`;
+      ? `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;align-items:center">${_f.dims ? _chip('📐 أبعاد', '#fef3c7', '#92400e') : ''}${_f.size ? _chip('🗜️ حجم', '#ffedd5', '#9a3412') : ''}${_f.frame ? _chip('🖼️ مساحة', '#e0e7ff', '#3730a3') : ''}${_q}${_na}</div>${_qInfo}`
+      : `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;align-items:center">${_chip('✅ متظبط', '#dcfce7', '#166534')}${_q}${_na}</div>${_qInfo}`;
     const newBadge = it._isNew
       ? `<span style="background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:6px;font-size:9px;font-weight:700;margin-right:4px">🆕 جديد</span>`
       : '';
@@ -23940,6 +23954,8 @@ function _imgfixButtons(){
     fa.style.display = n ? 'inline-flex' : 'none';
     fa.textContent = _imgfixSel.size ? `✅ ظبّط المحدد (${n})` : `✅ ظبّط اللي محتاج (${n})`;
   }
+  const qb = document.getElementById('imgfix-q-btn');
+  if(qb && !qb.disabled) qb.textContent = _imgfixSel.size ? `🔬 فحص جودة المحدد (${_imgfixSel.size})` : '🔬 فحص الجودة';
   const sb = document.getElementById('imgfix-scan-btn');
   if(sb && !_imgfixScanning) sb.textContent = _imgfixSel.size ? `🔍 افحص المحدد (${_imgfixSel.size})` : '🔍 افحص الكتالوج كله';
 }
@@ -23968,6 +23984,29 @@ function _imgfixMerge(scannedItems){
     ? { ...i, ...by.get(i.productGid), scanned: true, scannedAt: new Date().toISOString() } : i);
   const have = new Set(_imgfixItems.map(i => i.productGid));
   scannedItems.filter(i => !have.has(i.productGid)).forEach(i => _imgfixItems.push({ ...i, scanned: true }));
+}
+// 🔍 v942: فحص الجودة — المحدد لو فيه، وإلا اللي ظاهر بالفلاتر
+async function imgfixQualityClick(){
+  const list = (_imgfixSel.size ? _imgfixItems.filter(i => _imgfixSel.has(i.productGid)) : _imgfixVisible).filter(i => i.hasImage !== false && i.imageUrl);
+  if(!list.length){ toast('مفيش صور تتفحص'); return; }
+  if(!_imgfixSel.size && !confirm(`فحص جودة ${list.length} منتج بينزّل كل صورة بحجمها الكامل وبياخد وقت. نبدأ؟\n(لو عايز منتجات معيّنة، حددها الأول)`)) return;
+  const btn = document.getElementById('imgfix-q-btn'), prog = document.getElementById('imgfix-scan-progress');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ بيفحص الجودة...'; }
+  let done = 0, weak = 0, failed = 0;
+  try{
+    for(let i = 0; i < list.length; i += 20){
+      const r = await apiFetch('/api/image-fix/quality', 'POST', { productGids: list.slice(i, i + 20).map(x => x.productGid) });
+      const got = (r?.items || []).filter(x => !x.error);
+      failed += (r?.items || []).length - got.length;
+      const by = new Map(got.map(x => [x.productGid, x]));
+      _imgfixItems = _imgfixItems.map(x => by.has(x.productGid) ? { ...x, ...by.get(x.productGid), qAt: new Date().toISOString() } : x);
+      weak += got.filter(x => x.qWeak).length; done += Math.min(20, list.length - i);
+      if(prog) prog.textContent = `🔬 فحص الجودة: ${done}/${list.length} · ${weak} جودة ضعيفة` + (failed ? ` · ${failed} فشل` : '');
+      imgfixRender();
+    }
+    if(prog) prog.textContent = `✅ خلص فحص الجودة: ${done} منتج · ${weak} جودة ضعيفة` + (failed ? ` · ${failed} فشل` : '');
+  }catch(e){ toast('❌ ' + e.message); }
+  finally{ if(btn){ btn.disabled = false; btn.textContent = '🔬 فحص الجودة'; } }
 }
 async function imgfixScanClick(){
   if(_imgfixSel.size) return imgfixScanSelected();
