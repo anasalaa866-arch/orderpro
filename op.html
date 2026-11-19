@@ -12071,7 +12071,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v953';
+const UI_BUILD = 'v954';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -27702,6 +27702,7 @@ function renderChecksPage(){
   const tbody=$('chk-tbody');
   if(!tbody)return;
   if(!list.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--muted)">لا توجد شيكات</td></tr>';$('chk-sum-row').style.display='none';return;}
+  const _dups=_chkDupIds();   // 🐛 v954
   tbody.innerHTML=list.map(c=>{
     const days=chkDaysUntil(c.date);
     const dayLbl=c.status==='pending'?(days<0?`<span style="color:var(--danger);font-size:10px">(${Math.abs(days)} يوم تأخير)</span>`:days<=7?`<span style="color:var(--warn);font-size:10px">(بعد ${days} أيام)</span>`:''):'';
@@ -27709,7 +27710,7 @@ function renderChecksPage(){
     const sp=_chkIsSpoiled(c);   // 🗑️ v921
     if(sp) return _chkSpoiledRow(c, book);
     return`<tr style="${chkIsOverdue(c)?'background:#fff5f5':''}${c.status==='void'?'background:#f3f4f6;opacity:.6':''}">
-      <td><strong style="direction:ltr;display:inline-block">${escapeHtml(chkNumShow(c))}</strong></td>
+      <td><strong style="direction:ltr;display:inline-block">${escapeHtml(chkNumShow(c))}</strong>${_chkDupBadge(c, _dups)}</td>
       <td><strong>${c.payee}</strong>${c.note?`<br><span style="font-size:10px;color:var(--muted)">${c.note}</span>`:''}</td>
       <td style="font-weight:700;font-size:14px">${chkFmtAmount(c.amount)} ج</td>
       <td>${chkFmtDate(c.date)} ${dayLbl}</td>
@@ -28052,15 +28053,37 @@ async function _chkSaveSpoiled(num){
   closeM('m-chk'); chkRenderActive();
   toast(old ? '✅ اتعدّلت الورقة الهالكة' : '✅ اتسجّلت الورقة الهالكة — مستنية موافقة المدير');
 }
-function saveChk(){
+// 🐛 v954: شيكات متسجّلة بنفس الرقم في نفس الدفتر (من قبل الحماية) — بتتعلّم «⚠️ مكرر»
+function _chkDupIds(){
+  const by = new Map();
+  for(const c of (chkList || [])){
+    if(c.kind === 'spoiled' && c.status === 'rejected') continue;
+    const k = (c.bookId || '') + '|' + _chkNorm(c.num); if(!_chkNorm(c.num)) continue;
+    (by.get(k) || by.set(k, []).get(k)).push(c.id);
+  }
+  const s = new Set(); for(const ids of by.values()) if(ids.length > 1) ids.forEach(i => s.add(i));
+  return s;
+}
+function _chkDupBadge(c, dups){
+  return (dups || _chkDupIds()).has(c.id)
+    ? ' <span title="الرقم ده متسجّل أكتر من مرة في نفس الدفتر — امسح الزيادة" style="font-size:10px;padding:1px 6px;border-radius:999px;background:#fee2e2;color:#991b1b;font-weight:800;white-space:nowrap">⚠️ مكرر</span>' : '';
+}
+let _chkSavingNow = false;
+async function saveChk(){
   const num=($('chk-num-sel')?.value)||($('chk-num')?.value?.trim())||'';
   if(chkKind==='spoiled') return _chkSaveSpoiled(num);
+  if(_chkSavingNow) return;   // 🐛 v954: دوستين ورا بعض = شيكين
   // 🆕 v194: لازم اختيار من الـ dropdown — مفيش إدخال يدوي
   const payee=$('chk-payee-sel')?.value?.trim()||'';
   const amount=parseFloat($('chk-amount').value),date=$('chk-date').value;
   if(!num){toast('❗ اختر رقم الشيك');return;}
   if(!payee){toast('❗ اختر المورد من القائمة');return;}
   if(!amount||!date){toast('❗ يرجى ملء الحقول المطلوبة');return;}
+  // 🐛 v954: نفس الرقم في نفس الدفتر؟ (من غير الأصفار)
+  const _bk=$('chk-book-sel')?.value||'';
+  const _dup=chkList.find(x=>x.id!==editingChkId && (x.bookId||'')===_bk && _chkNorm(x.num)===_chkNorm(num)
+    && !(x.kind==='spoiled'&&x.status==='rejected'));
+  if(_dup){toast(`❗ الرقم ${chkNumShow(_dup)} متسجّل قبل كده (${_dup.payee||''})`);return;}
   // 🚑 v437: مانبعتش img إلا لو صورة حقيقية — أي حاجة تانية بتمسح الصورة الأصلية
   const imgToSave = _isRealImg(chkImgData) ? chkImgData : '';
   const data={id:editingChkId||(Date.now()+'_'+Math.random().toString(36).slice(2,5)),
@@ -28072,12 +28095,24 @@ function saveChk(){
   // 🚑 v437: لو مفيش صورة جديدة حقيقية → ماتبعتش img خالص (الباك اند يسيب الأصلية)
   if(!_isRealImg(imgToSave)) delete data.img;
   
-  if(editingChkId){const idx=chkList.findIndex(x=>x.id===editingChkId);if(idx>=0){
-    chkList[idx]={...chkList[idx], ...data}; // merge عشان hasImg ما يتحذفش
-  }}
-  else chkList.push({...data, hasImg: !!imgToSave});
-  saveChks(true);if(API_URL)apiFetch('/api/checks','POST',data).catch(()=>{});
-  closeM('m-chk');chkRenderActive();toast('✅ تم حفظ الشيك');
+  // 🐛 v954: السيرفر الأول — لو رفض (رقم مكرر) مانسجّلش محلي. كان الرفض بيتبلع.
+  _chkSavingNow = true;
+  try{
+    if(API_URL){
+      let r = null;
+      try{ r = await apiFetch('/api/checks','POST',data); }
+      catch(e){
+        if(/متسجّل قبل كده/.test(e.message||'')){ toast('❗ '+e.message); return; }
+        r = null;   // نت/سيرفر — يتسجّل محلي ويتزامن بعدين زي الأول
+      }
+    }
+    if(editingChkId){const idx=chkList.findIndex(x=>x.id===editingChkId);if(idx>=0){
+      chkList[idx]={...chkList[idx], ...data}; // merge عشان hasImg ما يتحذفش
+    }}
+    else chkList.push({...data, hasImg: !!imgToSave});
+    saveChks(true);
+    closeM('m-chk');chkRenderActive();toast('✅ تم حفظ الشيك');
+  }finally{ _chkSavingNow = false; }
 }
 async function chkMarkDone(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
@@ -28717,7 +28752,7 @@ function openBookDetails(bookId){
               ${checks.map(c=>{
                 const overdue=chkIsOverdue(c);
                 return `<tr style="border-bottom:1px solid var(--border);${overdue?'background:#fff5f5':''}">
-                  <td style="padding:8px"><strong style="direction:ltr;display:inline-block">${escapeHtml(chkNumShow(c)||'—')}</strong></td>
+                  <td style="padding:8px"><strong style="direction:ltr;display:inline-block">${escapeHtml(chkNumShow(c)||'—')}</strong>${_chkDupBadge(c)}</td>
                   <td style="padding:8px"><strong>${c.payee||'—'}</strong>${c.note?`<br><span style="font-size:10px;color:var(--muted)">${c.note}</span>`:''}</td>
                   <td style="padding:8px;font-weight:700">${fmt(c.amount)} ج</td>
                   <td style="padding:8px">${chkFmtDate(c.date)}</td>
@@ -35050,7 +35085,7 @@ function openWeekChecksModal(weekNum){
       : '';
     return `
       <tr style="background:${bg};border-bottom:1px solid var(--border)">
-        <td style="padding:8px;font-weight:700;direction:ltr;text-align:right">${escapeHtml(chkNumShow(c) || '—')}</td>
+        <td style="padding:8px;font-weight:700;direction:ltr;text-align:right">${escapeHtml(chkNumShow(c) || '—')}${_chkDupBadge(c)}</td>
         <td style="padding:8px">
           <strong>${escapeHtml(c.payee || '—')}</strong>
           ${c.note ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(c.note)}</div>` : ''}
@@ -35215,7 +35250,7 @@ function openMonthChecksModal(monthNum, yearNum){
       : '';
     return `
       <tr style="background:${bg};border-bottom:1px solid var(--border)">
-        <td style="padding:8px;font-weight:700;direction:ltr;text-align:right">${escapeHtml(chkNumShow(c) || '—')}</td>
+        <td style="padding:8px;font-weight:700;direction:ltr;text-align:right">${escapeHtml(chkNumShow(c) || '—')}${_chkDupBadge(c)}</td>
         <td style="padding:8px">
           <strong>${escapeHtml(c.payee || '—')}</strong>
           ${c.note ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(c.note)}</div>` : ''}
