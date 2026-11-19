@@ -7710,6 +7710,8 @@ tr:hover td{background:#fafbff}
       <select id="st-status" onchange="stRender()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"></select>
       <select id="st-origin" onchange="stRender()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"></select>
       <select id="st-dest" onchange="stRender()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif"></select>
+      <select id="st-printed" onchange="stRender()" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif">
+        <option value="">🖨️ الطباعة: الكل</option><option value="no">لسه ما اتطبعش</option><option value="yes">اتطبع قبل كده</option></select>
       <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="st-diff" onchange="stRender()"> فيها فرق بس</label>
       <button class="btn btn-xs btn-ghost" onclick="stClear()">✖ مسح</button>
     </div>
@@ -12033,7 +12035,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v934';
+const UI_BUILD = 'v935';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -30153,7 +30155,7 @@ async function stOpen(){
   stLoad();
 }
 function stClear(){
-  ['st-q','st-status','st-origin','st-dest'].forEach(id => { if($(id)) $(id).value = ''; });
+  ['st-q','st-status','st-origin','st-dest','st-printed'].forEach(id => { if($(id)) $(id).value = ''; });
   _stDestDefaulted = false;   // المسح بيرجّع تريفيوم
   if($('st-diff')) $('st-diff').checked = false;
   $('st-from').value = _tzToday(-29); $('st-to').value = _tzToday(0);
@@ -30192,8 +30194,9 @@ function _stFillSelects(){
   fill('st-origin', '📤 من: كل المخازن', uniq('origin_name'));
   fill('st-dest', '📥 لـ: كل المخازن', uniq('dest_name'));
   // 🏪 v934: «لـ» افتراضي تريفيوم — أول مرة بس، لو اخترت غيره بيتساب
+  //   v935: المطابقة كانت /trivium/ والاسم الحقيقي «Trivim Square Shop» فماكانتش بتشتغل
   if(!_stDestDefaulted){
-    const sel = $('st-dest'), tri = [...(sel?.options || [])].find(o => /trivium/i.test(o.value));
+    const sel = $('st-dest'), tri = [...(sel?.options || [])].find(o => /triv/i.test(o.value));   // اسمه في شوبيفاي «Trivim» من غير u
     if(tri){ sel.value = tri.value; _stDestDefaulted = true; }
   }
 }
@@ -30207,6 +30210,9 @@ function _stFiltered(){
     if(o && t.origin_name !== o) return false;
     if(d && t.dest_name !== d) return false;
     if(diff && !_stHasDiff(t)) return false;
+    const pr = $('st-printed')?.value || '';
+    if(pr === 'yes' && !t.printed_at) return false;
+    if(pr === 'no' && t.printed_at) return false;
     if(q){
       const hay = norm([t.name, t.reference_name, t.note, (t.tags || []).join(' '), t.po_number, t.origin_name, t.dest_name,
         ...(t.line_items || []).map(l => [l.title, l.sku, l.barcode].join(' '))].join(' '));
@@ -30226,7 +30232,9 @@ function stRender(){
     sum.innerHTML = `<span style="color:var(--muted)">${_stRows.length} ترانسفير في المدة:</span>` +
       Object.keys(_ST_STATUS).filter(k => by[k]).map(k =>
         `<span style="cursor:pointer" onclick="$('st-status').value='${k}';stRender()">${_stBadge(k)} <b>${by[k]}</b></span>`).join('') +
-      (nDiff ? `<span style="cursor:pointer" onclick="$('st-diff').checked=true;stRender()"><span class="badge" style="background:#fee2e2;color:#991b1b">⚠️ فيها فرق</span> <b>${nDiff}</b></span>` : '');
+      (nDiff ? `<span style="cursor:pointer" onclick="$('st-diff').checked=true;stRender()"><span class="badge" style="background:#fee2e2;color:#991b1b">⚠️ فيها فرق</span> <b>${nDiff}</b></span>` : '') +
+      (() => { const n = _stRows.filter(t => !t.printed_at && !['CANCELED','TRANSFERRED'].includes(t.status)).length;
+        return n ? `<span style="cursor:pointer" onclick="$('st-printed').value='no';stRender()"><span class="badge" style="background:#fff7ed;color:#9a3412">🖨️ مفتوح ولسه ما اتطبعش</span> <b>${n}</b></span>` : ''; })();
   }
   if(!rows.length){
     box.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">${_stRows.length ? 'مفيش ترانسفيرات تطابق الفلتر' : 'مفيش ترانسفيرات في المدة دي'}</div>`;
@@ -30248,7 +30256,8 @@ function _stRow(t){
   return `<tr onclick="stToggle('${escapeHtml(t.transfer_id)}')" style="border-bottom:1px solid var(--border);cursor:pointer;${open ? 'background:#f8fafc' : ''}">
     <td style="padding:9px 10px;white-space:nowrap"><b>${escapeHtml(t.name || '#' + t.transfer_id)}</b>
       ${t.po_number ? `<span class="badge" style="background:#ede9fe;color:#5b21b6;font-size:10px">📋 ${escapeHtml(t.po_number)}</span>` : ''}
-      ${diff ? '<span title="فيه فرق بين المبعوت والمستلم" style="color:#dc2626">⚠️</span>' : ''}</td>
+      ${diff ? '<span title="فيه فرق بين المبعوت والمستلم" style="color:#dc2626">⚠️</span>' : ''}
+      ${_stPrintedBadge(t)}</td>
     <td style="padding:9px 10px;white-space:nowrap">${_stDate(t.created_at, true)}</td>
     <td style="padding:9px 10px">${escapeHtml(t.origin_name || '—')} <span style="color:var(--muted)">←</span> ${escapeHtml(t.dest_name || '—')}</td>
     <td style="padding:9px 10px">${_stBadge(t.status)}</td>
@@ -30257,7 +30266,7 @@ function _stRow(t){
     <td style="padding:9px 10px">${(t.line_items || []).length}</td>
     <td style="padding:9px 10px">${ships.length ? ships.map(s => escapeHtml(_ST_SHIP[s.status] || s.status)).join('<br>') : '—'}</td>
     <td style="padding:9px 10px;max-width:240px;color:var(--muted);font-size:11.5px">${escapeHtml([t.reference_name, t.note].filter(Boolean).join(' · ') || '—')}</td>
-    <td style="padding:9px 6px"><button class="btn btn-xs btn-ghost" title="طباعة / PDF" onclick="event.stopPropagation();stPrint('${escapeHtml(t.transfer_id)}')">🖨️</button></td>
+    <td style="padding:9px 6px;white-space:nowrap"><button class="btn btn-xs ${t.printed_at ? 'btn-ghost' : 'btn-primary'}" title="${t.printed_at ? 'اتطبع قبل كده — اطبع تاني' : 'اطبع'}" onclick="event.stopPropagation();stPrint('${escapeHtml(t.transfer_id)}')">🖨️${t.printed_at ? ' تاني' : ' اطبع'}</button></td>
   </tr>${open ? `<tr><td colspan="9" style="padding:0 10px 14px;background:#f8fafc">${_stDetail(t)}</td></tr>` : ''}`;
 }
 function _stDetail(t){
@@ -30305,8 +30314,11 @@ function _stPrintHtml(t){
   const items = (t.line_items || []).slice().sort((a, b) =>
     String(a.product_title || a.title || '').localeCompare(String(b.product_title || b.title || ''), 'en'));
   const box = '<span class="bx"></span>';
+  // 🖼️ v935: صورة المنتج في الطباعة — مصغّرة من الـ CDN عشان الورقة تفتح بسرعة
+  const thumb = u => !u ? '' : (typeof _shopThumb === 'function' ? _shopThumb(u, 160) : u);
   const rows = items.map((l, i) => `<tr>
       <td class="c">${i + 1}</td>
+      <td class="c im">${l.image ? `<img src="${escapeHtml(thumb(l.image))}" alt="">` : '<div class="noimg"></div>'}</td>
       <td><div class="nm">${escapeHtml(l.product_title || l.title || '—')}${l.variant_title ? ' - ' + escapeHtml(l.variant_title) : ''}</div>
           <div class="sk">${escapeHtml(l.sku || '')}${l.barcode ? ' · ' + escapeHtml(l.barcode) : ''}</div></td>
       <td class="c q">${l.qty || 0}</td>
@@ -30335,13 +30347,15 @@ function _stPrintHtml(t){
   .nm { font-weight: 700; } .sk { font-size: 10px; color: #555; direction: ltr; text-align: right; }
   .bx { display: inline-block; width: 20px; height: 20px; border: 1.6px solid #111; border-radius: 3px; }
   .w { width: 90px; }
+  .im { width: 58px; padding: 3px; } .im img { width: 50px; height: 50px; object-fit: contain; display: block; margin: auto; }
+  .noimg { width: 50px; height: 50px; border: 1px dashed #bbb; margin: auto; }
   .sig { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 26px; font-size: 12.5px; }
   .sig div { border-top: 1px solid #111; padding-top: 6px; }
   .note { margin: 6px 0 10px; padding: 6px 8px; border: 1px dashed #777; }
 </style></head><body>
   <div class="hd">
     <div><h1>🚚 ترانسفير ${escapeHtml(t.name || '')}</h1>
-      <div class="muted">${escapeHtml(st)}${t.po_number ? ' · أمر شراء ' + escapeHtml(t.po_number) : ''}</div></div>
+      <div class="muted">${escapeHtml(st)}${t.po_number ? ' · أمر شراء ' + escapeHtml(t.po_number) : ''}${t.printed_at ? ` · <b>نسخة ${(t.print_count || 0) + 1}</b>` : ''}</div></div>
     <div style="text-align:left"><b>CAFELAX</b><div class="muted">اتطبع ${_stDate(new Date().toISOString(), true)}</div></div>
   </div>
   <div class="meta">
@@ -30354,21 +30368,42 @@ function _stPrintHtml(t){
   </div>
   ${t.note ? `<div class="note">📝 ${escapeHtml(t.note)}</div>` : ''}
   <table>
-    <thead><tr><th style="width:30px">#</th><th>الصنف</th><th style="width:60px">الكمية</th>
+    <thead><tr><th style="width:30px">#</th><th style="width:58px">صورة</th><th>الصنف</th><th style="width:60px">الكمية</th>
       <th style="width:62px">تحضير ✓</th><th style="width:62px">استلام ✓</th><th class="w">ملاحظات</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="6" class="c">مفيش أصناف</td></tr>'}</tbody>
+    <tbody>${rows || '<tr><td colspan="7" class="c">مفيش أصناف</td></tr>'}</tbody>
   </table>
   <div class="sig"><div>المحضّر: ........................ التوقيع: ............</div>
                    <div>المستلم: ........................ التوقيع: ............</div></div>
-  <script>window.onload = () => setTimeout(() => window.print(), 300);<\/script>
+  <script>
+    // استنى الصور تحمّل (أقصى ٨ ثواني) قبل نافذة الطباعة — وإلا الورقة تطلع من غير صور
+    (function(){ var done = false; function go(){ if(done) return; done = true; setTimeout(function(){ window.print(); }, 200); }
+      function check(){ var imgs = [].slice.call(document.images); if(imgs.every(function(i){ return i.complete; })) go(); }
+      [].slice.call(document.images).forEach(function(i){ i.addEventListener('load', check); i.addEventListener('error', check); });
+      window.addEventListener('load', check); setTimeout(go, 8000); check(); })();
+  <\/script>
 </body></html>`;
+}
+// 🖨️ v935: علامة «اتطبع» — مين وإمتى وكام مرة
+function _stPrintedBadge(t){
+  if(!t.printed_at) return '';
+  const tip = `اتطبع ${t.print_count > 1 ? t.print_count + ' مرات · آخر مرة ' : ''}${_stDate(t.printed_at, true)}${t.printed_by ? ' · ' + t.printed_by : ''}`;
+  return `<span class="badge" title="${escapeHtml(tip)}" style="background:#e0f2fe;color:#075985;font-size:10px;white-space:nowrap">🖨️ اتطبع${t.print_count > 1 ? ' ×' + t.print_count : ''}</span>`;
 }
 function stPrint(id){
   const t = _stRows.find(x => x.transfer_id === id);
   if(!t){ toast('❌ الترانسفير مش موجود'); return; }
+  if(t.printed_at && !confirm(`الترانسفير ${t.name || ''} اتطبع قبل كده (${_stDate(t.printed_at, true)}${t.printed_by ? ' · ' + t.printed_by : ''}).\nتطبعه تاني؟`)) return;
   const w = window.open('', '_blank');
   if(!w){ toast('❌ المتصفح منع النافذة — اسمح بالـ popups'); return; }
   w.document.open(); w.document.write(_stPrintHtml(t)); w.document.close();
+  // سجّل الطباعة وحدّث العلامة على طول
+  t.printed_at = new Date().toISOString(); t.print_count = (t.print_count || 0) + 1;
+  t.printed_by = (typeof currentUser !== 'undefined' && currentUser?.name) || t.printed_by;
+  stRender();
+  apiFetch(`/api/shopify-transfers/${encodeURIComponent(id)}/printed`, 'POST',
+    { by: (typeof currentUser !== 'undefined' && currentUser?.name) || '' })
+    .then(r => { if(r && r.printed_at){ Object.assign(t, { printed_at: r.printed_at, printed_by: r.printed_by, print_count: r.print_count }); stRender(); } })
+    .catch(e => toast('⚠️ الطباعة ماتسجلتش: ' + e.message));
 }
 function stToggle(id){ _stOpenId = _stOpenId === id ? null : id; stRender(); }
 async function stRefresh(id){
