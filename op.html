@@ -3316,16 +3316,17 @@ tr:hover td{background:#fafbff}
     <!-- Controls -->
     <div class="card" style="margin-bottom:14px">
       <div style="padding:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <button class="btn btn-primary" id="imgfix-scan-btn" onclick="imgfixScan()">🔍 افحص الكتالوج</button>
+        <button class="btn btn-primary" id="imgfix-scan-btn" onclick="imgfixScanClick()">🔍 افحص الكتالوج</button>
         <input id="imgfix-search" placeholder="🔎 ابحث باسم المنتج..." oninput="imgfixRender()"
                style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;min-width:220px">
         <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="imgfix-only-needed" checked onchange="imgfixRender()" style="width:15px;height:15px">
+          <input type="checkbox" id="imgfix-only-needed" onchange="imgfixRender()" style="width:15px;height:15px">
           اعرض اللي محتاج تظبيط بس
         </label>
         <select id="imgfix-need-filter" onchange="imgfixRender()" title="محتاج إيه"
                 style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:Cairo,sans-serif;font-size:12px;cursor:pointer">
           <option value="all">كل الأسباب</option>
+          <option value="unscanned">⏳ لسه ما اتفحصش</option>
           <option value="dims">📐 محتاج أبعاد</option>
           <option value="size">🗜️ محتاج حجم</option>
           <option value="both">📐+🗜️ محتاج الاتنين</option>
@@ -12035,7 +12036,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v936';
+const UI_BUILD = 'v937';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -23659,6 +23660,7 @@ let _imgfixJobPoll = null;    // interval للـ progress
 
 function imgfixOnOpen(){
   imgfixModesLoad();   // 🖼️ v934
+  imgfixLoadProducts();   // 🖼️ v937: كل المنتجات + آخر فحص — من غير فحص جديد
   // لو فيه job شغّال، استأنف المتابعة
   imgfixCheckActiveJob();
   // 🆕 v399: حمّل المنتجات الجديدة (review queue) تلقائياً
@@ -23673,8 +23675,11 @@ async function imgfixLoadReviewQueue(){
     const items = (r && r.items) ? r.items : [];
     if(items.length){
       // احقن المنتجات الجديدة في القايمة (من غير ما نمسح نتيجة فحص كامل لو موجودة)
-      const existing = new Set(_imgfixItems.map(i => i.mediaGid));
-      const fresh = items.filter(i => !existing.has(i.mediaGid)).map(i => ({...i, hasImage: true, _isNew: true}));
+      // 🖼️ v937: لو المنتج موجود في القايمة، علّمه جديد وحدّث بياناته بدل ما يتكرر
+      const byGid = new Map(items.map(i => [i.productGid, i]));
+      _imgfixItems = _imgfixItems.map(i => byGid.has(i.productGid) ? { ...i, ...byGid.get(i.productGid), hasImage: true, scanned: true, _isNew: true } : i);
+      const have = new Set(_imgfixItems.map(i => i.productGid));
+      const fresh = items.filter(i => !have.has(i.productGid)).map(i => ({...i, hasImage: true, scanned: true, _isNew: true}));
       _imgfixItems = [...fresh, ..._imgfixItems];
       imgfixRender();
       const prog = document.getElementById('imgfix-scan-progress');
@@ -23701,33 +23706,31 @@ async function imgfixScan(){
   if(!API_URL){ toast('❌ الـ backend غير متصل'); return; }
   if(_imgfixScanning) return;
   _imgfixScanning = true;
-  _imgfixItems = [];
   const btn = document.getElementById('imgfix-scan-btn');
   if(btn){ btn.disabled = true; btn.textContent = '⏳ جاري الفحص...'; }
   const prog = document.getElementById('imgfix-scan-progress');
 
   try {
-    let cursor = null, pages = 0;
+    let cursor = null, pages = 0, _scannedN = 0;
     do {
       const params = new URLSearchParams({ limit: '50' });
       if(cursor) params.set('cursor', cursor);
       const r = await apiFetch('/api/image-fix/scan?' + params.toString());
       if(!r || !r.items) throw new Error(r?.error || 'فشل الفحص');
       if(r.sharpReady === false){ imgfixSharpWarn(false); _imgfixScanning = false; return; }   // 🆕 v622
-      _imgfixItems.push(...r.items.filter(it => it.hasImage));
+      _imgfixMerge(r.items);   // 🖼️ v937: دمج — المنتجات كلها فاضلة ظاهرة
+      _scannedN += r.items.length;
       cursor = r.hasNextPage ? r.endCursor : null;
       pages++;
-      const needed = _imgfixItems.filter(i => i.needsFix).length;
-      if(prog) prog.textContent = `تم فحص ${_imgfixItems.length} منتج... (${needed} محتاج تظبيط)`;
+      if(prog) prog.textContent = `تم فحص ${_scannedN} منتج...`;
       imgfixRender();
       // safety: حد أقصى ~160 صفحة (8000 منتج)
       if(pages > 165) break;
     } while(cursor);
 
-    const needed = _imgfixItems.filter(i => i.needsFix).length;
-    if(prog) prog.textContent = `✅ خلص الفحص: ${_imgfixItems.length} منتج · ${needed} محتاج تظبيط`;
-    const fixAll = document.getElementById('imgfix-fixall-btn');
-    if(fixAll) fixAll.style.display = needed > 0 ? 'inline-flex' : 'none';
+    const needed = _imgfixItems.filter(i => i.scanned && i.needsFix).length;
+    if(prog) prog.textContent = `✅ خلص الفحص: ${_scannedN} منتج · ${needed} محتاج تظبيط`;
+    _imgfixButtons();
   } catch(e){
     if(prog) prog.textContent = '❌ ' + e.message;
     toast('❌ ' + e.message);
@@ -23749,6 +23752,7 @@ function matchTokens(haystack, query){
 function imgfixRender(){
   const cont = document.getElementById('imgfix-results');
   if(!cont) return;
+  _imgfixButtons();
   const onlyNeeded = document.getElementById('imgfix-only-needed')?.checked;
   const search = (document.getElementById('imgfix-search')?.value || '').trim().toLowerCase();
   let list = _imgfixItems.slice();
@@ -23756,7 +23760,8 @@ function imgfixRender(){
   if(search) list = list.filter(i => matchTokens(i.title, search));
   // 🖼️ v934: فلتر بالسبب
   const needF = document.getElementById('imgfix-need-filter')?.value || 'all';
-  if(needF !== 'all'){
+  if(needF === 'unscanned') list = list.filter(i => !i.scanned);
+  else if(needF !== 'all'){
     list = list.filter(i => { const f = _imgfixFlags(i);
       return needF === 'dims' ? f.dims : needF === 'size' ? f.size : needF === 'both' ? (f.dims && f.size)
            : needF === 'dims_only' ? (f.dims && !f.size) : needF === 'size_only' ? (f.size && !f.dims) : true; });
@@ -23789,13 +23794,11 @@ function imgfixRender(){
   else if(sortBy === 'size-asc') list.sort((a,b) => _bytes(a) - _bytes(b));
   else if(sortBy === 'title') list.sort((a,b) => (a.title||'').localeCompare(b.title||'', 'ar'));
 
+  // 🖼️ v937: أي تغيير في البحث/الفلاتر يرجّع لأول صفحة
+  const _sig = [search, onlyNeeded, needF, sizeFilter, sortBy].join('|');
+  if(_sig !== _imgfixSig){ _imgfixSig = _sig; _imgfixPage = 1; }
   _imgfixVisible = list;   // 🖼️ v934: «ظبّط الكل» بيشتغل على اللي ظاهر
-  const _fa = document.getElementById('imgfix-fixall-btn');
-  if(_fa && _imgfixItems.length){
-    const n = list.filter(_imgfixNeeds).length;
-    _fa.style.display = n ? 'inline-flex' : 'none';
-    _fa.textContent = `✅ ظبّط الكل (${n})`;
-  }
+  _imgfixButtons();
   if(!list.length){
     let msg, sub;
     if(search){ msg = '🔎 مفيش نتائج للبحث'; sub = 'جرّب كلمة تانية'; }
@@ -23806,7 +23809,11 @@ function imgfixRender(){
     return;
   }
 
-  const rows = list.map(it => {
+  const _pages = Math.max(1, Math.ceil(list.length / _IMGFIX_PER));
+  if(_imgfixPage > _pages) _imgfixPage = _pages;
+  const _from = (_imgfixPage - 1) * _IMGFIX_PER, pageList = list.slice(_from, _from + _IMGFIX_PER);
+  const _allSel = pageList.length && pageList.every(i => _imgfixSel.has(i.productGid));
+  const rows = pageList.map(it => {
     const dim = (it.width && it.height) ? `${it.width}×${it.height}` : '؟';
     // 🆕 v621: لوّن فوق 300 KB، ووضّح لو أكبر صورة مش الرئيسية
     const _mx = it.maxFileSize || it.fileSize || 0;
@@ -23816,21 +23823,24 @@ function imgfixRender(){
       + (_alsoBigger ? `<div style="font-size:9.5px;color:#b45309">أكبر صورة ${imgfixFmtSize(it.maxFileSize)}</div>` : '');
     // 🖼️ v934: السبب بالظبط بدل «محتاج تظبيط»
     const _f = _imgfixFlags(it), _chip = (t, bg, c) => `<span style="background:${bg};color:${c};padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700;white-space:nowrap">${t}</span>`;
-    const badge = (_f.dims || _f.size)
+    const badge = !it.scanned && it.scanned !== undefined
+      ? _chip('⏳ لسه ما اتفحصش', '#f1f5f9', '#64748b')
+      : (_f.dims || _f.size)
       ? `<div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap">${_f.dims ? _chip('📐 أبعاد', '#fef3c7', '#92400e') : ''}${_f.size ? _chip('🗜️ حجم', '#ffedd5', '#9a3412') : ''}</div>`
       : _chip('✅ متظبط', '#dcfce7', '#166534');
     const newBadge = it._isNew
       ? `<span style="background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:6px;font-size:9px;font-weight:700;margin-right:4px">🆕 جديد</span>`
       : '';
     return `
-      <tr data-media="${it.mediaGid}">
-        <td style="width:48px"><img src="${_shopThumb(it.imageUrl, 84)}" style="width:42px;height:42px;object-fit:contain;background:#f3f4f6;border-radius:6px;border:1px solid var(--border)"></td>
+      <tr data-media="${it.mediaGid}" style="${_imgfixSel.has(it.productGid) ? 'background:#eef2ff' : ''}">
+        <td style="width:30px;text-align:center"><input type="checkbox" ${_imgfixSel.has(it.productGid) ? 'checked' : ''} onchange="imgfixToggleSel('${escapeHtml(it.productGid)}', this.checked)" style="width:15px;height:15px;cursor:pointer"></td>
+        <td style="width:48px"><img loading="lazy" src="${_shopThumb(it.imageUrl, 84)}" style="width:42px;height:42px;object-fit:contain;background:#f3f4f6;border-radius:6px;border:1px solid var(--border)"></td>
         <td style="font-size:12px;font-weight:600">${newBadge}${escapeHtml(it.title)}</td>
         <td style="text-align:center;font-size:11px;font-family:monospace">${dim}</td>
         <td style="text-align:center;font-size:11px;font-family:monospace;color:var(--muted)">${sizeStr}</td>
         <td style="text-align:center">${badge}</td>
         <td style="text-align:center">
-          ${_imgfixNeeds(it) ? `<button class="btn btn-ghost btn-xs" onclick='imgfixOne(this, ${JSON.stringify(it).replace(/'/g,"&#39;")})' style="color:#16a34a">🖼️ ظبّط</button>` : '—'}
+          ${it.hasImage !== false ? `<button class="btn btn-ghost btn-xs" onclick='imgfixOne(this, ${JSON.stringify(it).replace(/'/g,"&#39;")})' style="color:#16a34a">🖼️ ظبّط</button>` : '<span style="color:var(--muted);font-size:11px">مفيش صورة</span>'}
         </td>
       </tr>`;
   }).join('');
@@ -23841,11 +23851,14 @@ function imgfixRender(){
 
   cont.innerHTML = `
     <div class="card">
-      <div class="card-hd"><h3 style="margin:0">${list.length} منتج${search?` (بحث: "${escapeHtml(search)}")`:''}${totalStr}</h3></div>
+      <div class="card-hd" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">${list.length} منتج${search?` (بحث: "${escapeHtml(search)}")`:''}${totalStr}</h3>
+        <span style="font-size:12px;color:var(--muted)">${_imgfixSel.size ? `· ✔️ ${_imgfixSel.size} محدد` : ''}</span>
+        ${_imgfixSel.size ? `<button class="btn btn-ghost btn-xs" onclick="imgfixSelAll(true)">حدد كل اللي ظاهر (${list.length})</button><button class="btn btn-ghost btn-xs" onclick="imgfixSelAll(false)">إلغاء التحديد</button>`
+                          : `<button class="btn btn-ghost btn-xs" onclick="imgfixSelAll(true)">حدد كل اللي ظاهر (${list.length})</button>`}</div>
       <div class="tw" style="overflow-x:auto">
         <table style="width:100%;font-size:12px">
           <thead><tr>
-            <th></th><th>المنتج</th>
+            <th style="text-align:center"><input type="checkbox" title="حدد كل اللي في الصفحة" ${_allSel ? 'checked' : ''} onchange="imgfixSelPage(this.checked)" style="width:15px;height:15px;cursor:pointer"></th><th></th><th>المنتج</th>
             <th style="text-align:center">الأبعاد</th>
             <th style="text-align:center">الحجم</th>
             <th style="text-align:center">الحالة</th>
@@ -23854,6 +23867,7 @@ function imgfixRender(){
           <tbody>${rows}</tbody>
         </table>
       </div>
+      ${_imgfixPagerHtml(list.length, _pages)}
     </div>`;
 }
 
@@ -23865,9 +23879,97 @@ function imgfixFmtSize(bytes){
   return (bytes/(1024*1024)).toFixed(1) + ' MB';
 }
 
+// ═══ 🖼️ v937: كل المنتجات ظاهرة + تحديد + الفحص بالطلب بس ═══
+const _IMGFIX_PER = 100;
+let _imgfixPage = 1, _imgfixSel = new Set(), _imgfixSig = '';
+function imgfixToggleSel(gid, on){ on ? _imgfixSel.add(gid) : _imgfixSel.delete(gid); imgfixRender(); }
+function imgfixSelPage(on){
+  const from = (_imgfixPage - 1) * _IMGFIX_PER;
+  _imgfixVisible.slice(from, from + _IMGFIX_PER).forEach(i => on ? _imgfixSel.add(i.productGid) : _imgfixSel.delete(i.productGid));
+  imgfixRender();
+}
+function imgfixSelAll(on){
+  if(on) _imgfixVisible.forEach(i => _imgfixSel.add(i.productGid)); else _imgfixSel.clear();
+  imgfixRender();
+}
+function imgfixGoPage(p){ _imgfixPage = p; imgfixRender(); document.getElementById('imgfix-results')?.scrollIntoView({ block: 'start' }); }
+function _imgfixPagerHtml(total, pages){
+  if(pages <= 1) return '';
+  const p = _imgfixPage, b = (n, t) => `<button class="btn btn-ghost btn-xs" ${n === p ? 'style="background:var(--accent);color:#fff"' : ''} onclick="imgfixGoPage(${n})">${t || n}</button>`;
+  const nums = [...new Set([1, p - 2, p - 1, p, p + 1, p + 2, pages])].filter(n => n >= 1 && n <= pages).sort((a, c) => a - c);
+  let out = '', last = 0;
+  nums.forEach(n => { if(n - last > 1) out += '<span style="color:var(--muted)">…</span>'; out += b(n); last = n; });
+  return `<div style="display:flex;gap:4px;justify-content:center;align-items:center;padding:10px;flex-wrap:wrap">
+    ${p > 1 ? b(p - 1, '‹ السابق') : ''}${out}${p < pages ? b(p + 1, 'التالي ›') : ''}
+    <span style="font-size:11px;color:var(--muted);margin-inline-start:8px">${total} منتج · ${_IMGFIX_PER} في الصفحة</span></div>`;
+}
+// اللي هيتبعت للتظبيط: المحدد لو فيه، وإلا اللي ظاهر ومحتاج
+function _imgfixTargets(){
+  if(_imgfixSel.size) return _imgfixItems.filter(i => _imgfixSel.has(i.productGid) && i.hasImage !== false);
+  return _imgfixVisible.filter(_imgfixNeeds);
+}
+function _imgfixButtons(){
+  const fa = document.getElementById('imgfix-fixall-btn');
+  if(fa){
+    const n = _imgfixTargets().length;
+    fa.style.display = n ? 'inline-flex' : 'none';
+    fa.textContent = _imgfixSel.size ? `✅ ظبّط المحدد (${n})` : `✅ ظبّط اللي محتاج (${n})`;
+  }
+  const sb = document.getElementById('imgfix-scan-btn');
+  if(sb && !_imgfixScanning) sb.textContent = _imgfixSel.size ? `🔍 افحص المحدد (${_imgfixSel.size})` : '🔍 افحص الكتالوج كله';
+}
+// كل المنتجات من السيرفر (من غير ما نكلّم شوبيفاي) + آخر فحص محفوظ
+async function imgfixLoadProducts(){
+  if(!API_URL) return;
+  try{
+    const r = await apiFetch('/api/image-fix/products');
+    if(r && r.sharpReady === false) imgfixSharpWarn(false);
+    const fresh = (r?.items || []);
+    const isNew = new Set(_imgfixItems.filter(i => i._isNew).map(i => i.productGid));
+    _imgfixItems = fresh.map(i => isNew.has(i.productGid) ? { ...i, _isNew: true } : i);
+    const scanned = fresh.filter(i => i.scanned), last = scanned.reduce((m, i) => i.scannedAt > m ? i.scannedAt : m, '');
+    const prog = document.getElementById('imgfix-scan-progress');
+    if(prog && !_imgfixScanning && r?.sharpReady !== false){
+      prog.textContent = `${fresh.length} منتج · ${scanned.length} اتفحص` + (last ? ` (آخر فحص ${new Date(last).toLocaleString('en-GB', { timeZone: 'Africa/Cairo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})` : '')
+        + ` · ${fresh.filter(i => i.scanned && i.needsFix).length} محتاج تظبيط`;
+    }
+    imgfixRender();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+// دمج نتيجة فحص في القايمة (من غير ما نمسح الباقي)
+function _imgfixMerge(scannedItems){
+  const by = new Map(scannedItems.map(i => [i.productGid, i]));
+  _imgfixItems = _imgfixItems.map(i => by.has(i.productGid)
+    ? { ...i, ...by.get(i.productGid), scanned: true, scannedAt: new Date().toISOString() } : i);
+  const have = new Set(_imgfixItems.map(i => i.productGid));
+  scannedItems.filter(i => !have.has(i.productGid)).forEach(i => _imgfixItems.push({ ...i, scanned: true }));
+}
+async function imgfixScanClick(){
+  if(_imgfixSel.size) return imgfixScanSelected();
+  if(!confirm(`فحص الكتالوج كله (${_imgfixItems.length || 'كل'} منتج) بياخد وقت. نبدأ؟\n(لو عايز تفحص منتجات معيّنة، حددها الأول)`)) return;
+  imgfixScan();
+}
+async function imgfixScanSelected(){
+  const gids = [..._imgfixSel];
+  const btn = document.getElementById('imgfix-scan-btn'), prog = document.getElementById('imgfix-scan-progress');
+  _imgfixScanning = true; if(btn){ btn.disabled = true; btn.textContent = '⏳ جاري الفحص...'; }
+  try{
+    let done = 0;
+    for(let i = 0; i < gids.length; i += 100){
+      const r = await apiFetch('/api/image-fix/scan-products', 'POST', { productGids: gids.slice(i, i + 100) });
+      _imgfixMerge(r?.items || []); done += Math.min(100, gids.length - i);
+      if(prog) prog.textContent = `⏳ فحص المحدد: ${done}/${gids.length}`;
+      imgfixRender();
+    }
+    if(prog) prog.textContent = `✅ اتفحص ${gids.length} منتج`;
+  }catch(e){ toast('❌ ' + e.message); if(prog) prog.textContent = '❌ ' + e.message; }
+  finally{ _imgfixScanning = false; if(btn) btn.disabled = false; _imgfixButtons(); }
+}
+
 // ═══ 🖼️ v934: أوضاع التظبيط ═══
 let _imgfixVisible = [];
 function _imgfixFlags(it){
+  if(it.scanned === false) return { dims: false, size: false };   // 🖼️ v937: لسه ما اتفحصش
   // فحص قديم من قبل v934 مالوش أسباب → «محتاج تظبيط» = أبعاد
   if(it.needDims == null && it.needSize == null) return { dims: !!it.needsFix, size: false };
   return { dims: !!it.needDims, size: !!it.needSize };
@@ -23907,11 +24009,12 @@ async function imgfixOne(btn, item){
       productId: item.productId || item.productGid,  // 🆕 v399: عشان العلم يتشال
       productGid: item.productGid, modes,            // 🖼️ v934
     });
+    if(r && r.scan) _imgfixMerge([r.scan]);         // 🖼️ v937: الحالة الجديدة من غير فحص كامل
     if(r && r.success){
       const note = (r.notes && r.notes.length) ? ' · ' + r.notes.join(' · ') : '';
       toast(r.fixed === 0 ? ('ℹ️ مفيش حاجة اتغيّرت' + note) : ('✅ اتظبطت' + (r.fixed > 1 ? ` ${r.fixed} صور` : (r.filename ? ': ' + r.filename : '')) + note));
-      // 🆕 v399: شيل الصف من القايمة (اتظبط خلاص)، والباقي يفضل
-      _imgfixItems = _imgfixItems.filter(x => x.mediaGid !== item.mediaGid);
+      // 🖼️ v937: الصف بيفضل ظاهر بحالته الجديدة (كل المنتجات ظاهرة)
+      _imgfixSel.delete(item.productGid);
       imgfixRender();
     } else {
       toast('❌ ' + (r?.error || 'فشل'));
@@ -23926,10 +24029,10 @@ async function imgfixOne(btn, item){
 async function imgfixStartAll(){
   const modes = imgfixModes();
   if(!modes.dims && !modes.size && !modes.frame){ toast('اختار يتظبّط إيه الأول'); return; }
-  // 🖼️ v934: اللي ظاهر بالفلاتر بس، وفي الأوضاع المختارة
-  const needed = (_imgfixVisible.length ? _imgfixVisible : _imgfixItems).filter(_imgfixNeeds);
-  if(!needed.length){ toast('مفيش صور محتاجة تظبيط'); return; }
-  if(!confirm(`هتظبّط ${needed.length} منتج: ${_imgfixModesLabel(modes)}.\nالعملية بتشتغل في الخلفية وممكن تاخد وقت. نبدأ؟`)) return;
+  // 🖼️ v937: المحدد لو فيه، وإلا اللي ظاهر ومحتاج
+  const needed = _imgfixTargets();
+  if(!needed.length){ toast(_imgfixSel.size ? 'المحدد مفيهوش صور' : 'مفيش صور محتاجة تظبيط — حدد اللي عايزه'); return; }
+  if(!confirm(`هتظبّط ${needed.length} منتج${_imgfixSel.size ? ' (المحدد)' : ''}: ${_imgfixModesLabel(modes)}.\nالعملية بتشتغل في الخلفية وممكن تاخد وقت. نبدأ؟`)) return;
 
   try {
     const items = needed.map(i => ({
@@ -23937,7 +24040,8 @@ async function imgfixStartAll(){
     }));
     const r = await apiFetch('/api/image-fix/jobs', 'POST', { items, modes });
     if(r && r.success){
-      toast(`✅ بدأ تظبيط ${r.total} صورة`);
+      toast(`✅ بدأ تظبيط ${r.total} منتج`);
+      _imgfixSel.clear(); imgfixRender();
       imgfixTrackJob(r.jobId);
     } else {
       toast('❌ ' + (r?.error || 'فشل بدء العملية'));
@@ -23984,8 +24088,9 @@ function imgfixTrackJob(jobId){
         clearInterval(_imgfixJobPoll);
         _imgfixJobPoll = null;
         toast(`✅ خلصت: ${j.done} نجحت · ${j.failed} فشلت`);
-        // أعد الفحص عشان نحدّث الحالات
-        setTimeout(() => imgfixScan(), 1500);
+        // 🖼️ v937: السيرفر بيعيد فحص المنتجات اللي اتظبطت بس — هات الحالات المحفوظة
+        //   (كان بيعيد فحص الكتالوج كله، وده كان بيشتغل كمان كل ما تفتح الصفحة)
+        setTimeout(() => imgfixLoadProducts(), 800);
       }
     } catch(e){}
   };
