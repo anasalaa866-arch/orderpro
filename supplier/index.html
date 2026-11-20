@@ -141,25 +141,69 @@ let TAB='products';
 function go(t){ TAB=t; document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   ({products:vProducts,orders:vOrders,expiry:vExpiry})[t](); }
 const PILL={'خلص':'--bad','قرب يخلص':'--warn','متوفر':'--ok','مؤرشف':'--muted'};
+// 🔧 v956: مبيع 30 يوم + يكفي كام يوم + فلاتر وترتيب
+let PROD=null; const PF={q:'',state:'',cover:'',sort:'days'};
+try{ Object.assign(PF, JSON.parse(localStorage.getItem('sup_pf')||'{}')); }catch(e){}
 async function vProducts(){
   $('view').innerHTML='<div style="color:var(--muted)">⏳</div>';
-  try{ const j=await api('/api/supplier/products');
-    $('view').innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-      <div class="sc"><span style="color:var(--muted);font-size:12px">خلص</span><b style="color:var(--bad)">${j.summary.out}</b></div>
-      <div class="sc"><span style="color:var(--muted);font-size:12px">قرب يخلص</span><b style="color:var(--warn)">${j.summary.low}</b></div>
-      <div class="sc"><span style="color:var(--muted);font-size:12px">متوفر</span><b style="color:var(--ok)">${j.summary.ok}</b></div>
-    </div>
-    <div style="overflow:auto"><table><thead><tr><th></th><th class="r" style="text-align:right">المنتج</th><th>SKU</th><th>المخزون</th><th>الحالة</th><th style="color:var(--muted)">سعر البيع</th></tr></thead><tbody>
-    ${j.rows.map(r=>`<tr>
+  try{ PROD=await api('/api/supplier/products'); pRender(true); }
+  catch(e){ $('view').innerHTML=`<div style="color:var(--bad)">${esc(e.message)}</div>`; }
+}
+function pSet(k,v){ PF[k]=v; try{ localStorage.setItem('sup_pf',JSON.stringify(PF)); }catch(e){} pRender(false); }
+function _pDays(r){ return r.days_left==null ? '—' : (r.days_left>=999 ? '+999' : n(r.days_left)); }
+function _pDaysColor(d){ return d==null ? 'var(--muted)' : d<=7 ? 'var(--bad)' : d<=30 ? 'var(--warn)' : 'var(--ok)'; }
+function pFiltered(){
+  const q=PF.q.trim().toLowerCase();
+  let rows=PROD.rows.filter(r=>{
+    if(q && !(`${r.title} ${r.sku||''} ${r.barcode||''}`.toLowerCase().includes(q))) return false;
+    if(PF.state && r.state!==PF.state) return false;
+    const d=r.days_left;
+    if(PF.cover==='7'  && !(d!=null && d<=7)) return false;
+    if(PF.cover==='15' && !(d!=null && d<=15)) return false;
+    if(PF.cover==='30' && !(d!=null && d<=30)) return false;
+    if(PF.cover==='60' && !(d!=null && d>60)) return false;
+    if(PF.cover==='nosale' && (r.sold_30d||0)>0) return false;
+    return true;
+  });
+  const big=1e9, ttl=(a,b)=>String(a.title).localeCompare(String(b.title),'ar');
+  const S={
+    days:(a,b)=>(a.days_left??big)-(b.days_left??big)||ttl(a,b),
+    sold:(a,b)=>(b.sold_30d||0)-(a.sold_30d||0)||ttl(a,b),
+    stock_asc:(a,b)=>a.stock-b.stock||ttl(a,b),
+    stock_desc:(a,b)=>b.stock-a.stock||ttl(a,b),
+    name:ttl,
+  };
+  return rows.sort(S[PF.sort]||S.days);
+}
+function pRender(full){
+  const j=PROD, rows=pFiltered();
+  const body=`<div style="overflow:auto"><table><thead><tr><th></th><th class="r" style="text-align:right">المنتج</th><th>SKU</th><th>المخزون</th><th title="عدد القطع اللي اتباعت آخر 30 يوم من كل المخازن">مبيع 30 يوم</th><th title="المخزون ÷ متوسط البيع اليومي آخر 30 يوم">يكفي (يوم)</th><th>الحالة</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr>
       <td>${r.image?`<img class="th" src="${esc(r.image)}" loading="lazy" onerror="this.style.visibility='hidden'">`:''}</td>
       <td class="r">${esc(r.title)}</td>
       <td class="num" style="font-size:11.5px;color:var(--muted)">${esc(r.sku||'')}</td>
       <td class="num" style="font-weight:800">${n(r.stock)}</td>
-      <td><span class="pill" style="color:var(${PILL[r.state]});background:var(${PILL[r.state]});background-color:transparent;border:1px solid currentColor">${r.state}</span></td>
-      <td class="num" style="color:var(--muted);font-size:12px">${r.price!=null?n(r.price):'—'}</td></tr>`).join('')}
+      <td class="num">${n(r.sold_30d||0)}</td>
+      <td class="num" style="font-weight:800;color:${_pDaysColor(r.days_left)}">${_pDays(r)}</td>
+      <td><span class="pill" style="color:var(${PILL[r.state]});background:var(${PILL[r.state]});background-color:transparent;border:1px solid currentColor">${r.state}</span></td></tr>`).join('')
+      || `<tr><td colspan="7" style="color:var(--muted);padding:18px">مفيش منتجات بالفلتر ده</td></tr>`}
     </tbody></table></div>
-    <div style="font-size:11.5px;color:var(--muted);margin-top:9px">المخزون إجمالي كل المخازن، بيتحدّث لحظياً.</div>`;
-  }catch(e){ $('view').innerHTML=`<div style="color:var(--bad)">${esc(e.message)}</div>`; }
+    <div style="font-size:11.5px;color:var(--muted);margin-top:9px">المخزون إجمالي كل المخازن، بيتحدّث لحظياً. «مبيع 30 يوم» = القطع المباعة آخر 30 يوم من كل المخازن (أونلاين + المحل). «يكفي» = المخزون ÷ متوسط البيع اليومي — «—» يعني مفيش بيع آخر 30 يوم.</div>`;
+  if(!full && $('pbody')){ $('pbody').innerHTML=body; $('pcount').textContent=`${rows.length} من ${j.rows.length}`; return; }
+  const sel=(k,opts)=>`<select onchange="pSet('${k}',this.value)" style="padding:8px;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-family:Cairo">${opts.map(([v,l])=>`<option value="${v}"${PF[k]===v?' selected':''}>${l}</option>`).join('')}</select>`;
+  $('view').innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="sc"><span style="color:var(--muted);font-size:12px">خلص</span><b style="color:var(--bad)">${j.summary.out}</b></div>
+      <div class="sc"><span style="color:var(--muted);font-size:12px">قرب يخلص</span><b style="color:var(--warn)">${j.summary.low}</b></div>
+      <div class="sc"><span style="color:var(--muted);font-size:12px">متوفر</span><b style="color:var(--ok)">${j.summary.ok}</b></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input id="pq" placeholder="🔍 اسم / SKU / باركود" value="${esc(PF.q)}" oninput="pSet('q',this.value)" style="flex:1;min-width:180px;margin:0;padding:8px">
+      ${sel('state',[['','كل الحالات'],['خلص','خلص'],['قرب يخلص','قرب يخلص'],['متوفر','متوفر'],['مؤرشف','مؤرشف']])}
+      ${sel('cover',[['','يكفي: الكل'],['7','يكفي ≤ 7 أيام'],['15','يكفي ≤ 15 يوم'],['30','يكفي ≤ 30 يوم'],['60','يكفي أكتر من 60 يوم'],['nosale','مفيش بيع 30 يوم']])}
+      ${sel('sort',[['days','ترتيب: الأقل كفاية'],['sold','الأكتر مبيعاً'],['stock_asc','الأقل مخزون'],['stock_desc','الأكتر مخزون'],['name','الاسم']])}
+      <span id="pcount" style="font-size:12px;color:var(--muted)">${rows.length} من ${j.rows.length}</span>
+    </div>
+    <div id="pbody">${body}</div>`;
 }
 async function vOrders(){
   $('view').innerHTML='<div style="color:var(--muted)">⏳</div>';
