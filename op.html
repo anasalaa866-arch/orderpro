@@ -7336,11 +7336,11 @@ tr:hover td{background:#fafbff}
           <div>
             <label style="font-size:10px;color:var(--muted);font-weight:700;display:block;margin-bottom:3px">ترتيب</label>
             <select id="reorder-f-sort" onchange="reorderOnFilterChange()" style="padding:6px 8px;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px">
-              <option value="priority">الأولوية (افتراضي)</option>
+              <option value="priority">الأولوية</option>
               <option value="days_remaining_asc">أيام متبقية ↑</option>
               <option value="total_stock_asc">المخزون ↑</option>
               <option value="avg_30d_desc">مبيع 30 يوم ↓</option>
-              <option value="suggested_desc">المقترح ↓</option>
+              <option value="suggested_desc" selected>المقترح ↓ (افتراضي)</option>
               <option value="requested_desc">المطلوب ↓</option>
               <option value="title_asc">اسم المنتج (أ-ي)</option>
             </select>
@@ -12097,7 +12097,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v959';
+const UI_BUILD = 'v960';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -44673,8 +44673,22 @@ async function openSupplierReorder(supplierId){
     
     // حساب الكميات المقترحة
     recalcSuggested();
+    // 🔧 v960: كل مورد بيفتح على «المقترح ↓»
+    const _fs = document.getElementById('reorder-f-sort');
+    if(_fs) _fs.value = 'suggested_desc';
+    _reorderFilters.sort = 'suggested_desc';
     renderReorderTable();
     updateReorderTotals();
+
+    // 🤖 v960: أول ما المورد يفتح — التحليل الذكي على «المخزن الرئيسي + MAX(A,B)»
+    //   ويطبّق كل الاقتراحات لوحده
+    const _mr = document.querySelector('input[name="ai_source"][value="master"]');
+    if(_mr){ _mr.checked = true; try{ updateAISourceHint(); }catch(e){} }
+    (async () => {
+      await runAIAssistant();
+      if(_reorderSupplierId != supplierId || !_aiAnalysis?.suggestions?.length) return;
+      applyAISuggestions(false);
+    })().catch(e => console.warn('[v960] auto AI:', e));
 
     // 🖼️ v612: لو السيرفر لسه ماببعتش الصور (أقدم من v560) — هاتها وأعد الرسم
     if(_reorderProducts.some(x => !x.image_url && x.sku)){
@@ -44748,14 +44762,14 @@ let _reorderFilters = {
   search: '',
   priority: '',
   status: '',
-  sort: 'priority'
+  sort: 'suggested_desc'   // 🔧 v960: الافتراضي «المقترح ↓»
 };
 
 function reorderOnFilterChange(){
   _reorderFilters.search = (document.getElementById('reorder-f-search')?.value || '').trim().toLowerCase();
   _reorderFilters.priority = document.getElementById('reorder-f-priority')?.value || '';
   _reorderFilters.status = document.getElementById('reorder-f-status')?.value || '';
-  _reorderFilters.sort = document.getElementById('reorder-f-sort')?.value || 'priority';
+  _reorderFilters.sort = document.getElementById('reorder-f-sort')?.value || 'suggested_desc';
   renderReorderTable();
 }
 
@@ -44763,8 +44777,8 @@ function reorderResetFilters(){
   document.getElementById('reorder-f-search').value = '';
   document.getElementById('reorder-f-priority').value = '';
   document.getElementById('reorder-f-status').value = '';
-  document.getElementById('reorder-f-sort').value = 'priority';
-  _reorderFilters = { search: '', priority: '', status: '', sort: 'priority' };
+  document.getElementById('reorder-f-sort').value = 'suggested_desc';
+  _reorderFilters = { search: '', priority: '', status: '', sort: 'suggested_desc' };
   renderReorderTable();
 }
 
