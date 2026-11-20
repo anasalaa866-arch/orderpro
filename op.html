@@ -12097,7 +12097,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v960';
+const UI_BUILD = 'v961';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -44938,7 +44938,10 @@ function renderReorderTable(){
   // Headers (المخازن dynamic)
   let headerCells = `
     <th style="padding:8px;text-align:right;background:#1e293b;color:#fff;position:sticky;left:0;z-index:2;min-width:200px">المنتج</th>
-  `;
+    <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px">مقترح</th>
+    <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px;min-width:90px">الكمية المطلوبة</th>
+    <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px;min-width:80px">السعر</th>
+  `;   // 🔧 v961: الكمية جنب الصورة والاسم
   _reorderWarehouses.forEach(w => {
     headerCells += `<th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px;min-width:60px" title="${escapeHtml(w.name)}">${escapeHtml(w.name.slice(0, 12))}</th>`;
   });
@@ -44948,9 +44951,6 @@ function renderReorderTable(){
     <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px" title="متوسط آخر 30 يوم">M30</th>
     <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px" title="متوسط آخر 60 يوم">M60</th>
     <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px">أيام متبقية</th>
-    <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px">مقترح</th>
-    <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px;min-width:90px">الكمية المطلوبة</th>
-    <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px;min-width:80px">السعر</th>
     <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px"></th>
   `;
   
@@ -44999,12 +44999,6 @@ function renderReorderTable(){
             </div>
           </div>
         </td>
-        ${whCells}
-        <td style="padding:6px;text-align:center;font-weight:800;color:${p.total_stock === 0 ? '#ef4444' : p.total_stock < 10 ? '#f97316' : '#3b82f6'}">${p.total_stock}</td>
-        <td style="padding:6px;text-align:center;font-size:11px" title="${_buildBreakdownTooltip(p, 'avg_7d')}">${p.avg_7d.toFixed(1)}</td>
-        <td style="padding:6px;text-align:center;font-size:11px;font-weight:700" title="${_buildBreakdownTooltip(p, 'avg_30d')}">${p.avg_30d.toFixed(1)}${p.smart_metadata && p.smart_metadata.improvement_pct && Math.abs(p.smart_metadata.improvement_pct) > 20 ? ' <span style="font-size:9px;color:#16a34a">✨</span>' : ''}</td>
-        <td style="padding:6px;text-align:center;font-size:11px" title="${_buildBreakdownTooltip(p, 'avg_60d')}">${p.avg_60d.toFixed(1)}</td>
-        <td style="padding:6px;text-align:center;font-size:11px;${daysClass}">${p.days_remaining < 999 ? p.days_remaining.toFixed(0) : '∞'}</td>
         <td style="padding:6px;text-align:center;font-weight:700;color:${p.ai_suggested_qty != null ? '#7c3aed' : '#3b82f6'}" title="${p.ai_formula_info ? `A=${p.ai_formula_info.A}, B=${p.ai_formula_info.B}, اختار ${p.ai_formula_info.chosen}` : (p.ai_suggested_qty != null ? 'اقتراح AI: '+p.ai_suggested_qty+' (الأساسي: '+(p.suggested_qty||0)+')' : 'الكمية المقترحة')}">
           ${p.ai_suggested_qty != null ? `🤖 ${p.ai_suggested_qty}` : (p.suggested_qty || 0)}
           ${p.ai_formula_info ? `<div style="font-size:9px;color:${p.ai_formula_info.chosen === 'B' ? '#10b981' : '#3b82f6'};font-weight:600;margin-top:2px">${p.ai_formula_info.chosen === 'B' ? '🏠 B' : '🌐 A'}</div>` : ''}
@@ -45019,6 +45013,12 @@ function renderReorderTable(){
                  onchange="updateReorderCost(${idx}, this.value)"
                  style="width:70px;padding:6px;background:var(--elev);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px;text-align:center">
         </td>
+        ${whCells}
+        <td style="padding:6px;text-align:center;font-weight:800;color:${p.total_stock === 0 ? '#ef4444' : p.total_stock < 10 ? '#f97316' : '#3b82f6'}">${p.total_stock}</td>
+        <td style="padding:6px;text-align:center;font-size:11px" title="${_buildBreakdownTooltip(p, 'avg_7d')}">${p.avg_7d.toFixed(1)}</td>
+        <td style="padding:6px;text-align:center;font-size:11px;font-weight:700" title="${_buildBreakdownTooltip(p, 'avg_30d')}">${p.avg_30d.toFixed(1)}${p.smart_metadata && p.smart_metadata.improvement_pct && Math.abs(p.smart_metadata.improvement_pct) > 20 ? ' <span style="font-size:9px;color:#16a34a">✨</span>' : ''}</td>
+        <td style="padding:6px;text-align:center;font-size:11px" title="${_buildBreakdownTooltip(p, 'avg_60d')}">${p.avg_60d.toFixed(1)}</td>
+        <td style="padding:6px;text-align:center;font-size:11px;${daysClass}">${p.days_remaining < 999 ? p.days_remaining.toFixed(0) : '∞'}</td>
         <td style="padding:6px;text-align:center">
           <button onclick="removeReorderProduct(${idx})" style="background:transparent;border:1px solid var(--danger);color:var(--danger);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer">🗑️</button>
         </td>
@@ -45028,7 +45028,7 @@ function renderReorderTable(){
   
   wrapper.innerHTML = `
     <table style="width:100%;font-size:12px;border-collapse:collapse">
-      <thead><tr>${headerCells}</tr></thead>
+      <thead style="position:sticky;top:0;z-index:6;box-shadow:0 2px 4px rgba(0,0,0,.25)"><tr>${headerCells}</tr></thead>
       <tbody>${rows}</tbody>
     </table>
   `;
