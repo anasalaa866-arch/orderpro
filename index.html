@@ -12101,7 +12101,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v963';
+const UI_BUILD = 'v964';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -25873,9 +25873,32 @@ async function poZhStatus(){
       ? `<div style="max-height:160px;overflow:auto;border:1px solid var(--border);border-radius:8px">
          <table style="width:100%;font-size:11px"><tbody>${r.errors.map(e=>`<tr>
            <td style="padding:3px 6px;font-family:Roboto,sans-serif;font-weight:700">${escapeHtml(e.po_number)}</td>
-           <td style="padding:3px 6px;color:#dc2626">${escapeHtml(e.zoho_po_error||'')}</td></tr>`).join('')}</tbody></table></div>`
+           <td style="padding:3px 6px;color:#dc2626">${escapeHtml(e.zoho_po_error||'')}</td>
+           <td style="padding:3px 6px;white-space:nowrap">${e.id?`
+             <button class="btn btn-ghost btn-xs" onclick="viewPO(${e.id})" title="افتح الأمر">👁️</button>
+             <button class="btn btn-ghost btn-xs" onclick="poZhRetry(${e.id},this)" title="ابعته لـ Zoho تاني (بعد ما تظبط الصنف في Zoho)">🔁</button>
+             <button class="btn btn-ghost btn-xs" style="color:#dc2626" onclick="poZhSkip(${e.id},'${escapeHtml(e.po_number||'')}')" title="شيله من طابور Zoho — مش هيتبعت تاني">🗑️ مسح</button>`:''}</td></tr>`).join('')}</tbody></table></div>`
       : '';
   }catch(e){ /* الصفحة تشتغل عادي */ }
+}
+// 🗑️ v964: مسح أمر من طابور Zoho / إعادة إرسال أمر واحد
+async function poZhSkip(id, num){
+  if(!confirm(`تشيل ${num} من طابور Zoho؟\n\nالأمر نفسه مش هيتمسح من OrderPro — بس مش هيتبعت لـ Zoho تاني ومش هيتعدّ في «فشل».`)) return;
+  try{
+    const r = await apiFetch('/api/purchase-orders/' + id + '/zoho-skip', 'POST', { skip:true });
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    toast('🗑️ اتشال ' + (r.po_number || '') + ' من طابور Zoho');
+    poZhStatus();
+  }catch(e){ toast('❌ ' + e.message); }
+}
+async function poZhRetry(id, btn){
+  if(btn){ btn.disabled = true; btn.textContent = '⏳'; }
+  try{
+    const r = await apiFetch('/api/purchase-orders/' + id + '/zoho-push', 'POST', {});
+    if(!r?.ok) throw new Error(r?.error || 'فشل');
+    toast('✅ اتبعت Zoho ' + (r.zoho_po_number || ''));
+  }catch(e){ toast('❌ ' + e.message); }
+  poZhStatus();
 }
 async function poZhPush(scope){
   const box=$('po-zh-box');
