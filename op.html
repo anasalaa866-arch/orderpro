@@ -12101,7 +12101,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v964';
+const UI_BUILD = 'v965';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -39951,7 +39951,9 @@ function setPOFilter(btn, status){
   loadPurchaseOrdersPage();
 }
 
+let _poEditStatus = null;   // ✏️ v965: حالة الأمر اللي بيتعدل (null = جديد)
 async function openNewPO(skipSuggestionsDraft){
+  _poEditStatus = null;
   // املأ الموردين
   if(!_suppliers.length){
     // 🏷️ v583: الموردين من Zoho بس
@@ -40834,6 +40836,9 @@ async function savePO(status){
     status
   };
   
+  // ✏️ v965: أمر مرسل/مستلم → شاشة التأكيد (شوبيفاي/Zoho)
+  { const _eid = document.getElementById('po-id').value;
+    if(_eid && _poEditStatus && _poEditStatus !== 'draft'){ return poChangeFlow('edit', _eid, data); } }
   try {
     const id = document.getElementById('po-id').value;
     if(id){
@@ -40889,16 +40894,16 @@ async function editPODraft(id){
     const r = await apiFetch('/api/purchase-orders/' + id);
     const po = r?.order;
     if(!po){ toast('❌ الأمر مش موجود'); return; }
-    if(po.status !== 'draft'){
-      toast('❌ التعديل للمسودات بس — ده ' + (po.status === 'cancelled' ? 'ملغي' : 'اتبعت خلاص'));
-      return;
-    }
+    if(po.status === 'cancelled'){ toast('❌ الأمر ملغي'); return; }
 
     closeM('m-po-detail');
     await openNewPO(true);          // true = ماتحمّلش draft ذكاء الشراء
+    // ✏️ v965: الأوامر المرسلة/المستلمة بتتعدل برضه — والحفظ بيعدّي على شاشة التأكيد
+    _poEditStatus = po.status;
 
     document.getElementById('po-id').value = po.id;
-    document.getElementById('po-modal-title').textContent = '✏️ تعديل ' + (po.po_number || 'المسودة');
+    document.getElementById('po-modal-title').textContent = '✏️ تعديل ' + (po.po_number || 'المسودة')
+      + (po.status !== 'draft' ? ` (${({sent:'مرسل',ordered:'مرسل',partial_received:'استلام جزئي',received:'مستلم',closed:'مغلق'})[po.status] || po.status})` : '');
     const _dg = document.getElementById('po-diag-btn'); if(_dg) _dg.style.display = '';   // 🔍 v864
 
     // المخزن
@@ -40932,6 +40937,7 @@ async function editPODraft(id){
 
     // البنود — من شكل الداتابيز لشكل الشاشة
     _poItems = (r.items || []).map(it => ({
+      poItemId:    it.id,                       // ✏️ v965: عشان الفرق يتحسب صح
       variantId:   it.variant_id || null,
       productTitle: it.product_title || '',
       variantTitle: it.variant_title || '',
@@ -41034,6 +41040,10 @@ async function viewPO(id){
         willAdj ? ' (تسوية مخزون)' : ''}</button>`;
     }
     
+    // ✏️🗑️ v965: تعديل ومسح لأي أمر
+    if(po.status !== 'draft' && po.status !== 'cancelled')
+      actionButtons += `<button class="btn btn-sm" onclick="editPODraft(${po.id})" style="background:#7c3aed;border-color:#7c3aed;color:#fff;font-weight:800">✏️ تعديل</button>`;
+    actionButtons += `<button class="btn btn-sm" onclick="poChangeFlow('delete', ${po.id})" style="background:#fff;border:1px solid #dc2626;color:#dc2626;font-weight:800">🗑️ مسح</button>`;
     if(po.status === 'draft'){
       // ✏️ v603: ارجع افتح المسودة للتعديل
       actionButtons += `<button class="btn btn-sm" onclick="editPODraft(${po.id})" style="background:#7c3aed;border-color:#7c3aed;color:#fff;font-weight:800">✏️ تعديل المسودة</button>`;
@@ -44054,6 +44064,83 @@ async function pushPOToZoho(id){
     }
     viewPO(id);
   }catch(e){ toast('❌ ' + e.message); }
+}
+
+// ═══ ✏️🗑️ v965: شاشة تأكيد التعديل/المسح — مع اختيار شوبيفاي و Zoho ═══
+async function poChangeFlow(mode, id, data){
+  let pv;
+  try{ pv = await apiFetch('/api/purchase-orders/' + id + '/change-preview', 'POST', { mode, ...(data || {}) }); }
+  catch(e){ toast('❌ ' + e.message); return; }
+  if(!pv) return;
+  const simple = mode === 'delete' && !pv.has_transfer && !pv.zoho?.has && !(pv.items||[]).some(i => i.received > 0);
+  if(simple){
+    if(!confirm(`مسح ${pv.po_number} نهائي؟`)) return;
+    return _poChangeApply(id, mode, data, false, false, 'available');
+  }
+  const n = v => Number(v || 0).toLocaleString('en-US');
+  const shopTxt = i => {
+    const s = i.shop; if(!s) return '';
+    if(s.skip) return `<span style="color:#94a3b8">${escapeHtml(s.skip)}</span>`;
+    if(i.d > 0) return s.via === 'new_transfer' ? `➕ ${n(s.add)} على ترانسفير جديد` : `➕ ${n(s.add)} على نفس الترانسفير`;
+    const p = [];
+    if(s.from_unreceived) p.push(`${n(s.from_unreceived)} من اللي لسه ماتستلمش`);
+    if(s.from_stock) p.push(`<b>${n(s.from_stock)} تتخصم من المخزن</b>`);
+    if(s.short) p.push(`<span style="color:#dc2626">⚠️ المتاح ${n(i.available)} بس</span>`);
+    return p.join(' · ') || '—';
+  };
+  const rows = (pv.items || []).map(i => `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:6px">${escapeHtml(i.title)}${i.added ? ' <span style="color:#16a34a;font-size:10px">جديد</span>' : ''}${i.removed && mode !== 'delete' ? ' <span style="color:#dc2626;font-size:10px">اتشال</span>' : ''}</td>
+      <td style="padding:6px;text-align:center;font-family:monospace">${n(i.old_qty)} ← ${n(i.new_qty)}</td>
+      <td style="padding:6px;text-align:center;font-family:monospace;color:${i.d>0?'#16a34a':'#dc2626'};font-weight:800">${i.d>0?'+':''}${n(i.d)}</td>
+      <td style="padding:6px;font-size:11px">${shopTxt(i)}</td></tr>`).join('')
+    || `<tr><td colspan="4" style="padding:10px;color:var(--muted)">مفيش تغيير في الكميات — هيتحفظ السعر/البيانات بس</td></tr>`;
+  const zl = pv.zoho?.has ? (mode === 'delete'
+      ? `Void لـ ${escapeHtml(pv.zoho.number || '')}${pv.zoho.bills?.length ? ` + ${pv.zoho.bills.length} فاتورة` : ''}`
+      : `يتمسح ${escapeHtml(pv.zoho.number || '')} ويتبعت تاني بالبيانات الجديدة${pv.zoho.bills?.length ? ` (+ ${pv.zoho.bills.length} فاتورة استلام)` : ''}`)
+    : (mode === 'delete' ? 'مش متبعت Zoho' : 'مش متبعت Zoho — هيتبعت بالبيانات الجديدة');
+  const ov = document.createElement('div');
+  ov.id = 'po-chg-ov';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10050;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML = `<div style="background:var(--card);border-radius:14px;max-width:760px;width:100%;max-height:88vh;overflow:auto;padding:18px;box-shadow:0 20px 50px rgba(0,0,0,.3)">
+    <div style="font-size:16px;font-weight:800;margin-bottom:4px">${mode==='delete'?'🗑️ مسح':'✏️ تعديل'} ${escapeHtml(pv.po_number)}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${pv.transfer ? `الترانسفير: ${escapeHtml(pv.transfer.status)}${pv.transfer.closed?' (مقفول)':''}` : (pv.has_transfer ? 'الترانسفير مش متقري' : 'مالوش ترانسفير على شوبيفاي')}${pv.shop_error ? ` · <span style="color:#dc2626">${escapeHtml(pv.shop_error)}</span>` : ''}</div>
+    <div style="overflow:auto;border:1px solid var(--border);border-radius:9px;margin-bottom:12px"><table style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead><tr style="background:var(--bg)"><th style="padding:6px;text-align:right">الصنف</th><th style="padding:6px">الكمية</th><th style="padding:6px">الفرق</th><th style="padding:6px;text-align:right">على شوبيفاي</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;cursor:pointer"><input type="checkbox" id="po-chg-shop" ${pv.has_transfer || (pv.items||[]).some(i=>i.received>0) ? 'checked' : ''}>
+      <span><b>عدّل شوبيفاي (المخزون والترانسفير)</b><br><span style="font-size:11px;color:var(--muted)">لو مش متعلّم: شوبيفاي يفضل زي ما هو</span></span></label>
+    ${pv.short_total > 0 ? `<div id="po-chg-short" style="background:#fef2f2;border:1px solid #fecaca;border-radius:9px;padding:8px 10px;margin:0 26px 8px;font-size:12px">
+      ⚠️ فيه ${n(pv.short_total)} قطعة المفروض تتخصم والمخزن مفيهوش — غالباً اتباعت:<br>
+      <label style="cursor:pointer"><input type="radio" name="po-chg-sf" value="available" checked> اخصم المتاح بس</label> &nbsp;
+      <label style="cursor:pointer"><input type="radio" name="po-chg-sf" value="negative"> اخصم كله (المخزون يبقى بالسالب)</label></div>` : ''}
+    <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:14px;cursor:pointer"><input type="checkbox" id="po-chg-zoho" ${pv.zoho?.has ? 'checked' : ''} ${pv.zoho?.blocked ? 'disabled' : ''}>
+      <span><b>عدّل Zoho</b><br><span style="font-size:11px;color:var(--muted)">${pv.zoho?.blocked ? `<span style="color:#dc2626">${escapeHtml(pv.zoho.blocked)}</span>` : zl}</span></span></label>
+    <div style="display:flex;gap:8px;justify-content:flex-start">
+      <button class="btn btn-sm" id="po-chg-go" style="background:${mode==='delete'?'#dc2626':'#7c3aed'};border-color:transparent;color:#fff;font-weight:800">${mode==='delete'?'🗑️ امسح':'✅ احفظ التعديل'}</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('po-chg-ov').remove()">إلغاء</button>
+    </div></div>`;
+  document.getElementById('po-chg-ov')?.remove();
+  document.body.appendChild(ov);
+  document.getElementById('po-chg-go').onclick = async () => {
+    const shop = document.getElementById('po-chg-shop').checked, zoho = document.getElementById('po-chg-zoho').checked;
+    const sf = document.querySelector('input[name="po-chg-sf"]:checked')?.value || 'available';
+    const b = document.getElementById('po-chg-go'); b.disabled = true; b.textContent = '⏳ بينفّذ...';
+    const okDone = await _poChangeApply(id, mode, data, shop, zoho, sf);
+    if(okDone) ov.remove(); else { b.disabled = false; b.textContent = mode==='delete'?'🗑️ امسح':'✅ احفظ التعديل'; }
+  };
+}
+async function _poChangeApply(id, mode, data, syncShopify, syncZoho, shortfall){
+  try{
+    const r = await apiFetch('/api/purchase-orders/' + id + '/change-apply', 'POST', { mode, ...(data || {}), syncShopify, syncZoho, shortfall });
+    const errs = [...(r?.shopify?.errors || []).map(e => 'شوبيفاي: ' + e.error), ...(r?.zoho?.errors || []).map(e => 'Zoho: ' + e.error)];
+    toast((mode === 'delete' ? `🗑️ اتمسح ${r.po_number}` : `✅ اتعدّل ${r.po_number}`)
+      + (r?.shopify?.new_transfer ? ` · ترانسفير إضافة ${r.shopify.new_transfer.name || ''}` : ''), 'success');
+    if(errs.length) setTimeout(() => alert('⚠️ اتحفظ، بس فيه حاجات ماتعملتش:\n\n' + errs.join('\n')), 300);
+    closeM('m-po-detail'); closeM('m-po');
+    _poEditStatus = null;
+    loadPurchaseOrdersPage();
+    return true;
+  }catch(e){ toast('❌ ' + e.message); return false; }
 }
 
 async function cancelPO(id){
