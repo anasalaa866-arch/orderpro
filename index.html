@@ -7060,6 +7060,7 @@ tr:hover td{background:#fafbff}
         📦 اللي ليهم منتجات بس
       </label>
       <button class="btn btn-ghost btn-sm" onclick="supClearFilters()">مسح</button>
+      <button class="btn btn-ghost btn-sm" onclick="supAiRunNow(this)" title="التحليل بيشتغل لوحده في المواعيد اللي في الإعدادات (٩ ص و٩ م)">🤖 حلّل الكل دلوقتي</button>
     </div>
     <div id="suppliers-list" style="padding:14px"></div>
   </div>
@@ -12097,7 +12098,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v961';
+const UI_BUILD = 'v962';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -39639,7 +39640,34 @@ function supStatsRow(s){
         <div style="font-size:14px;font-weight:800;color:#5b21b6;font-family:monospace">${_supMoney(soldVal)} <span style="font-size:10px">ج</span></div>
         <div style="font-size:9px;color:#a78bfa">${sold30} قطعة</div>
       </div>
+      ${_supAiBox(s.ai)}
     </div>`;
+}
+
+// 🤖 v962: ملخص آخر تحليل ذكي مجدول (المخزن الرئيسي + MAX(A,B))
+function _supAiBox(a){
+  if(!a) return '';
+  const when = a.at ? new Date(a.at).toLocaleString('ar-EG',{weekday:'short',hour:'numeric',minute:'2-digit'}) : '';
+  if(a.error && a.total_qty == null) return `<div title="${escapeHtml(a.error)}" style="background:#fef2f2;border:1px solid #fecaca;border-radius:9px;padding:6px 10px;min-width:120px">
+      <div style="font-size:9px;color:#991b1b;font-weight:700">🤖 التحليل الذكي</div>
+      <div style="font-size:11px;color:#991b1b;font-weight:700">فشل</div><div style="font-size:9px;color:#991b1b;opacity:.75">${escapeHtml(when)}</div></div>`;
+  const hot = (a.critical||0) + (a.urgent||0) > 0;
+  const fg = hot ? '#991b1b' : '#5b21b6', bg = hot ? '#fef2f2' : '#f5f3ff', bd = hot ? '#fecaca' : '#ddd6fe';
+  return `<div title="آخر تحليل ذكي: ${escapeHtml(when)} — ${a.suggested_count||0} صنف محتاج طلب من ${a.products||0}" style="background:${bg};border:1px solid ${bd};border-radius:9px;padding:6px 10px;min-width:150px">
+      <div style="font-size:9px;color:${fg};font-weight:700">🤖 مقترح الطلب</div>
+      <div style="font-size:14px;font-weight:800;color:${fg};font-family:monospace">${_supMoney(a.total_cost)} <span style="font-size:10px">ج</span> · ${Number(a.total_qty||0).toLocaleString('en-US')} <span style="font-size:10px">قطعة</span></div>
+      <div style="font-size:9.5px;color:${fg};font-weight:700">${a.critical?`🔴 ${a.critical} نفد`:''}${a.critical&&a.urgent?' · ':''}${a.urgent?`🚨 ${a.urgent} عاجل`:''}${hot?'':'✅ مفيش عاجل'} <span style="opacity:.6;font-weight:400">· ${escapeHtml(when)}</span></div>
+    </div>`;
+}
+async function supAiRunNow(btn){
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ بيحلّل كل الموردين...'; }
+  try{
+    const r = await apiFetch('/api/suppliers/ai-snapshot/run', 'POST', {});
+    if(!r?.ok) throw new Error(r?.why || r?.error || 'فشل');
+    toast(`✅ اتحلّل ${r.done} مورد${r.failed?` · ${r.failed} فشل`:''}`);
+    await loadSuppliersPage();
+  }catch(e){ toast('❌ ' + e.message); }
+  finally{ if(btn){ btn.disabled = false; btn.textContent = '🤖 حلّل الكل دلوقتي'; } }
 }
 
 // 🔎 v597: الفلترة والرسم — الفلترة كلها في المتصفح، القائمة محمّلة أصلاً
@@ -44989,7 +45017,6 @@ function renderReorderTable(){
               ${p.is_primary ? '<span style="font-size:11px" title="مورد أساسي">⭐</span>' : ''}
               ${p.ai_priority ? `<span style="font-size:8px;background:#7c3aed;color:#fff;padding:1px 4px;border-radius:3px" title="حُلل بالـ AI">🤖</span>` : ''}
             </div>
-            ${_reorderImgHtml(p)}
             <div style="flex:1">
               <div style="font-weight:700;font-size:12px;cursor:pointer;color:var(--text)" onclick="showForecastDetail(${p.variant_id})" title="اضغط لمعرفة التوقعات التفصيلية">${escapeHtml(p.product_title || '')}${p.variant_title ? ' - '+escapeHtml(p.variant_title) : ''}</div>
               ${p.sku ? `<div style="font-size:10px;color:var(--muted);font-family:monospace">${escapeHtml(p.sku)}</div>` : ''}
@@ -44997,6 +45024,7 @@ function renderReorderTable(){
               ${p.smart_metadata && p.smart_metadata.improvement_pct && Math.abs(p.smart_metadata.improvement_pct) > 20 ? `<div style="font-size:10px;color:#16a34a;margin-top:2px;font-weight:700" title="الحساب الذكي أعلى من العادي بـ ${p.smart_metadata.improvement_pct}%">📊 محسوب على ${p.smart_metadata.in_stock_days_30} يوم بيع فعلي (مش 30)</div>` : ''}
               ${p.ai_reasoning && p.ai_reasoning.length ? `<div style="font-size:10px;color:#7c3aed;margin-top:3px;line-height:1.4" title="${escapeHtml(p.ai_reasoning.join(' | '))}">🤖 ${escapeHtml(p.ai_reasoning[0])}</div>` : ''}
             </div>
+            ${_reorderImgHtml(p)}
           </div>
         </td>
         <td style="padding:6px;text-align:center;font-weight:700;color:${p.ai_suggested_qty != null ? '#7c3aed' : '#3b82f6'}" title="${p.ai_formula_info ? `A=${p.ai_formula_info.A}, B=${p.ai_formula_info.B}, اختار ${p.ai_formula_info.chosen}` : (p.ai_suggested_qty != null ? 'اقتراح AI: '+p.ai_suggested_qty+' (الأساسي: '+(p.suggested_qty||0)+')' : 'الكمية المقترحة')}">
