@@ -2278,6 +2278,7 @@ tr:hover td{background:#fafbff}
   <div class="page" id="page-talabat">
     <div style="display:flex;gap:8px;margin-bottom:14px">
       <button class="btn" id="tal-tabbtn-links" onclick="talTab('links')" style="background:#2563eb;color:#fff">📋 المنتجات المربوطة</button>
+      <button class="btn btn-ghost" id="tal-tabbtn-pro" onclick="talTab('pro')">⭐ خصم طلبات برو</button>
       <button class="btn btn-ghost" id="tal-tabbtn-opps" onclick="talTab('opps')">🎯 فرص طلبات</button>
       <button class="btn btn-ghost" id="tal-tabbtn-new" onclick="talTab('new')">🆕 منتجات جديدة <span id="tal-new-badge" style="display:none;background:#16a34a;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px"></span></button>
       <button class="btn btn-ghost" id="tal-tabbtn-restock" onclick="talTab('restock')">🚚 محتاج تحويل <span id="tal-restock-badge" style="display:none;background:#dc2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:900;margin-inline-start:4px">0</span></button>
@@ -2327,6 +2328,20 @@ tr:hover td{background:#fafbff}
       </div>
     </div>
 
+    <div class="card" style="margin-bottom:14px">
+      <div style="padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+        <span style="font-weight:800">📋 المنتجات المربوطة</span>
+        <input type="text" id="tal-search" class="form-input" style="max-width:220px" placeholder="🔍 بحث بالاسم أو الـ sku..." oninput="talabatRender()">
+        <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="tal-only-unmatched" onchange="talabatRender()"> غير المتطابق بس</label>
+        <!-- 🆕 v627: فلتر المنتجات اللي ليها سعر مثبّت (مابتتأثرش بالنسبة) -->
+        <label style="font-size:12px;display:flex;align-items:center;gap:4px" title="المنتجات اللي ليها سعر مثبّت يدوي — دي اللي النسبة مابتغيّرهاش"><input type="checkbox" id="tal-only-pinned" onchange="talabatRender()"> 📌 سعر مثبّت بس</label>
+        <span id="tal-summary" style="font-size:12px;color:var(--muted);margin-inline-start:auto"></span>
+      </div>
+      <div id="tal-list" style="padding:6px 14px;overflow-x:auto"></div>
+    </div>
+    </div>
+    <!-- ⭐ v963: خصم طلبات برو في تاب لوحده -->
+    <div id="tal-tab-pro" style="display:none">
     <!-- ⭐ v628: خصم عملاء طلبات برو — اتفاق قابل للقفل في أي وقت -->
     <div class="card" style="margin-bottom:14px;border:2px solid #7c3aed">
       <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -2359,18 +2374,6 @@ tr:hover td{background:#fafbff}
         <div id="tpro-price-note" style="margin-top:8px;font-size:12px;line-height:1.9"></div>
         <div id="tpro-stats" style="margin-top:12px;font-size:12px"></div>
       </div>
-    </div>
-
-    <div class="card" style="margin-bottom:14px">
-      <div style="padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
-        <span style="font-weight:800">📋 المنتجات المربوطة</span>
-        <input type="text" id="tal-search" class="form-input" style="max-width:220px" placeholder="🔍 بحث بالاسم أو الـ sku..." oninput="talabatRender()">
-        <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="tal-only-unmatched" onchange="talabatRender()"> غير المتطابق بس</label>
-        <!-- 🆕 v627: فلتر المنتجات اللي ليها سعر مثبّت (مابتتأثرش بالنسبة) -->
-        <label style="font-size:12px;display:flex;align-items:center;gap:4px" title="المنتجات اللي ليها سعر مثبّت يدوي — دي اللي النسبة مابتغيّرهاش"><input type="checkbox" id="tal-only-pinned" onchange="talabatRender()"> 📌 سعر مثبّت بس</label>
-        <span id="tal-summary" style="font-size:12px;color:var(--muted);margin-inline-start:auto"></span>
-      </div>
-      <div id="tal-list" style="padding:6px 14px;overflow-x:auto"></div>
     </div>
     </div>
     <div id="tal-tab-opps" style="display:none">
@@ -12098,7 +12101,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v962';
+const UI_BUILD = 'v963';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -50140,7 +50143,7 @@ function talNewExcel(){
 }
 function talTab(which){
   // 🔧 v442: بقت 3 تابات بدل 2
-  const tabs = ['links','opps','restock','new'];
+  const tabs = ['links','pro','opps','restock','new'];   // ⭐ v963: + pro
   if(!tabs.includes(which)) which = 'links';
   tabs.forEach(t => {
     const panel = $('tal-tab-'+t);
