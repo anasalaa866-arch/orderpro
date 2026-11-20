@@ -12097,7 +12097,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v955';
+const UI_BUILD = 'v957';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -56426,7 +56426,10 @@ function csRender(){
 
   // الترتيب المعروض: المثبّتين فوق بترتيبهم، وبعدين الباقي زي ما هو
   const byId = new Map(_cs.products.map(p => [p.id, p]));
-  const pinOrder = act.map(p => p.id).filter(id => byId.has(id));
+  // 📍 v957: اللي ملهوش رقم فوق بترتيبهم، واللي ليه رقم بعدهم مترتبين بالرقم
+  const pinOrder = act.filter(p => !p.pos).map(p => p.id).filter(id => byId.has(id))
+    .concat(act.filter(p => p.pos).sort((a,b) => a.pos - b.pos).map(p => p.id).filter(id => byId.has(id)));
+  const topN = act.filter(p => !p.pos && byId.has(p.id)).length;
   const seen = new Set(pinOrder);
   const rest = _cs.products.filter(p => !seen.has(p.id));
   // _arKey بتطبّع العربي والأرقام العربية — نفس اللي في بحث السلف
@@ -56441,7 +56444,7 @@ function csRender(){
     const pin = _csPinOf(p.id);
     const gone = _csExpired(pin);
     return `<div style="display:flex;gap:10px;align-items:center;padding:8px 11px;border-bottom:1px solid var(--border);${pinned?'background:#fffbeb':''}">
-      <div style="width:26px;text-align:center;font-weight:800;color:var(--muted);font-family:Roboto,sans-serif">${pinned?i+1:''}</div>
+      <div style="width:26px;text-align:center;font-weight:800;color:${pin?.pos?'#7c3aed':'var(--muted)'};font-family:Roboto,sans-serif">${pinned?(pin?.pos||i+1):''}</div>
       <img src="${escapeHtml(_shopThumb(p.image||'', 80))}" style="width:40px;height:40px;object-fit:contain;border-radius:6px;background:#fff;border:1px solid var(--border)" onerror="this.style.visibility='hidden'">
       <div style="flex:1;min-width:0">
         <div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.title||'')}</div>
@@ -56451,11 +56454,14 @@ function csRender(){
         </div>
       </div>
       ${pinned ? `
+        <label style="font-size:11px;display:flex;align-items:center;gap:4px;white-space:nowrap" title="رقم مكانه في الكوليكشن (١ = أول واحد). سيبه فاضي = فوق مع المثبّتين">مكان
+          <input type="number" min="1" class="form-input cs-pos" style="width:66px;font-size:11px" placeholder="فوق" value="${pin?.pos||''}"
+                 onchange="csPinPos('${escapeHtml(p.id)}', this.value)"></label>
         <input type="date" class="form-input" style="width:148px;font-size:11px" value="${pin?.until||''}"
                title="يفك التثبيت بعد التاريخ ده — سيبه فاضي = تثبيت دايم"
                onchange="csPinUntil('${escapeHtml(p.id)}', this.value)">
-        <button class="btn btn-ghost btn-xs" onclick="csMove('${escapeHtml(p.id)}',-1)" ${i===0?'disabled':''}>⬆️</button>
-        <button class="btn btn-ghost btn-xs" onclick="csMove('${escapeHtml(p.id)}',1)" ${i===pinOrder.length-1?'disabled':''}>⬇️</button>
+        <button class="btn btn-ghost btn-xs" onclick="csMove('${escapeHtml(p.id)}',-1)" ${pin?.pos||i===0?'disabled':''}>⬆️</button>
+        <button class="btn btn-ghost btn-xs" onclick="csMove('${escapeHtml(p.id)}',1)" ${pin?.pos||i>=topN-1?'disabled':''}>⬇️</button>
         <button class="btn btn-ghost btn-xs" style="color:#dc2626" onclick="csUnpin('${escapeHtml(p.id)}')">✕</button>`
       : `<button class="btn btn-ghost btn-xs" onclick="csPin('${escapeHtml(p.id)}')">📌 ثبّت</button>`}
     </div>`;
@@ -56463,7 +56469,7 @@ function csRender(){
 
   $('cs-body').innerHTML = `
     ${pinOrder.length ? `<div style="padding:9px 12px;background:var(--bg);font-size:12px;font-weight:800">
-      📌 مثبّتين فوق (${pinOrder.length}) — بالترتيب ده
+      📌 مثبّتين (${pinOrder.length}) — اللي من غير رقم فوق بالترتيب ده، واللي ليه رقم بيقعد عنده بالظبط
       <button class="btn btn-ghost btn-xs" style="margin-inline-start:9px" onclick="csAllUntil()">📅 حط تاريخ فك على الكل</button>
       <button class="btn btn-ghost btn-xs" style="color:#dc2626" onclick="csClearPins()">فُك الكل</button>
     </div>${pinOrder.map((id,i) => card(byId.get(id), i, true)).join('')}` : ''}
@@ -56519,13 +56525,20 @@ function csPinUntil(id, v){
   p.until = v || null;
   csRender();
 }
+function csPinPos(id, v){
+  const p = _csPinOf(id); if(!p) return;
+  const n = Math.floor(Number(v));
+  p.pos = n >= 1 ? n : null;
+  csRender();
+}
 function csMove(id, dir){
-  const act = (_cs.pinned||[]).filter(p => !_csExpired(p));
+  // الأسهم بتحرّك بين المثبّتين فوق بس — اللي ليه رقم مكانه ثابت
+  const act = (_cs.pinned||[]).filter(p => !_csExpired(p) && !p.pos);
   const i = act.findIndex(p => p.id === id);
   const j = i + dir;
   if(i < 0 || j < 0 || j >= act.length) return;
   [act[i], act[j]] = [act[j], act[i]];
-  _cs.pinned = act.concat((_cs.pinned||[]).filter(p => _csExpired(p)));
+  _cs.pinned = act.concat((_cs.pinned||[]).filter(p => _csExpired(p) || p.pos));
   csRender();
 }
 function csClearPins(){
