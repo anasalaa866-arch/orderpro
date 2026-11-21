@@ -12314,7 +12314,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v987';
+const UI_BUILD = 'v988';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -43400,63 +43400,68 @@ async function cgLoadHistory(){
 
 // 🖨️ كشف المحاسبة
 function cgStlPrint(){
+  // 🎨 v988: نفس شكل باقي كشوف تحت البيع (اللوجو والألوان) + الرصيد قبل وبعد القطع
   if(!_cgStl) return toast('❌ افتح قطع الأول');
   const st = _cgStl.settlement, items = (_cgStl.items || []).filter(x => x.sold_qty > 0);
-  const esc = v => String(v==null?'':v).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const html = `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
-<title>${esc(st.settlement_number)}</title><style>
-  @page{size:A4;margin:14mm} *{box-sizing:border-box}
-  body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;color:#111;margin:0;font-size:12px}
-  .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #6366f1;padding-bottom:10px;margin-bottom:14px}
-  .hd h1{margin:0;font-size:20px;color:#6366f1}
-  .num{font-family:Roboto,Arial,sans-serif;font-weight:800;font-size:15px}
-  .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:14px}
-  .meta span{display:block;font-size:10px;color:#666} .meta b{font-size:13px}
-  table{width:100%;border-collapse:collapse}
-  th,td{border:1px solid #cbd5e1;padding:6px 7px} th{background:#f1f5f9;font-size:11px}
-  .c{text-align:center} .n{font-family:Roboto,Arial,sans-serif;font-weight:700}
-  .sku{font-family:Roboto,Arial,sans-serif;font-size:9px;color:#777}
-  tfoot td{background:#eef2ff;font-weight:800;font-size:14px}
-  .sig{margin-top:34px;display:grid;grid-template-columns:1fr 1fr;gap:40px;font-size:11px}
-  .sig div{border-top:1px solid #333;padding-top:5px;text-align:center}
-  .ft{margin-top:14px;font-size:9px;color:#888;text-align:center} tr{page-break-inside:avoid}
-</style></head><body>
-  <div class="hd"><div><h1>كشف محاسبة بضاعة تحت البيع</h1><div class="num">${esc(st.settlement_number)}</div></div>
-    <div style="text-align:left"><div style="font-weight:800;font-size:16px">CAFELAX</div>
-      <div style="font-size:10px;color:#666">${new Date(st.period_to).toLocaleString('ar-EG-u-nu-latn',{dateStyle:'medium',timeStyle:'short'})}</div></div></div>
-  <div class="meta">
-    <div><span>المورد</span><b>${esc(st.supplier_name || '-')}</b></div>
-    <div><span>الفترة من</span><b>${st.period_from ? new Date(st.period_from).toLocaleDateString('ar-EG-u-nu-latn',{dateStyle:'medium'}) : 'البداية'}</b></div>
-    <div><span>سجّله</span><b>${esc(st.created_by || '-')}</b></div></div>
-  <table><thead><tr><th style="width:30px">#</th><th>الصنف</th><th style="width:60px">باع</th>
-    <th style="width:76px">سعر البيع</th><th style="width:56px">خصم</th>
-    <th style="width:80px">التكلفة</th><th style="width:92px">الإجمالي</th>
-    <th style="width:62px;background:#fef9c3" title="الرصيد اللي كان عندنا من القطع اللي فات">من آخر قطع</th>
-    <th style="width:52px;background:#fef9c3">توريد</th>
-    <th style="width:66px;background:#fde68a" title="اللي فاضل عندنا بعد القطع ده — بيترحّل للفترة الجاية">الرصيد بعد القطع</th></tr></thead>
-    <tbody>${items.map((x,i) => `<tr><td class="c">${i+1}</td>
-      <td>${esc(x.product_title)}${x.sku ? `<div class="sku">${esc(x.sku)}</div>` : ''}</td>
-      <td class="c n">${x.sold_qty}</td><td class="c n">${(+x.sale_price).toFixed(2)}</td>
-      <td class="c n">${(+x.discount_pct).toFixed(1)}%</td>
-      <td class="c n">${(+x.unit_price).toFixed(2)}</td>
-      <td class="c n">${(+x.line_total).toFixed(2)}</td>
-      <td class="c n" style="background:#fefce8">${+x.opening_qty || 0}</td>
-      <td class="c n" style="background:#fefce8">${+x.delivered_qty || 0}</td>
-      <td class="c n" style="background:#fef3c7;font-size:13px">${+x.closing_qty || 0}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="2">${items.length} صنف</td>
-      <td class="c n">${items.reduce((a,x)=>a+x.sold_qty,0)}</td><td colspan="2"></td>
-      <td class="c">الإجمالي</td><td class="c n">${(+st.subtotal).toFixed(2)}</td>
-      <td class="c n">${items.reduce((a,x)=>a+(+x.opening_qty||0),0)}</td><td class="c n">${items.reduce((a,x)=>a+(+x.delivered_qty||0),0)}</td>
-      <td class="c n">${items.reduce((a,x)=>a+(+x.closing_qty||0),0)}</td></tr></tfoot></table>
-  <div style="margin-top:6px;font-size:10px;color:#666">من آخر قطع + توريد − باع = الرصيد بعد القطع (اللي فاضل عندنا وبيترحّل للفترة الجاية)</div>
-  ${st.notes ? `<div style="margin-top:12px;font-size:11px;border:1px solid #cbd5e1;border-radius:6px;padding:8px">📝 ${esc(st.notes)}</div>` : ''}
-  <div class="sig"><div>توقيع المورد</div><div>توقيع CAFELAX</div></div>
-  <div class="ft">OrderPro · CAFELAX — الأسعار بالجنيه المصري</div>
-</body></html>`;
-  const w = window.open('', '_blank');
-  if(!w){ toast('❌ المتصفح منع النافذة'); return; }
-  w.document.write(html); w.document.close();
-  setTimeout(() => { try{ w.focus(); w.print(); }catch(e){} }, 700);
+  const sup = { name: st.supplier_name || '' };
+  const d = v => v ? new Date(v).toLocaleDateString('ar-EG-u-nu-latn',{day:'numeric',month:'long',year:'numeric'}) : '';
+  const sum = k => items.reduce((a,x) => a + (+x[k] || 0), 0);
+  const rows = items.map((x,i) => `<tr>
+      <td class="idx">${_cgN(i+1)}</td>
+      <td class="item"><span class="nm">${escapeHtml(x.product_title||'')}</span>${x.sku?`<span class="sku">${escapeHtml(x.sku)}</span>`:''}</td>
+      <td class="q sold">${_cgN(x.sold_qty)}</td>
+      <td class="q money">${_cgM(x.sale_price)}${x.had_offer?'<span class="bang" title="سعر عرض">★</span>':''}</td>
+      <td class="q">${(+x.discount_pct||0) ? (+x.discount_pct).toFixed(1)+'%' : '—'}</td>
+      <td class="q money">${_cgM(x.unit_price)}</td>
+      <td class="q sold money">${_cgM(x.line_total)}</td>
+      <td class="q stk">${_cgN(x.opening_qty)}</td>
+      <td class="q stk">${_cgN(x.delivered_qty)}</td>
+      <td class="q stk after">${_cgN(x.closing_qty)}</td></tr>`).join('');
+  const w = window.open('', '_blank', 'width=1180,height=1120');
+  if(!w) return toast('❌ المتصفح منع النافذة — اسمح بالنوافذ المنبثقة');
+  w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
+  <title>${escapeHtml(st.settlement_number)} — ${escapeHtml(sup.name)}</title>
+  <style>${_cgSheetCss({ landscape:true })}
+    th.stk{ background:#3C4A32 !important } td.stk{ background:#F5F8F3 }
+    tbody tr:nth-child(even) td.stk{ background:#EEF3EB } td.stk.after{ font-weight:800; background:#E6EFE1 }
+    .num{ direction:ltr; unicode-bidi:isolate; font-family:Roboto,sans-serif; letter-spacing:.3px }
+  </style></head><body>
+  <div class="sheet">
+    ${_cgSheetHead(sup, 'كشف محاسبة — بضاعة تحت البيع')}
+    <dl class="meta">
+      <div><dt>رقم الكشف</dt><dd class="num">${escapeHtml(st.settlement_number)}</dd></div>
+      <div><dt>الفترة</dt><dd>${escapeHtml(st.period_from ? d(st.period_from) : 'بداية التعامل')} ← ${escapeHtml(d(st.period_to))}</dd></div>
+      <div><dt>الحالة</dt><dd>${st.status === 'confirmed' ? 'متأكّد ✓' : 'مسودة'}</dd></div>
+      <div><dt>المستحق للمورد</dt><dd style="font-size:16px;color:#9B2C14">${_cgM(st.subtotal)} ج</dd></div>
+    </dl>
+    <p class="lead">اتباع <b>${_cgN(sum('sold_qty'))} قطعة</b> من <b>${_cgN(items.length)} صنف</b> في الفترة دي.
+      الأعمدة الخضرا: الرصيد عندنا — <b>من آخر قطع + توريد − باع = الرصيد بعد القطع</b>، وده اللي بيترحّل للفترة الجاية.</p>
+    <table>
+      <thead><tr>
+        <th>#</th><th style="text-align:start">الصنف</th><th>باع</th><th>سعر البيع</th><th>خصم</th><th>التكلفة</th><th>الإجمالي</th>
+        <th class="stk">من آخر قطع</th><th class="stk">توريد</th><th class="stk">الرصيد بعد القطع</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr>
+        <td colspan="2" class="lbl">إجمالي ${_cgN(items.length)} صنف</td>
+        <td class="q">${_cgN(sum('sold_qty'))}</td><td class="q money"></td><td class="q"></td><td class="q money"></td>
+        <td class="q sold money">${_cgM(st.subtotal)} ج</td>
+        <td class="q">${_cgN(sum('opening_qty'))}</td><td class="q">${_cgN(sum('delivered_qty'))}</td><td class="q">${_cgN(sum('closing_qty'))}</td></tr></tfoot>
+    </table>
+    ${st.notes ? `<div class="note">📝 ${escapeHtml(st.notes)}</div>` : ''}
+    <div class="sign">
+      <div><div class="line">عن ${escapeHtml(sup.name || 'المورد')} — الاسم والتوقيع</div></div>
+      <div><div class="line">عن CAFELAX — الاسم والتوقيع</div></div>
+    </div>
+    <div class="fine">الأسعار بالجنيه المصري. ★ جنب سعر البيع معناه إن الصنف كان عليه عرض، والحساب اتعمل بسعر العرض الحقيقي. · سجّله ${escapeHtml(st.created_by || '—')}</div>
+  </div>
+  <div class="bar">
+    <button onclick="window.print()">اطبع الكشف</button>
+    <button class="ghost" onclick="window.close()">اقفل</button>
+  </div>
+  </body></html>`);
+  w.document.close();
+  setTimeout(() => { try{ w.focus(); }catch(e){} }, 250);
 }
 
 // ╔══════════════════════════════════════════════════════════════════╗
