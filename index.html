@@ -6328,6 +6328,10 @@ tr:hover td{background:#fafbff}
         <option value="price:desc">السعر: الأغلى الأول</option>
         <option value="price:asc">السعر: الأرخص الأول</option>
         <option value="value:asc">قيمة المخزون: الأقل الأول</option>
+        <option value="cost:desc">💵 التكلفة: الأعلى الأول</option>
+        <option value="cost:asc">التكلفة: الأقل الأول (مفيش تكلفة الأول)</option>
+        <option value="margin:asc">📉 الهامش: الأقل الأول (السالب الأول)</option>
+        <option value="margin:desc">الهامش: الأعلى الأول</option>
       </select>
       <button class="btn btn-ghost btn-sm" onclick="invClearFilters()">✖ مسح الفلاتر</button>
       <span style="font-size:11px;color:var(--muted);margin-right:auto" id="inv-last-sync"></span>
@@ -12243,7 +12247,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v978';
+const UI_BUILD = 'v980';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -36764,7 +36768,9 @@ function renderInventoryTable(){
       return (mul * (x - y)) || (mul * (pid(a) - pid(b)));
     });
   }
+  const _mg = i => (i.cost > 0 && Number(i.price) > 0) ? (Number(i.price) - i.cost) / Number(i.price) : null;   // 💰 v980 — من غير تكلفة: دايماً في الآخر
   const sv = i => sk === 'total' ? (i.totalQty || 0) : sk === 'price' ? Number(i.price || 0)
+                : sk === 'cost' ? (i.cost || -1) : sk === 'margin' ? (_mg(i) ?? (mul > 0 ? 1e9 : -1e9))
                 : sk === 'value' ? (i.totalQty || 0) * Number(i.price || 0)
                 : sk.startsWith('wh:') ? (i.levels[sk.slice(3)]?.qty || 0) : null;
   const nm = i => _invSortName((i.productTitle || '') + ' ' + (i.variantTitle && i.variantTitle !== 'Default Title' ? i.variantTitle : ''));
@@ -36827,6 +36833,9 @@ function renderInventoryTable(){
       ${whCells}
       <td style="text-align:center;font-weight:800;font-size:14px">${item.totalQty}</td>
       <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700;color:#16a34a">${item.price!=null&&item.price!==''?Number(item.price).toLocaleString(undefined,{maximumFractionDigits:2})+' ج':'<span style="color:var(--muted)">—</span>'}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif">${item.cost > 0 ? (() => { const pr = Number(item.price) || 0, m = pr > 0 ? Math.round((pr - item.cost) / pr * 1000) / 10 : null;
+        return `<div style="font-weight:700">${Number(item.cost).toLocaleString(undefined,{maximumFractionDigits:2})} ج</div>` + (m == null ? '' : `<div style="font-size:10.5px;font-weight:700;color:${m < 0 ? '#dc2626' : m < 20 ? '#b45309' : '#059669'}" title="(السعر − التكلفة) ÷ السعر">${m}%</div>`); })()
+        : '<span style="color:#b45309;font-size:11px" title="مفيش تكلفة متسجلة — الهامش والربح مش هيتحسبوا">مفيش تكلفة</span>'}</td>
       <td style="text-align:center">${statusBadge}</td>
       <td style="text-align:center">
         <button class="btn btn-ghost btn-xs" onclick="showProductHistory('${escapeHtml(item.variantId)}','${escapeHtml((item.productTitle||'').replace(/'/g,"\\'"))}')">📜</button>
@@ -36849,6 +36858,7 @@ function renderInventoryTable(){
           ${whCols}
           <th onclick="invSortBy('total')" style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:80px;cursor:pointer">الإجمالي${_invSortArrow('total')}</th>
           <th onclick="invSortBy('price')" style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:90px;cursor:pointer">سعر الموقع${_invSortArrow('price')}</th>
+          <th onclick="invSortBy('cost')" title="التكلفة اللي السيستم بيحسب بيها الربح والهامش. للترتيب بالهامش: من قايمة الترتيب" style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:95px;cursor:pointer">التكلفة / الهامش${_invSortArrow('cost')}${_invSortArrow('margin')}</th>
           <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:100px">الحالة</th>
           <th style="text-align:center;padding:10px;font-size:11px;font-weight:700;color:var(--muted);width:60px">حركة</th>
         </tr>
