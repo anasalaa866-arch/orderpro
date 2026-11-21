@@ -12131,7 +12131,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v967';
+const UI_BUILD = 'v968';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -16738,6 +16738,8 @@ async function assignBulkBosta(){
   if(!bostaApiKey){toast('❗ أدخل Bosta API Key في صفحة بوسطة أولاً');return;}
   let success=0,fail=0;
   toast('⏳ جاري رفع '+ids.length+' طلب على بوسطة...');
+  // 🐛 v968: كان بيوزّع من غير دفعة → الطلبات ماكانتش بتظهر في طباعة الدفعة
+  const _batch = await ensureCurrentBatchAsync().catch(() => null);
   for(const id of ids){
     const o=orders.find(x=>x.id===id);
     if(!o||o.bostaId)continue;
@@ -16750,7 +16752,10 @@ async function assignBulkBosta(){
         o.bostaTrackingNo=result.trackingNumber;
         o.bostaStatus='created';
         o.status='جاري التوصيل';
-        if(API_URL) await apiFetch('/api/orders/'+id,'PATCH',{bostaId:result.deliveryId,bostaTrackingNo:result.trackingNumber,bostaStatus:'created',status:'جاري التوصيل'});
+        o.isBosta=true; o.courierId=null;
+        if(_batch?.code) o.batchCode=_batch.code;
+        if(API_URL) await apiFetch('/api/orders/'+id,'PATCH',{bostaId:result.deliveryId,bostaTrackingNo:result.trackingNumber,bostaStatus:'created',status:'جاري التوصيل',
+          isBosta:true, courierId:null, ...(_batch?.code ? { batchCode:_batch.code } : {})});
         // Shopify fulfill + tag "Bosta"
         shopifyFulfill({ ...orderSnapshot, status:'جاري التوصيل', isBosta:true }, 'Bosta');
         success++;
@@ -16782,13 +16787,14 @@ async function assignBulkCourier(){
     }
   }
 
+  const _batch = await ensureCurrentBatchAsync().catch(() => null);   // 🐛 v968
   for(const id of ids){
     const o=orders.find(x=>x.id===id);
     if(!o)continue;
     // snapshot قبل التعديل
     const orderSnapshot = { ...o };
     const ship=getShipCost(o,c);
-    const upd={courierId:cId,ship,status:'جاري التوصيل'};
+    const upd={courierId:cId,ship,status:'جاري التوصيل',isBosta:false,...(_batch?.code ? { batchCode:_batch.code } : {})};
     if(API_URL) await apiFetch('/api/orders/'+id,'PATCH',upd);
     Object.assign(o,upd);
     // Shopify fulfill + tag اسم المندوب
@@ -16894,7 +16900,8 @@ async function assignToBosta(id){
   o.courierId='bosta';
   o.isBosta=true;
   o.status='جاري التوصيل';
-  const upd={courierId:null,isBosta:true,status:'جاري التوصيل'};
+  const _batch = await ensureCurrentBatchAsync().catch(() => null);   // 🐛 v968
+  const upd={courierId:null,isBosta:true,status:'جاري التوصيل',...(_batch?.code ? { batchCode:_batch.code } : {})};
   if(API_URL){
     _savePatchWithRetry(id, upd, 3).then(r => {
       if(!r.success) _trackAssignmentFailure(id, o.name, 'Bosta');
@@ -32823,6 +32830,19 @@ async function printBatchInvoices(){
   });
 
   const batchList = Object.values(batches).sort((a,b)=>b.code.localeCompare(a.code));
+  // 🐛 v968: طلبات اتوزعت من غير دفعة (توزيع جماعي / زرار بوسطة قبل v968) — ماكانتش بتظهر هنا
+  const _orph = orders.filter(o => o.status === 'جاري التوصيل' && (o.courierId || o.isBosta) && !o.batchCode);
+  if(_orph.length && confirm(`⚠️ فيه ${_orph.length} طلب موزّع ومش في أي دفعة، فمش هيطلعوا في الطباعة:\n${_orph.slice(0,15).map(o => o.id).join('، ')}${_orph.length>15?' …':''}\n\nأضمّهم للدفعة المفتوحة دلوقتي؟`)){
+    const b = await ensureCurrentBatchAsync().catch(() => null);
+    if(b?.code){
+      let n = 0;
+      for(const o of _orph){
+        try{ await apiFetch('/api/orders/' + o.id, 'PATCH', { batchCode: b.code }); o.batchCode = b.code; n++; }catch(e){}
+      }
+      toast(`✅ اتضم ${n} طلب للدفعة ${b.code}`);
+      return printBatchInvoices();
+    }
+  }
   if(!batchList.length){ toast('❗ لا توجد دفعات للطباعة'); return; }
 
   // حدد الدفعة الحالية افتراضياً
