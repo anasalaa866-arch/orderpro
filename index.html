@@ -7854,8 +7854,11 @@ tr:hover td{background:#fafbff}
   <div class="card" style="margin-bottom:14px">
     <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <span style="font-weight:900">📘 أداء Meta</span>
-      <select id="mta-days" class="form-input" style="width:auto;font-size:12px" onchange="mtaLoad()">
-        <option value="7">آخر 7 أيام</option><option value="14">آخر 14 يوم</option><option value="30" selected>آخر 30 يوم</option><option value="60">آخر 60 يوم</option><option value="90">آخر 90 يوم</option></select>
+      <select id="mta-days" class="form-input" style="width:auto;font-size:12px" onchange="_adRangeUi('mta');if(this.value!=='custom')mtaLoad()">
+        <option value="today">اليوم</option><option value="yesterday">أمس</option><option value="7">آخر 7 أيام</option><option value="14">آخر 14 يوم</option><option value="30" selected>آخر 30 يوم</option><option value="60">آخر 60 يوم</option><option value="90">آخر 90 يوم</option>
+        <option value="month">الشهر ده</option><option value="lastmonth">الشهر اللي فات</option><option value="custom">📅 من … لـ …</option></select>
+      <span id="mta-custom" style="display:none;gap:4px;align-items:center;font-size:12px">من <input id="mta-from" type="date" class="form-input" style="width:auto;font-size:12px"> لـ <input id="mta-to" type="date" class="form-input" style="width:auto;font-size:12px">
+        <button class="btn btn-sm btn-primary" onclick="mtaLoad()">عرض</button></span>
       <span id="mta-sub" style="color:var(--muted);font-size:12px"></span>
       <button class="btn btn-sm btn-ghost" style="margin-inline-start:auto" onclick="mtaLoad()">🔄 تحديث</button>
       <button class="btn btn-sm btn-ghost" onclick="mtaToken()">🔑 التوكن</button>
@@ -7884,8 +7887,11 @@ tr:hover td{background:#fafbff}
   <div class="card" style="margin-bottom:14px">
     <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <span style="font-weight:900">📈 أداء Google Ads</span>
-      <select id="gap-days" class="form-input" style="width:auto;font-size:12px" onchange="gapLoad()">
-        <option value="7">آخر 7 أيام</option><option value="14">آخر 14 يوم</option><option value="30" selected>آخر 30 يوم</option><option value="60">آخر 60 يوم</option><option value="90">آخر 90 يوم</option></select>
+      <select id="gap-days" class="form-input" style="width:auto;font-size:12px" onchange="_adRangeUi('gap');if(this.value!=='custom')gapLoad()">
+        <option value="today">اليوم</option><option value="yesterday">أمس</option><option value="7">آخر 7 أيام</option><option value="14">آخر 14 يوم</option><option value="30" selected>آخر 30 يوم</option><option value="60">آخر 60 يوم</option><option value="90">آخر 90 يوم</option>
+        <option value="month">الشهر ده</option><option value="lastmonth">الشهر اللي فات</option><option value="custom">📅 من … لـ …</option></select>
+      <span id="gap-custom" style="display:none;gap:4px;align-items:center;font-size:12px">من <input id="gap-from" type="date" class="form-input" style="width:auto;font-size:12px"> لـ <input id="gap-to" type="date" class="form-input" style="width:auto;font-size:12px">
+        <button class="btn btn-sm btn-primary" onclick="gapLoad()">عرض</button></span>
       <span id="gap-sub" style="color:var(--muted);font-size:12px"></span>
       <button class="btn btn-sm btn-ghost" style="margin-inline-start:auto" onclick="gapLoad()">🔄 تحديث</button>
       <button class="btn btn-sm btn-ghost" onclick="gapExport()">📥 Excel</button>
@@ -12308,7 +12314,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v983';
+const UI_BUILD = 'v985';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -26206,12 +26212,27 @@ function wsExport(){
   XLSX.writeFile(wb, `تقييم_المنتجات_${_ws.mode === 'live' ? _todayCairo() : _ws.month}.xlsx`);
 }
 
+// 📅 v985: فترة صفحتي الإعلانات — اليوم / أمس / الشهر / من … لـ …
+function _adCairo(off){ return new Date(Date.now() + (off || 0) * 86400000).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }); }
+function _adRangeUi(p){ const c = $(p + '-custom'); if(!c) return; const on = $(p + '-days').value === 'custom'; c.style.display = on ? 'inline-flex' : 'none';
+  if(on && !$(p + '-from').value){ $(p + '-from').value = _adCairo(-6); $(p + '-to').value = _adCairo(0); } }
+function _adRangeQs(p){
+  const v = $(p + '-days').value, t = _adCairo(0), q = (f, e) => `from=${f}&to=${e}`;
+  if(v === 'today') return q(t, t);
+  if(v === 'yesterday'){ const y = _adCairo(-1); return q(y, y); }
+  if(v === 'month') return q(t.slice(0, 8) + '01', t);
+  if(v === 'lastmonth'){ const d = new Date(t.slice(0, 8) + '01T12:00:00Z'); d.setUTCDate(0); const e = d.toISOString().slice(0, 10); return q(e.slice(0, 8) + '01', e); }
+  if(v === 'custom'){ const f = $(p + '-from').value, e = $(p + '-to').value; if(f && e) return q(f, e); }
+  return 'days=' + (parseInt(v) || 30);
+}
+function _adRangeLbl(d){ if(!d) return ''; const f = x => String(x || '').slice(8, 10) + '/' + String(x || '').slice(5, 7);
+  return d.from === d.to ? f(d.from) : `${f(d.from)} → ${f(d.to)} · ${d.days} يوم`; }
 // ═══ 📘 v981: أداء Meta ═══
 let _mta = null, _mtaT = 'c', _mtaPage = 1, _mtaPoll = null;
 const _mtaN = v => (v == null ? '—' : Math.round(v).toLocaleString('en-US'));
 async function mtaLoad(){
   $('mta-list').innerHTML = '⏳';
-  try{ _mta = await apiFetch('/api/meta/perf?days=' + $('mta-days').value); mtaRender(); }
+  try{ _mta = await apiFetch('/api/meta/perf?' + _adRangeQs('mta')); mtaRender(); }
   catch(e){ $('mta-list').innerHTML = `<span style="color:#dc2626">${escapeHtml(e.message)}</span>`; }
 }
 function mtaTab(t){ _mtaT = t; _mtaPage = 1; mtaRender(); }
@@ -26225,7 +26246,7 @@ function mtaRender(){
   const prodSpend = _mta.products.reduce((a, p) => a + p.spend, 0), prodVal = _mta.products.reduce((a, p) => a + p.value, 0);
   $('mta-cards').innerHTML =
     (st.error || !_mta.has_token ? `<div style="width:100%;padding:8px 12px;border-radius:8px;background:#fef2f2;color:#991b1b;font-size:12px">⚠️ ${escapeHtml(st.error || 'مفيش توكن Meta')} — دوس «🔑 التوكن».</div>` : '')
-    + box(`💸 الصرف (${_mta.days} يوم)`, `<b style="font-size:16px">${_mtaN(T.spend)} ج</b><br>قيمة المشتريات ${_mtaN(T.value)} ج`)
+    + box(`💸 الصرف (${_adRangeLbl(_mta)})`, `<b style="font-size:16px">${_mtaN(T.spend)} ج</b><br>قيمة المشتريات ${_mtaN(T.value)} ج`)
     + box('📈 العائد', `ROAS <b>${T.spend > 0 ? (T.value / T.spend).toFixed(2) : '—'}</b><br>مشتريات ${_mtaN(T.purchases)} · تكلفة الطلب ${T.purchases > 0 ? _mtaN(T.spend / T.purchases) + ' ج' : '—'}`)
     + box('📦 إعلانات الكتالوج', `${_mta.products.length} منتج · صرف ${_mtaN(prodSpend)} ج<br>ROAS ${prodSpend > 0 ? (prodVal / prodSpend).toFixed(2) : '—'}${_mta.products.some(p => !p.matched) ? ` · <span style="color:#b45309">${_mta.products.filter(p => !p.matched).length} مش متعرّف</span>` : ''}`)
     + `<div style="font-size:11px;color:var(--muted);max-width:300px;line-height:1.7">ROAS = قيمة المشتريات ÷ الصرف. <b>ربحية Meta</b> = (القيمة × هامش المنتج) ÷ الصرف — 1 = تعادل. الأرقام زي ما Meta بينسبها (Attribution بتاع الحساب). السحب التلقائي كل يوم الساعة ${_mta.cfg?.hour ?? 6} الصبح — من الإعدادات ← «أداء Meta».${(last?.log || []).length ? '<br>' + last.log.map(escapeHtml).join('<br>') : ''}</div>`;
@@ -26299,7 +26320,7 @@ function mtaExport(){
     'CTR %': c.ctr ?? '', 'مشتريات': c.purchases, 'تكلفة الطلب': c.cpa ?? '', 'القيمة': c.value, 'ROAS': c.roas ?? '' }))), 'الحملات');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(_mta.products.map(p => ({ 'المنتج': p.title + (p.variant && p.variant !== 'Default Title' ? ' · ' + p.variant : ''), 'SKU': p.sku || '', 'Meta id': p.key,
     'الصرف': p.spend, 'كليكات': p.clicks, 'مشتريات': p.purchases, 'القيمة': p.value, 'ROAS': p.roas ?? '', 'الهامش %': p.margin_pct ?? '', 'ربحية Meta': p.poas ?? '' }))), 'المنتجات');
-  XLSX.writeFile(wb, `أداء_Meta_${_mta.days}يوم_${_todayCairo()}.xlsx`);
+  XLSX.writeFile(wb, `أداء_Meta_${_mta.from}_${_mta.to}.xlsx`);
 }
 
 // ═══ 📈 v983: أداء Google Ads ═══
@@ -26307,7 +26328,7 @@ let _gap = null, _gapT = 'c', _gapPage = 1, _gapPoll = null;
 const _gapN = v => (v == null ? '—' : Math.round(v).toLocaleString('en-US'));
 async function gapLoad(){
   $('gap-list').innerHTML = '⏳';
-  try{ _gap = await apiFetch('/api/gads/perf?days=' + $('gap-days').value); gapRender(); }
+  try{ _gap = await apiFetch('/api/gads/perf?' + _adRangeQs('gap')); gapRender(); }
   catch(e){ $('gap-list').innerHTML = `<span style="color:#dc2626">${escapeHtml(e.message)}</span>`; }
 }
 function gapTab(t){ _gapT = t; _gapPage = 1; gapRender(); }
@@ -26321,7 +26342,7 @@ function gapRender(){
   const prodSpend = _gap.products.reduce((a, p) => a + p.spend, 0), prodVal = _gap.products.reduce((a, p) => a + p.value, 0);
   $('gap-cards').innerHTML =
     (!last ? `<div style="width:100%;padding:8px 12px;border-radius:8px;background:#fffbeb;color:#92400e;font-size:12px">⚠️ بيانات الحملات بتيجي من النسخة الجديدة من السكريبت — دوس «📜 السكريبت»، انسخه، والصقه مكان القديم في Google Ads (Tools ← Scripts ← OrderPro products) وبعدين Preview.</div>` : '')
-    + box(`💸 الصرف (${_gap.days} يوم)`, `<b style="font-size:16px">${_gapN(T.spend)} ج</b><br>قيمة التحويلات ${_gapN(T.value)} ج`)
+    + box(`💸 الصرف (${_adRangeLbl(_gap)})`, `<b style="font-size:16px">${_gapN(T.spend)} ج</b><br>قيمة التحويلات ${_gapN(T.value)} ج`)
     + box('📈 العائد', `ROAS <b>${T.spend > 0 ? (T.value / T.spend).toFixed(2) : '—'}</b><br>تحويلات ${_gapN(T.purchases)} · تكلفة التحويل ${T.purchases > 0 ? _gapN(T.spend / T.purchases) + ' ج' : '—'}`)
     + box('📦 المنتجات (Shopping + PMax)', `${_gap.products.length} منتج · صرف ${_gapN(prodSpend)} ج<br>ROAS ${prodSpend > 0 ? (prodVal / prodSpend).toFixed(2) : '—'}${_gap.products.some(p => !p.matched) ? ` · <span style="color:#b45309">${_gap.products.filter(p => !p.matched).length} مش متعرّف</span>` : ''}`)
     + `<div style="font-size:11px;color:var(--muted);max-width:300px;line-height:1.7">ROAS = قيمة التحويلات ÷ الصرف. <b>ربحية جوجل</b> = (القيمة × هامش المنتج) ÷ الصرف — 1 = تعادل. الأرقام زي ما جوجل بينسبها. البيانات بتوصل من سكريبت Google Ads كل يوم.</div>`;
@@ -26379,7 +26400,7 @@ function gapExport(){
     'CTR %': c.ctr ?? '', 'تحويلات': c.purchases, 'تكلفة التحويل': c.cpa ?? '', 'القيمة': c.value, 'ROAS': c.roas ?? '' }))), 'الحملات');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(_gap.products.map(p => ({ 'المنتج': p.title + (p.variant && p.variant !== 'Default Title' ? ' · ' + p.variant : ''), 'SKU': p.sku || '', 'Google id': p.key,
     'الصرف': p.spend, 'كليكات': p.clicks, 'تحويلات': p.purchases, 'القيمة': p.value, 'ROAS': p.roas ?? '', 'الهامش %': p.margin_pct ?? '', 'ربحية جوجل': p.poas ?? '' }))), 'المنتجات');
-  XLSX.writeFile(wb, `أداء_جوجل_${_gap.days}يوم_${_todayCairo()}.xlsx`);
+  XLSX.writeFile(wb, `أداء_جوجل_${_gap.from}_${_gap.to}.xlsx`);
 }
 
 // 🆕 v502: فيد جوجل التكميلي
