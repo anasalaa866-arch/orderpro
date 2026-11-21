@@ -12314,7 +12314,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v990';
+const UI_BUILD = 'v991';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -42389,6 +42389,7 @@ function cgRenderReport(){
       </div>
       <button class="btn btn-sm btn-ghost" onclick="cgPrintReport()" title="اطبع التقرير قبل ما تقفل — تراجعه أو تدّيه للمورد">🖨️ طباعة</button>
       <button class="btn btn-sm btn-ghost" onclick="cgPrintMovement()" title="كشف كميات للمورد — من غير أسعار ولا مبالغ">📄 كشف جرد</button>
+      <button class="btn btn-sm btn-ghost" onclick="cgPrintStock()" title="الرصيد الحالي عندنا بس — صنف وكمية">📦 تقرير الرصيد</button>
       <button class="btn btn-sm" onclick="cgCut()" style="background:#dc2626;border-color:#dc2626;color:#fff;font-weight:800">✂️ اقفل الفترة واتحاسب</button>
     </div>
 
@@ -42440,6 +42441,49 @@ function cgRenderReport(){
   cgRepRows();
 }
 
+// 📦 v991: تقرير الرصيد الحالي — الصنف والكمية اللي عندنا دلوقتي بس
+function cgPrintStock(){
+  const r = _cgRep;
+  if(!r || !(r.items||[]).length) return toast('❌ مفيش تقرير مفتوح');
+  const sup = (_cgSups||[]).find(x => String(x.id) === String(_cgSup));
+  const all = r.items.slice().sort((a,b) => String(a.product_title||'').localeCompare(String(b.product_title||''), 'en', { numeric:true }));
+  const has = all.filter(x => (+x.closing_qty || 0) > 0), zero = all.filter(x => !((+x.closing_qty || 0) > 0));
+  const now = new Date().toLocaleString('ar-EG-u-nu-latn',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const row = (x,i) => `<tr><td class="idx">${_cgN(i+1)}</td>
+      <td class="item"><span class="nm">${escapeHtml(x.product_title||'')}</span>${x.sku?`<span class="sku">${escapeHtml(x.sku)}</span>`:''}</td>
+      <td class="q sold">${_cgN(x.closing_qty)}</td></tr>`;
+  const w = window.open('', '_blank', 'width=900,height=1100');
+  if(!w) return toast('❌ المتصفح منع النافذة — اسمح بالنوافذ المنبثقة');
+  w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8">
+  <title>الرصيد الحالي — ${escapeHtml(sup?.name||'')}</title>
+  <style>${_cgSheetCss({})} .q.sold{ width:110px } tr.z td{ color:#9A8F86 }</style></head><body>
+  <div class="sheet">
+    ${_cgSheetHead(sup, 'الرصيد الحالي — بضاعة تحت البيع')}
+    <dl class="meta">
+      <div><dt>بتاريخ</dt><dd>${escapeHtml(now)}</dd></div>
+      <div><dt>أصناف ليها رصيد</dt><dd>${_cgN(has.length)} من ${_cgN(all.length)}</dd></div>
+      <div><dt>إجمالي القطع عندنا</dt><dd style="font-size:16px">${_cgN(has.reduce((a,x)=>a+(+x.closing_qty||0),0))} قطعة</dd></div>
+    </dl>
+    <table>
+      <thead><tr><th>#</th><th style="text-align:start">الصنف</th><th>الرصيد الحالي</th></tr></thead>
+      <tbody>${has.map(row).join('')}</tbody>
+      <tfoot><tr><td colspan="2" class="lbl">الإجمالي — ${_cgN(has.length)} صنف</td>
+        <td class="q sold">${_cgN(has.reduce((a,x)=>a+(+x.closing_qty||0),0))}</td></tr></tfoot>
+    </table>
+    ${zero.length ? `<div class="fine">أصناف رصيدها صفر (${_cgN(zero.length)}): ${zero.map(x => escapeHtml(x.product_title||'')).join(' · ')}</div>` : ''}
+    <div class="sign">
+      <div><div class="line">عن ${escapeHtml(sup?.name||'المورد')} — الاسم والتوقيع</div></div>
+      <div><div class="line">عن CAFELAX — الاسم والتوقيع</div></div>
+    </div>
+  </div>
+  <div class="bar">
+    <button onclick="window.print()">اطبع</button>
+    <button class="ghost" onclick="window.close()">اقفل</button>
+  </div>
+  </body></html>`);
+  w.document.close();
+  setTimeout(() => { try{ w.focus(); }catch(e){} }, 250);
+}
 let _cgRepQ = '', _cgRepF = '', _cgRepS = '', _cgRepRowFn = null;
 function cgRepRows(){
   const tb = document.getElementById('cg-rep-tbody'); if(!tb || !_cgRep || !_cgRepRowFn) return;
