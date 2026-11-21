@@ -12278,7 +12278,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v981';
+const UI_BUILD = 'v982';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -26429,8 +26429,9 @@ async function poTransferLabels(btn){
   if(btn){ btn.disabled = true; btn.textContent = '⏳ بيحدّث...'; }
   try{
     const r = await apiFetch('/api/purchase-orders/transfer-labels/backfill', 'POST', { days: 120 });
-    toast(`✅ ${r.total} ترانسفير · اتغير اسم ${r.renamed} · اتحط تاريخ ${r.dated}${r.error_count ? ` · ⚠️ ${r.error_count} غلط` : ''}`, 'success');
-    if(r.scope_missing) setTimeout(() => alert('⚠️ تاريخ الوصول ماتحطش: ' + r.scope_missing + '\n\nضيف الصلاحية دي (write_inventory_shipments و read_inventory_shipments) للتطبيق المخصص من إعدادات شوبيفاي، وبعدين اضغط الزرار تاني.'), 300);
+    toast(`✅ ${r.total} ترانسفير · اتغير اسم ${r.renamed} · اتحط تاريخ ${r.dated}${r.already_dated ? ` · ${r.already_dated} كان عليه تاريخ` : ''}${r.not_saved ? ` · ⚠️ ${r.not_saved} شوبيفاي ماحفظش التاريخ` : ''}${r.error_count ? ` · ⚠️ ${r.error_count} غلط` : ''}`, 'success');
+    if(r.not_saved && !r.dated) setTimeout(() => alert(`⚠️ شوبيفاي قبل طلب تاريخ الوصول لـ ${r.not_saved} ترانسفير بس ماحفظهوش.\n\nغالباً لأن الترانسفيرات دي خلاص اتستلمت (Transferred)، وشوبيفاي مابيحفظش «تاريخ وصول متوقع» لشحنة وصلت. الأوامر الجديدة بيتحط عليها التاريخ وقت ما الترانسفير يتعمل.`), 300);
+    else if(r.scope_missing) setTimeout(() => alert('⚠️ تاريخ الوصول ماتحطش: ' + r.scope_missing + '\n\nضيف الصلاحية دي (write_inventory_shipments و read_inventory_shipments) للتطبيق المخصص من إعدادات شوبيفاي، وبعدين اضغط الزرار تاني.'), 300);
     else if(r.error_count) setTimeout(() => alert('حاجات ماتحدّثتش:\n\n' + r.errors.map(e => `${e.po}: ${e.error}`).join('\n')), 300);
   }catch(e){ toast('❌ ' + e.message); }
   finally{ if(btn){ btn.disabled = false; btn.textContent = '🏷️ حدّث ترانسفيرات شوبيفاي'; } }
