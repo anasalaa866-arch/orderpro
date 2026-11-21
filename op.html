@@ -12131,7 +12131,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v968';
+const UI_BUILD = 'v969';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -33900,15 +33900,18 @@ async function batchAssign(courierId){
 
   // 🆕 v192: لو التوزيع للمحل، حوّل delivery_type لـ 'pickup' عشان Stars يشوف الطلب
   // وإذا مش للمحل (مندوب أو بوسطة) ولسه pickup، رجّعه لـ normal/express
+  // 🐛 v969: _currentBatchCode كان ممكن يبقى دفعة قديمة (اتقفلت من جهاز تاني بعد ما الصفحة فتحت)
+  //   → طلبات راحت B-…-06 بدل الدفعة المفتوحة. دلوقتي بنسأل السيرفر وقت التوزيع.
+  const _bc = (await ensureCurrentBatchAsync().catch(() => null))?.code || _currentBatchCode;
   let upd;
   if(isBosta){
-    upd = {courierId:null,isBosta:true,ship,status:'جاري التوصيل',assignedZone,batchCode:_currentBatchCode};
+    upd = {courierId:null,isBosta:true,ship,status:'جاري التوصيل',assignedZone,batchCode:_bc};
     // لو كان pickup قبل كده، رجّعه لـ normal
     if(o.deliveryType==='pickup') upd.deliveryType = isSameDay(o)?'express':'normal';
   } else if(isShop){
-    upd = {courierId,isBosta:false,ship,status:'جاري التوصيل',assignedZone,batchCode:_currentBatchCode,deliveryType:'pickup'};
+    upd = {courierId,isBosta:false,ship,status:'جاري التوصيل',assignedZone,batchCode:_bc,deliveryType:'pickup'};
   } else {
-    upd = {courierId,isBosta:false,ship,status:'جاري التوصيل',assignedZone,batchCode:_currentBatchCode};
+    upd = {courierId,isBosta:false,ship,status:'جاري التوصيل',assignedZone,batchCode:_bc};
     // لو كان pickup ودلوقتي مندوب عادي، رجّعه لـ normal/express
     if(o.deliveryType==='pickup') upd.deliveryType = isSameDay(o)?'express':'normal';
   }
