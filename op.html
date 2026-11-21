@@ -8229,6 +8229,7 @@ tr:hover td{background:#fafbff}
       <!-- 🧾 v582: الأوامر اللي اتعملت في OrderPro ومارحتش Zoho -->
       <button class="btn btn-sm" onclick="poZhPush('all')" style="background:#0ea5e9;color:#fff" title="شامل أوامر OrderPro مش المستوردة بس — بأسماء الموردين الحقيقية">📤 ابعت دفعة شاملة أوامر OrderPro</button>
       <button class="btn btn-ghost btn-sm" onclick="poZhStatus()">🔄 تحديث</button>
+      <button class="btn btn-ghost btn-sm" onclick="poTransferLabels(this)" title="الترانسفيرات القديمة على شوبيفاي: اسم المورد الأول في الـ Reference + تاريخ الوصول المتوقع">🏷️ حدّث ترانسفيرات شوبيفاي</button>
     </div>
     <div id="po-zh-box" style="padding:0 14px 12px;font-size:13px"></div>
   </div>
@@ -12130,7 +12131,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v966';
+const UI_BUILD = 'v967';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -25911,6 +25912,17 @@ async function poZhStatus(){
   }catch(e){ /* الصفحة تشتغل عادي */ }
 }
 // 🗑️ v964: مسح أمر من طابور Zoho / إعادة إرسال أمر واحد
+// 🏷️ v967: الترانسفيرات القديمة — «المورد · رقم الأمر» + تاريخ الوصول
+async function poTransferLabels(btn){
+  if(!confirm('يحدّث ترانسفيرات أوامر الشراء على شوبيفاي (آخر 120 يوم):\n• الـ Reference يبقى «اسم المورد · رقم الأمر»\n• تاريخ الوصول المتوقع = التاريخ المتوقع للأمر، أو تاريخ الأمر\n\nمش بيغير كميات ولا مخزون.')) return;
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ بيحدّث...'; }
+  try{
+    const r = await apiFetch('/api/purchase-orders/transfer-labels/backfill', 'POST', { days: 120 });
+    toast(`✅ ${r.total} ترانسفير · اتغير اسم ${r.renamed} · اتحط تاريخ ${r.dated}${r.error_count ? ` · ⚠️ ${r.error_count} غلط` : ''}`, 'success');
+    if(r.error_count) setTimeout(() => alert('حاجات ماتحدّثتش:\n\n' + r.errors.map(e => `${e.po}: ${e.error}`).join('\n')), 300);
+  }catch(e){ toast('❌ ' + e.message); }
+  finally{ if(btn){ btn.disabled = false; btn.textContent = '🏷️ حدّث ترانسفيرات شوبيفاي'; } }
+}
 async function poZhSkip(id, num){
   if(!confirm(`تشيل ${num} من طابور Zoho؟\n\nالأمر نفسه مش هيتمسح من OrderPro — بس مش هيتبعت لـ Zoho تاني ومش هيتعدّ في «فشل».`)) return;
   try{
