@@ -12314,7 +12314,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v988';
+const UI_BUILD = 'v990';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -42344,7 +42344,8 @@ function cgRenderReport(){
     ? new Date(r.period_from).toLocaleDateString('ar-EG-u-nu-latn',{day:'numeric',month:'short',year:'numeric'})
     : 'البداية';
 
-  const rows = items.map(x => {
+  // 🔎 v990: بحث وترتيب وفلتر — الصفوف بتتبني في cgRepRows عشان البحث مايقفلش الكتابة
+  _cgRepRowFn = x => {
     const warn = x.negative;
     const diff = x.system_sold != null && x.system_sold !== x.sold_qty;
     return `<tr data-cg-row="${x.item_id}" style="border-bottom:1px solid var(--border);${warn?'background:#fef2f2':''}">
@@ -42364,7 +42365,7 @@ function cgRenderReport(){
       <td class="cgn" style="padding:4px" data-cg-cost-cell="${x.item_id}">${_cgCostCell(x)}</td>
       <td class="cgn" style="font-weight:800" data-cg-total="${x.item_id}">${x.sold_qty > 0 ? _cgM(x.line_total) : '—'}</td>
     </tr>`;
-  }).join('');
+  };
 
   document.getElementById('cg-body').innerHTML = `
     <style>#cg-body .cgn{padding:7px;text-align:center;font-family:Roboto,sans-serif;font-size:12px}</style>
@@ -42398,6 +42399,18 @@ function cgRenderReport(){
       📊 <b>${t.mismatch}</b> صنف المستنتج فيه مختلف عن مبيعات النظام. الحساب بالمستنتج زي ما اتفقنا،
       بس الفرق ده معناه تالف أو فاقد أو جرد — شوفه قبل ما تدفع.</div>` : ''}
 
+    <div class="card" style="padding:9px 12px;margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="cg-q" class="form-input" style="flex:1;min-width:200px;font-size:12px" placeholder="🔎 اسم الصنف / SKU / باركود"
+        value="${escapeHtml(_cgRepQ)}" oninput="_cgRepQ=this.value;cgRepRows()">
+      <select id="cg-f" class="form-input" style="width:auto;font-size:12px" onchange="_cgRepF=this.value;cgRepRows()">
+        ${[['','كل الأصناف'],['sold','✅ اتباع منه'],['unsold','⚪ ماتباعش'],['neg','⚠️ رصيده أكبر من المتوقع'],['diff','📊 مختلف عن مبيعات النظام'],['stock','📦 فيه رصيد عندنا'],['nostock','⛔ رصيده صفر'],['deliv','🚚 اتورّد في الفترة']]
+          .map(([v,l]) => `<option value="${v}" ${_cgRepF===v?'selected':''}>${l}</option>`).join('')}</select>
+      <select id="cg-s" class="form-input" style="width:auto;font-size:12px" onchange="_cgRepS=this.value;cgRepRows()">
+        ${[['','الترتيب: زي ما هو'],['name','الاسم (أ ← ي)'],['sold','باع ↓'],['total','الإجمالي ↓'],['closing','الرصيد الحالي ↓'],['closing_asc','الرصيد الحالي ↑'],['opening','أول الفترة ↓'],['deliv','التوريدات ↓'],['diff','الفرق مع النظام ↓'],['price','سعر البيع ↓']]
+          .map(([v,l]) => `<option value="${v}" ${_cgRepS===v?'selected':''}>${l}</option>`).join('')}</select>
+      <button class="btn btn-ghost btn-xs" onclick="_cgRepQ='';_cgRepF='';_cgRepS='';cgRenderReport()">مسح</button>
+      <span id="cg-cnt" style="font-size:12px;color:var(--muted)"></span>
+    </div>
     <div class="card" style="padding:0;overflow-x:auto">
       <table style="width:100%;min-width:900px;border-collapse:collapse">
         <thead><tr style="background:var(--bg);border-bottom:2px solid var(--border);font-size:11px">
@@ -42413,7 +42426,7 @@ function cgRenderReport(){
           <th style="padding:8px;width:90px">التكلفة</th>
           <th style="padding:8px;width:100px">الإجمالي</th>
         </tr></thead>
-        <tbody>${rows}</tbody>
+        <tbody id="cg-rep-tbody"></tbody>
         <tfoot><tr style="background:var(--bg);border-top:2px solid var(--border);font-weight:900">
           <td style="padding:9px">${items.length} صنف</td>
           <td></td>${_cgColTotals(items, _cols.deliv, 'deliv', 'cgn')}<td></td>
@@ -42424,8 +42437,37 @@ function cgRenderReport(){
         </tr></tfoot>
       </table>
     </div>`;
+  cgRepRows();
 }
 
+let _cgRepQ = '', _cgRepF = '', _cgRepS = '', _cgRepRowFn = null;
+function cgRepRows(){
+  const tb = document.getElementById('cg-rep-tbody'); if(!tb || !_cgRep || !_cgRepRowFn) return;
+  const all = _cgRep.items || [];
+  const toks = String(_cgRepQ || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const df = x => x.system_sold == null ? 0 : Math.abs((x.sold_qty || 0) - (x.system_sold || 0));
+  let L = all.filter(x => {
+    const f = _cgRepF;
+    if(f === 'sold' && !(x.sold_qty > 0)) return false;
+    if(f === 'unsold' && x.sold_qty > 0) return false;
+    if(f === 'neg' && !x.negative) return false;
+    if(f === 'diff' && !df(x)) return false;
+    if(f === 'stock' && !(x.closing_qty > 0)) return false;
+    if(f === 'nostock' && x.closing_qty > 0) return false;
+    if(f === 'deliv' && !(x.delivered_qty > 0)) return false;
+    const h = `${x.product_title || ''} ${x.sku || ''} ${x.barcode || ''}`.toLowerCase();
+    return toks.every(t => h.includes(t));
+  });
+  const nm = (a, b) => String(a.product_title || '').localeCompare(String(b.product_title || ''), 'en', { numeric: true });
+  const S = { name: nm, sold: (a, b) => (b.sold_qty || 0) - (a.sold_qty || 0) || nm(a, b),
+    total: (a, b) => (b.sold_qty > 0 ? +b.line_total : 0) - (a.sold_qty > 0 ? +a.line_total : 0) || nm(a, b),
+    closing: (a, b) => (b.closing_qty || 0) - (a.closing_qty || 0) || nm(a, b), closing_asc: (a, b) => (a.closing_qty || 0) - (b.closing_qty || 0) || nm(a, b),
+    opening: (a, b) => (b.opening_qty || 0) - (a.opening_qty || 0) || nm(a, b), deliv: (a, b) => (b.delivered_qty || 0) - (a.delivered_qty || 0) || nm(a, b),
+    diff: (a, b) => df(b) - df(a) || nm(a, b), price: (a, b) => (+b.sale_price || 0) - (+a.sale_price || 0) || nm(a, b) };
+  if(S[_cgRepS]) L = L.slice().sort(S[_cgRepS]);
+  tb.innerHTML = L.map(_cgRepRowFn).join('') || `<tr><td colspan="30" style="padding:16px;text-align:center;color:var(--muted)">مفيش أصناف بالبحث ده</td></tr>`;
+  const c = document.getElementById('cg-cnt'); if(c) c.textContent = L.length === all.length ? `${all.length} صنف` : `${L.length} من ${all.length} صنف`;
+}
 // 💰 v892: خانة التكلفة — تتكتب بالإيد لكل صنف لوحده.
 //   الأولوية: رقم مكتوب للصنف ← نسبة خاصة بالصنف ← نسبة المورد.
 //   بتفهم الشكلين: «11000» رقم ثابت، و«25%» نسبة على سعر البيع.
