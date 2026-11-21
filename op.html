@@ -1941,6 +1941,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="couriers" onclick="goPage(this,'couriers')"><span class="ni-icon">🚴</span><span class="ni-label">المناديب</span></div>
         <div class="ni" data-p="google-feed" onclick="goPage(this,'google-feed')"><span class="ni-icon">🏷️</span><span class="ni-label">فيد جوجل (Custom Labels)</span></div>
         <div class="ni" data-p="winners" onclick="goPage(this,'winners')"><span class="ni-icon">🏆</span><span class="ni-label">تقييم المنتجات (Winners)</span></div>
+        <div class="ni" data-p="meta-ads" onclick="goPage(this,'meta-ads')"><span class="ni-icon">📘</span><span class="ni-label">أداء Meta</span></div>
         <div class="ni" data-p="delivery-areas" onclick="goPage(this,'delivery-areas')"><span class="ni-icon">🗺️</span><span class="ni-label">إعدادات التوصيل (المناطق)</span></div>
         <div class="ni" data-p="couriers-dashboard" onclick="goPage(this,'couriers-dashboard')"><span class="ni-icon">📊</span><span class="ni-label">إنجازات المناديب</span></div>
         <!-- 🆕 v335: تقارير المحضرين -->
@@ -7847,6 +7848,36 @@ tr:hover td{background:#fafbff}
   </div>
 </div>
 
+<div class="page" id="page-meta-ads">
+  <!-- 📘 v981: أداء إعلانات Meta — الحملات والمنتجات -->
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span style="font-weight:900">📘 أداء Meta</span>
+      <select id="mta-days" class="form-input" style="width:auto;font-size:12px" onchange="mtaLoad()">
+        <option value="7">آخر 7 أيام</option><option value="14">آخر 14 يوم</option><option value="30" selected>آخر 30 يوم</option><option value="60">آخر 60 يوم</option><option value="90">آخر 90 يوم</option></select>
+      <span id="mta-sub" style="color:var(--muted);font-size:12px"></span>
+      <button class="btn btn-sm btn-ghost" style="margin-inline-start:auto" onclick="mtaLoad()">🔄 تحديث</button>
+      <button class="btn btn-sm btn-ghost" onclick="mtaToken()">🔑 التوكن</button>
+      <button class="btn btn-sm btn-ghost" onclick="mtaExport()">📥 Excel</button>
+      <button class="btn btn-sm btn-primary" id="mta-sync-btn" onclick="mtaSync(this)">⬇️ اسحب من Meta دلوقتي</button>
+    </div>
+    <div id="mta-cards" style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap"></div>
+    <div style="padding:0 16px 8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border)">
+      <button class="btn btn-sm" id="mta-tab-c" onclick="mtaTab('c')">📣 الحملات</button>
+      <button class="btn btn-sm" id="mta-tab-p" onclick="mtaTab('p')">📦 المنتجات (إعلانات الكتالوج)</button>
+      <input id="mta-q" class="form-input" style="flex:1;min-width:180px;font-size:12px;margin-inline-start:8px" placeholder="🔎 اسم / SKU" oninput="_mtaPage=1;mtaRender()">
+      <select id="mta-f" class="form-input" style="width:auto;font-size:12px" onchange="_mtaPage=1;mtaRender()">
+        <option value="">كل الحالات</option><option value="spend">💸 فيه صرف</option><option value="loss">🔻 بيخسر (ربحية &lt; 1)</option><option value="win">⭐ بيكسب (ربحية ≥ 2)</option>
+        <option value="nopurch">⚪ صرف من غير مشتريات</option><option value="nomatch">❓ منتج مش متعرّف</option></select>
+      <select id="mta-sort" class="form-input" style="width:auto;font-size:12px" onchange="mtaRender()">
+        <option value="spend">ترتيب: الصرف ↓</option><option value="value">قيمة المشتريات ↓</option><option value="roas">ROAS ↓</option><option value="poas">ربحية Meta ↓</option>
+        <option value="poas_asc">ربحية Meta ↑</option><option value="purchases">المشتريات ↓</option><option value="name">الاسم</option></select>
+      <span id="mta-count" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div id="mta-list" style="padding:10px 16px 14px">⏳</div>
+  </div>
+</div>
+
 <div class="page" id="page-delivery-areas">
   <!-- 🗺️ v966: مين بياخد كل منطقة — عادي ومستعجل -->
   <div class="card" style="margin-bottom:14px">
@@ -12242,12 +12273,12 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','shopify-transfers':'🚚 ترانسفيرات شوبيفاي','abandoned':'🛒 سلات متسابة','delivery-areas':'🗺️ إعدادات التوصيل','google-feed':'🏷️ فيد جوجل (Custom Labels)','winners':'🏆 تقييم المنتجات — Winners','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','shopify-transfers':'🚚 ترانسفيرات شوبيفاي','abandoned':'🛒 سلات متسابة','delivery-areas':'🗺️ إعدادات التوصيل','google-feed':'🏷️ فيد جوجل (Custom Labels)','winners':'🏆 تقييم المنتجات — Winners','meta-ads':'📘 أداء Meta','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v980';
+const UI_BUILD = 'v981';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -26143,6 +26174,102 @@ function wsExport(){
   ws['!cols'] = [{wch:8},{wch:8},{wch:45},{wch:14},{wch:16},{wch:9},{wch:11},{wch:12},{wch:9},{wch:11},{wch:11},{wch:11},{wch:11},{wch:8},{wch:11},{wch:10},{wch:10},{wch:10},{wch:10},{wch:9}];
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'تقييم المنتجات');
   XLSX.writeFile(wb, `تقييم_المنتجات_${_ws.mode === 'live' ? _todayCairo() : _ws.month}.xlsx`);
+}
+
+// ═══ 📘 v981: أداء Meta ═══
+let _mta = null, _mtaT = 'c', _mtaPage = 1, _mtaPoll = null;
+const _mtaN = v => (v == null ? '—' : Math.round(v).toLocaleString('en-US'));
+async function mtaLoad(){
+  $('mta-list').innerHTML = '⏳';
+  try{ _mta = await apiFetch('/api/meta/perf?days=' + $('mta-days').value); mtaRender(); }
+  catch(e){ $('mta-list').innerHTML = `<span style="color:#dc2626">${escapeHtml(e.message)}</span>`; }
+}
+function mtaTab(t){ _mtaT = t; _mtaPage = 1; mtaRender(); }
+function _mtaPc(v){ return v == null ? '<span style="color:var(--muted)">—</span>' : `<b style="color:${v >= 2 ? '#059669' : v >= 1 ? '#b45309' : '#dc2626'}">${v.toFixed(2)}</b>`; }
+function mtaRender(){
+  if(!_mta) return;
+  ['c','p'].forEach(t => { const b = $('mta-tab-' + t); b.className = 'btn btn-sm ' + (_mtaT === t ? 'btn-primary' : 'btn-ghost'); });
+  const st = _mta.status || {}, last = _mta.last, T = _mta.totals || {};
+  $('mta-sub').innerHTML = st.running ? '⏳ بيسحب من Meta…' : last ? `آخر سحب: ${new Date(last.at).toLocaleString('ar-EG')}` : 'لسه ماتسحبش';
+  const box = (t, b) => `<div style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;min-width:170px;font-size:12px;line-height:1.8"><div style="font-size:11px;color:var(--muted);font-weight:700">${t}</div>${b}</div>`;
+  const prodSpend = _mta.products.reduce((a, p) => a + p.spend, 0), prodVal = _mta.products.reduce((a, p) => a + p.value, 0);
+  $('mta-cards').innerHTML =
+    (st.error || !_mta.has_token ? `<div style="width:100%;padding:8px 12px;border-radius:8px;background:#fef2f2;color:#991b1b;font-size:12px">⚠️ ${escapeHtml(st.error || 'مفيش توكن Meta')} — دوس «🔑 التوكن».</div>` : '')
+    + box(`💸 الصرف (${_mta.days} يوم)`, `<b style="font-size:16px">${_mtaN(T.spend)} ج</b><br>قيمة المشتريات ${_mtaN(T.value)} ج`)
+    + box('📈 العائد', `ROAS <b>${T.spend > 0 ? (T.value / T.spend).toFixed(2) : '—'}</b><br>مشتريات ${_mtaN(T.purchases)} · تكلفة الطلب ${T.purchases > 0 ? _mtaN(T.spend / T.purchases) + ' ج' : '—'}`)
+    + box('📦 إعلانات الكتالوج', `${_mta.products.length} منتج · صرف ${_mtaN(prodSpend)} ج<br>ROAS ${prodSpend > 0 ? (prodVal / prodSpend).toFixed(2) : '—'}${_mta.products.some(p => !p.matched) ? ` · <span style="color:#b45309">${_mta.products.filter(p => !p.matched).length} مش متعرّف</span>` : ''}`)
+    + `<div style="font-size:11px;color:var(--muted);max-width:300px;line-height:1.7">ROAS = قيمة المشتريات ÷ الصرف. <b>ربحية Meta</b> = (القيمة × هامش المنتج) ÷ الصرف — 1 = تعادل. الأرقام زي ما Meta بينسبها (Attribution بتاع الحساب). السحب التلقائي كل يوم الساعة ${_mta.cfg?.hour ?? 6} الصبح — من الإعدادات ← «أداء Meta».${(last?.log || []).length ? '<br>' + last.log.map(escapeHtml).join('<br>') : ''}</div>`;
+  const q = ($('mta-q').value || '').trim().toLowerCase(), f = $('mta-f').value, so = $('mta-sort').value;
+  const isP = _mtaT === 'p';
+  let R = (isP ? _mta.products : _mta.campaigns).filter(r => {
+    const name = isP ? `${r.title} ${r.variant || ''} ${r.sku || ''} ${r.key}` : `${r.name} ${r.objective || ''}`;
+    if(q && !name.toLowerCase().includes(q)) return false;
+    const pv = isP ? r.poas : r.roas;
+    if(f === 'spend' && !(r.spend > 0)) return false;
+    if(f === 'loss' && !(r.spend > 0 && (pv ?? 0) < 1)) return false;
+    if(f === 'win' && !(pv >= 2)) return false;
+    if(f === 'nopurch' && !(r.spend > 0 && !r.purchases)) return false;
+    if(f === 'nomatch' && !(isP && !r.matched)) return false;
+    return true;
+  });
+  const nz = v => v ?? -1e9, nm = (a, b) => String(isP ? a.title : a.name).localeCompare(String(isP ? b.title : b.name));
+  const S = { spend: (a, b) => b.spend - a.spend, value: (a, b) => b.value - a.value, roas: (a, b) => nz(b.roas) - nz(a.roas),
+    poas: (a, b) => nz(b.poas ?? b.roas) - nz(a.poas ?? a.roas), poas_asc: (a, b) => ((a.poas ?? a.roas) ?? 1e9) - ((b.poas ?? b.roas) ?? 1e9),
+    purchases: (a, b) => b.purchases - a.purchases, name: nm };
+  R.sort(S[so] || S.spend);
+  const per = 100, pages = Math.max(1, Math.ceil(R.length / per)); if(_mtaPage > pages) _mtaPage = pages;
+  const shown = R.slice((_mtaPage - 1) * per, _mtaPage * per);
+  $('mta-count').textContent = `${R.length} من ${(isP ? _mta.products : _mta.campaigns).length}`;
+  const pg = pages > 1 ? `<div style="display:flex;gap:6px;justify-content:center;margin-top:10px;align-items:center">
+      <button class="btn btn-ghost btn-xs" ${_mtaPage <= 1 ? 'disabled' : ''} onclick="_mtaPage--;mtaRender()">→ السابق</button><span style="font-size:12px">${_mtaPage} / ${pages}</span>
+      <button class="btn btn-ghost btn-xs" ${_mtaPage >= pages ? 'disabled' : ''} onclick="_mtaPage++;mtaRender()">التالي ←</button></div>` : '';
+  const th = 'style="padding:6px;white-space:nowrap"';
+  $('mta-list').innerHTML = !R.length ? `<div style="padding:16px;color:var(--muted)">${isP ? 'مفيش بيانات منتجات — بتيجي من إعلانات الكتالوج (Advantage+ Catalog) بس' : 'مفيش حملات في الفترة دي'}</div>`
+    : `<div style="overflow:auto"><table style="width:100%;font-size:12px;border-collapse:collapse"><thead><tr style="background:var(--bg)">${isP
+      ? `<th></th><th ${th} style="text-align:right">المنتج</th><th ${th}>الصرف</th><th ${th}>كليكات</th><th ${th}>مشتريات</th><th ${th}>القيمة</th><th ${th}>ROAS</th><th ${th}>الهامش</th><th ${th} title="(القيمة × الهامش) ÷ الصرف">ربحية Meta</th>`
+      : `<th ${th} style="text-align:right">الحملة</th><th ${th}>الهدف</th><th ${th}>الصرف</th><th ${th}>الظهور</th><th ${th}>CTR</th><th ${th}>مشتريات</th><th ${th}>تكلفة الطلب</th><th ${th}>القيمة</th><th ${th}>ROAS</th>`}</tr></thead><tbody>
+      ${shown.map(r => isP ? `<tr style="border-top:1px solid var(--border)">
+        <td style="padding:4px">${r.image ? `<img src="${escapeHtml(r.image)}" loading="lazy" style="width:34px;height:34px;object-fit:contain;border-radius:6px;background:#fff">` : ''}</td>
+        <td style="padding:6px;max-width:360px"><div style="font-weight:700">${escapeHtml(r.title || '')}${r.variant && r.variant !== 'Default Title' ? ` <span style="color:var(--muted);font-weight:400">· ${escapeHtml(r.variant)}</span>` : ''}</div>
+          <div style="font-size:10.5px;color:var(--muted);font-family:Roboto,sans-serif">${r.matched ? escapeHtml(r.sku || '') + (r.type ? ' · ' + escapeHtml(r.type) : '') : `<span style="color:#b45309">مش متعرّف في المخزون</span> · ${escapeHtml(r.key)}`}</div></td>
+        <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${_mtaN(r.spend)}</td><td style="text-align:center">${_mtaN(r.clicks)}</td>
+        <td style="text-align:center">${r.purchases || '—'}</td><td style="text-align:center;font-family:Roboto,sans-serif">${r.value ? _mtaN(r.value) : '—'}</td>
+        <td style="text-align:center">${r.roas == null ? '—' : r.roas.toFixed(1)}</td>
+        <td style="text-align:center">${r.margin_pct == null ? '<span style="color:#b45309" title="مفيش تكلفة">؟</span>' : r.margin_pct + '%'}</td>
+        <td style="text-align:center">${_mtaPc(r.poas)}</td></tr>`
+      : `<tr style="border-top:1px solid var(--border)">
+        <td style="padding:6px;font-weight:700;max-width:380px">${escapeHtml(r.name || r.campaign_id)}<div style="font-size:10px;color:var(--muted);font-weight:400">${r.last_day ? 'آخر صرف: ' + String(r.last_day).slice(0, 10) : ''}</div></td>
+        <td style="text-align:center;font-size:10.5px;color:var(--muted)">${escapeHtml(String(r.objective || '').replace('OUTCOME_', ''))}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${_mtaN(r.spend)}</td><td style="text-align:center">${_mtaN(r.impr)}</td>
+        <td style="text-align:center">${r.ctr == null ? '—' : r.ctr + '%'}</td><td style="text-align:center">${r.purchases || '—'}</td>
+        <td style="text-align:center">${r.cpa == null ? '—' : _mtaN(r.cpa)}</td><td style="text-align:center;font-family:Roboto,sans-serif">${r.value ? _mtaN(r.value) : '—'}</td>
+        <td style="text-align:center">${_mtaPc(r.roas)}</td></tr>`).join('')}</tbody></table></div>${pg}`;
+  if(st.running && !_mtaPoll) _mtaPoll = setTimeout(() => { _mtaPoll = null; if(document.getElementById('page-meta-ads')?.classList.contains('active')) mtaLoad(); }, 8000);
+}
+async function mtaSync(btn){
+  btn.disabled = true; const t = btn.textContent; btn.textContent = '⏳ بيسحب…';
+  try{
+    const r = await apiFetch('/api/meta/sync', 'POST', {});
+    if(r.ok === false) toast('❌ ' + r.error); else toast(r.running ? '⏳ السحب شغال — الصفحة هتتحدث لوحدها' : '✅ اتسحب', 'success');
+    await mtaLoad();
+  }catch(e){ toast('❌ ' + e.message); }
+  finally{ btn.disabled = false; btn.textContent = t; }
+}
+async function mtaToken(){
+  const src = { page: 'محفوظ من الصفحة دي', env_ads: 'من السيرفر (META_ADS_TOKEN)', env_catalog: 'توكن الكتالوج اللي على السيرفر' }[_mta?.token_source] || 'مفيش';
+  const v = prompt(`التوكن الحالي: ${src}\n\nالصق System User Token من Meta Business Settings ← System Users (لازم يكون ليه ads_read وحساب الإعلانات متضاف له).\nسيبه فاضي ودوس OK عشان ترجع لتوكن السيرفر.`, '');
+  if(v === null) return;
+  try{ const r = await apiFetch('/api/meta/token', 'POST', { token: v.trim() }); toast(r.cleared ? '✅ رجع لتوكن السيرفر' : '✅ التوكن اتحفظ واتجرب', 'success'); await mtaLoad(); }
+  catch(e){ toast('❌ ' + e.message); }
+}
+function mtaExport(){
+  if(!_mta) return;
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(_mta.campaigns.map(c => ({ 'الحملة': c.name, 'الهدف': c.objective, 'الصرف': c.spend, 'الظهور': c.impr, 'كليكات': c.clicks,
+    'CTR %': c.ctr ?? '', 'مشتريات': c.purchases, 'تكلفة الطلب': c.cpa ?? '', 'القيمة': c.value, 'ROAS': c.roas ?? '' }))), 'الحملات');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(_mta.products.map(p => ({ 'المنتج': p.title + (p.variant && p.variant !== 'Default Title' ? ' · ' + p.variant : ''), 'SKU': p.sku || '', 'Meta id': p.key,
+    'الصرف': p.spend, 'كليكات': p.clicks, 'مشتريات': p.purchases, 'القيمة': p.value, 'ROAS': p.roas ?? '', 'الهامش %': p.margin_pct ?? '', 'ربحية Meta': p.poas ?? '' }))), 'المنتجات');
+  XLSX.writeFile(wb, `أداء_Meta_${_mta.days}يوم_${_todayCairo()}.xlsx`);
 }
 
 // 🆕 v502: فيد جوجل التكميلي
@@ -62387,6 +62514,7 @@ function goPage(el,page){
   if(page==='delivery-areas')daOpen();         // 🗺️ v966
   if(page==='google-feed')gffLoad();           // 🏷️ v972
   if(page==='winners')wsLoad('live');          // 🏆 v977
+  if(page==='meta-ads')mtaLoad();              // 📘 v981
   if(page==='promo')promoOpen();               // 🎟️ v783
   if(page==='settings')chOpen();               // 📡 v738
   if(page==='settings')tgOpen();               // 🤖 v739
