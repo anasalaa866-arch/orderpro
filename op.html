@@ -1940,6 +1940,7 @@ tr:hover td{background:#fafbff}
       <div class="nav-group-body">
         <div class="ni" data-p="couriers" onclick="goPage(this,'couriers')"><span class="ni-icon">🚴</span><span class="ni-label">المناديب</span></div>
         <div class="ni" data-p="google-feed" onclick="goPage(this,'google-feed')"><span class="ni-icon">🏷️</span><span class="ni-label">فيد جوجل (Custom Labels)</span></div>
+        <div class="ni" data-p="winners" onclick="goPage(this,'winners')"><span class="ni-icon">🏆</span><span class="ni-label">تقييم المنتجات (Winners)</span></div>
         <div class="ni" data-p="delivery-areas" onclick="goPage(this,'delivery-areas')"><span class="ni-icon">🗺️</span><span class="ni-label">إعدادات التوصيل (المناطق)</span></div>
         <div class="ni" data-p="couriers-dashboard" onclick="goPage(this,'couriers-dashboard')"><span class="ni-icon">📊</span><span class="ni-label">إنجازات المناديب</span></div>
         <!-- 🆕 v335: تقارير المحضرين -->
@@ -7804,6 +7805,43 @@ tr:hover td{background:#fafbff}
   </div>
 </div>
 
+<div class="page" id="page-winners">
+  <!-- 🏆 v977: تقييم المنتجات (Weighted) — مين يدخل حملة الـ Winners -->
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:13px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span style="font-weight:900">🏆 تقييم المنتجات — Winners</span>
+      <select id="ws-month" class="form-input" style="width:auto;font-size:12px" onchange="wsLoad(this.value)"><option value="live">🔴 لايف (دلوقتي)</option></select>
+      <span id="ws-sub" style="color:var(--muted);font-size:12px"></span>
+      <button class="btn btn-sm btn-ghost" style="margin-inline-start:auto" onclick="wsLoad($('ws-month').value)">🔄 تحديث</button>
+      <button class="btn btn-sm btn-ghost" onclick="wsScript()">📜 سكريبت جوجل</button>
+      <button class="btn btn-sm btn-ghost" onclick="wsExport()">📥 Excel</button>
+      <button class="btn btn-sm btn-primary" onclick="wsSnapshot(this)" title="يعتمد ترتيب دلوقتي كترتيب الشهر وينشر custom_label_3 في الفيد">📌 اعتمد ترتيب الشهر وانشر</button>
+    </div>
+    <div id="ws-cards" style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap"></div>
+    <div style="padding:0 16px 8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="ws-q" class="form-input" style="flex:1;min-width:200px;font-size:12px" placeholder="🔎 اسم / SKU / نوع / براند" oninput="_wsPage=1;wsRender()">
+      <select id="ws-grp" class="form-input" style="width:auto;font-size:12px" onchange="_wsPage=1;wsRender()">
+        <option value="">الكل</option><option value="win">🏆 Winners</option><option value="rest">باقي المنتجات</option>
+        <option value="feed">📌 Winners في الفيد دلوقتي</option><option value="in">⬆️ هيدخل الـ Winners في الاعتماد الجاي</option><option value="out">⬇️ هيخرج من الـ Winners</option>
+        <option value="noeli">⛔ مش مؤهل (مفيش مخزون)</option></select>
+      <select id="ws-ins" class="form-input" style="width:auto;font-size:12px" onchange="_wsPage=1;wsRender()">
+        <option value="">كل الحالات</option>
+        <option value="offg">💡 بيبيع كويس برة جوجل وضعيف في جوجل</option>
+        <option value="loss">🔻 جوجل بيصرف ومش بيكسب (ربحية &lt; 1)</option>
+        <option value="gstar">⭐ جوجل بيكسب فيه (ربحية ≥ 2)</option>
+        <option value="nog">⚪ مفيش صرف كفاية من جوجل</option>
+        <option value="nocost">❓ مفيش تكلفة</option></select>
+      <select id="ws-sort" class="form-input" style="width:auto;font-size:12px" onchange="wsRender()">
+        <option value="score">ترتيب: الدرجة ↓</option><option value="units">القطع ↓</option><option value="revenue">القيمة ↓</option>
+        <option value="margin">الهامش ↓</option><option value="g_cost">صرف جوجل ↓</option><option value="roas">ROAS ↓</option>
+        <option value="poas">ربحية جوجل ↓</option><option value="poas_asc">ربحية جوجل ↑</option><option value="score_asc">الدرجة ↑</option><option value="name">الاسم</option></select>
+      <button class="btn btn-ghost btn-xs" onclick="wsClear()">مسح الفلاتر</button>
+      <span id="ws-count" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div id="ws-list" style="padding:0 16px 14px">⏳</div>
+  </div>
+</div>
+
 <div class="page" id="page-delivery-areas">
   <!-- 🗺️ v966: مين بياخد كل منطقة — عادي ومستعجل -->
   <div class="card" style="margin-bottom:14px">
@@ -12199,12 +12237,12 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','shopify-transfers':'🚚 ترانسفيرات شوبيفاي','abandoned':'🛒 سلات متسابة','delivery-areas':'🗺️ إعدادات التوصيل','google-feed':'🏷️ فيد جوجل (Custom Labels)','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','shopify-transfers':'🚚 ترانسفيرات شوبيفاي','abandoned':'🛒 سلات متسابة','delivery-areas':'🗺️ إعدادات التوصيل','google-feed':'🏷️ فيد جوجل (Custom Labels)','winners':'🏆 تقييم المنتجات — Winners','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v975';
+const UI_BUILD = 'v977';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -25977,6 +26015,127 @@ async function gffBuild(btn){
   try{ const r = await apiFetch('/api/google-feed/build', 'POST', {}); toast(`✅ اتنشر ${r.rows} منتج`, 'success'); await gffLoad(); }
   catch(e){ toast('❌ ' + e.message); }
   finally{ if(btn){ btn.disabled = false; btn.textContent = '📤 ابني وانشر الفيد'; } }
+}
+
+// ═══ 🏆 v977: تقييم المنتجات — Winners ═══
+let _ws = null, _wsPage = 1;
+const _wsN = v => (v == null ? '—' : Math.round(v).toLocaleString('en-US'));
+async function wsLoad(month){
+  $('ws-list').innerHTML = '⏳ بيحسب…';
+  try{
+    _ws = await apiFetch('/api/ws/rows' + (month && month !== 'live' ? '?month=' + encodeURIComponent(month) : ''));
+    const sel = $('ws-month'), cur = month || 'live';
+    sel.innerHTML = '<option value="live">🔴 لايف (دلوقتي)</option>' + (_ws.months || []).map(m => `<option value="${m.month}">📌 ترتيب ${m.month} (${m.n_win} winner)</option>`).join('');
+    sel.value = cur; _wsPage = 1; wsRender();
+  }catch(e){ $('ws-list').innerHTML = `<span style="color:#dc2626">${escapeHtml(e.message)}</span>`; }
+}
+function wsClear(){ ['ws-q','ws-grp','ws-ins'].forEach(id => $(id).value = ''); _wsPage = 1; wsRender(); }
+function _wsFiltered(){
+  const q = ($('ws-q').value || '').trim().toLowerCase(), g = $('ws-grp').value, ins = $('ws-ins').value;
+  return _ws.rows.filter(r => {
+    if(g === 'win' && !r.winner) return false;
+    if(g === 'rest' && r.winner) return false;
+    if(g === 'feed' && !r.in_feed) return false;
+    if(g === 'in' && !(r.winner && !r.in_feed)) return false;
+    if(g === 'out' && !(r.in_feed && !r.winner)) return false;
+    if(g === 'noeli' && r.eligible !== false) return false;
+    if(ins === 'offg' && !((r.s_units + r.s_value) / 2 >= 60 && (!r.g_ok || r.s_google < 40))) return false;
+    if(ins === 'loss' && !(r.g_ok && r.poas < 1)) return false;
+    if(ins === 'gstar' && !(r.g_ok && r.poas >= 2)) return false;
+    if(ins === 'nog' && r.g_ok) return false;
+    if(ins === 'nocost' && r.margin_pct != null) return false;
+    return !q || `${r.title} ${r.variant||''} ${r.sku||''} ${r.type||''} ${r.vendor||''}`.toLowerCase().includes(q);
+  });
+}
+function wsRender(){
+  if(!_ws) return;
+  const R = _ws.rows, live = _ws.mode === 'live';
+  const c = live ? _ws.cfg : (_ws.meta?.cfg || {});
+  const W = c.w || {};
+  const gl = _ws.gads_last, gd = _ws.gads || {};
+  $('ws-sub').textContent = live
+    ? (_ws.current_month ? `الفيد ماشي على ترتيب ${_ws.current_month}` : '⚠️ لسه مفيش ترتيب معتمد — custom_label_3 فاضية في الفيد')
+    : `اتعتمد ${_ws.meta ? new Date(_ws.meta.created_at).toLocaleString('ar-EG') + ' · ' + escapeHtml(_ws.meta.created_by || '') : ''}`;
+  const box = (t, body) => `<div style="border:1px solid var(--border);border-radius:10px;padding:8px 12px;min-width:190px;font-size:12px;line-height:1.8"><div style="font-size:11px;color:var(--muted);font-weight:700">${t}</div>${body}</div>`;
+  $('ws-cards').innerHTML =
+    box('⚖️ الأوزان', `قطع <b>${W.units ?? '—'}%</b> · قيمة <b>${W.value ?? '—'}%</b><br>هامش <b>${W.margin ?? '—'}%</b> · جوجل <b>${W.google ?? '—'}%</b><div style="font-size:10.5px;color:var(--muted)">مبيعات ${c.salesDays ?? '—'} يوم · جوجل ${c.gadsDays ?? '—'} يوم · Top ${c.topN ?? '—'}</div>`)
+    + box('📡 بيانات جوجل', gl ? `آخر استلام: <b>${new Date(gl.at).toLocaleString('ar-EG')}</b><br>صرف ${c.gadsDays || 30} يوم: <b>${_wsN(gd.cost)} ج</b> · قيمة <b>${_wsN(gd.value)} ج</b><br>${gd.products || 0} منتج${gd.unmatched ? ` · <span style="color:#b45309">${gd.unmatched} صف مش مربوط</span>` : ''}` : '<span style="color:#b45309">⚠️ لسه مفيش بيانات — ركّب السكريبت من «📜 سكريبت جوجل»</span>')
+    + box('🏆 النتيجة', `${R.filter(r => r.winner).length} winner من ${R.length} منتج${live && _ws.machines_excluded ? `<br><span style="color:var(--muted)">${_ws.machines_excluded} ماكينة برا الترتيب (ليها حملتها)</span>` : ''}${live ? `<br>⬆️ ${R.filter(r => r.winner && !r.in_feed).length} داخلين · ⬇️ ${R.filter(r => r.in_feed && !r.winner).length} خارجين` : ''}`)
+    + `<div style="font-size:11px;color:var(--muted);max-width:300px;line-height:1.7">كل معيار درجة من 0 لـ 100 بترتيب المنتج وسط الباقيين. <b>ربحية جوجل</b> = (قيمة تحويلات جوجل × الهامش) ÷ الصرف — 1 يعني بيغطي نفسه بالظبط. أقل من حد الصرف = 50 محايد. الأوزان والأعداد من الإعدادات ← «تقييم المنتجات».</div>`;
+  const rows = _wsFiltered();
+  const so = $('ws-sort').value, nm = (a, b) => String(a.title).localeCompare(String(b.title)), nz = v => v ?? -1e9;
+  const S = { score: (a, b) => b.score - a.score, score_asc: (a, b) => a.score - b.score, units: (a, b) => b.units - a.units || b.score - a.score,
+    revenue: (a, b) => b.revenue - a.revenue, margin: (a, b) => nz(b.margin_pct) - nz(a.margin_pct), g_cost: (a, b) => b.g_cost - a.g_cost,
+    roas: (a, b) => nz(b.roas) - nz(a.roas), poas: (a, b) => nz(b.poas) - nz(a.poas), poas_asc: (a, b) => (a.poas ?? 1e9) - (b.poas ?? 1e9), name: nm };
+  rows.sort(S[so] || S.score);
+  const per = 100, pages = Math.max(1, Math.ceil(rows.length / per)); if(_wsPage > pages) _wsPage = pages;
+  const shown = rows.slice((_wsPage - 1) * per, _wsPage * per);
+  $('ws-count').textContent = `${rows.length.toLocaleString('en-US')} من ${R.length.toLocaleString('en-US')}`;
+  const bar = (v, col) => `<div title="${v}" style="height:5px;background:#e5e7eb;border-radius:3px;margin-top:2px"><div style="height:5px;width:${Math.max(0, Math.min(100, v))}%;background:${col};border-radius:3px"></div></div>`;
+  const sc = (v, l, col) => `<div style="font-size:10px;color:var(--muted);min-width:54px">${l} <b style="color:var(--text)">${Math.round(v)}</b>${bar(v, col)}</div>`;
+  const pc = v => v == null ? '<span style="color:var(--muted)">—</span>' : `<b style="color:${v >= 2 ? '#059669' : v >= 1 ? '#b45309' : '#dc2626'}">${v.toFixed(2)}</b>`;
+  const pg = pages > 1 ? `<div style="display:flex;gap:6px;justify-content:center;margin-top:10px;align-items:center">
+      <button class="btn btn-ghost btn-xs" ${_wsPage <= 1 ? 'disabled' : ''} onclick="_wsPage--;wsRender()">→ السابق</button>
+      <span style="font-size:12px">${_wsPage} / ${pages}</span>
+      <button class="btn btn-ghost btn-xs" ${_wsPage >= pages ? 'disabled' : ''} onclick="_wsPage++;wsRender()">التالي ←</button></div>` : '';
+  $('ws-list').innerHTML = `<div style="overflow:auto"><table style="width:100%;font-size:12px;border-collapse:collapse">
+    <thead><tr style="background:var(--bg)"><th style="padding:6px">#</th><th></th><th style="padding:6px;text-align:right">المنتج</th>
+      <th title="كل القنوات">قطع</th><th>قيمة (ج)</th><th>هامش</th><th title="آخر ${c.gadsDays || 30} يوم">صرف جوجل</th><th>قيمة جوجل</th><th>ROAS</th><th title="(قيمة جوجل × الهامش) ÷ الصرف">ربحية جوجل</th>
+      <th>الدرجات</th><th>الدرجة</th></tr></thead>
+    <tbody>${shown.map(r => `<tr style="border-top:1px solid var(--border);${r.winner ? 'background:#f0fdf4' : ''}">
+      <td style="text-align:center;font-weight:800;white-space:nowrap">${r.rank ?? '<span title="مش مؤهل — مفيش مخزون" style="color:var(--muted)">⛔</span>'}${r.winner ? ' 🏆' : ''}${live && r.winner && !r.in_feed ? ' <span title="هيدخل في الاعتماد الجاي">⬆️</span>' : ''}${live && !r.winner && r.in_feed ? ' <span title="هيخرج في الاعتماد الجاي">⬇️</span>' : ''}</td>
+      <td style="padding:4px">${r.image ? `<img src="${escapeHtml(r.image)}" loading="lazy" style="width:34px;height:34px;object-fit:contain;border-radius:6px;background:#fff">` : ''}</td>
+      <td style="padding:6px;max-width:320px"><div style="font-weight:700">${escapeHtml(r.title || '')}${r.variant && r.variant !== 'Default Title' ? ` <span style="color:var(--muted);font-weight:400">· ${escapeHtml(r.variant)}</span>` : ''}</div>
+        <div style="font-size:10.5px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(r.sku || '')}${r.type ? ' · ' + escapeHtml(r.type) : ''} · مخزون ${r.qty ?? '—'}</div></td>
+      <td style="text-align:center;font-weight:800">${_wsN(r.units)}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif">${_wsN(r.revenue)}</td>
+      <td style="text-align:center">${r.margin_pct == null ? '<span style="color:#b45309" title="مفيش تكلفة">؟</span>' : r.margin_pct + '%'}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif">${r.g_cost ? _wsN(r.g_cost) : '—'}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif">${r.g_cost || r.g_value ? _wsN(r.g_value) : '—'}</td>
+      <td style="text-align:center">${r.roas == null ? '—' : r.roas.toFixed(1)}</td>
+      <td style="text-align:center">${pc(r.poas)}${r.g_cost && !r.g_ok ? '<div style="font-size:9.5px;color:var(--muted)">صرف قليل</div>' : ''}</td>
+      <td style="padding:4px 6px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 8px">${sc(r.s_units, 'قطع', '#6366f1')}${sc(r.s_value, 'قيمة', '#0ea5e9')}${sc(r.s_margin, 'هامش', '#f59e0b')}${sc(r.s_google, 'جوجل', '#10b981')}</div></td>
+      <td style="text-align:center;font-weight:900;font-size:14px">${r.score}</td></tr>`).join('')
+      || '<tr><td colspan="12" style="padding:16px;color:var(--muted)">مفيش منتجات بالفلتر ده</td></tr>'}</tbody></table></div>${pg}
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">الأخضر = Winner. ${live ? '⬆️/⬇️ = الفرق بين الترتيب اللايف والمعتمد في الفيد — بيتطبق أول الشهر الجاي أو لما تضغط «اعتمد».' : 'ده ترتيب معتمد محفوظ — الأرقام زي ما كانت يومها.'}</div>`;
+}
+async function wsSnapshot(btn){
+  if(!_ws) return;
+  if(!confirm('تعتمد الترتيب الحالي كترتيب الشهر ده؟\ncustom_label_3 هيتنشر في الفيد: winners للـ Top والباقي others — وجوجل بيسحب الفيد في خلال يوم.')) return;
+  btn.disabled = true; const t = btn.textContent; btn.textContent = '⏳ بيعتمد…';
+  try{ const r = await apiFetch('/api/ws/snapshot', 'POST', {}); toast(`✅ ترتيب ${r.month}: ${r.winners} winner · الفيد اتنشر (${r.feed_rows} منتج)`, 'success'); await wsLoad('live'); }
+  catch(e){ toast('❌ ' + e.message); }
+  finally{ btn.disabled = false; btn.textContent = t; }
+}
+async function wsScript(){
+  let r; try{ r = await apiFetch('/api/gads/script'); }catch(e){ toast('❌ ' + e.message); return; }
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.onclick = e => { if(e.target === ov) ov.remove(); };
+  ov.innerHTML = `<div style="background:var(--card,#fff);border-radius:14px;max-width:820px;width:100%;max-height:90vh;overflow:auto;padding:16px 18px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b style="font-size:15px">📜 سكريبت Google Ads ← OrderPro</b><button class="btn btn-ghost btn-xs" style="margin-inline-start:auto" onclick="this.closest('div[style*=fixed]').remove()">✕</button></div>
+    <ol style="font-size:12.5px;line-height:1.9;padding-inline-start:18px;margin:0 0 10px">
+      <li>Google Ads ← <b>Tools</b> ← <b>Bulk actions</b> ← <b>Scripts</b> ← زرار <b>+</b> ← New script.</li>
+      <li>امسح اللي مكتوب والصق السكريبت ده كله.</li>
+      <li><b>Authorize</b> (مرة واحدة) ← <b>Preview</b>: لازم تشوف في الـ Logs «✅ اتبعت …».</li>
+      <li>سمّيه «OrderPro products» و <b>Save</b>، وخلّي <b>Frequency = Daily</b> الساعة 5 الصبح.</li>
+    </ol>
+    <div style="font-size:11.5px;color:#b45309;margin-bottom:6px">🔒 السكريبت فيه مفتاح سري خاص بـ OrderPro — ماتبعتوش لحد.</div>
+    <textarea id="ws-script-ta" readonly style="width:100%;height:340px;font-family:monospace;font-size:11px;direction:ltr;text-align:left;border:1px solid var(--border);border-radius:8px;padding:8px">${escapeHtml(r.script)}</textarea>
+    <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-primary btn-sm" onclick="navigator.clipboard.writeText($('ws-script-ta').value).then(()=>toast('✅ اتنسخ','success'))">📋 انسخ السكريبت</button></div></div>`;
+  document.body.appendChild(ov);
+}
+function wsExport(){
+  if(!_ws) return;
+  const rows = _wsFiltered().slice().sort((a, b) => b.score - a.score);
+  const data = rows.map(r => ({ 'الترتيب': r.rank ?? '', 'Winner': r.winner ? 'نعم' : '', 'المنتج': r.title + (r.variant && r.variant !== 'Default Title' ? ' · ' + r.variant : ''),
+    'SKU': r.sku || '', 'النوع': r.type || '', 'المخزون': r.qty ?? '', 'القطع المباعة': r.units, 'قيمة المبيعات': r.revenue, 'الهامش %': r.margin_pct ?? '',
+    'صرف جوجل': r.g_cost, 'قيمة جوجل': r.g_value, 'كليكات جوجل': r.g_clicks ?? '', 'تحويلات جوجل': r.g_conv ?? '', 'ROAS': r.roas ?? '', 'ربحية جوجل': r.poas ?? '',
+    'درجة القطع': r.s_units, 'درجة القيمة': r.s_value, 'درجة الهامش': r.s_margin, 'درجة جوجل': r.s_google, 'الدرجة': r.score }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:8},{wch:8},{wch:45},{wch:14},{wch:16},{wch:9},{wch:11},{wch:12},{wch:9},{wch:11},{wch:11},{wch:11},{wch:11},{wch:8},{wch:11},{wch:10},{wch:10},{wch:10},{wch:10},{wch:9}];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'تقييم المنتجات');
+  XLSX.writeFile(wb, `تقييم_المنتجات_${_ws.mode === 'live' ? _todayCairo() : _ws.month}.xlsx`);
 }
 
 // 🆕 v502: فيد جوجل التكميلي
@@ -62214,6 +62373,7 @@ function goPage(el,page){
   if(page==='abandoned')acOpen();              // 🛒 v955
   if(page==='delivery-areas')daOpen();         // 🗺️ v966
   if(page==='google-feed')gffLoad();           // 🏷️ v972
+  if(page==='winners')wsLoad('live');          // 🏆 v977
   if(page==='promo')promoOpen();               // 🎟️ v783
   if(page==='settings')chOpen();               // 📡 v738
   if(page==='settings')tgOpen();               // 🤖 v739
