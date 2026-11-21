@@ -7821,9 +7821,10 @@ tr:hover td{background:#fafbff}
     <div style="padding:0 16px 8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <input id="ws-q" class="form-input" style="flex:1;min-width:200px;font-size:12px" placeholder="🔎 اسم / SKU / نوع / براند" oninput="_wsPage=1;wsRender()">
       <select id="ws-grp" class="form-input" style="width:auto;font-size:12px" onchange="_wsPage=1;wsRender()">
-        <option value="">الكل</option><option value="win">🏆 Winners</option><option value="rest">باقي المنتجات</option>
+        <option value="">الكل (من غير الماكينات)</option><option value="win">🏆 Winners</option><option value="rest">باقي المنتجات</option>
         <option value="feed">📌 Winners في الفيد دلوقتي</option><option value="in">⬆️ هيدخل الـ Winners في الاعتماد الجاي</option><option value="out">⬇️ هيخرج من الـ Winners</option>
-        <option value="noeli">⛔ مش مؤهل (مفيش مخزون)</option></select>
+        <option value="noeli">⛔ مش مؤهل (مفيش مخزون)</option>
+        <option value="mach">🔧 الماكينات (برا الترتيب — للمتابعة بس)</option><option value="all">الكل + الماكينات</option></select>
       <select id="ws-ins" class="form-input" style="width:auto;font-size:12px" onchange="_wsPage=1;wsRender()">
         <option value="">كل الحالات</option>
         <option value="offg">💡 بيبيع كويس برة جوجل وضعيف في جوجل</option>
@@ -12242,7 +12243,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v977';
+const UI_BUILD = 'v978';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -26033,6 +26034,8 @@ function wsClear(){ ['ws-q','ws-grp','ws-ins'].forEach(id => $(id).value = ''); 
 function _wsFiltered(){
   const q = ($('ws-q').value || '').trim().toLowerCase(), g = $('ws-grp').value, ins = $('ws-ins').value;
   return _ws.rows.filter(r => {
+    // 🔧 v978: الماكينات مخفية إلا لو اخترتها
+    if(g === 'mach' ? !r.machine : (g !== 'all' && r.machine)) return false;
     if(g === 'win' && !r.winner) return false;
     if(g === 'rest' && r.winner) return false;
     if(g === 'feed' && !r.in_feed) return false;
@@ -26060,7 +26063,7 @@ function wsRender(){
   $('ws-cards').innerHTML =
     box('⚖️ الأوزان', `قطع <b>${W.units ?? '—'}%</b> · قيمة <b>${W.value ?? '—'}%</b><br>هامش <b>${W.margin ?? '—'}%</b> · جوجل <b>${W.google ?? '—'}%</b><div style="font-size:10.5px;color:var(--muted)">مبيعات ${c.salesDays ?? '—'} يوم · جوجل ${c.gadsDays ?? '—'} يوم · Top ${c.topN ?? '—'}</div>`)
     + box('📡 بيانات جوجل', gl ? `آخر استلام: <b>${new Date(gl.at).toLocaleString('ar-EG')}</b><br>صرف ${c.gadsDays || 30} يوم: <b>${_wsN(gd.cost)} ج</b> · قيمة <b>${_wsN(gd.value)} ج</b><br>${gd.products || 0} منتج${gd.unmatched ? ` · <span style="color:#b45309">${gd.unmatched} صف مش مربوط</span>` : ''}` : '<span style="color:#b45309">⚠️ لسه مفيش بيانات — ركّب السكريبت من «📜 سكريبت جوجل»</span>')
-    + box('🏆 النتيجة', `${R.filter(r => r.winner).length} winner من ${R.length} منتج${live && _ws.machines_excluded ? `<br><span style="color:var(--muted)">${_ws.machines_excluded} ماكينة برا الترتيب (ليها حملتها)</span>` : ''}${live ? `<br>⬆️ ${R.filter(r => r.winner && !r.in_feed).length} داخلين · ⬇️ ${R.filter(r => r.in_feed && !r.winner).length} خارجين` : ''}`)
+    + box('🏆 النتيجة', `${R.filter(r => r.winner).length} winner من ${R.filter(r => !r.machine).length} منتج${R.some(r => r.machine) ? `<br><span style="color:var(--muted)">${R.filter(r => r.machine).length} ماكينة برا الترتيب — فلتر «🔧 الماكينات»</span>` : ''}${live ? `<br>⬆️ ${R.filter(r => r.winner && !r.in_feed).length} داخلين · ⬇️ ${R.filter(r => r.in_feed && !r.winner).length} خارجين` : ''}`)
     + `<div style="font-size:11px;color:var(--muted);max-width:300px;line-height:1.7">كل معيار درجة من 0 لـ 100 بترتيب المنتج وسط الباقيين. <b>ربحية جوجل</b> = (قيمة تحويلات جوجل × الهامش) ÷ الصرف — 1 يعني بيغطي نفسه بالظبط. أقل من حد الصرف = 50 محايد. الأوزان والأعداد من الإعدادات ← «تقييم المنتجات».</div>`;
   const rows = _wsFiltered();
   const so = $('ws-sort').value, nm = (a, b) => String(a.title).localeCompare(String(b.title)), nz = v => v ?? -1e9;
@@ -26083,7 +26086,7 @@ function wsRender(){
       <th title="كل القنوات">قطع</th><th>قيمة (ج)</th><th>هامش</th><th title="آخر ${c.gadsDays || 30} يوم">صرف جوجل</th><th>قيمة جوجل</th><th>ROAS</th><th title="(قيمة جوجل × الهامش) ÷ الصرف">ربحية جوجل</th>
       <th>الدرجات</th><th>الدرجة</th></tr></thead>
     <tbody>${shown.map(r => `<tr style="border-top:1px solid var(--border);${r.winner ? 'background:#f0fdf4' : ''}">
-      <td style="text-align:center;font-weight:800;white-space:nowrap">${r.rank ?? '<span title="مش مؤهل — مفيش مخزون" style="color:var(--muted)">⛔</span>'}${r.winner ? ' 🏆' : ''}${live && r.winner && !r.in_feed ? ' <span title="هيدخل في الاعتماد الجاي">⬆️</span>' : ''}${live && !r.winner && r.in_feed ? ' <span title="هيخرج في الاعتماد الجاي">⬇️</span>' : ''}</td>
+      <td style="text-align:center;font-weight:800;white-space:nowrap">${r.machine ? `<span title="ماكينة — برا ترتيب الـ Winners. الرقم = ترتيبها وسط الماكينات، والدرجات محسوبة وسط الماكينات بس">🔧 ${r.rank_m ?? ''}</span>` : (r.rank ?? '<span title="مش مؤهل — مفيش مخزون" style="color:var(--muted)">⛔</span>')}${r.winner ? ' 🏆' : ''}${live && r.winner && !r.in_feed ? ' <span title="هيدخل في الاعتماد الجاي">⬆️</span>' : ''}${live && !r.winner && r.in_feed ? ' <span title="هيخرج في الاعتماد الجاي">⬇️</span>' : ''}</td>
       <td style="padding:4px">${r.image ? `<img src="${escapeHtml(r.image)}" loading="lazy" style="width:34px;height:34px;object-fit:contain;border-radius:6px;background:#fff">` : ''}</td>
       <td style="padding:6px;max-width:320px"><div style="font-weight:700">${escapeHtml(r.title || '')}${r.variant && r.variant !== 'Default Title' ? ` <span style="color:var(--muted);font-weight:400">· ${escapeHtml(r.variant)}</span>` : ''}</div>
         <div style="font-size:10.5px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(r.sku || '')}${r.type ? ' · ' + escapeHtml(r.type) : ''} · مخزون ${r.qty ?? '—'}</div></td>
@@ -26128,7 +26131,7 @@ async function wsScript(){
 function wsExport(){
   if(!_ws) return;
   const rows = _wsFiltered().slice().sort((a, b) => b.score - a.score);
-  const data = rows.map(r => ({ 'الترتيب': r.rank ?? '', 'Winner': r.winner ? 'نعم' : '', 'المنتج': r.title + (r.variant && r.variant !== 'Default Title' ? ' · ' + r.variant : ''),
+  const data = rows.map(r => ({ 'الترتيب': r.machine ? 'ماكينة ' + (r.rank_m ?? '') : (r.rank ?? ''), 'Winner': r.winner ? 'نعم' : '', 'المنتج': r.title + (r.variant && r.variant !== 'Default Title' ? ' · ' + r.variant : ''),
     'SKU': r.sku || '', 'النوع': r.type || '', 'المخزون': r.qty ?? '', 'القطع المباعة': r.units, 'قيمة المبيعات': r.revenue, 'الهامش %': r.margin_pct ?? '',
     'صرف جوجل': r.g_cost, 'قيمة جوجل': r.g_value, 'كليكات جوجل': r.g_clicks ?? '', 'تحويلات جوجل': r.g_conv ?? '', 'ROAS': r.roas ?? '', 'ربحية جوجل': r.poas ?? '',
     'درجة القطع': r.s_units, 'درجة القيمة': r.s_value, 'درجة الهامش': r.s_margin, 'درجة جوجل': r.s_google, 'الدرجة': r.score }));
