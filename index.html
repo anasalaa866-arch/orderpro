@@ -10841,6 +10841,39 @@ tr:hover td{background:#fafbff}
     </div>
     <div id="lv-list" style="padding:8px 14px;overflow-x:auto"></div>
   </div>
+  <!-- ⏱️ v1003: الأذونات -->
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:14px">
+      <div style="font-weight:800;margin-bottom:10px">⏱️ إذن جديد <span style="font-size:11px;color:var(--muted);font-weight:600">— تأخير · خروج في النص · نص يوم</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;align-items:end">
+        <select id="pm-emp" class="form-input"><option value="">— الموظف —</option></select>
+        <select id="pm-type" class="form-input" onchange="pmTypeChanged()">
+          <option value="late">⏰ تأخير</option><option value="mid">🚪 خروج في النص</option><option value="half">🌗 نص يوم</option>
+        </select>
+        <div><label style="font-size:11px;color:var(--muted)">اليوم</label><input type="date" id="pm-date" class="form-input"></div>
+        <div><label style="font-size:11px;color:var(--muted)">الساعات</label><input type="number" id="pm-hours" class="form-input" min="0.5" step="0.5" oninput="pmCalc()"></div>
+        <input type="text" id="pm-reason" class="form-input" placeholder="السبب (اختياري)">
+      </div>
+      <div style="margin-top:10px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;cursor:pointer">
+          <input type="checkbox" id="pm-deduct" onchange="pmCalc()" style="width:16px;height:16px"> اخصم من رصيد السنوية</label>
+        <span id="pm-calc" style="font-size:12px;color:var(--muted)"></span>
+        <button class="btn btn-primary" onclick="pmSubmit()">➕ تسجيل الإذن</button>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div style="padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
+      <span style="font-weight:800">⏱️ الأذونات</span>
+      <input type="month" id="pm-f-month" class="form-input" style="max-width:160px" onchange="pmLoad()">
+      <select id="pm-f-status" class="form-input" style="max-width:150px" onchange="pmLoad()">
+        <option value="">كل الحالات</option><option value="pending">مستنية</option><option value="approved">مقبولة</option><option value="rejected">مرفوضة</option>
+      </select>
+      <button class="btn btn-ghost btn-sm" onclick="pmLoad()">🔄 تحديث</button>
+      <span id="pm-sum" style="font-size:12px;color:var(--muted);margin-inline-start:auto"></span>
+    </div>
+    <div id="pm-list" style="padding:8px 14px;overflow-x:auto"></div>
+  </div>
 </div>
 
 <div class="page" id="page-hr-purchases">
@@ -12322,7 +12355,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1002';
+const UI_BUILD = 'v1003';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -57042,6 +57075,7 @@ async function attDays(fingerId){
       </tr></thead><tbody>
       ${rows.map(x => {
         const d = new Date(x.d + 'T00:00:00');
+        const _pm = x.perm_min ? ` · ⏱️ إذن ${_attHM(x.perm_min)}` : '';
         const st = x.absent ? ['🔴 غياب','#991b1b','#fef2f2']
                  : x.no_out ? ['⚠️ مابصمش انصراف','#b45309','#fff7ed']
                  : x.no_in  ? ['⚠️ مابصمش حضور','#b45309','#fff7ed']
@@ -57055,7 +57089,7 @@ async function attDays(fingerId){
           <td style="padding:7px;text-align:center;font-family:Roboto,sans-serif;color:${x.late_min?'#b45309':'var(--muted)'}">${x.late_min?_attHM(x.late_min):'—'}</td>
           <td style="padding:7px;text-align:center;font-family:Roboto,sans-serif;color:${x.early_min?'#b45309':'var(--muted)'}">${x.early_min?_attHM(x.early_min):'—'}</td>
           <td style="padding:7px;text-align:center;font-family:Roboto,sans-serif;color:${x.overtime_min?'var(--success)':'var(--muted)'}">${x.overtime_min?_attHM(x.overtime_min):'—'}</td>
-          <td style="padding:7px;text-align:center"><span class="badge" style="color:${st[1]}">${st[0]}</span></td>
+          <td style="padding:7px;text-align:center"><span class="badge" style="color:${st[1]}">${st[0]}</span>${_pm ? `<div style="font-size:10.5px;color:#2563eb;font-weight:700;margin-top:2px">${_pm.slice(3)}</div>` : ''}</td>
         </tr>`;
       }).join('')}</tbody></table>`;
   }catch(e){
@@ -59673,6 +59707,7 @@ async function loadHrLeaves(){
   list.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted)">⏳...</div>';
   try{
     const qs=[]; if(status)qs.push('status='+status); if(year)qs.push('year='+year);
+    pmLoad();   // ⏱️ v1003
     const r=await apiFetch('/api/hr/leaves'+(qs.length?'?'+qs.join('&'):''),'GET');
     if(!r) apiNN(r, '/api/hr/leaves');   // 🚑 v797
     const rows=r.leaves||[];
@@ -59699,6 +59734,81 @@ async function loadHrLeaves(){
       }).join('')}</tbody></table>`;
   }catch(e){ list.innerHTML=`<div style="padding:18px;color:var(--danger)">❌ ${escapeHtml(e.message)}</div>`; }
 }
+// ⏱️ v1003: الأذونات — جوه صفحة الإجازات
+let _pmMeta = { defaults: { late: 2, mid: 2, half: 4 }, workday_hours: 8, month_limit: 0 };
+const _PM_T = { late: '⏰ تأخير', mid: '🚪 خروج في النص', half: '🌗 نص يوم' };
+function pmTypeChanged(){
+  const t = $('pm-type')?.value || 'late';
+  if($('pm-hours')) $('pm-hours').value = _pmMeta.defaults[t] ?? 2;
+  pmCalc();
+}
+function pmCalc(){
+  const h = Number($('pm-hours')?.value) || 0, wd = _pmMeta.workday_hours || 8, el = $('pm-calc');
+  if(!el) return;
+  el.textContent = $('pm-deduct')?.checked && h > 0 ? `= ${Math.round(h / wd * 100) / 100} يوم من رصيد السنوية (لما يتوافق عليه)` : 'مش هيتخصم من الرصيد';
+}
+async function pmLoad(){
+  const box = $('pm-list'); if(!box) return;
+  const sel = $('pm-emp');
+  if(sel && sel.options.length <= 1 && _lvEmployees.length)
+    sel.innerHTML = '<option value="">— الموظف —</option>' + _lvEmployees.map(e => `<option value="${e.id}">${escapeHtml(e.name_ar || ('#' + e.id))}</option>`).join('');
+  if($('pm-date') && !$('pm-date').value) $('pm-date').value = _todayCairo();
+  if($('pm-f-month') && !$('pm-f-month').value) $('pm-f-month').value = _todayCairo().slice(0, 7);
+  const qs = [];
+  if($('pm-f-month')?.value) qs.push('month=' + $('pm-f-month').value);
+  if($('pm-f-status')?.value) qs.push('status=' + $('pm-f-status').value);
+  box.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted)">⏳...</div>';
+  const r = await apiFetch('/api/hr/leaves/permissions' + (qs.length ? '?' + qs.join('&') : ''));
+  if(!r || r.error){ box.innerHTML = `<div style="padding:16px;color:var(--danger)">❌ ${escapeHtml(r?.error || _errText(_apiLastErr, 'فشل'))}</div>`; return; }
+  const first = !_pmMeta._loaded;
+  _pmMeta = { ...r, _loaded: true };
+  if(first || !$('pm-hours').value) pmTypeChanged();
+  const rows = r.permissions || [];
+  const lim = r.month_limit || 0;
+  const pend = rows.filter(x => x.status === 'pending').length;
+  $('pm-sum').textContent = rows.length ? `${rows.length} إذن${pend ? ' · ' + pend + ' مستني' : ''}${lim ? ' · الحد ' + lim + ' في الشهر' : ''}` : '';
+  if(!rows.length){ box.innerHTML = '<div style="padding:18px;text-align:center;color:var(--muted)">مفيش أذونات</div>'; return; }
+  box.innerHTML = `<table style="width:100%;font-size:13px"><thead><tr>
+    <th style="text-align:right">الموظف</th><th>النوع</th><th>اليوم</th><th>ساعات</th><th>من الرصيد</th><th>في الشهر</th><th style="text-align:right">السبب</th><th>الحالة</th><th>إجراء</th>
+    </tr></thead><tbody>${rows.map(x => {
+      const st = _LV_STATUS[x.status] || [x.status, '#64748b'];
+      const over = lim && x.month_count > lim;
+      return `<tr>
+        <td style="font-weight:700">${escapeHtml(x.employee_name || ('#' + x.employee_id))}</td>
+        <td style="text-align:center;white-space:nowrap">${_PM_T[x.perm_type] || x.perm_type}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(x.d || '')}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${Number(x.hours)}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif">${x.deduct ? Number(x.deduct_days) + ' يوم' : '<span style="color:var(--muted)">—</span>'}</td>
+        <td style="text-align:center;font-family:Roboto,sans-serif;${over ? 'color:#dc2626;font-weight:800' : ''}" title="${over ? 'عدّى الحد الشهري' : ''}">${x.month_count}${over ? ' ⚠️' : ''}</td>
+        <td style="font-size:11px;color:var(--muted)">${escapeHtml(x.reason || '')}</td>
+        <td style="text-align:center"><span style="background:${st[1]}22;color:${st[1]};padding:2px 8px;border-radius:99px;font-size:11px;font-weight:700">${st[0]}</span></td>
+        <td style="text-align:center;white-space:nowrap">
+          ${x.status === 'pending' ? `<button class="btn btn-sm" style="background:#16a34a;color:#fff;padding:3px 8px" onclick="pmAction(${x.id},'approve')">✓</button> <button class="btn btn-sm" style="background:#dc2626;color:#fff;padding:3px 8px" onclick="pmAction(${x.id},'reject')">✕</button>` : ''}
+          <button class="btn btn-ghost btn-sm" style="padding:3px 8px" onclick="pmDelete(${x.id})">🗑️</button>
+        </td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+async function pmSubmit(){
+  const b = { employee_id: $('pm-emp')?.value, perm_type: $('pm-type')?.value, perm_date: $('pm-date')?.value,
+    hours: Number($('pm-hours')?.value) || 0, deduct: !!$('pm-deduct')?.checked, reason: $('pm-reason')?.value || '' };
+  if(!b.employee_id) return toast('اختار الموظف');
+  if(!b.perm_date) return toast('حدد اليوم');
+  const r = await apiFetch('/api/hr/leaves/permissions', 'POST', b);
+  if(!r || r.error) return toast('❌ ' + (r?.error || _errText(_apiLastErr, 'فشل')));
+  toast(r.over_limit ? `⚠️ اتسجّل — بس ده الإذن رقم ${r.month_count} في الشهر (الحد ${r.month_limit})` : '✅ اتسجّل الإذن', r.over_limit ? 'error' : 'success', r.over_limit ? 7000 : 3000);
+  $('pm-reason').value = ''; $('pm-deduct').checked = false; pmCalc();
+  pmLoad();
+}
+async function pmAction(id, a){
+  const r = await apiFetch(`/api/hr/leaves/permissions/${id}/${a}`, 'POST', {});
+  if(!r || r.error) return toast('❌ ' + (r?.error || _errText(_apiLastErr, 'فشل')));
+  pmLoad(); lvLoadBalance();
+}
+async function pmDelete(id){
+  if(!confirm('تمسح الإذن ده؟')) return;
+  await apiFetch(`/api/hr/leaves/permissions/${id}`, 'DELETE');
+  pmLoad(); lvLoadBalance();
+}
 function lvCalcDays(){
   const f=$('lv-from')?.value, t=$('lv-to')?.value; const el=$('lv-days');
   if(f&&t){ const d=Math.round((new Date(t+'T00:00:00Z')-new Date(f+'T00:00:00Z'))/86400000)+1; el.textContent=d>0?`📅 ${d} يوم`:'⚠️ التاريخ غلط'; }
@@ -59708,7 +59818,7 @@ async function lvLoadBalance(){
   const id=$('lv-emp')?.value; const el=$('lv-bal'); if(!el) return; el.textContent='';
   if(!id) return;
   try{ const r=await apiFetch(`/api/hr/leaves/balance/${id}?year=${new Date().getFullYear()}`,'GET');
-    el.textContent=`رصيد السنوية: ${r.annual_remaining} من ${r.annual_entitlement} (اتاخد ${r.annual_used})`;
+    el.textContent=`رصيد السنوية: ${r.annual_remaining} من ${r.annual_entitlement} (اتاخد ${r.annual_used}${r.perm_days?' منهم '+r.perm_days+' أذونات':''})`;
   }catch(e){}
 }
 async function submitLeave(){
