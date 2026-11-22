@@ -7863,6 +7863,7 @@ tr:hover td{background:#fafbff}
       <button class="btn btn-sm btn-ghost" style="margin-inline-start:auto" onclick="mtaLoad()">🔄 تحديث</button>
       <button class="btn btn-sm btn-ghost" onclick="mtaToken()">🔑 التوكن</button>
       <button class="btn btn-sm btn-ghost" onclick="mtaExport()">📥 Excel</button>
+      <button class="btn btn-sm btn-ghost" onclick="adTgSend()" title="يبعت تقرير الإعلانات (جوجل + Meta) على جروب تيليجرام دلوقتي">📨 تقرير تيليجرام</button>
       <button class="btn btn-sm btn-primary" id="mta-sync-btn" onclick="mtaSync(this)">⬇️ اسحب من Meta دلوقتي</button>
     </div>
     <div id="mta-cards" style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap"></div>
@@ -7895,6 +7896,7 @@ tr:hover td{background:#fafbff}
       <span id="gap-sub" style="color:var(--muted);font-size:12px"></span>
       <button class="btn btn-sm btn-ghost" style="margin-inline-start:auto" onclick="gapLoad()">🔄 تحديث</button>
       <button class="btn btn-sm btn-ghost" onclick="gapExport()">📥 Excel</button>
+      <button class="btn btn-sm btn-ghost" onclick="adTgSend()" title="يبعت تقرير الإعلانات (جوجل + Meta) على جروب تيليجرام دلوقتي">📨 تقرير تيليجرام</button>
       <button class="btn btn-sm btn-primary" onclick="wsScript()" title="البيانات بتيجي من سكريبت Google Ads كل يوم — لو لسه ماحدّثتهوش، انسخ النسخة الجديدة">📜 السكريبت</button>
     </div>
     <div id="gap-cards" style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap"></div>
@@ -12314,7 +12316,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v991';
+const UI_BUILD = 'v992';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -26227,12 +26229,50 @@ function _adRangeQs(p){
 }
 function _adRangeLbl(d){ if(!d) return ''; const f = x => String(x || '').slice(8, 10) + '/' + String(x || '').slice(5, 7);
   return d.from === d.to ? f(d.from) : `${f(d.from)} → ${f(d.to)} · ${d.days} يوم`; }
+// 💳📨 v992: الرصيد وتقارير تيليجرام
+let _adBill = null;
+function _adGoogleOwedBox(box){
+  const g = _adBill?.google, n = v => Math.round(v || 0).toLocaleString('en-US');
+  const btns = `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap"><button class="btn btn-ghost btn-xs" onclick="adBill('anchor')" title="اكتب المديونية زي ما ظاهرة في جوجل ← Billing دلوقتي">✏️ الرقم من جوجل</button><button class="btn btn-ghost btn-xs" onclick="adBill('payment')">➕ سداد</button></div>`;
+  if(!g) return box('💳 مديونية جوجل', `<span style="color:#b45309">اكتب المديونية الحالية من جوجل ← Billing مرة واحدة، والسيستم يكمّل بالصرف اليومي</span>${btns}`);
+  const col = g.pct >= 80 ? '#dc2626' : g.pct >= 60 ? '#b45309' : '#059669';
+  return box('💳 مديونية جوجل (تقريبي)', `<b style="font-size:16px;color:${col}">${n(g.owed)} ج</b> من ${n(g.limit)} (${g.pct}%)
+    <div style="height:5px;background:#e5e7eb;border-radius:3px;margin:3px 0"><div style="height:5px;width:${Math.min(100, g.pct)}%;background:${col};border-radius:3px"></div></div>
+    <span style="font-size:10.5px;color:var(--muted)">آخر رقم ${n(g.anchor)} (${new Date(g.anchor_at).toLocaleDateString('ar-EG-u-nu-latn')}) + صرف ${n(g.spend_since)} − سداد ${n(g.paid_since)}${g.days_to_limit != null ? ` · الحد بعد ~${g.days_to_limit} يوم` : ''}</span>${btns}`);
+}
+function _adMetaBalBox(box){
+  const m = _adBill?.meta, n = v => Math.round(v || 0).toLocaleString('en-US');
+  const btn = `<div style="margin-top:4px"><button class="btn btn-ghost btn-xs" onclick="adMetaBal(this)">🔄 حدّث الرصيد</button></div>`;
+  const acc = (m?.accounts || []).filter(a => !a.error);
+  if(!acc.length) return box('💳 رصيد Meta', `<span style="color:var(--muted)">لسه ماتسحبش${(m?.accounts||[]).find(a => a.error) ? ' — ' + escapeHtml(m.accounts.find(a => a.error).error) : ''}</span>${btn}`);
+  return box('💳 رصيد Meta', acc.map(a => a.prepay ? `${escapeHtml(a.funding || 'مدفوع مقدماً')}` :
+    `مستحق <b style="font-size:15px">${n(a.owed)} ج</b>${a.cap ? `<br>الحد ${n(a.cap)} · اتصرف ${n(a.spent)}` : ''}${a.funding ? `<br><span style="font-size:10.5px;color:var(--muted)">${escapeHtml(a.funding)}</span>` : ''}`).join('<hr style="margin:4px 0">')
+    + `<div style="font-size:10px;color:var(--muted)">${new Date(m.at).toLocaleString('ar-EG-u-nu-latn')}</div>${btn}`);
+}
+async function adBill(kind){
+  const v = prompt(kind === 'anchor' ? 'المديونية الحالية زي ما ظاهرة في Google Ads ← Billing (بالجنيه):' : 'مبلغ السداد / الخصم من الكارت (بالجنيه):');
+  if(v === null || !String(v).trim()) return;
+  try{ await apiFetch('/api/ads/billing', 'POST', { kind, amount: String(v).trim() }); toast('✅ اتسجل', 'success'); _adReload(); }
+  catch(e){ toast('❌ ' + e.message); }
+}
+async function adMetaBal(btn){
+  btn.disabled = true;
+  try{ await apiFetch('/api/meta/balance/refresh', 'POST', {}); _adReload(); }catch(e){ toast('❌ ' + e.message); }
+  finally{ btn.disabled = false; }
+}
+function _adReload(){ if(document.getElementById('page-gads-perf')?.classList.contains('active')) gapLoad(); else mtaLoad(); }
+async function adTgSend(){
+  const k = confirm('ابعت التقرير اليومي (أداء امبارح) على تيليجرام؟') ? 'daily' : (confirm('طب ابعت التقرير الأسبوعي (آخر 7 أيام)؟') ? 'weekly' : null);
+  if(!k) return;
+  try{ const r = await apiFetch('/api/ads/report/send', 'POST', { kind: k }); toast(r.ok ? '✅ اتبعت على تيليجرام' : '❌ ' + (r.why || 'ماتبعتش'), r.ok ? 'success' : undefined); }
+  catch(e){ toast('❌ ' + e.message); }
+}
 // ═══ 📘 v981: أداء Meta ═══
 let _mta = null, _mtaT = 'c', _mtaPage = 1, _mtaPoll = null;
 const _mtaN = v => (v == null ? '—' : Math.round(v).toLocaleString('en-US'));
 async function mtaLoad(){
   $('mta-list').innerHTML = '⏳';
-  try{ _mta = await apiFetch('/api/meta/perf?' + _adRangeQs('mta')); mtaRender(); }
+  try{ _adBill = await apiFetch('/api/ads/billing').catch(() => null); _mta = await apiFetch('/api/meta/perf?' + _adRangeQs('mta')); mtaRender(); }
   catch(e){ $('mta-list').innerHTML = `<span style="color:#dc2626">${escapeHtml(e.message)}</span>`; }
 }
 function mtaTab(t){ _mtaT = t; _mtaPage = 1; mtaRender(); }
@@ -26248,6 +26288,7 @@ function mtaRender(){
     (st.error || !_mta.has_token ? `<div style="width:100%;padding:8px 12px;border-radius:8px;background:#fef2f2;color:#991b1b;font-size:12px">⚠️ ${escapeHtml(st.error || 'مفيش توكن Meta')} — دوس «🔑 التوكن».</div>` : '')
     + box(`💸 الصرف (${_adRangeLbl(_mta)})`, `<b style="font-size:16px">${_mtaN(T.spend)} ج</b><br>قيمة المشتريات ${_mtaN(T.value)} ج`)
     + box('📈 العائد', `ROAS <b>${T.spend > 0 ? (T.value / T.spend).toFixed(2) : '—'}</b><br>مشتريات ${_mtaN(T.purchases)} · تكلفة الطلب ${T.purchases > 0 ? _mtaN(T.spend / T.purchases) + ' ج' : '—'}`)
+    + _adMetaBalBox(box)
     + box('📦 إعلانات الكتالوج', `${_mta.products.length} منتج · صرف ${_mtaN(prodSpend)} ج<br>ROAS ${prodSpend > 0 ? (prodVal / prodSpend).toFixed(2) : '—'}${_mta.products.some(p => !p.matched) ? ` · <span style="color:#b45309">${_mta.products.filter(p => !p.matched).length} مش متعرّف</span>` : ''}`)
     + `<div style="font-size:11px;color:var(--muted);max-width:300px;line-height:1.7">ROAS = قيمة المشتريات ÷ الصرف. <b>ربحية Meta</b> = (القيمة × هامش المنتج) ÷ الصرف — 1 = تعادل. الأرقام زي ما Meta بينسبها (Attribution بتاع الحساب). السحب التلقائي كل يوم الساعة ${_mta.cfg?.hour ?? 6} الصبح — من الإعدادات ← «أداء Meta».${(last?.log || []).length ? '<br>' + last.log.map(escapeHtml).join('<br>') : ''}</div>`;
   const q = ($('mta-q').value || '').trim().toLowerCase(), f = $('mta-f').value, so = $('mta-sort').value;
@@ -26328,7 +26369,7 @@ let _gap = null, _gapT = 'c', _gapPage = 1, _gapPoll = null;
 const _gapN = v => (v == null ? '—' : Math.round(v).toLocaleString('en-US'));
 async function gapLoad(){
   $('gap-list').innerHTML = '⏳';
-  try{ _gap = await apiFetch('/api/gads/perf?' + _adRangeQs('gap')); gapRender(); }
+  try{ _adBill = await apiFetch('/api/ads/billing').catch(() => null); _gap = await apiFetch('/api/gads/perf?' + _adRangeQs('gap')); gapRender(); }
   catch(e){ $('gap-list').innerHTML = `<span style="color:#dc2626">${escapeHtml(e.message)}</span>`; }
 }
 function gapTab(t){ _gapT = t; _gapPage = 1; gapRender(); }
@@ -26344,6 +26385,7 @@ function gapRender(){
     (!last ? `<div style="width:100%;padding:8px 12px;border-radius:8px;background:#fffbeb;color:#92400e;font-size:12px">⚠️ بيانات الحملات بتيجي من النسخة الجديدة من السكريبت — دوس «📜 السكريبت»، انسخه، والصقه مكان القديم في Google Ads (Tools ← Scripts ← OrderPro products) وبعدين Preview.</div>` : '')
     + box(`💸 الصرف (${_adRangeLbl(_gap)})`, `<b style="font-size:16px">${_gapN(T.spend)} ج</b><br>قيمة التحويلات ${_gapN(T.value)} ج`)
     + box('📈 العائد', `ROAS <b>${T.spend > 0 ? (T.value / T.spend).toFixed(2) : '—'}</b><br>تحويلات ${_gapN(T.purchases)} · تكلفة التحويل ${T.purchases > 0 ? _gapN(T.spend / T.purchases) + ' ج' : '—'}`)
+    + _adGoogleOwedBox(box)
     + box('📦 المنتجات (Shopping + PMax)', `${_gap.products.length} منتج · صرف ${_gapN(prodSpend)} ج<br>ROAS ${prodSpend > 0 ? (prodVal / prodSpend).toFixed(2) : '—'}${_gap.products.some(p => !p.matched) ? ` · <span style="color:#b45309">${_gap.products.filter(p => !p.matched).length} مش متعرّف</span>` : ''}`)
     + `<div style="font-size:11px;color:var(--muted);max-width:300px;line-height:1.7">ROAS = قيمة التحويلات ÷ الصرف. <b>ربحية جوجل</b> = (القيمة × هامش المنتج) ÷ الصرف — 1 = تعادل. الأرقام زي ما جوجل بينسبها. البيانات بتوصل من سكريبت Google Ads كل يوم.</div>`;
   const q = ($('gap-q').value || '').trim().toLowerCase(), f = $('gap-f').value, so = $('gap-sort').value;
