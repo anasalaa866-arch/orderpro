@@ -12356,7 +12356,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1006';
+const UI_BUILD = 'v1007';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -42440,44 +42440,60 @@ async function cgLoadLedger(){
   }catch(e){ b.innerHTML = `<div style="color:var(--danger);padding:16px">❌ ${escapeHtml(e.message)}</div>`; }
 }
 function cgRenderLedger(){
+  // 📜 v1007: نفس شكل شيت أنس — أرقام صريحة: الرصيد الحالي، كل توريدة عمود،
+  //   كل قطع عمود «مبيعات»، السعر، وإجمالي آخر قطع. من غير أسهم ولا أرصدة جارية.
   const r = _cgLed, b = document.getElementById('cg-body'); if(!r || !b) return;
   const ev = r.events || [];
   const q = _cgLedQ.trim().toLowerCase();
   const rows = (r.rows || []).filter(x => !q || (x.title + ' ' + (x.sku||'') + ' ' + (x.barcode||'')).toLowerCase().includes(q));
-  const N = v => _cgN(v);
-  const sty = { delivery: ['#eef2ff', '#4338ca', '📦'], cut: ['#f0fdf4', '#166534', '✂️'], ret: ['#fef2f2', '#991b1b', '↩️'] };
-  const st = e => e.type === 'delivery' ? sty.delivery : e.type === 'cut' ? sty.cut : sty.ret;
-  const head = ev.map(e => { const [bg, fg, ic] = st(e);
-    return `<th style="padding:6px 8px;background:${bg};color:${fg};font-size:11px;white-space:nowrap;text-align:center;border-inline-start:1px solid var(--border)">
-      ${ic} <span style="font-family:Roboto,sans-serif">${escapeHtml(e.label || '')}</span><div style="font-weight:600;font-size:10px;font-family:Roboto,sans-serif">${escapeHtml(e.date || '')}</div>
-      ${e.type === 'cut' ? `<div style="font-size:10px">باع · الرصيد${e.paid ? ' · ✅ اتدفع' : ''}</div>` : `<div style="font-size:10px">${e.type === 'delivery' ? 'ورّد' : 'رجع'} · الرصيد</div>`}</th>`; }).join('');
-  const body = rows.map(x => `<tr style="border-top:1px solid var(--border)">
-      <td style="padding:6px 8px;font-weight:700;min-width:220px;position:sticky;right:0;background:var(--card)">${escapeHtml(x.title)}<div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(x.barcode || x.sku || '')}</div></td>
-      <td style="padding:6px 8px;text-align:center;font-family:Roboto,sans-serif;font-weight:800">${N(x.opening)}</td>
-      ${x.cells.map((c, i) => { const e = ev[i], [bg] = st(e);
-        const qv = c.q ? `<b style="color:${e.type === 'delivery' ? '#4338ca' : '#dc2626'}">${c.q > 0 ? '+' : ''}${N(c.q)}</b>` : '<span style="color:var(--muted)">·</span>';
-        return `<td style="padding:6px 8px;text-align:center;font-family:Roboto,sans-serif;background:${bg}55;border-inline-start:1px solid var(--border);white-space:nowrap">${qv}<span style="color:var(--muted);font-size:11px"> ← </span><b>${N(c.bal)}</b></td>`; }).join('')}
-      <td style="padding:6px 8px;text-align:center;font-family:Roboto,sans-serif;font-weight:900;border-inline-start:2px solid var(--border)">${N(x.current)}</td>
-    </tr>`).join('');
-  const foot = `<tr style="border-top:2px solid var(--border);font-weight:900;background:var(--bg)">
-      <td style="padding:7px 8px;position:sticky;right:0;background:var(--bg)">الإجمالي</td>
-      <td style="text-align:center;font-family:Roboto,sans-serif">${N(rows.reduce((a, x) => a + x.opening, 0))}</td>
-      ${ev.map((e, i) => `<td style="text-align:center;font-family:Roboto,sans-serif;border-inline-start:1px solid var(--border);white-space:nowrap">${e.total_qty > 0 ? '+' : ''}${N(e.total_qty)}${e.type === 'cut' ? `<div style="font-size:11px;color:#166534">${_cgM(e.amount)}</div>` : ''}</td>`).join('')}
-      <td style="text-align:center;font-family:Roboto,sans-serif;border-inline-start:2px solid var(--border)">${N(rows.reduce((a, x) => a + x.current, 0))}</td></tr>`;
-  const cuts = ev.filter(e => e.type === 'cut'), dels = ev.filter(e => e.type === 'delivery');
+  const N = v => v ? _cgN(v) : '';
+  const dIdx = ev.map((e, i) => [e, i]).filter(([e]) => e.type !== 'cut');
+  const cIdx = ev.map((e, i) => [e, i]).filter(([e]) => e.type === 'cut');
+  const lastCut = cIdx.length ? cIdx[cIdx.length - 1] : null;
+  const showOpen = rows.some(x => x.opening);
+  const B = 'border:1px solid #9ca3af;padding:5px 8px;text-align:center';
+  const TH = `${B};background:#6b7280;color:#fff;font-weight:800;font-size:12px;white-space:nowrap`;
+  const ord = n => ['أول','تاني','تالت','رابع','خامس','سادس','سابع','تامن','تاسع','عاشر'][n] || ('#' + (n + 1));
+  const head = `<tr>
+      <th style="${TH};text-align:right;min-width:240px">الصنف</th>
+      <th style="${TH}">الرصيد<br>الحالي</th>
+      ${showOpen ? `<th style="${TH}">أول المدة<div style="font-size:10px;font-weight:600">${escapeHtml(r.opening_as_of || '')}</div></th>` : ''}
+      ${dIdx.map(([e], n) => `<th style="${TH};background:${e.type === 'return' ? '#991b1b' : '#4b5563'}" title="${escapeHtml(e.label)}">${e.type === 'return' ? 'مرتجع' : 'توريد ' + ord(dIdx.filter(([x]) => x.type !== 'return').findIndex(([x]) => x === e))}<div style="font-size:10px;font-weight:600;font-family:Roboto,sans-serif">${escapeHtml(e.date || '')}</div></th>`).join('')}
+      ${cIdx.map(([e]) => `<th style="${TH};background:#166534" title="${escapeHtml(e.label)}">مبيعات<div style="font-size:10px;font-weight:600;font-family:Roboto,sans-serif">${escapeHtml(e.date || '')}</div>${e.paid ? '<div style="font-size:10px">✅ اتدفع</div>' : ''}</th>`).join('')}
+      <th style="${TH}">السعر</th>
+      <th style="${TH}">إجمالي<br>آخر قطع</th></tr>`;
+  const body = rows.map(x => {
+    const price = lastCut ? (x.cells[lastCut[1]].price || 0) : 0;
+    const lastAmt = lastCut ? x.cells[lastCut[1]].amt : 0;
+    return `<tr>
+      <td style="${B};text-align:right;font-weight:600">${escapeHtml(x.title)}</td>
+      <td style="${B};font-weight:800">${_cgN(x.current)}</td>
+      ${showOpen ? `<td style="${B}">${N(x.opening)}</td>` : ''}
+      ${dIdx.map(([, i]) => `<td style="${B}">${N(x.cells[i].q)}</td>`).join('')}
+      ${cIdx.map(([, i]) => `<td style="${B};background:#f0fdf4">${x.cells[i].q ? _cgN(-x.cells[i].q) : '0'}</td>`).join('')}
+      <td style="${B};font-family:Roboto,sans-serif">${price ? price.toFixed(2).replace(/\.00$/, '') : ''}</td>
+      <td style="${B};font-family:Roboto,sans-serif">${lastAmt ? _cgM(lastAmt) : '0'}</td></tr>`;
+  }).join('');
+  const sum = f => rows.reduce((a, x) => a + f(x), 0);
+  const foot = `<tr style="font-weight:900;background:#f3f4f6">
+      <td style="${B};text-align:right">الإجمالي</td>
+      <td style="${B}">${_cgN(sum(x => x.current))}</td>
+      ${showOpen ? `<td style="${B}">${_cgN(sum(x => x.opening))}</td>` : ''}
+      ${dIdx.map(([, i]) => `<td style="${B}">${_cgN(sum(x => x.cells[i].q))}</td>`).join('')}
+      ${cIdx.map(([e, i]) => `<td style="${B};background:#dcfce7">${_cgN(sum(x => -x.cells[i].q))}<div style="font-size:11px;color:#166534">${_cgM(sum(x => x.cells[i].amt))}</div></td>`).join('')}
+      <td style="${B}"></td>
+      <td style="${B};font-size:15px">${lastCut ? _cgM(sum(x => x.cells[lastCut[1]].amt)) : '0'}</td></tr>`;
+  const legend = ev.map(e => `<span style="font-family:Roboto,sans-serif">${e.type === 'cut' ? '✂️' : e.type === 'return' ? '↩️' : '📦'} ${escapeHtml(e.date || '')} = ${escapeHtml(e.label || '')}</span>`).join(' · ');
   b.innerHTML = `<div class="card" style="padding:12px 14px;margin-bottom:10px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
-      <b>📜 السجل من الأول</b>
-      <span style="font-size:12px;color:var(--muted)">أول المدة ${escapeHtml(r.opening_as_of || '—')} · ${dels.length} توريدة · ${cuts.length} قطع · إجمالي القطوعات <b style="color:#166534">${_cgM(cuts.reduce((a, e) => a + e.amount, 0))}</b></span>
+      <b>📜 من الأول</b>
+      <span style="font-size:12px;color:var(--muted)">${dIdx.filter(([e]) => e.type !== 'return').length} توريدة · ${cIdx.length} قطع · إجمالي القطوعات <b style="color:#166534">${_cgM(cIdx.reduce((a, [e]) => a + e.amount, 0))}</b></span>
       <input class="form-input" style="max-width:260px;margin-inline-start:auto" placeholder="🔎 اسم الصنف / SKU / باركود" value="${escapeHtml(_cgLedQ)}" oninput="_cgLedQ=this.value;clearTimeout(window._cgLedT);window._cgLedT=setTimeout(cgRenderLedger,250)">
     </div>
-    <div class="card" style="overflow:auto;max-height:70vh"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
-      <thead style="position:sticky;top:0;z-index:2;background:var(--card)"><tr>
-        <th style="padding:6px 8px;text-align:right;position:sticky;right:0;background:var(--card)">الصنف</th>
-        <th style="padding:6px 8px;text-align:center;white-space:nowrap">أول المدة</th>${head}
-        <th style="padding:6px 8px;text-align:center;white-space:nowrap;border-inline-start:2px solid var(--border)">الرصيد الحالي</th></tr></thead>
+    <div class="card" style="overflow:auto;max-height:72vh;padding:0"><table style="border-collapse:collapse;font-size:12.5px;width:100%;background:#fff;color:#111">
+      <thead style="position:sticky;top:0;z-index:2">${head}</thead>
       <tbody>${body || '<tr><td colspan="99" style="padding:20px;text-align:center;color:var(--muted)">مفيش أصناف</td></tr>'}</tbody>
       <tfoot>${foot}</tfoot></table></div>
-    <div style="font-size:11px;color:var(--muted);margin-top:6px">كل خانة: الحركة ← الرصيد بعدها. في القطع الرصيد هو رصيد الإقفال المتسجّل فيه.</div>`;
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.8">${legend}</div>`;
 }
 
 
