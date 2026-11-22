@@ -1732,8 +1732,14 @@ tr:hover td{background:#fafbff}
   /* Topbar */
   .topbar{padding:0 10px;gap:6px}
   .topbar-title{font-size:14px}
-  .search-wrap{display:none} /* search في كل صفحة جواها */
-  .search-wrap input{width:130px}
+  /* 📱 v995: بحث الطلبات على الموبايل — أيقونة 🔍 بتفتح صف بعرض الشاشة تحت الشريط */
+  .topbar{position:relative}
+  .search-wrap{display:block;position:static}
+  .search-wrap input{display:none}
+  .search-wrap .search-ic{position:static;transform:none;font-size:19px;cursor:pointer;padding:6px 4px;display:inline-block}
+  .search-wrap.mopen{position:absolute;top:100%;left:0;right:0;padding:8px 10px;background:#fff;border-bottom:1px solid var(--border);box-shadow:0 6px 16px rgba(0,0,0,.08);z-index:1001}
+  .search-wrap.mopen input{display:block;width:100%;font-size:16px;padding:10px 12px 10px 38px}
+  .search-wrap.mopen .search-ic{position:absolute;left:18px;top:50%;transform:translateY(-50%);font-size:15px;padding:0}
 
   /* Hide non-essential desktop buttons in topbar */
   .topbar .desktop-only{display:none}
@@ -2153,7 +2159,7 @@ tr:hover td{background:#fafbff}
     <!-- 🏷️ v928: النسختين اتنقلوا من أسفل القايمة الجانبية للشريط اللي فوق -->
     <div id="sb-ver" class="desktop-only" title="دوس للتفاصيل" onclick="verShow()"
          style="font-size:11px;color:var(--muted);padding:6px 10px;border:1px solid var(--border);border-radius:20px;background:var(--bg);cursor:pointer;white-space:nowrap;font-family:Roboto,Cairo,sans-serif">…</div>
-    <div class="search-wrap"><span class="search-ic">🔍</span><input type="text" placeholder="بحث..." id="srch" oninput="onSearch(this.value)"></div>
+    <div class="search-wrap"><span class="search-ic" onclick="srchMobileToggle()">🔍</span><input type="text" placeholder="بحث..." id="srch" oninput="onSearch(this.value)"></div>
     <div class="api-badge wait desktop-only" id="api-badge">⏳ جاري...</div>
     <button class="btn btn-ghost desktop-only" onclick="syncNow()">🔄 مزامنة</button>
       <button class="btn btn-ghost desktop-only" id="btn-import-shopify" onclick="openImportModal()" style="color:var(--purple);border-color:var(--purple)">📥 استيراد من Shopify</button>
@@ -12316,7 +12322,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v994';
+const UI_BUILD = 'v995';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -14394,7 +14400,6 @@ function onSearch(q){
   }).join('') +
   `<div onclick="searchGoToOrders()" style="padding:8px 14px;text-align:center;font-size:12px;color:var(--accent);cursor:pointer;font-weight:700">عرض كل النتائج في صفحة الطلبات ←</div>`;
 
-  wrap.style.position='relative';
   wrap.appendChild(drop);
 
   // إغلاق عند الضغط خارج
@@ -14405,7 +14410,17 @@ function onSearch(q){
   },100);
 }
 
+// 📱 v995: فتح/قفل البحث على الموبايل
+function srchMobileToggle(force){
+  if(window.innerWidth>768){ $('srch')?.focus(); return; }
+  const w=document.querySelector('.search-wrap'); if(!w) return;
+  const open = force===undefined ? !w.classList.contains('mopen') : !!force;
+  w.classList.toggle('mopen', open);
+  if(open){ setTimeout(()=>$('srch')?.focus(),30); }
+  else { const d=document.getElementById('global-search-drop'); if(d) d.remove(); }
+}
 function searchGoToOrder(id){
+  srchMobileToggle(false);
   const drop=document.getElementById('global-search-drop');
   if(drop) drop.remove();
   $('srch').value='';
@@ -14420,6 +14435,7 @@ function searchGoToOrder(id){
 }
 
 function searchGoToOrders(){
+  srchMobileToggle(false);
   const drop=document.getElementById('global-search-drop');
   if(drop) drop.remove();
   goPage(document.querySelector('[data-p=orders]'),'orders');
@@ -70448,7 +70464,16 @@ function setShellOpen(){
     shell.id = 'set-shell';
     shell.innerHTML = `<style>
       #set-shell{display:grid;grid-template-columns:230px minmax(0,1fr);gap:16px;align-items:start}
-      @media(max-width:900px){#set-shell{grid-template-columns:1fr}}
+      @media(max-width:900px){#set-shell{grid-template-columns:1fr;gap:10px}}
+      #set-nav-sel{display:none;width:100%;font-size:14px;font-weight:700;padding:9px 10px}
+      @media(max-width:900px){
+        #set-nav{position:static;max-height:none;padding:8px;display:flex;flex-direction:column;gap:6px}
+        #set-nav #set-q{margin-bottom:0 !important}
+        #set-nav-list{display:none} #set-nav-sel{display:block}
+        #set-nav.q #set-nav-list{display:block;max-height:45vh;overflow:auto}
+        #set-hd{flex-wrap:wrap} #set-title{font-size:15px !important}
+      }
+      @media(max-width:600px){#set-shell .cfr{flex-wrap:wrap;padding:10px 12px}#set-shell .cfr>div:first-child{flex:1 1 100%}#set-shell .cfr .ctl{flex-wrap:wrap}}
       #set-nav{position:sticky;top:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:10px;max-height:calc(100vh - 110px);overflow:auto}
       #set-nav .cat{font-size:10.5px;color:var(--muted);font-weight:800;margin:12px 6px 4px}
       #set-nav .it{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;cursor:pointer;font-size:12.5px;font-weight:700}
@@ -70465,7 +70490,7 @@ function setShellOpen(){
       .cfsw.on{background:#16a34a} .cfsw.on::after{right:21px}
     </style>
     <div id="set-nav"><input id="set-q" class="form-input" placeholder="🔎 دوّر في كل الإعدادات" style="width:100%;font-size:12px;margin-bottom:4px"
-      oninput="_setQ=this.value;setNavRender();setShow()"><div id="set-nav-list"></div></div>
+      oninput="_setQ=this.value;setNavRender();setShow()"><select id="set-nav-sel" class="form-input" onchange="setPick(this.value)"></select><div id="set-nav-list"></div></div>
     <div id="set-main"><div id="set-hd" style="display:flex;align-items:center;gap:10px;margin:2px 4px 12px">
       <span id="set-title" style="font-weight:900;font-size:17px"></span><span id="set-chg"></span>
       <span id="set-saved" style="margin-inline-start:auto;font-size:12px;color:#16a34a;opacity:0;transition:opacity .3s">✓ اتحفظ</span></div></div>`;
@@ -70514,6 +70539,15 @@ function setNavRender(){
       return `<div class="cat">${c}</div>` + L.map(i => `<div class="it ${_setSel === i.key && !(q && _setSel === '__search') ? 'on' : ''}" onclick="setPick('${escapeHtml(i.key).replace(/'/g, "\\'")}')">
         <span style="width:18px;text-align:center">${i.icon}</span><span>${escapeHtml(i.title)}</span>${i.badge ? `<span class="b">${escapeHtml(String(i.badge))}</span>` : ''}</div>`).join('');
     }).join('') || '<div style="padding:10px;color:var(--muted);font-size:12px">مفيش نتايج</div>';
+  // 📱 v995: نفس الأقسام كقايمة منسدلة للموبايل
+  const nav = document.getElementById('set-nav'); if(nav) nav.classList.toggle('q', !!q);
+  const sel = document.getElementById('set-nav-sel');
+  if(sel){
+    sel.innerHTML = _SET_CATS.map(c => {
+      const L = items.filter(i => i.cat === c); if(!L.length) return '';
+      return `<optgroup label="${escapeHtml(c)}">` + L.map(i => `<option value="${escapeHtml(i.key)}" ${_setSel === i.key ? 'selected' : ''}>${i.icon} ${escapeHtml(i.title)}${!q && i.badge ? ' · ' + escapeHtml(String(i.badge)) : ''}</option>`).join('') + '</optgroup>';
+    }).join('');
+  }
 }
 function setPick(k){ _setSel = k; try{ if(k !== '__search') localStorage.setItem('set_sel', k); }catch(e){} setNavRender(); setShow(); }
 function setShow(){
