@@ -12322,7 +12322,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1001';
+const UI_BUILD = 'v1002';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -58018,12 +58018,10 @@ function filterAdvances(status, btn){
 
 async function openNewAdvance(){
   // املأ الموظفين
-  if(!_hrEmployees.length){
-    try{ _hrEmployees = await apiFetch('/api/hr/employees') || []; }catch(e){}
-  }
+  const _emps = await _hrEmpNames();   // 🔓 v1002: أسماء بس — مش محتاجة فتح قفل صفحة الموظفين
   const sel = document.getElementById('adv-emp');
   sel.innerHTML = '<option value="">-- اختر موظف --</option>' +
-    _hrEmployees.filter(e => e.active).map(e => `<option value="${e.id}">${escapeHtml(e.name_ar)} (${escapeHtml(e.code||'')})</option>`).join('');
+    _emps.filter(e => e.active).map(e => `<option value="${e.id}">${escapeHtml(e.name_ar)} (${escapeHtml(e.code||'')})</option>`).join('');
   
   document.getElementById('adv-amount').value = '';
   document.getElementById('adv-reason').value = '';
@@ -59311,13 +59309,17 @@ async function loadHrPenalties(){
   }
 }
 
+// 🔓 v1002: قايمة الموظفين للاختيار (جزاء/سلفة/مشتريات) — من غير
+//   الرواتب والبيانات الشخصية، فمش بتتقفل لما «الموظفين» تبقى بالباسورد
+async function _hrEmpNames(){
+  if(_hrEmployees.length) return _hrEmployees;
+  try{ return (await apiFetch('/api/hr/emp-names')) || []; }catch(e){ return []; }
+}
 async function openNewPenalty(){
-  if(!_hrEmployees.length){
-    try{ _hrEmployees = await apiFetch('/api/hr/employees') || []; }catch(e){}
-  }
+  const _emps = await _hrEmpNames();   // 🔓 v1002: أسماء بس — مش محتاجة فتح قفل صفحة الموظفين
   const sel = document.getElementById('pen-emp');
   sel.innerHTML = '<option value="">-- اختر موظف --</option>' +
-    _hrEmployees.filter(e => e.active).map(e => `<option value="${e.id}">${escapeHtml(e.name_ar)} (${escapeHtml(e.code||'')})</option>`).join('');
+    _emps.filter(e => e.active).map(e => `<option value="${e.id}">${escapeHtml(e.name_ar)} (${escapeHtml(e.code||'')})</option>`).join('');
   
   document.getElementById('pen-amount').value = '';
   document.getElementById('pen-date').value = _todayCairo();
@@ -59858,12 +59860,10 @@ async function deletePurchase(id){
 }
 
 async function openManualPurchase(){
-  if(!_hrEmployees.length){
-    try{ _hrEmployees = await apiFetch('/api/hr/employees') || []; }catch(e){}
-  }
+  const _emps = await _hrEmpNames();   // 🔓 v1002: أسماء بس — مش محتاجة فتح قفل صفحة الموظفين
   const sel = document.getElementById('purch-emp');
   sel.innerHTML = '<option value="">-- اختر موظف --</option>' +
-    _hrEmployees.filter(e => e.active).map(e => `<option value="${e.id}">${escapeHtml(e.name_ar)} (${escapeHtml(e.code||'')})</option>`).join('');
+    _emps.filter(e => e.active).map(e => `<option value="${e.id}">${escapeHtml(e.name_ar)} (${escapeHtml(e.code||'')})</option>`).join('');
   
   document.getElementById('purch-order').value = '';
   document.getElementById('purch-amount').value = '';
