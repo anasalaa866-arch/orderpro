@@ -12355,7 +12355,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1003';
+const UI_BUILD = 'v1004';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -42011,6 +42011,9 @@ async function viewPO(id){
       actionButtons += `<a href="${shopifyUrl}" target="_blank" class="btn btn-success btn-sm" style="text-decoration:none">🔗 افتح في Shopify (Transfer #${po.shopify_transfer_id})</a>`;
       // 🔄 v586: زامن المستلم من شوبيفاي
       actionButtons += `<button class="btn btn-sm" onclick="syncPOTransfer(${po.id})" style="background:#6366f1;border-color:#6366f1;color:#fff;font-weight:700">🔄 زامن الاستلام من Shopify</button>`;
+      // 📥 v1004: استلم كل الباقي في شوبيفاي من هنا
+      if(!['received','closed','cancelled'].includes(po.status))
+        actionButtons += `<button class="btn btn-sm" onclick="poShopifyReceive(${po.id})" style="background:#0f766e;border-color:#0f766e;color:#fff;font-weight:800">📥 استلم في Shopify</button>`;
     } else if(po.status === 'draft' || po.status === 'sent' || po.status === 'ordered'){
       // متاح للإرسال
       actionButtons += `<button class="btn btn-success btn-sm" onclick="sendPOToShopify(${po.id})" style="background:#16a34a;border-color:#16a34a">📤 ارسال لـ Shopify كـ Transfer</button>`;
@@ -45125,6 +45128,17 @@ async function sendPO(id){
 }
 
 // 🔄 v586: زامن استلام أمر شراء من الـ Transfer في شوبيفاي
+// 📥 v1004: يستلم كل الكمية الباقية في شوبيفاي (كمقبولة) ويزامن الأمر
+async function poShopifyReceive(id){
+  if(!confirm('هيتعمل استلام في شوبيفاي لكل الكمية الباقية على الترانسفير (والإضافات) كمقبولة، والمخزون هيزيد في المخزن المستلم.\n\nلو فيه حاجة ناقصة أو تالفة استلمها من شوبيفاي بالإيد بدل كده. تكمّل؟')) return;
+  toast('📥 بيستلم في شوبيفاي...');
+  const r = await apiFetch('/api/purchase-orders/' + id + '/shopify-receive', 'POST', {});
+  if(!r || r.error){ return toast('❌ ' + (r?.error || _errText(_apiLastErr, 'الاستلام ماتمّش')), 'error', 9000); }
+  const s = r.sync;
+  toast(`✅ اتستلم ${r.received_qty} قطعة${s ? ` · الأمر ${s.total_received}/${s.total_ordered}` : ''}${r.errors?.length ? ' · ⚠️ ' + r.errors.map(e => e.error).join(' · ') : ''}`, r.errors?.length ? 'error' : 'success', 7000);
+  try{ if(typeof viewPO === 'function') viewPO(id); }catch(e){}
+  try{ if(typeof loadPurchaseOrdersPage === 'function') loadPurchaseOrdersPage(); }catch(e){}
+}
 async function syncPOTransfer(id){
   toast('🔄 جاري القراءة من شوبيفاي...');
   try{
