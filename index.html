@@ -10578,6 +10578,7 @@ tr:hover td{background:#fafbff}
     <button class="btn btn-sm" id="cg-tab-report"  onclick="cgTab('report')">📊 التقرير</button>
     <button class="btn btn-sm" id="cg-tab-items"   onclick="cgTab('items')">📦 الأصناف ورصيد أول مدة</button>
     <button class="btn btn-sm" id="cg-tab-history" onclick="cgTab('history')">✂️ القطوعات <span id="cg-draft-badge"></span></button>
+    <button class="btn btn-sm" id="cg-tab-ledger" onclick="cgTab('ledger')">📜 من الأول</button>
   </div>
 
   <div id="cg-body"></div>
@@ -12355,7 +12356,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1005';
+const UI_BUILD = 'v1006';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -42413,7 +42414,7 @@ async function cgUnmark(id){
 
 function cgTab(t){
   _cgTab = t;
-  for(const k of ['report','items','history']){
+  for(const k of ['report','items','history','ledger']){
     const b = document.getElementById('cg-tab-' + k);
     if(!b) continue;
     const on = k === t;
@@ -42425,7 +42426,60 @@ function cgTab(t){
   if(t === 'report')  cgLoadReport();
   if(t === 'items')   cgLoadItems();
   if(t === 'history') cgLoadHistory();
+  if(t === 'ledger')  cgLoadLedger();   // 📜 v1006
 }
+// 📜 v1006: السجل من الأول — كل حركة عمود بترتيبها، ورصيد جاري لكل صنف
+let _cgLed = null, _cgLedQ = '';
+async function cgLoadLedger(){
+  const b = document.getElementById('cg-body');
+  b.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">⏳ بيجمّع السجل...</div>';
+  try{
+    const r = await apiFetch(`/api/consignment/${_cgSup}/ledger`);
+    if(!r || r.error) throw new Error(r?.error || _errText(_apiLastErr, 'فشل'));
+    _cgLed = r; cgRenderLedger();
+  }catch(e){ b.innerHTML = `<div style="color:var(--danger);padding:16px">❌ ${escapeHtml(e.message)}</div>`; }
+}
+function cgRenderLedger(){
+  const r = _cgLed, b = document.getElementById('cg-body'); if(!r || !b) return;
+  const ev = r.events || [];
+  const q = _cgLedQ.trim().toLowerCase();
+  const rows = (r.rows || []).filter(x => !q || (x.title + ' ' + (x.sku||'') + ' ' + (x.barcode||'')).toLowerCase().includes(q));
+  const N = v => _cgN(v);
+  const sty = { delivery: ['#eef2ff', '#4338ca', '📦'], cut: ['#f0fdf4', '#166534', '✂️'], ret: ['#fef2f2', '#991b1b', '↩️'] };
+  const st = e => e.type === 'delivery' ? sty.delivery : e.type === 'cut' ? sty.cut : sty.ret;
+  const head = ev.map(e => { const [bg, fg, ic] = st(e);
+    return `<th style="padding:6px 8px;background:${bg};color:${fg};font-size:11px;white-space:nowrap;text-align:center;border-inline-start:1px solid var(--border)">
+      ${ic} <span style="font-family:Roboto,sans-serif">${escapeHtml(e.label || '')}</span><div style="font-weight:600;font-size:10px;font-family:Roboto,sans-serif">${escapeHtml(e.date || '')}</div>
+      ${e.type === 'cut' ? `<div style="font-size:10px">باع · الرصيد${e.paid ? ' · ✅ اتدفع' : ''}</div>` : `<div style="font-size:10px">${e.type === 'delivery' ? 'ورّد' : 'رجع'} · الرصيد</div>`}</th>`; }).join('');
+  const body = rows.map(x => `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:6px 8px;font-weight:700;min-width:220px;position:sticky;right:0;background:var(--card)">${escapeHtml(x.title)}<div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(x.barcode || x.sku || '')}</div></td>
+      <td style="padding:6px 8px;text-align:center;font-family:Roboto,sans-serif;font-weight:800">${N(x.opening)}</td>
+      ${x.cells.map((c, i) => { const e = ev[i], [bg] = st(e);
+        const qv = c.q ? `<b style="color:${e.type === 'delivery' ? '#4338ca' : '#dc2626'}">${c.q > 0 ? '+' : ''}${N(c.q)}</b>` : '<span style="color:var(--muted)">·</span>';
+        return `<td style="padding:6px 8px;text-align:center;font-family:Roboto,sans-serif;background:${bg}55;border-inline-start:1px solid var(--border);white-space:nowrap">${qv}<span style="color:var(--muted);font-size:11px"> ← </span><b>${N(c.bal)}</b></td>`; }).join('')}
+      <td style="padding:6px 8px;text-align:center;font-family:Roboto,sans-serif;font-weight:900;border-inline-start:2px solid var(--border)">${N(x.current)}</td>
+    </tr>`).join('');
+  const foot = `<tr style="border-top:2px solid var(--border);font-weight:900;background:var(--bg)">
+      <td style="padding:7px 8px;position:sticky;right:0;background:var(--bg)">الإجمالي</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif">${N(rows.reduce((a, x) => a + x.opening, 0))}</td>
+      ${ev.map((e, i) => `<td style="text-align:center;font-family:Roboto,sans-serif;border-inline-start:1px solid var(--border);white-space:nowrap">${e.total_qty > 0 ? '+' : ''}${N(e.total_qty)}${e.type === 'cut' ? `<div style="font-size:11px;color:#166534">${_cgM(e.amount)}</div>` : ''}</td>`).join('')}
+      <td style="text-align:center;font-family:Roboto,sans-serif;border-inline-start:2px solid var(--border)">${N(rows.reduce((a, x) => a + x.current, 0))}</td></tr>`;
+  const cuts = ev.filter(e => e.type === 'cut'), dels = ev.filter(e => e.type === 'delivery');
+  b.innerHTML = `<div class="card" style="padding:12px 14px;margin-bottom:10px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+      <b>📜 السجل من الأول</b>
+      <span style="font-size:12px;color:var(--muted)">أول المدة ${escapeHtml(r.opening_as_of || '—')} · ${dels.length} توريدة · ${cuts.length} قطع · إجمالي القطوعات <b style="color:#166534">${_cgM(cuts.reduce((a, e) => a + e.amount, 0))}</b></span>
+      <input class="form-input" style="max-width:260px;margin-inline-start:auto" placeholder="🔎 اسم الصنف / SKU / باركود" value="${escapeHtml(_cgLedQ)}" oninput="_cgLedQ=this.value;clearTimeout(window._cgLedT);window._cgLedT=setTimeout(cgRenderLedger,250)">
+    </div>
+    <div class="card" style="overflow:auto;max-height:70vh"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+      <thead style="position:sticky;top:0;z-index:2;background:var(--card)"><tr>
+        <th style="padding:6px 8px;text-align:right;position:sticky;right:0;background:var(--card)">الصنف</th>
+        <th style="padding:6px 8px;text-align:center;white-space:nowrap">أول المدة</th>${head}
+        <th style="padding:6px 8px;text-align:center;white-space:nowrap;border-inline-start:2px solid var(--border)">الرصيد الحالي</th></tr></thead>
+      <tbody>${body || '<tr><td colspan="99" style="padding:20px;text-align:center;color:var(--muted)">مفيش أصناف</td></tr>'}</tbody>
+      <tfoot>${foot}</tfoot></table></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">كل خانة: الحركة ← الرصيد بعدها. في القطع الرصيد هو رصيد الإقفال المتسجّل فيه.</div>`;
+}
+
 
 // ───────────── التقرير ─────────────
 async function cgLoadReport(){
