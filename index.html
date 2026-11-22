@@ -12322,7 +12322,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1000';
+const UI_BUILD = 'v1001';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -43521,6 +43521,12 @@ function _cgZohoBox(st){
     <span style="flex:1">⏳ لسه مااتبعتش لزوهو${st.zoho_error ? ' — ' + escapeHtml(st.zoho_error) : ''}</span>
     <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();cgStlZoho(${st.id})">📤 ابعت لزوهو</button></div>`;
 }
+// ✔️ v1001: علامة «اتدفع» — مرجع بس
+async function cgStlPaid(id, on){
+  const r = await apiFetch(`/api/consignment/settlements/${id}/paid`, 'PATCH', { paid: !!on });
+  if(!r || r.error){ toast('❌ ' + (r?.error || _errText(_apiLastErr, 'ماتحفظش'))); }
+  cgLoadHistory();
+}
 async function cgStlZoho(id){
   toast('⏳ بيبعت لزوهو...');
   const r = await apiFetch(`/api/consignment/settlements/${id}/zoho`, 'POST', {});
@@ -43592,7 +43598,7 @@ async function cgLoadHistory(){
         <thead><tr style="background:var(--bg);border-bottom:2px solid var(--border);font-size:11px">
           <th style="padding:8px;text-align:right">الرقم</th><th style="padding:8px">التاريخ</th>
           <th style="padding:8px">أصناف</th><th style="padding:8px">قطع</th>
-          <th style="padding:8px">الإجمالي</th><th style="padding:8px">الحالة</th><th style="padding:8px">زوهو</th>
+          <th style="padding:8px">الإجمالي</th><th style="padding:8px">الحالة</th><th style="padding:8px">زوهو</th><th style="padding:8px">اتدفع؟</th>
         </tr></thead>
         <tbody>${list.map(x => `
           <tr onclick="cgOpenStl(${x.id})" style="border-bottom:1px solid var(--border);cursor:pointer${
@@ -43610,13 +43616,19 @@ async function cgLoadHistory(){
             <td style="padding:8px;text-align:center;font-size:11px">${x.status !== 'confirmed' ? '—'
               : x.zoho_po_id ? `<span style="color:#166534;font-weight:800;font-family:Roboto,sans-serif">✅ ${escapeHtml(x.zoho_po_number || '')}</span>`
               : `<button class="btn btn-sm btn-primary" title="${escapeHtml(x.zoho_error || '')}" onclick="event.stopPropagation();cgStlZoho(${x.id})">📤 ابعت</button>${x.zoho_error ? '<div style="color:#dc2626;font-size:10px;margin-top:2px">⚠️ فشل — افتحه للسبب</div>' : ''}`}</td>
+            <td style="padding:8px;text-align:center" onclick="event.stopPropagation()">${x.status !== 'confirmed' ? '—'
+              : `<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;font-weight:800;color:${x.paid ? '#166534' : 'var(--muted)'}"
+                  title="${x.paid && x.paid_at ? 'اتعلّم ' + new Date(x.paid_at).toLocaleDateString('ar-EG-u-nu-latn') + (x.paid_by ? ' · ' + escapeHtml(x.paid_by) : '') : 'للمرجع بس — مالوش أي تأثير'}">
+                  <input type="checkbox" ${x.paid ? 'checked' : ''} onchange="cgStlPaid(${x.id}, this.checked)" style="width:16px;height:16px">${x.paid ? 'اتدفع' : 'لسه'}</label>`}</td>
           </tr>`).join('')}</tbody>
         ${(() => { const c = list.filter(x => x.status === 'confirmed');
           return c.length ? `<tfoot><tr style="background:var(--bg);font-weight:900;border-top:2px solid var(--border)">
             <td style="padding:8px">الإجمالي (${_cgN(c.length)} قطع متأكّد)</td><td></td><td></td>
             <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif">${_cgN(c.reduce((a,x) => a + (+x.total_qty||0), 0))}</td>
             <td style="padding:8px;text-align:center;font-family:Roboto,sans-serif">${_cgM(c.reduce((a,x) => a + (+x.subtotal||0), 0))}</td><td></td>
-            <td style="padding:8px;text-align:center;font-size:11px">${c.filter(x => !x.zoho_po_id).length ? '⏳ ' + c.filter(x => !x.zoho_po_id).length + ' مستني' : '✅'}</td></tr></tfoot>` : ''; })()}
+            <td style="padding:8px;text-align:center;font-size:11px">${c.filter(x => !x.zoho_po_id).length ? '⏳ ' + c.filter(x => !x.zoho_po_id).length + ' مستني' : '✅'}</td>
+            <td style="padding:8px;text-align:center;font-size:11px;line-height:1.6">${(() => { const u = c.filter(x => !x.paid);
+              return u.length ? `<span style="color:#b45309">لسه ${_cgM(u.reduce((a,x) => a + (+x.subtotal||0), 0))}</span>` : '<span style="color:#166534">✅ كله اتدفع</span>'; })()}</td></tr></tfoot>` : ''; })()}
       </table></div>`;
   }catch(e){ b.innerHTML = `<div style="color:var(--danger);padding:16px">❌ ${escapeHtml(e.message)}</div>`; }
 }
