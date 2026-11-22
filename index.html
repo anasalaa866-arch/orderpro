@@ -12322,7 +12322,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v997';
+const UI_BUILD = 'v998';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -13570,7 +13570,8 @@ async function apiFetch(path, method='GET', body=null){
       } catch(parseErr){
         // الـ response مش JSON - استخدم الـ status code
       }
-      throw new Error(errMsg);
+      // 🚑 v998: رفض من السيرفر (409/400…) مش انقطاع شبكة — مايتحطّش في طابور الأوفلاين
+      const he = new Error(errMsg); he.http = r.status; throw he;
     }
     const data = _xssClean(await r.json(), 0);   // 🛡️ v736
 
@@ -13590,7 +13591,7 @@ async function apiFetch(path, method='GET', body=null){
     return data;
   }catch(e){
     // الشبكة فشلت — العمليات الكتابية تتحفظ في الـ queue
-    if(method !== 'GET' && !e.message.match(/^\d+$/)){
+    if(method !== 'GET' && !e.http && !e.message.match(/^\d+$/)){
       addToOfflineQueue(path, method, body);
     }
     console.warn('API:', path, e.message);
@@ -43415,10 +43416,9 @@ async function cgCut(){
   if(!confirm(msg)) return;
   try{
     const r = await apiFetch(`/api/consignment/${_cgSup}/settlements`, 'POST', {});
-    if(r?.error){
-      if(r.settlement_id){ toast('في قطع مفتوح — بيفتحه'); return cgOpenStl(r.settlement_id); }
-      return toast('❌ ' + r.error);
-    }
+    // 🚑 v998: في قطع مفتوح بالفعل → افتحه بدل «Cannot read … settlement»
+    if(r?.open_id){ toast('📝 في قطع مفتوح لنفس المورد — بيفتحه', 'success'); return cgOpenStl(r.open_id); }
+    if(!r || !r.settlement){ return toast('❌ ' + (r?.error || _errText(_apiLastErr, 'القطع ماتعملش'))); }
     cgOpenStl(r.settlement.id);
   }catch(e){ toast('❌ ' + e.message); }
 }
