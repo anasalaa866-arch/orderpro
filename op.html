@@ -12316,7 +12316,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v993';
+const UI_BUILD = 'v994';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -62847,6 +62847,7 @@ function goPage(el,page){
   if(page==='reports')renderReports();
   if(page==='notifs')renderNotifs();
   if(page==='settings')renderUsersAdmin();
+  if(page==='settings')setShellOpen();          // ⚙️ v994
   if(page==='delivery-sheet')dsInit();
   if(page==='settle-history'){
     if(!_settlementsLoaded && API_URL){
@@ -70397,12 +70398,216 @@ function cfgOpen(){
   cfgLoad();
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// ⚙️ v994: صفحة الإعدادات الجديدة — قايمة أقسام + قسم واحد ظاهر + بحث
+//   الكروت القديمة بتتنقل زي ما هي (بنفس الـ handlers) جوه أقسام،
+//   و«القيم والحدود» بقت قسم لكل مجموعة، بمفاتيح ووقت وأيام ووحدات.
+// ═══════════════════════════════════════════════════════════════════
+let _cfgRows = null, _cfgGroupSel = null, _setSel = null, _setQ = '', _setBuilt = false;
+const _SET_CATS = ['عام', 'الإعلانات وجوجل', 'المبيعات والعملاء', 'الشحن والتوصيل', 'المخزون والمشتريات', 'الماليات', 'أدوات وتقارير'];
+function _setCatOf(name){
+  const n = String(name || '');
+  if(/جوجل|Meta|إعلان|Winners|تقييم المنتجات|Merchant|فيد/i.test(n)) return 'الإعلانات وجوجل';
+  if(/بوسطة|شحن|توصيل|مندوب|مناديب|عقد/.test(n)) return 'الشحن والتوصيل';
+  if(/مورد|شراء|تحت البيع|مخزون|جرد|صلاحية|تموين|ترتيب/.test(n)) return 'المخزون والمشتريات';
+  if(/سلات|عملاء|طلبات|Talabat|كاشير|المحل|عروض|كود/.test(n)) return 'المبيعات والعملاء';
+  if(/خزنة|بنك|Paymob|Zoho|فلوس|مالي|شيكات/.test(n)) return 'الماليات';
+  return 'عام';
+}
+function _setIsAdmin(){ return currentUser?.username === 'admin' || currentUser?.role === 'admin'; }
+// الكروت القديمة → أقسام (بالعنوان) — اللي مايتعرفش بيروح «أخرى» عشان مايضيعش
+function _setClassify(el){
+  const id = el.id || '';
+  const t = (el.querySelector('h3,h4,span[style*="font-weight:900"],.card-header')?.textContent || el.textContent || '').slice(0, 160);
+  const fixed = { 'lk-settings':['security','الأمان والباسورد','🔒','عام'], 'tg-settings':['telegram','تيليجرام','🤖','عام'],
+    'ch-settings':['channels','قنوات البيع','📡','المبيعات والعملاء'], 'tc-settings':['treasury','أقسام حركات الخزنة','🏷️','الماليات'],
+    'pc-settings':['pricecheck','شاشة فحص السعر','🖥️','المبيعات والعملاء'], 'cr-settings':['courierfail','نسبة فشل التوصيل لكل مندوب','📊','أدوات وتقارير'],
+    'vc-settings':['visa','مراجعة فيزا الكاشير','🧾','أدوات وتقارير'], 'pm-settings':['paymob','تشخيص Paymob','🔑','أدوات وتقارير'],
+    'bosta-setup-banner2':['bosta','ربط بوسطة','🚚','الشحن والتوصيل'], 'bosta-setup-form':['bosta','ربط بوسطة','🚚','الشحن والتوصيل'] };
+  if(fixed[id]) return fixed[id];
+  if(el.querySelector('#users-list-admin')) return ['users','المستخدمين والصلاحيات','👥','عام'];
+  if(el.querySelector('#bwh-box') || /بوسطة|التحصيل/.test(t) || /بوسطة/.test(el.textContent.slice(0, 400))) return ['bosta','ربط بوسطة','🚚','الشحن والتوصيل'];
+  if(/الإشعارات/.test(t) && el.querySelector('.toggle')) return ['__hide'];
+  if(el.querySelector('#cfg-api2') || /خطوات ربط Shopify/.test(t)) return ['server','ربط Shopify والسيرفر','🔌','أدوات وتقارير'];
+  if(/الصيانة|مسحة حالات|Duplicates|المكرر/i.test(t)) return ['maint','أدوات الصيانة','🛠️','أدوات وتقارير'];
+  return ['other','أخرى','📁','أدوات وتقارير'];
+}
+function setShellOpen(){
+  const page = document.getElementById('page-settings');
+  if(!page || !_setIsAdmin()) return;
+  if(!_setBuilt){
+    _setBuilt = true;
+    // الكروت اللي على أول مستوى (أو اللي جوه شبكة .sg)
+    const blocks = [];
+    page.querySelectorAll('.card, #bosta-setup-banner2').forEach(el => {
+      const up = el.parentElement?.closest('.card');
+      if(up && page.contains(up)) return;
+      blocks.push(el);
+    });
+    const shell = document.createElement('div');
+    shell.id = 'set-shell';
+    shell.innerHTML = `<style>
+      #set-shell{display:grid;grid-template-columns:230px minmax(0,1fr);gap:16px;align-items:start}
+      @media(max-width:900px){#set-shell{grid-template-columns:1fr}}
+      #set-nav{position:sticky;top:12px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:10px;max-height:calc(100vh - 110px);overflow:auto}
+      #set-nav .cat{font-size:10.5px;color:var(--muted);font-weight:800;margin:12px 6px 4px}
+      #set-nav .it{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;cursor:pointer;font-size:12.5px;font-weight:700}
+      #set-nav .it:hover{background:var(--bg)} #set-nav .it.on{background:var(--primary);color:#fff}
+      #set-nav .it .b{margin-inline-start:auto;white-space:nowrap;font-size:10px;background:#dbeafe;color:#1e40af;border-radius:6px;padding:0 6px}
+      #set-nav .it.on .b{background:rgba(255,255,255,.25);color:#fff}
+      .set-sec>.card,.set-sec>div{margin-bottom:14px}
+      .cfr{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)}
+      .cfr:last-child{border-bottom:none} .cfr.chg{background:#eff6ff}
+      .cfr .nm{font-weight:800;font-size:13px} .cfr .nt{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.6}
+      .cfr .ctl{display:flex;align-items:center;gap:6px;flex-shrink:0}
+      .cfsw{width:42px;height:24px;border-radius:12px;background:#cbd5e1;position:relative;cursor:pointer;transition:background .15s;border:none;padding:0}
+      .cfsw::after{content:'';position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:right .15s}
+      .cfsw.on{background:#16a34a} .cfsw.on::after{right:21px}
+    </style>
+    <div id="set-nav"><input id="set-q" class="form-input" placeholder="🔎 دوّر في كل الإعدادات" style="width:100%;font-size:12px;margin-bottom:4px"
+      oninput="_setQ=this.value;setNavRender();setShow()"><div id="set-nav-list"></div></div>
+    <div id="set-main"><div id="set-hd" style="display:flex;align-items:center;gap:10px;margin:2px 4px 12px">
+      <span id="set-title" style="font-weight:900;font-size:17px"></span><span id="set-chg"></span>
+      <span id="set-saved" style="margin-inline-start:auto;font-size:12px;color:#16a34a;opacity:0;transition:opacity .3s">✓ اتحفظ</span></div></div>`;
+    page.insertBefore(shell, page.firstChild);
+    const main = shell.querySelector('#set-main');
+    window._SET_SECS = {};
+    const sec = (key, title, icon, cat) => {
+      if(!_SET_SECS[key]){
+        const w = document.createElement('div'); w.className = 'set-sec'; w.dataset.sec = key; w.style.display = 'none'; main.appendChild(w);
+        _SET_SECS[key] = { key, title, icon, cat, el: w };
+      }
+      return _SET_SECS[key];
+    };
+    for(const el of blocks){
+      if(el.id === 'cfg-settings'){ sec('cfg', 'القيم والحدود', '⚙️', 'عام').el.appendChild(el); continue; }
+      const [k, title, icon, cat] = _setClassify(el);
+      if(k === '__hide'){ el.style.display = 'none'; continue; }
+      sec(k, title, icon, cat).el.appendChild(el);
+    }
+    // الشبكة القديمة .sg فضلت فاضية — نخفيها
+    page.querySelectorAll('.sg').forEach(g => { if(!g.querySelector('.card')) g.style.display = 'none'; });
+    try{ _setSel = localStorage.getItem('set_sel') || null; }catch(e){}
+  }
+  setNavRender(); setShow();
+}
+function _setCfgGroups(){
+  const g = [];
+  for(const r of (_cfgRows || [])){ if(!g.includes(r.group)) g.push(r.group); }
+  return g;
+}
+function setNavRender(){
+  const box = document.getElementById('set-nav-list'); if(!box) return;
+  const q = String(_setQ || '').trim().toLowerCase();
+  const items = [];
+  for(const s of Object.values(window._SET_SECS || {})){ if(s.key !== 'cfg') items.push({ key: s.key, title: s.title, icon: s.icon, cat: s.cat }); }
+  for(const g of _setCfgGroups()){
+    const rows = _cfgRows.filter(r => r.group === g), chg = rows.filter(r => r.changed).length;
+    const hit = q ? rows.filter(r => `${r.label} ${r.note || ''} ${g}`.toLowerCase().includes(q)).length : 0;
+    items.push({ key: 'cfg:' + g, title: g, icon: ({ 'الإعلانات وجوجل':'📣', 'الشحن والتوصيل':'🚚', 'المخزون والمشتريات':'📦', 'المبيعات والعملاء':'🛒', 'الماليات':'💰' })[_setCatOf(g)] || '⚙️', cat: _setCatOf(g), badge: q ? (hit || '') : (chg ? chg + ' معدّل' : ''), hit });
+  }
+  const vis = items.filter(i => !q || i.hit || i.title.toLowerCase().includes(q));
+  if(!_setSel || !items.some(i => i.key === _setSel)) _setSel = (items.find(i => i.key.startsWith('cfg:')) || items[0])?.key || null;
+  box.innerHTML = (q ? `<div class="it ${_setSel === '__search' ? 'on' : ''}" onclick="setPick('__search')">🔎 كل النتايج</div>` : '')
+    + _SET_CATS.map(c => {
+      const L = vis.filter(i => i.cat === c); if(!L.length) return '';
+      return `<div class="cat">${c}</div>` + L.map(i => `<div class="it ${_setSel === i.key && !(q && _setSel === '__search') ? 'on' : ''}" onclick="setPick('${escapeHtml(i.key).replace(/'/g, "\\'")}')">
+        <span style="width:18px;text-align:center">${i.icon}</span><span>${escapeHtml(i.title)}</span>${i.badge ? `<span class="b">${escapeHtml(String(i.badge))}</span>` : ''}</div>`).join('');
+    }).join('') || '<div style="padding:10px;color:var(--muted);font-size:12px">مفيش نتايج</div>';
+}
+function setPick(k){ _setSel = k; try{ if(k !== '__search') localStorage.setItem('set_sel', k); }catch(e){} setNavRender(); setShow(); }
+function setShow(){
+  const S = window._SET_SECS || {}; if(!document.getElementById('set-main')) return;
+  const q = String(_setQ || '').trim();
+  let key = _setSel;
+  if(q && key && key.startsWith('cfg:')) key = '__search';
+  const isCfg = key && (key.startsWith('cfg:') || key === '__search');
+  for(const s of Object.values(S)) s.el.style.display = (isCfg ? s.key === 'cfg' : s.key === key) ? '' : 'none';
+  _cfgGroupSel = isCfg ? (key === '__search' ? '__search' : key.slice(4)) : null;
+  const t = document.getElementById('set-title'), c = document.getElementById('set-chg');
+  if(t) t.textContent = key === '__search' ? `نتايج «${q}»` : isCfg ? key.slice(4) : (S[key]?.title || '');
+  if(c){ const n = isCfg && key !== '__search' ? (_cfgRows || []).filter(r => r.group === key.slice(4) && r.changed).length : 0;
+    c.innerHTML = n ? `<span style="font-size:11px;background:#dbeafe;color:#1e40af;border-radius:7px;padding:2px 8px">${n} معدّل</span>` : ''; }
+  // كارت القيم: من غير هيدره القديم
+  const cs = document.getElementById('cfg-settings');
+  if(cs && isCfg){ const hd = cs.firstElementChild; if(hd && !hd.id) hd.style.display = 'none'; cfgRender(); }
+}
+function _cfgKind(r){
+  const L = `${r.label} ${r.note || ''}`;
+  if(r.type === 'text' && /_time$/.test(r.key) && /^\d{2}:\d{2}$/.test(String(r.value || ''))) return 'time';
+  if(r.key === 'ads_tg_week_day') return 'weekday';
+  if(r.type !== 'text' && (/\(1\/0\)|1 = أيوه|\(1 = /.test(L))) return 'bool';
+  return r.type === 'text' ? 'text' : 'num';
+}
+function _cfgUnit(r){
+  const l = String(r.label || '');
+  if(r.type === 'pct' || /%/.test(l)) return '%';
+  if(/\(ج\b|\(ج\/|بالجنيه|\(ج\)|ج\)/.test(l)) return 'ج';
+  if(/أيام|\(يوم|كام يوم|بالأيام/.test(l)) return 'يوم';
+  if(/دقيقة|دقايق/.test(l)) return 'دقيقة';
+  if(/ساعة/.test(l) && !/ميعاد|ساعة السحب/.test(l)) return 'ساعة';
+  return '';
+}
+const _cfgCleanLabel = l => String(l || '').replace(/\s*\(1\/0\)\s*/g, ' ').replace(/[؟?]\s*$/, '').replace(/\s*%\s*$/, '').trim();
+function _cfgRow(r){
+  const k = _cfgKind(r), u = _cfgUnit(r), key = r.key;
+  const days = ['الحد','الاتنين','التلات','الأربع','الخميس','الجمعة','السبت'];
+  let ctl;
+  if(k === 'bool') ctl = `<button class="cfsw ${Number(r.value) ? 'on' : ''}" onclick="cfgSet('${key}', this.classList.contains('on') ? '0' : '1')" title="${Number(r.value) ? 'شغّال' : 'مقفول'}"></button>`;
+  else if(k === 'time') ctl = `<input type="time" class="form-input" style="width:120px;direction:ltr" value="${escapeHtml(r.value)}" onchange="cfgSet('${key}', this.value)">`;
+  else if(k === 'weekday') ctl = `<select class="form-input" style="width:130px" onchange="cfgSet('${key}', this.value)">${days.map((d, i) => `<option value="${i}" ${Number(r.value) === i ? 'selected' : ''}>${d}</option>`).join('')}</select>`;
+  else if(r.type === 'text' && (r.max || 0) > 100) ctl = `<textarea class="form-input" rows="3" maxlength="${r.max}" placeholder="فاضي = مقفول" style="width:min(380px,60vw);font-size:12.5px" onchange="cfgSet('${key}', this.value)">${escapeHtml(r.value ?? '')}</textarea>`;
+  else if(r.type === 'text') ctl = `<input class="form-input" type="text" maxlength="${r.max || 60}" placeholder="فاضي = مقفول" style="width:220px;direction:ltr" value="${escapeHtml(r.value ?? '')}" onchange="cfgSet('${key}', this.value)">`;
+  else ctl = `<input class="form-input" type="number" step="any" inputmode="decimal" style="width:120px;direction:ltr;text-align:center;font-family:Roboto,sans-serif;font-weight:700" value="${r.value}" onchange="cfgSet('${key}', this.value)">`;
+  const defTxt = k === 'bool' ? (Number(r.def) ? 'شغّال' : 'مقفول') : k === 'weekday' ? days[Number(r.def)] || r.def : (r.def === '' ? 'فاضي' : r.def);
+  return `<div class="cfr ${r.changed ? 'chg' : ''}" data-cfg-key="${key}">
+    <div style="flex:1;min-width:0"><div class="nm">${escapeHtml(_cfgCleanLabel(r.label))}${r.changed ? ' <span style="font-size:10.5px;color:#1d4ed8;font-weight:700">● معدّل</span>' : ''}
+      ${r.expired ? ' <span style="font-size:10.5px;color:#dc2626">⏰ العقد خلص</span>' : r.expiring ? ' <span style="font-size:10.5px;color:#92400e">⏳ قرب يخلص</span>' : ''}</div>
+      ${r.note ? `<div class="nt">${escapeHtml(r.note)}</div>` : ''}${r.expires ? `<div class="nt">لحد ${escapeHtml(r.expires)}</div>` : ''}</div>
+    <div class="ctl">${ctl}${u ? `<span style="font-size:12px;color:var(--muted);min-width:26px">${u}</span>` : ''}
+      ${r.changed ? `<button class="btn btn-ghost btn-xs" title="رجّعه للأصلي" onclick="cfgSet('${key}', null, true)">↩️ ${escapeHtml(String(defTxt))}</button>` : ''}</div></div>`;
+}
+function cfgRender(){
+  const body = document.getElementById('cfg-body'); if(!body || !_cfgRows) return;
+  const q = String(_setQ || '').trim().toLowerCase();
+  let rows = _cfgRows;
+  if(_cfgGroupSel === '__search') rows = rows.filter(r => `${r.label} ${r.note || ''} ${r.group}`.toLowerCase().includes(q));
+  else if(_cfgGroupSel) rows = rows.filter(r => r.group === _cfgGroupSel);
+  const bad = _cfgRows.filter(r => r.expired);
+  const grp = [];
+  for(const r of rows){ let g = grp[grp.length - 1]; if(!g || g.n !== r.group){ g = { n: r.group, L: [] }; grp.push(g); } g.L.push(r); }
+  body.parentElement.style.padding = '0';
+  body.innerHTML = (bad.length ? `<div style="background:#fee2e2;color:#991b1b;font-size:12.5px;padding:10px 16px;border-bottom:1px solid #fca5a5">⏰ <b>${bad.length}</b> قيمة عقدها خلص: ${bad.map(x => escapeHtml(x.label)).join(' · ')}</div>` : '')
+    + (grp.map(g => (_cfgGroupSel === '__search' ? `<div style="padding:9px 16px 4px;font-size:11px;font-weight:800;color:var(--primary);background:var(--bg)">${escapeHtml(g.n)}</div>` : '') + g.L.map(_cfgRow).join('')).join('')
+       || '<div style="padding:20px;color:var(--muted)">مفيش إعدادات بالبحث ده</div>');
+}
+async function cfgSet(key, value, reset){
+  const send = async confirmed => {
+    const b = reset ? { key, reset: true } : { key, value, confirm: confirmed };
+    const r = await apiFetch('/api/config', 'POST', b);
+    if(r === null) throw new Error(_errText(_apiLastErr, 'النداء فشل'));
+    return r;
+  };
+  try{
+    let r = await send(false);
+    if(r?.need_confirm || (r?.error && /أكّدها/.test(r.error))){
+      if(!confirm(`القيمة دي بعيدة جداً عن الأصلي (${r.def}). متأكد؟`)){ cfgLoad(); return; }
+      r = await send(true);
+    }
+    if(r?.error) throw new Error(r.error);
+    const s = document.getElementById('set-saved'); if(s){ s.style.opacity = 1; clearTimeout(s._t); s._t = setTimeout(() => s.style.opacity = 0, 1800); }
+    await cfgLoad();
+  }catch(e){ toast('❌ ' + (e.message || e)); cfgLoad(); }
+}
 async function cfgLoad(){
   const body = document.getElementById('cfg-body');
   if(!body) return;
   body.innerHTML = '<span style="color:var(--muted)">⏳...</span>';
   try{
     const d = apiNN(await apiFetch('/api/config'), 'القيم');
+    _cfgRows = d.rows;
+    // ⚙️ v994: الشكل الجديد (قسم لكل مجموعة) لما صفحة الإعدادات الجديدة تبقى مبنية
+    if(_setBuilt){ setNavRender(); setShow(); return; }
     const groups = [];
     for(const r of d.rows){
       let g = groups[groups.length-1];
