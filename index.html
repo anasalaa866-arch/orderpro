@@ -12356,7 +12356,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1007';
+const UI_BUILD = 'v1008';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -13974,6 +13974,7 @@ document.addEventListener('DOMContentLoaded', () => setTimeout(verLoad, 2000));
 //   الفترة، فتطلب 30 يوم وتستلم بيانات الـ 60. دلوقتي أي نداء غير
 //   الدورة بيجيب بيانات جديدة أكيد — بس بالدور، مش فوق بعضه.
 let _loadOrdersBusy = null;
+const _ordersSync = { since: null, range: null, fullAt: 0 };   // 📉 v1008
 async function loadOrders(){
   const prev = _loadOrdersBusy;
   const p = (async () => {
@@ -13998,8 +13999,24 @@ async function _loadOrdersInner(){
                  : ordersRange === 'all' ? '?days=all'
                  : '?days=' + ordersRange;
   
-  const data=await apiFetch('/api/orders' + queryStr);
+  // 📉 v1008: بعد أول تحميل بنطلب اللي اتغيّر بس (?since=) — وتحميل كامل كل 10 دقايق
+  const _rk = ordersRange || '';
+  const _full = !_ordersSync.since || _ordersSync.range !== _rk || (Date.now() - _ordersSync.fullAt) > 10 * 60 * 1000 || !orders.length;
+  const _q = _full ? queryStr : (queryStr ? queryStr + '&' : '?') + 'since=' + encodeURIComponent(_ordersSync.since);
+  const data=await apiFetch('/api/orders' + _q);
   if(!data)return;
+  if(data.delta){
+    const ch = new Map((data.orders || []).map(o => [o.id, o]));
+    const keep = new Set(data.ids || []);
+    const byId = new Map(orders.map(o => [o.id, o]));
+    for(const [id, o] of ch) byId.set(id, o);
+    // بنبني القايمة بترتيب السيرفر؛ اللي مااتغيّرش بيفضل بنفس الـ object
+    data.orders = (data.ids || []).filter(id => byId.has(id)).map(id => ch.get(id) || byId.get(id));
+    if(data.orders.length !== keep.size){ _ordersSync.since = null; }   // ناقص حاجة → تحميل كامل المرة الجاية
+  } else {
+    _ordersSync.fullAt = Date.now(); _ordersSync.range = _rk;
+  }
+  if(data.last_updated) _ordersSync.since = data.last_updated;
   if(data.default_days) _ordersDefaultDays = String(data.default_days);
   const prev=orders.length;
   
