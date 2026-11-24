@@ -12422,7 +12422,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1025';
+const UI_BUILD = 'v1026';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -13540,7 +13540,7 @@ function lkSetRender(){
   if(!_lkSet) return;
   const q = (document.getElementById('lk-q')?.value || '').trim().toLowerCase();
   const all = Object.entries(PAGE_T)
-    .filter(([k,v]) => !q || v.toLowerCase().includes(q) || k.includes(q))
+    .filter(([k,v]) => !q || matchTokens(v + ' ' + k, q))
     .sort((a,b) => {
       const sa = _lkSet.has(a[0]) ? 0 : 1, sb = _lkSet.has(b[0]) ? 0 : 1;
       return sa - sb || a[1].localeCompare(b[1], 'ar');
@@ -14492,7 +14492,7 @@ function onSearch(q){
   const ql = q.toLowerCase();
   const results = orders.filter(o=>
     (o.id||'').toLowerCase().includes(ql) ||
-    (o.name||'').toLowerCase().includes(ql) ||
+    matchTokens(o.name, ql) ||
     (o.phone||'').replace(/\D/g,'').includes(ql.replace(/\D/g,'')) ||
     (o.area||'').toLowerCase().includes(ql) ||
     (o.shopifyId||'').includes(ql)
@@ -20933,7 +20933,7 @@ function renderOrderTracker(){
     displayNums = displayNums.filter(n => {
       const o = byNum[n];
       if(!o) return String(n).includes(search);
-      return (o.name||'').toLowerCase().includes(search) ||
+      return matchTokens(o.name, search) ||
              (o.phone||'').includes(search) ||
              String(n).includes(search);
     });
@@ -21147,8 +21147,7 @@ function renderSettlementsReceipts(){
     _pool = [..._pendingSettlements, ...window._stlSearchResults.filter(x=>!seen.has(x.id))];
   }
   const _match = (s) => !_q || String(s.id) === _q || String(s.id).includes(_q)
-    || String(s.cashier_name||'').toLowerCase().includes(_q)
-    || String(s.manager_name||'').toLowerCase().includes(_q);
+    || matchTokens(String(s.cashier_name||'') + ' ' + String(s.manager_name||''), _q);
   const pending = _pool.filter(isPending).filter(_match);
   const received = _pool.filter(s => !isPending(s)).filter(_match);
   const activeCount = (_activeShifts || []).length;
@@ -24780,10 +24779,7 @@ function renderTasksList(){
   const q = (document.getElementById('tasks-search')?.value || '').trim().toLowerCase();
   let list = _tasks;
   if (q) list = list.filter(t =>
-    (t.title || '').toLowerCase().includes(q) ||
-    (t.description || '').toLowerCase().includes(q) ||
-    (t.assigned_to || '').toLowerCase().includes(q) ||
-    (t.assigned_by || '').toLowerCase().includes(q)
+    matchTokens([t.title, t.description, t.assigned_to, t.assigned_by].join(' '), q)
   );
 
   const cont = document.getElementById('tasks-list');
@@ -26489,7 +26485,7 @@ function mtaRender(){
   const isP = _mtaT === 'p';
   let R = (isP ? _mta.products : _mta.campaigns).filter(r => {
     const name = isP ? `${r.title} ${r.variant || ''} ${r.sku || ''} ${r.key}` : `${r.name} ${r.objective || ''}`;
-    if(q && !name.toLowerCase().includes(q)) return false;
+    if(q && !matchTokens(name, q)) return false;
     const pv = isP ? r.poas : r.roas;
     if(f === 'spend' && !(r.spend > 0)) return false;
     if(f === 'loss' && !(r.spend > 0 && (pv ?? 0) < 1)) return false;
@@ -26586,7 +26582,7 @@ function gapRender(){
   const isP = _gapT === 'p';
   let R = (isP ? _gap.products : _gap.campaigns).filter(r => {
     const name = isP ? `${r.title} ${r.variant || ''} ${r.sku || ''} ${r.key}` : `${r.name} ${r.objective || ''}`;
-    if(q && !name.toLowerCase().includes(q)) return false;
+    if(q && !matchTokens(name, q)) return false;
     const pv = isP ? r.poas : r.roas;
     if(f === 'spend' && !(r.spend > 0)) return false;
     if(f === 'loss' && !(r.spend > 0 && (pv ?? 0) < 1)) return false;
@@ -28643,7 +28639,7 @@ function renderChecksPage(){
     if(fromV) list=list.filter(c=>c.date && c.date>=fromV);
     if(toV) list=list.filter(c=>c.date && c.date<=toV);
   }
-  if(q)list=list.filter(c=>(chkNumShow(c)+' '+c.num+c.payee+(c.invoice||'')).toLowerCase().includes(q)||(/^\d{3,}$/.test(q)&&_chkNorm(c.num).includes(_chkNorm(q))));
+  if(q)list=list.filter(c=>matchTokens(chkNumShow(c)+' '+c.num+' '+c.payee+' '+(c.invoice||''), q)||(/^\d{3,}$/.test(q)&&_chkNorm(c.num).includes(_chkNorm(q))));
   list.sort((a,b)=>new Date(a.date)-new Date(b.date));
 
   // 🆕 v250: الأرقام ديناميكية - من الـ filtered list
@@ -28761,7 +28757,7 @@ function getFilteredChkList(){
     if(fromV) list=list.filter(c=>c.date && c.date>=fromV);
     if(toV) list=list.filter(c=>c.date && c.date<=toV);
   }
-  if(q)list=list.filter(c=>(chkNumShow(c)+' '+c.num+c.payee+(c.invoice||'')).toLowerCase().includes(q)||(/^\d{3,}$/.test(q)&&_chkNorm(c.num).includes(_chkNorm(q))));
+  if(q)list=list.filter(c=>matchTokens(chkNumShow(c)+' '+c.num+' '+c.payee+' '+(c.invoice||''), q)||(/^\d{3,}$/.test(q)&&_chkNorm(c.num).includes(_chkNorm(q))));
   list.sort((a,b)=>new Date(a.date)-new Date(b.date));
   return list;
 }
@@ -35274,7 +35270,7 @@ function fillSupplierSel(keepValue){
   if(!sel)return;
   const keep = keepValue !== undefined ? keepValue : sel.value;
   const q = String($('chk-payee-q')?.value || '').trim().toLowerCase();
-  const hit = n => !q || String(n||'').toLowerCase().includes(q);
+  const hit = n => !q || matchTokens(n, q);
   const byName = (a,b) => String(a.name||'').localeCompare(String(b.name||''),'ar');
 
   const zoho = chkZohoVendors.filter(v => hit(v.name)).sort(byName);
@@ -35392,9 +35388,8 @@ function _renderVendorsList(){
   }
   if(search){
     list=list.filter(v=>
-      (v.name||'').toLowerCase().includes(search) ||
-      (v.phone||'').includes(search) ||
-      (v.note||'').toLowerCase().includes(search)
+      matchTokens([v.name, v.note].join(' '), search) ||
+      (v.phone||'').includes(search)
     );
   }
 
@@ -36046,7 +36041,7 @@ function _chkRepList(){
   // 0️⃣ v951: «0012345» يلاقي «12345» والعكس
   const qn = _chkNorm(q);
   if(q) list = list.filter(c =>
-    ((chkNumShow(c)||'') + ' ' + (c.num||'') + (c.payee||'') + (c.invoice||'') + (c.notes||'')).toLowerCase().includes(q)
+    matchTokens([chkNumShow(c)||'', c.num||'', c.payee||'', c.invoice||'', c.notes||''].join(' '), q)
     || (qn.length >= 3 && /^\d+$/.test(q.replace(/\s/g,'')) && _chkNorm(c.num).includes(qn)));
   return list;
 }
@@ -38190,9 +38185,7 @@ function tpVisiblePlan(){
   const search = (document.getElementById('tp-search')?.value || '').trim().toLowerCase();
   if(search){
     plan = plan.filter(p =>
-      (p.product_title || '').toLowerCase().includes(search) ||
-      (p.sku || '').toLowerCase().includes(search) ||
-      (p.barcode || '').toLowerCase().includes(search)
+      matchTokens([p.product_title, p.sku, p.barcode].join(' '), search)
     );
   }
   // نسخة جديدة — sort بيعدّل المصفوفة الأصلية، ومش عايزين نخرّب
@@ -38483,7 +38476,7 @@ const _tmxPoSt = { draft:'مسودة', sent:'اتبعت', ordered:'اتطلب', 
 function tmxRenderPos(){
   const box = $('tmx-pos'); if(!box) return;
   const q = String($('tmx-po-q')?.value || '').trim().toLowerCase();
-  const list = _tmx.pos.filter(p => !q || [p.po_number, p.supplier_name, p.supplier_name_ref].join(' ').toLowerCase().includes(q)).slice(0, 60);
+  const list = _tmx.pos.filter(p => !q || matchTokens([p.po_number, p.supplier_name, p.supplier_name_ref].join(' '), q)).slice(0, 60);
   box.innerHTML = list.length ? list.map(p => {
     const d = p.order_date || p.created_at; const st = String(p.status || '');
     return `<label style="display:flex;gap:8px;align-items:center;font-size:12px;padding:4px 6px;border-radius:6px;cursor:pointer;${_tmx.selPos.has(p.id) ? 'background:#eef2ff' : ''}">
@@ -38915,9 +38908,7 @@ function renderPurchaseSuggestions(){
   const search = (document.getElementById('ps-search')?.value || '').trim().toLowerCase();
   if(search){
     suggestions = suggestions.filter(s => 
-      (s.product_title || '').toLowerCase().includes(search) ||
-      (s.sku || '').toLowerCase().includes(search) ||
-      (s.barcode || '').toLowerCase().includes(search)
+      matchTokens([s.product_title, s.sku, s.barcode].join(' '), search)
     );
   }
   
@@ -39270,9 +39261,7 @@ function renderTransferProductPicker(){
   
   if(search){
     items = items.filter(i => 
-      (i.productTitle||'').toLowerCase().includes(search) ||
-      (i.sku||'').toLowerCase().includes(search) ||
-      (i.barcode||'').toLowerCase().includes(search)
+      matchTokens([i.productTitle, i.sku, i.barcode].join(' '), search)
     );
   }
   
@@ -41214,8 +41203,7 @@ function renderSuppliersList(){
     if(onlyProducts && !(parseInt(s.products_count) || 0)) return false;
     if(_st && !_supStateOk(s, _st)) return false;
     if(!q) return true;
-    return [s.name, s.contact_person, s.phone, s.email, s.notes]
-      .some(v => String(v || '').toLowerCase().includes(q));
+    return matchTokens([s.name, s.contact_person, s.phone, s.email, s.notes].join(' '), q);
   });
 
   if(_so) rows.sort(_so);
@@ -41560,7 +41548,7 @@ function _poFillSupplierOptions(filter){
   const q = String(filter || '').trim().toLowerCase();
   const keep = sel.value;
   const list = q
-    ? _suppliers.filter(s => String(s.name || '').toLowerCase().includes(q))
+    ? _suppliers.filter(s => matchTokens(s.name, q))
     : _suppliers;
   sel.innerHTML = '<option value="">-- اختار من القائمة --</option>' +
     list.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('') +
@@ -44590,7 +44578,7 @@ function prFillSuppliers(filter){
   if(!sel) return;
   const q = String(filter || '').trim().toLowerCase();
   const keep = sel.value;
-  const list = q ? _suppliers.filter(s => String(s.name||'').toLowerCase().includes(q)) : _suppliers;
+  const list = q ? _suppliers.filter(s => matchTokens(s.name, q)) : _suppliers;
   sel.innerHTML = '<option value="">-- اختار المورد --</option>' +
     list.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
   if(keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
@@ -52184,8 +52172,7 @@ function _talRestockRows(){
   const q = ($('tal-restock-q')?.value || '').trim().toLowerCase();
   let rows = hotOnly ? _talRestock.filter(x => x.sold_30d > 0) : _talRestock.slice();
   if(q) rows = rows.filter(x =>
-    String(x.title||x.talabat_name||'').toLowerCase().includes(q) ||
-    String(x.talabat_sku||'').toLowerCase().includes(q));
+    matchTokens([x.title||x.talabat_name||'', x.talabat_sku||''].join(' '), q));
   const k = _talRsSort.key, d = _talRsSort.dir;
   rows.sort((a, b) => {
     if(k === 'title'){
@@ -53915,9 +53902,7 @@ function renderStkProductPicker(){
   }
   if(search){
     items = items.filter(i => 
-      (i.productTitle||'').toLowerCase().includes(search) ||
-      (i.sku||'').toLowerCase().includes(search) ||
-      (i.barcode||'').toLowerCase().includes(search)
+      matchTokens([i.productTitle, i.sku, i.barcode].join(' '), search)
     );
   }
   
@@ -56070,9 +56055,7 @@ function renderHrEmployeesTable(){
   
   if(search){
     list = list.filter(e =>
-      (e.name_ar||'').toLowerCase().includes(search) ||
-      (e.name_en||'').toLowerCase().includes(search) ||
-      (e.code||'').toLowerCase().includes(search) ||
+      matchTokens([e.name_ar, e.name_en, e.code].join(' '), search) ||
       (e.phone||'').includes(search) ||
       (e.national_id||'').includes(search)
     );
@@ -62225,9 +62208,7 @@ function _expFilter(list, search){
   const off = $('exp-f-offer')?.value || '', ven = $('exp-f-vendor')?.value || '';
   const sort = $('exp-f-sort')?.value || 'exp';
   let out = list.filter(p => {
-    if(search && !((p.product_title || '').toLowerCase().includes(search) ||
-                   (p.sku || '').toLowerCase().includes(search) ||
-                   (p.barcode || '').toLowerCase().includes(search))) return false;
+    if(search && !matchTokens([p.product_title, p.sku, p.barcode].join(' '), search)) return false;
     if(win){
       const d = _expDays(p);
       if(d == null) return false;
@@ -63965,7 +63946,7 @@ function sidebarFilter(query){
     let visibleCount = 0;
     g.querySelectorAll('.ni').forEach(i => {
       const label = (i.querySelector('.ni-label')?.textContent || '').toLowerCase();
-      const matches = label.includes(q);
+      const matches = matchTokens(label, q);
       i.classList.toggle('sb-hidden', !matches);
       if (matches) visibleCount++;
     });
@@ -66814,7 +66795,7 @@ async function btLoad(){
 function btRender(){
   const box = $('bt-list'); if(!box) return;
   const q = (($('bt-filter')||{}).value || '').trim().toLowerCase();
-  const rows = q ? _bt.filter(x => (x.a||'').toLowerCase().includes(q) || (x.b||'').toLowerCase().includes(q)) : _bt;
+  const rows = q ? _bt.filter(x => matchTokens((x.a||'') + ' ' + (x.b||''), q)) : _bt;
   const sum = $('bt-summary'); if(sum) sum.textContent = `${rows.length.toLocaleString('en-US')} زوج`;
   if(!rows.length){ box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">مفيش أزواج بالمعايير دي</div>'; return; }
   const max = rows[0].together || 1;
@@ -66842,7 +66823,7 @@ function btRender(){
 }
 function btExcel(){
   const q = (($('bt-filter')||{}).value || '').trim().toLowerCase();
-  const rows = q ? _bt.filter(x => (x.a||'').toLowerCase().includes(q) || (x.b||'').toLowerCase().includes(q)) : _bt;
+  const rows = q ? _bt.filter(x => matchTokens((x.a||'') + ' ' + (x.b||''), q)) : _bt;
   if(!rows.length){ toast('مفيش'); return; }
   const ws = XLSX.utils.json_to_sheet(rows.map((x,i)=>({
     '#': i+1, 'المنتج A': x.a, 'المنتج B': x.b, 'مع بعض': x.together,
@@ -66870,7 +66851,7 @@ async function tprepLoad(){
 }
 function _tprepFilter(arr){
   const q = (($('tprep-filter')||{}).value || '').trim().toLowerCase();
-  return q ? arr.filter(x => (x.name||'').toLowerCase().includes(q) || (x.sku||'').toLowerCase().includes(q)) : arr;
+  return q ? arr.filter(x => matchTokens((x.name||'') + ' ' + (x.sku||''), q)) : arr;
 }
 function tprepRender(){
   const money = n => 'EGP ' + (Number(n)||0).toLocaleString('en-US');
@@ -66927,7 +66908,7 @@ async function topProdLoad(){
 function topProdRender(){
   const box = $('topprod-list'); if(!box) return;
   const q = (($('topprod-filter')||{}).value || '').trim().toLowerCase();
-  const rows = q ? _topProd.filter(x => (x.name||'').toLowerCase().includes(q) || (x.sku||'').toLowerCase().includes(q)) : _topProd;
+  const rows = q ? _topProd.filter(x => matchTokens((x.name||'') + ' ' + (x.sku||''), q)) : _topProd;
   const sum = $('topprod-summary');
   if(sum) sum.textContent = `${rows.length.toLocaleString('en-US')} منتج`;
   if(!rows.length){ box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">مفيش نتايج</div>'; return; }
@@ -66954,7 +66935,7 @@ function topProdRender(){
 }
 function topProdExcel(){
   const q = (($('topprod-filter')||{}).value || '').trim().toLowerCase();
-  const rows = q ? _topProd.filter(x => (x.name||'').toLowerCase().includes(q) || (x.sku||'').toLowerCase().includes(q)) : _topProd;
+  const rows = q ? _topProd.filter(x => matchTokens((x.name||'') + ' ' + (x.sku||''), q)) : _topProd;
   if(!rows.length){ toast('مفيش'); return; }
   const ws = XLSX.utils.json_to_sheet(rows.map((x,i)=>({ '#': i+1, 'المنتج': x.name, 'SKU': x.sku, 'في كام طلب': x.ordersCount, 'إجمالي القطع': x.unitsTotal })));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'top-products');
@@ -68438,8 +68419,7 @@ function filterRiskList(){
     _riskFiltered = _riskList.slice();
   } else {
     _riskFiltered = _riskList.filter(c =>
-      (c.phone || '').toLowerCase().includes(q) ||
-      (c.customerName || '').toLowerCase().includes(q)
+      matchTokens((c.phone || '') + ' ' + (c.customerName || ''), q)
     );
   }
   renderRiskList();
@@ -71496,10 +71476,10 @@ function setNavRender(){
   for(const s of Object.values(window._SET_SECS || {})){ if(s.key !== 'cfg') items.push({ key: s.key, title: s.title, icon: s.icon, cat: s.cat }); }
   for(const g of _setCfgGroups()){
     const rows = _cfgRows.filter(r => r.group === g), chg = rows.filter(r => r.changed).length;
-    const hit = q ? rows.filter(r => `${r.label} ${r.note || ''} ${g}`.toLowerCase().includes(q)).length : 0;
+    const hit = q ? rows.filter(r => matchTokens(`${r.label} ${r.note || ''} ${g}`, q)).length : 0;
     items.push({ key: 'cfg:' + g, title: g, icon: ({ 'الإعلانات وجوجل':'📣', 'الشحن والتوصيل':'🚚', 'المخزون والمشتريات':'📦', 'المبيعات والعملاء':'🛒', 'الماليات':'💰' })[_setCatOf(g)] || '⚙️', cat: _setCatOf(g), badge: q ? (hit || '') : (chg ? chg + ' معدّل' : ''), hit });
   }
-  const vis = items.filter(i => !q || i.hit || i.title.toLowerCase().includes(q));
+  const vis = items.filter(i => !q || i.hit || matchTokens(i.title, q));
   if(!_setSel || !items.some(i => i.key === _setSel)) _setSel = (items.find(i => i.key.startsWith('cfg:')) || items[0])?.key || null;
   box.innerHTML = (q ? `<div class="it ${_setSel === '__search' ? 'on' : ''}" onclick="setPick('__search')">🔎 كل النتايج</div>` : '')
     + _SET_CATS.map(c => {
@@ -71573,7 +71553,7 @@ function cfgRender(){
   const body = document.getElementById('cfg-body'); if(!body || !_cfgRows) return;
   const q = String(_setQ || '').trim().toLowerCase();
   let rows = _cfgRows;
-  if(_cfgGroupSel === '__search') rows = rows.filter(r => `${r.label} ${r.note || ''} ${r.group}`.toLowerCase().includes(q));
+  if(_cfgGroupSel === '__search') rows = rows.filter(r => matchTokens(`${r.label} ${r.note || ''} ${r.group}`, q));
   else if(_cfgGroupSel) rows = rows.filter(r => r.group === _cfgGroupSel);
   const bad = _cfgRows.filter(r => r.expired);
   const grp = [];
