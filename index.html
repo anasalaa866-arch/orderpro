@@ -12417,7 +12417,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1019';
+const UI_BUILD = 'v1020';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -38633,7 +38633,9 @@ function tmxRender(){
   const q = (_tmx.q || '').toLowerCase();
   _tmx.removed = _tmx.removed || new Set();
   const NI = _tmx.newInfo || {};
+  const TF = _tmx.talF || '';
   const rows = d.items.filter(it => !_tmx.removed.has(it.variant_id) && (_tmx.showSmart || it.source === 'po') && (!_tmx.onlyNew || NI[it.variant_id])
+    && (!TF || (TF === 'yes' ? !!it.talabat : it.talabat === null))
     && (!q || [it.title, it.variant_title, it.sku, it.barcode].join(' ').toLowerCase().includes(q)));
   const nPo = d.items.filter(i => i.source === 'po').length, nSm = d.items.length - nPo;
   const head = d.to.map(w => `<th style="min-width:120px;text-align:center">📥 ${escapeHtml(w.name)}<div style="font-size:10px;font-weight:400;color:var(--muted)">الكمية اللي هتتحوّل</div></th>`).join('');
@@ -38654,11 +38656,14 @@ function tmxRender(){
         <div style="font-size:10px;color:var(--muted);margin-top:2px;font-family:Roboto,sans-serif">بيبيع ${x.velocity || 0}/يوم${x.days_left != null ? ' · يكفّي ' + x.days_left + ' يوم' : ''}</div>
       </td>`; }).join('');
     const ni = NI[it.variant_id];
+    const talBadge = it.talabat === undefined ? '' : (it.talabat
+      ? `<span title="متسجل على طلبات — sku ${escapeHtml(it.talabat.sku || '')}" style="background:#fff1e6;color:#c2410c;border:1px solid #fdba74;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:900;margin-inline-start:4px">🛵 على طلبات</span>`
+      : `<span title="مش متسجل على طلبات" style="background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:700;margin-inline-start:4px">✖ مش على طلبات</span>`);
     const niBadge = ni ? `<span style="background:#fef08a;color:#713f12;border:1px solid #facc15;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:900;margin-inline-start:4px">🆕 ${ni.kind === 'new' ? 'جديد' : 'زاد +' + ni.delta}</span>` : '';
     return `<tr style="${ni ? 'background:#fefce8;box-shadow:inset 4px 0 0 #facc15' : ''}">
       <td style="width:44px">${it.image_url ? `<img src="${escapeHtml(it.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">` : ''}</td>
       <td><div style="font-weight:700;font-size:12px">${escapeHtml(it.title)}${it.variant_title && it.variant_title !== 'Default Title' ? ` <span style="color:var(--muted);font-weight:400">${escapeHtml(it.variant_title)}</span>` : ''}</div>
-        <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(it.sku || it.barcode || '')}</div>${src}${niBadge}</td>
+        <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(it.sku || it.barcode || '')}</div>${src}${talBadge}${niBadge}</td>
       <td style="text-align:center;font-family:Roboto,sans-serif"><b style="font-size:15px">${_tmxTot(it)}</b>
         <div style="font-size:10px;color:var(--muted)">رصيد ${it.from_stock}${it.po?.incoming ? ' + جاي ' + it.po.incoming : ''}</div></td>
       <td style="text-align:center;font-family:Roboto,sans-serif">${d.to.map(w => { const s = it.wh[w.id]?.suggest || 0, nd = it.wh[w.id]?.need || 0;
@@ -38675,6 +38680,10 @@ function tmxRender(){
         <span style="font-size:12px;color:var(--muted)">📦 ${nPo} من أوامر الشراء · 🧠 ${nSm} اقتراح ذكاء</span>
         <label style="font-size:12px;display:flex;gap:5px;align-items:center"><input type="checkbox" ${_tmx.showSmart ? 'checked' : ''} onchange="_tmx.showSmart=this.checked;tmxRender()" title="لو مقفولة اقتراحات الذكاء مش هتتبعت"> اعرض اقتراحات الذكاء</label>
         <input class="form-input" placeholder="🔎 بحث" value="${escapeHtml(_tmx.q || '')}" oninput="_tmx.q=this.value;clearTimeout(window._tmxQt);window._tmxQt=setTimeout(tmxRender,250)" style="max-width:180px;padding:4px 8px;font-size:12px">
+        ${d.items.some(i => i.talabat !== undefined) ? `<select class="form-input" style="width:auto;padding:3px 6px;font-size:12px" onchange="_tmx.talF=this.value;tmxRender()">
+          <option value="" ${!TF ? 'selected' : ''}>🛵 طلبات: الكل</option>
+          <option value="yes" ${TF === 'yes' ? 'selected' : ''}>🛵 على طلبات (${d.items.filter(i => i.talabat).length})</option>
+          <option value="no" ${TF === 'no' ? 'selected' : ''}>✖ مش على طلبات (${d.items.filter(i => i.talabat === null).length})</option></select>` : ''}
         <button class="btn btn-ghost btn-xs" onclick="tmxFill('suggest')">↺ رجّع الاقتراح</button>
         <button class="btn btn-ghost btn-xs" onclick="tmxFill('zero')">⓪ صفّر الكل</button>
         ${Object.keys(NI).length ? `<label style="font-size:12px;display:flex;gap:5px;align-items:center;background:#fef9c3;border-radius:6px;padding:2px 8px;font-weight:700"><input type="checkbox" ${_tmx.onlyNew ? 'checked' : ''} onchange="_tmx.onlyNew=this.checked;tmxRender()"> 🆕 الجديد بس (<span style="font-family:Roboto,sans-serif">${Object.keys(NI).length}</span>)</label>
