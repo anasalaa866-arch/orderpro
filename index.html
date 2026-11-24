@@ -7458,6 +7458,8 @@ tr:hover td{background:#fafbff}
       <button class="btn btn-ghost" onclick="closeM('m-reorder')">إغلاق</button>
       <button class="btn btn-ghost" onclick="poDraftRestart()" style="color:#dc2626" title="امسح الشغل المحفوظ وابدأ الطلب من الأول بالاقتراحات">↺ ابدأ من الأول</button>
       <span id="po-draft-badge" style="font-size:11px;color:#16a34a;font-weight:700;align-self:center"></span>
+      <label style="display:flex;gap:4px;align-items:center;font-size:12px;font-weight:700;align-self:center;cursor:pointer" title="طباعة أمر الشراء بالأسعار أو من غيرها">
+        <input type="checkbox" id="reorder-pdf-prices" onchange="try{localStorage.setItem('po_pdf_prices',this.checked?'1':'0')}catch(e){}"> 💰 بالأسعار</label>
       <button class="btn btn-secondary" onclick="exportReorderPDF()">🖨️ معاينة + PDF</button>
       <button class="btn btn-primary" onclick="saveReorderAsPO('draft')">💾 حفظ كمسودة</button>
       <button class="btn btn-primary" onclick="saveReorderAsPO('sent')">📤 حفظ وإرسال</button>
@@ -12422,7 +12424,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1026';
+const UI_BUILD = 'v1027';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -46544,6 +46546,7 @@ async function removeSPProduct(variantId){
 // ─── Reorder Modal (إنشاء PO من مورد) ───
 async function openSupplierReorder(supplierId){
   _poDraft.ready = false; _poDraft.dirty = false; clearTimeout(_poDraft.t);   // 📝 v1024
+  try{ const _pp = $('reorder-pdf-prices'); if(_pp) _pp.checked = localStorage.getItem('po_pdf_prices') !== '0'; }catch(e){}
   _reorderSupplierId = supplierId;
   const sup = _suppliers.find(s => s.id == supplierId);
   if(!sup) return;
@@ -47193,6 +47196,8 @@ async function _fillReorderImages(){
   }catch(e){}
 }
 async function exportReorderPDF(){
+  // 🆕 v1027: طباعة بالأسعار أو من غيرها
+  const WP = $('reorder-pdf-prices') ? $('reorder-pdf-prices').checked : true;
   await _fillReorderImages();
   const requested = _reorderProducts.filter(p => p.requested_qty > 0);
   if(!requested.length){ toast('❌ مفيش كميات مطلوبة'); return; }
@@ -47218,8 +47223,8 @@ async function exportReorderPDF(){
         ${p.barcode ? `<div style="font-size:11px;color:#666">Barcode: ${escapeHtml(p.barcode)}</div>` : ''}
       </td>
       <td style="padding:8px;text-align:center;border:1px solid #ddd;font-weight:800;font-size:16px">${p.requested_qty}</td>
-      <td style="padding:8px;text-align:center;border:1px solid #ddd">${p.unit_cost.toFixed(2)} ج</td>
-      <td style="padding:8px;text-align:center;border:1px solid #ddd;font-weight:700">${(p.requested_qty * p.unit_cost).toFixed(2)} ج</td>
+      ${WP ? `<td style="padding:8px;text-align:center;border:1px solid #ddd">${p.unit_cost.toFixed(2)} ج</td>
+      <td style="padding:8px;text-align:center;border:1px solid #ddd;font-weight:700">${(p.requested_qty * p.unit_cost).toFixed(2)} ج</td>` : ''}
     </tr>
   `).join('');
   
@@ -47313,8 +47318,8 @@ async function exportReorderPDF(){
             <th style="width:60px">صورة</th>
             <th>المنتج</th>
             <th style="width:70px">الكمية</th>
-            <th style="width:90px">السعر</th>
-            <th style="width:110px">الإجمالي</th>
+            ${WP ? `<th style="width:90px">السعر</th>
+            <th style="width:110px">الإجمالي</th>` : ''}
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -47323,7 +47328,7 @@ async function exportReorderPDF(){
       <div class="totals">
         <div class="totals-row"><span>عدد المنتجات:</span><strong>${requested.length}</strong></div>
         <div class="totals-row"><span>إجمالي القطع:</span><strong>${totalQty}</strong></div>
-        <div class="totals-row totals-final"><span>الإجمالي:</span><span>${totalCost.toFixed(2)} ج</span></div>
+        ${WP ? `<div class="totals-row totals-final"><span>الإجمالي:</span><span>${totalCost.toFixed(2)} ج</span></div>` : ''}
       </div>
 
       ${notes ? `<div class="notes-box"><strong>📝 ملاحظات:</strong><br>${escapeHtml(notes)}</div>` : ''}
