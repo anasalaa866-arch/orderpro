@@ -12390,7 +12390,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1012';
+const UI_BUILD = 'v1013';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -38484,7 +38484,7 @@ async function tmxLoad(){
       days: $('tmx-days').value, target: $('tmx-target').value, keep: $('tmx-keep').value, smart: smart ? '1' : '0' });
     const r = await apiFetch('/api/transfer-mix?' + qs);
     if(!r || r.error){ toast('❌ ' + _errText(r?.error || _apiLastErr, 'فشل')); return; }
-    _tmx.data = r; _tmx.qty = {};
+    _tmx.data = r; _tmx.qty = {}; _tmx.removed = new Set();
     for(const it of r.items){ _tmx.qty[it.variant_id] = {}; for(const w of r.to) _tmx.qty[it.variant_id][w.id] = it.wh[w.id]?.suggest || 0; }
     tmxRender();
   }finally{ if(btn){ btn.disabled = false; btn.textContent = '🔍 هات المنتجات'; } }
@@ -38503,20 +38503,27 @@ function tmxFill(mode){
     _tmx.qty[it.variant_id][w.id] = mode === 'zero' ? 0 : (it.wh[w.id]?.suggest || 0);
   tmxRender();
 }
+function _tmxItems(){ const rm = _tmx.removed || new Set(); return (_tmx.data?.items || []).filter(it => !rm.has(it.variant_id) && (_tmx.showSmart || it.source === 'po')); }
+function tmxRemove(vid){
+  _tmx.removed = _tmx.removed || new Set();
+  _tmx.removed.add(vid);
+  tmxRender();
+}
 function tmxFooter(){
   const d = _tmx.data, box = $('tmx-foot'); if(!d || !box) return;
   const per = d.to.map(w => {
     let q = 0, n = 0;
-    for(const it of d.items){ const x = parseInt(_tmx.qty[it.variant_id]?.[w.id]) || 0; if(x > 0){ q += x; n++; } }
+    for(const it of _tmxItems()){ const x = parseInt(_tmx.qty[it.variant_id]?.[w.id]) || 0; if(x > 0){ q += x; n++; } }
     return `<span style="background:var(--elev);border-radius:8px;padding:5px 10px;font-weight:800">📥 ${escapeHtml(w.name)}: <span style="font-family:Roboto,sans-serif">${n}</span> صنف · <span style="font-family:Roboto,sans-serif">${q}</span> قطعة</span>`;
   }).join('');
-  const over = d.items.filter(it => _tmxRowTotal(it.variant_id) > it.avail).length;
+  const over = _tmxItems().filter(it => _tmxRowTotal(it.variant_id) > it.avail).length;
   box.innerHTML = per + (over ? `<span style="color:#dc2626;font-weight:800">⚠️ ${over} صنف الكمية فيه أكبر من المتاح</span>` : '');
 }
 function tmxRender(){
   const d = _tmx.data, box = $('tmx-result'); if(!d || !box) return;
   const q = (_tmx.q || '').toLowerCase();
-  const rows = d.items.filter(it => (_tmx.showSmart || it.source === 'po')
+  _tmx.removed = _tmx.removed || new Set();
+  const rows = d.items.filter(it => !_tmx.removed.has(it.variant_id) && (_tmx.showSmart || it.source === 'po')
     && (!q || [it.title, it.variant_title, it.sku, it.barcode].join(' ').toLowerCase().includes(q)));
   const nPo = d.items.filter(i => i.source === 'po').length, nSm = d.items.length - nPo;
   const head = d.to.map(w => `<th style="min-width:120px;text-align:center">📥 ${escapeHtml(w.name)}<div style="font-size:10px;font-weight:400;color:var(--muted)">الكمية اللي هتتحوّل</div></th>`).join('');
@@ -38542,6 +38549,7 @@ function tmxRender(){
         return `<div title="اضغط عشان تحطه في الكمية" onclick="_tmx.qty['${it.variant_id}'][${w.id}]=${s};tmxRender()" style="cursor:pointer;line-height:1.3">${multi ? `<span style="font-size:10px;color:var(--muted)">${escapeHtml(w.name)}: </span>` : ''}<b style="font-size:15px;color:#16a34a">${s}</b>${nd > s ? `<div style="font-size:10px;color:#b45309">محتاج ${nd}</div>` : ''}</div>`; }).join('')}</td>
       ${cells}
       <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:${left < 0 ? '#dc2626' : 'var(--muted)'}" id="tmx-left-${it.variant_id}">${left}</td>
+      <td style="text-align:center"><button class="btn btn-ghost btn-xs" title="شيل الصنف من التحويل" onclick="tmxRemove('${it.variant_id}')" style="color:#dc2626">🗑️</button></td>
     </tr>`;
   }).join('');
   box.innerHTML = `
@@ -38549,14 +38557,15 @@ function tmxRender(){
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
         <b>📤 ${escapeHtml(d.from.name)}</b>
         <span style="font-size:12px;color:var(--muted)">📦 ${nPo} من أوامر الشراء · 🧠 ${nSm} اقتراح ذكاء</span>
-        <label style="font-size:12px;display:flex;gap:5px;align-items:center"><input type="checkbox" ${_tmx.showSmart ? 'checked' : ''} onchange="_tmx.showSmart=this.checked;tmxRender()"> اعرض اقتراحات الذكاء</label>
+        <label style="font-size:12px;display:flex;gap:5px;align-items:center"><input type="checkbox" ${_tmx.showSmart ? 'checked' : ''} onchange="_tmx.showSmart=this.checked;tmxRender()" title="لو مقفولة اقتراحات الذكاء مش هتتبعت"> اعرض اقتراحات الذكاء</label>
         <input class="form-input" placeholder="🔎 بحث" value="${escapeHtml(_tmx.q || '')}" oninput="_tmx.q=this.value;clearTimeout(window._tmxQt);window._tmxQt=setTimeout(tmxRender,250)" style="max-width:180px;padding:4px 8px;font-size:12px">
         <button class="btn btn-ghost btn-xs" onclick="tmxFill('suggest')">↺ رجّع الاقتراح</button>
         <button class="btn btn-ghost btn-xs" onclick="tmxFill('zero')">⓪ صفّر الكل</button>
+        ${_tmx.removed.size ? `<button class="btn btn-ghost btn-xs" onclick="_tmx.removed.clear();tmxRender()">↩️ رجّع المحذوف (<span style="font-family:Roboto,sans-serif">${_tmx.removed.size}</span>)</button>` : ''}
       </div>
       <div style="overflow:auto"><table class="tbl" style="width:100%">
-        <thead><tr><th></th><th>المنتج</th><th style="text-align:center">المتاح للتحويل</th><th style="text-align:center">💡 المقترح</th>${head}<th style="text-align:center">يفضل</th></tr></thead>
-        <tbody>${body || `<tr><td colspan="${5 + d.to.length}" style="text-align:center;color:var(--muted);padding:20px">مفيش منتجات</td></tr>`}</tbody>
+        <thead><tr><th></th><th>المنتج</th><th style="text-align:center">المتاح للتحويل</th><th style="text-align:center">💡 المقترح</th>${head}<th style="text-align:center">يفضل</th><th></th></tr></thead>
+        <tbody>${body || `<tr><td colspan="${6 + d.to.length}" style="text-align:center;color:var(--muted);padding:20px">مفيش منتجات</td></tr>`}</tbody>
       </table></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;font-size:12px">
         <div id="tmx-foot" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"></div>
@@ -38567,8 +38576,8 @@ function tmxRender(){
 }
 async function tmxSend(){
   const d = _tmx.data; if(!d) return;
-  const over = d.items.filter(it => _tmxRowTotal(it.variant_id) > it.avail);
-  const plan = d.to.map(w => ({ w, items: d.items.map(it => ({ variantId: it.variant_id, qty: parseInt(_tmx.qty[it.variant_id]?.[w.id]) || 0 })).filter(x => x.qty > 0) }))
+  const over = _tmxItems().filter(it => _tmxRowTotal(it.variant_id) > it.avail);
+  const plan = d.to.map(w => ({ w, items: _tmxItems().map(it => ({ variantId: it.variant_id, qty: parseInt(_tmx.qty[it.variant_id]?.[w.id]) || 0 })).filter(x => x.qty > 0) }))
     .filter(p => p.items.length);
   if(!plan.length){ toast('⚠️ مفيش كميات'); return; }
   const poNums = d.pos.map(p => p.po_number).join('، ');
