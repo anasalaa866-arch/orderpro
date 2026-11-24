@@ -12390,7 +12390,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1013';
+const UI_BUILD = 'v1014';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -38438,6 +38438,7 @@ async function tmxInit(){
     }catch(e){ _tmx.pos = []; }
     tmxRenderPos();
   }
+  if(!_tmx.data && !_tmx.triedRestore){ _tmx.triedRestore = true; await _tmxRestore(); }
 }
 function tmxRenderTo(){
   const from = $('tmx-from')?.value, box = $('tmx-to'); if(!box) return;
@@ -38478,6 +38479,7 @@ async function tmxLoad(){
   if(!to.length){ toast('⚠️ اختار مخزن وجهة واحد على الأقل'); return; }
   const smart = $('tmx-smart')?.checked;
   if(!_tmx.selPos.size && !smart){ toast('⚠️ اختار أمر شراء أو فعّل اقتراحات الذكاء'); return; }
+  if(_tmx.data && !confirm('فيه تحويل شغال عليه — هيتبدل بالمنتجات الجديدة والكميات اللي عدّلتها هتضيع. أكمّل؟')) return;
   const btn = $('tmx-load-btn'); if(btn){ btn.disabled = true; btn.textContent = '⏳ بيحسب...'; }
   try{
     const qs = new URLSearchParams({ from, to: to.join(','), poIds: [..._tmx.selPos].join(','),
@@ -38497,11 +38499,61 @@ function tmxSetQty(vid, w, val){
   const el = document.getElementById('tmx-left-' + vid);
   if(el){ el.textContent = left; el.style.color = left < 0 ? '#dc2626' : 'var(--muted)'; }
   tmxFooter();
+  _tmxSave();
 }
 function tmxFill(mode){
   for(const it of _tmx.data.items) for(const w of _tmx.data.to)
     _tmx.qty[it.variant_id][w.id] = mode === 'zero' ? 0 : (it.wh[w.id]?.suggest || 0);
   tmxRender();
+}
+// 📝 v1014: المسودة — بتتحفظ لوحدها (السيرفر + الجهاز) وترجع لما تفتح الصفحة
+function _tmxSnapshot(){
+  return {
+    from: $('tmx-from')?.value || '', to: [...document.querySelectorAll('#tmx-to input:checked')].map(i => i.value),
+    poIds: [..._tmx.selPos], days: $('tmx-days')?.value, target: $('tmx-target')?.value, keep: $('tmx-keep')?.value,
+    smart: !!$('tmx-smart')?.checked, data: _tmx.data, qty: _tmx.qty, removed: [...(_tmx.removed || [])],
+    showSmart: _tmx.showSmart, savedAt: new Date().toISOString(),
+  };
+}
+function _tmxSave(){
+  if(!_tmx.data || _tmx.restoring) return;
+  clearTimeout(_tmx._saveT);
+  _tmx._saveT = setTimeout(async () => {
+    const snap = _tmxSnapshot();
+    try{ localStorage.setItem('tmx_draft', JSON.stringify(snap)); }catch(e){}
+    try{ await apiFetch('/api/transfer-mix/draft', 'PUT', { draft: snap }); _tmx.savedAt = snap.savedAt; }catch(e){}
+    const b = $('tmx-saved'); if(b) b.textContent = '📝 محفوظ ' + new Date(snap.savedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  }, 1200);
+}
+async function _tmxClearDraft(){
+  clearTimeout(_tmx._saveT);
+  try{ localStorage.removeItem('tmx_draft'); }catch(e){}
+  try{ await apiFetch('/api/transfer-mix/draft', 'DELETE'); }catch(e){}
+}
+async function tmxDiscardDraft(){
+  if(!confirm('تمسح التحويل اللي شغال عليه وتبدأ من الأول؟')) return;
+  await _tmxClearDraft();
+  _tmx.data = null; _tmx.qty = {}; _tmx.removed = new Set();
+  const box = $('tmx-result'); if(box) box.innerHTML = '';
+  toast('🗑️ اتمسحت المسودة');
+}
+async function _tmxRestore(){
+  let snap = null;
+  try{ const r = await apiFetch('/api/transfer-mix/draft'); snap = r?.draft || null; }catch(e){}
+  if(!snap){ try{ snap = JSON.parse(localStorage.getItem('tmx_draft') || 'null'); }catch(e){} }
+  if(!snap || !snap.data) return;
+  _tmx.restoring = true;
+  try{
+    if(snap.from && $('tmx-from')){ $('tmx-from').value = String(snap.from); tmxRenderTo(); }
+    document.querySelectorAll('#tmx-to input').forEach(i => { i.checked = (snap.to || []).includes(i.value); });
+    _tmx.selPos = new Set((snap.poIds || []).map(Number)); tmxRenderPos();
+    if(snap.days) $('tmx-days').value = snap.days; if(snap.target) $('tmx-target').value = snap.target;
+    if(snap.keep != null) $('tmx-keep').value = snap.keep; if($('tmx-smart')) $('tmx-smart').checked = !!snap.smart;
+    _tmx.data = snap.data; _tmx.qty = snap.qty || {}; _tmx.removed = new Set(snap.removed || []);
+    _tmx.showSmart = snap.showSmart !== false; _tmx.savedAt = snap.savedAt;
+    tmxRender();
+    toast('📝 رجّعتلك التحويل اللي كنت شغال عليه');
+  } finally { _tmx.restoring = false; }
 }
 function _tmxItems(){ const rm = _tmx.removed || new Set(); return (_tmx.data?.items || []).filter(it => !rm.has(it.variant_id) && (_tmx.showSmart || it.source === 'po')); }
 function tmxRemove(vid){
@@ -38561,6 +38613,8 @@ function tmxRender(){
         <input class="form-input" placeholder="🔎 بحث" value="${escapeHtml(_tmx.q || '')}" oninput="_tmx.q=this.value;clearTimeout(window._tmxQt);window._tmxQt=setTimeout(tmxRender,250)" style="max-width:180px;padding:4px 8px;font-size:12px">
         <button class="btn btn-ghost btn-xs" onclick="tmxFill('suggest')">↺ رجّع الاقتراح</button>
         <button class="btn btn-ghost btn-xs" onclick="tmxFill('zero')">⓪ صفّر الكل</button>
+        <span id="tmx-saved" style="font-size:11px;color:#16a34a;font-weight:700">${_tmx.savedAt ? '📝 محفوظ ' + new Date(_tmx.savedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+        <button class="btn btn-ghost btn-xs" onclick="tmxDiscardDraft()" style="color:#dc2626">🗑️ ابدأ من الأول</button>
         ${_tmx.removed.size ? `<button class="btn btn-ghost btn-xs" onclick="_tmx.removed.clear();tmxRender()">↩️ رجّع المحذوف (<span style="font-family:Roboto,sans-serif">${_tmx.removed.size}</span>)</button>` : ''}
       </div>
       <div style="overflow:auto"><table class="tbl" style="width:100%">
@@ -38573,6 +38627,7 @@ function tmxRender(){
       </div>
     </div></div>`;
   tmxFooter();
+  _tmxSave();
 }
 async function tmxSend(){
   const d = _tmx.data; if(!d) return;
@@ -38602,7 +38657,17 @@ async function tmxSend(){
     }catch(e){ out.push(`📥 ${p.w.name}: ❌ ${e.message}`); }
   }
   if(btn){ btn.disabled = false; btn.textContent = '🚚 ابعت التحويلات لشوبيفاي'; }
-  infoModal('نتيجة التحويلات', out.join('\n') + '\n\nكمّل الشحن والاستلام من شوبيفاي — الأرصدة هترجعلنا لوحدها.');
+  const allOk = out.every(l => l.includes('✅'));
+  if(!allOk){   // اللي اتبعت بنجاح نصفّر كمياته عشان مايتبعتش مرتين
+    plan.forEach((p, i) => { if(out[i] && out[i].includes('✅')) for(const it of d.items) if(_tmx.qty[it.variant_id]) _tmx.qty[it.variant_id][p.w.id] = 0; });
+    tmxRender();
+  }
+  if(allOk){   // 📝 خلص — المسودة مالهاش لازمة
+    await _tmxClearDraft();
+    _tmx.data = null; _tmx.qty = {}; _tmx.removed = new Set(); _tmx.savedAt = null;
+    const box = $('tmx-result'); if(box) box.innerHTML = '';
+  }
+  infoModal('نتيجة التحويلات', out.join('\n') + (allOk ? '' : '\n\n📝 التحويل لسه محفوظ كمسودة — تقدر تعدّل وتبعت تاني.') + '\n\nكمّل الشحن والاستلام من شوبيفاي — الأرصدة هترجعلنا لوحدها.');
 }
 
 // ============================================================
