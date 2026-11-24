@@ -12420,7 +12420,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1021';
+const UI_BUILD = 'v1022';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -38516,7 +38516,8 @@ async function tmxLoad(){
   const btn = $('tmx-load-btn'); if(btn){ btn.disabled = true; btn.textContent = '⏳ بيحسب...'; }
   try{
     const qs = new URLSearchParams({ from, to: to.join(','), poIds: [..._tmx.selPos].join(','),
-      days: $('tmx-days').value, target: $('tmx-target').value, keep: $('tmx-keep').value, smart: smart ? '1' : '0' });
+      days: $('tmx-days').value, target: $('tmx-target').value, keep: $('tmx-keep').value, smart: smart ? '1' : '0',
+      extra: (merging ? [...(_tmx.manualIds || [])] : []).join(',') });
     const r = await apiFetch('/api/transfer-mix?' + qs);
     if(!r || r.error){ toast('❌ ' + _errText(r?.error || _apiLastErr, 'فشل')); return; }
     if(merging){
@@ -38540,7 +38541,7 @@ async function tmxLoad(){
       _tmx.data = r; _tmx.qty = qty;
       toast(nNew || nMore ? `🆕 اتضاف ${nNew} صنف جديد${nMore ? ` · ${nMore} صنف زادت كميته` : ''} — متعلّمين بالأصفر` : 'مفيش أصناف جديدة');
     } else {
-      _tmx.data = r; _tmx.qty = {}; _tmx.removed = new Set(); _tmx.newInfo = {}; _tmx.onlyNew = false;
+      _tmx.data = r; _tmx.qty = {}; _tmx.removed = new Set(); _tmx.newInfo = {}; _tmx.onlyNew = false; _tmx.manualIds = [];
       for(const it of r.items){ _tmx.qty[it.variant_id] = {}; for(const w of r.to) _tmx.qty[it.variant_id][w.id] = it.wh[w.id]?.suggest || 0; }
     }
     tmxRender();
@@ -38568,7 +38569,7 @@ function _tmxSnapshot(){
     from: $('tmx-from')?.value || '', to: [...document.querySelectorAll('#tmx-to input:checked')].map(i => i.value),
     poIds: [..._tmx.selPos], days: $('tmx-days')?.value, target: $('tmx-target')?.value, keep: $('tmx-keep')?.value,
     smart: !!$('tmx-smart')?.checked, data: _tmx.data, qty: _tmx.qty, removed: [...(_tmx.removed || [])],
-    showSmart: _tmx.showSmart, newInfo: _tmx.newInfo || {}, onlyNew: !!_tmx.onlyNew, srcF: _tmx.srcF || '', talF: _tmx.talF || '', savedAt: new Date().toISOString(),
+    showSmart: _tmx.showSmart, newInfo: _tmx.newInfo || {}, onlyNew: !!_tmx.onlyNew, srcF: _tmx.srcF || '', talF: _tmx.talF || '', manualIds: _tmx.manualIds || [], savedAt: new Date().toISOString(),
   };
 }
 function _tmxSave(){
@@ -38608,7 +38609,7 @@ async function _tmxRestore(){
     if(snap.keep != null) $('tmx-keep').value = snap.keep; if($('tmx-smart')) $('tmx-smart').checked = !!snap.smart;
     _tmx.data = snap.data; _tmx.qty = snap.qty || {}; _tmx.removed = new Set(snap.removed || []);
     _tmx.showSmart = snap.showSmart !== false; _tmx.savedAt = snap.savedAt;
-    _tmx.newInfo = snap.newInfo || {}; _tmx.onlyNew = !!snap.onlyNew; _tmx.srcF = snap.srcF || ''; _tmx.talF = snap.talF || '';
+    _tmx.newInfo = snap.newInfo || {}; _tmx.onlyNew = !!snap.onlyNew; _tmx.srcF = snap.srcF || ''; _tmx.talF = snap.talF || ''; _tmx.manualIds = snap.manualIds || [];
     tmxRender();
     toast('📝 رجّعتلك التحويل اللي كنت شغال عليه');
   } finally { _tmx.restoring = false; }
@@ -38616,6 +38617,61 @@ async function _tmxRestore(){
 // 📦 v1015: المتاح = كل اللي في المخزن (رصيد + جاي) — الاحتفاظ بيأثر على الاقتراح بس
 function _tmxTot(it){ return it.total != null ? it.total : (it.avail + (it.src_keep || 0)); }
 function _tmxItems(){ const rm = _tmx.removed || new Set(); return (_tmx.data?.items || []).filter(it => !rm.has(it.variant_id) && (_tmx.showSmart || it.source === 'po')); }
+// ✋ v1022: إضافة صنف يدوي (برا الأوامر والذكاء) — من غير تكرار
+let _tmxAddT = null, _tmxAddRes = [];
+function tmxAddSearch(){
+  clearTimeout(_tmxAddT);
+  const q = String($('tmx-add-q')?.value || '').trim(), box = $('tmx-add-res');
+  if(q.length < 2){ if(box) box.style.display = 'none'; return; }
+  _tmxAddT = setTimeout(async () => {
+    try{
+      const r = await apiFetch(`/api/inventory/search?q=${encodeURIComponent(q)}&limit=15`);
+      _tmxAddRes = r?.results || [];
+      const have = new Set((_tmx.data?.items || []).map(i => String(i.variant_id)));
+      box.innerHTML = _tmxAddRes.length ? _tmxAddRes.map((p, i) => {
+        const has = have.has(String(p.variant_id));
+        return `<div onclick="tmxAddPick(${i})" style="display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background=''">
+          ${_imgThumb(p.image_url, 30)}
+          <div style="flex:1;min-width:0"><div style="font-weight:700">${escapeHtml(p.product_title)}${p.variant_title && p.variant_title !== 'Default Title' ? ' · ' + escapeHtml(p.variant_title) : ''}</div>
+          <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(p.barcode || p.sku || '')}</div></div>
+          ${has ? '<span style="font-size:10px;color:#16a34a;font-weight:800;white-space:nowrap">✓ موجود</span>' : '<span style="font-size:11px;color:#0e7490;font-weight:800">➕</span>'}
+        </div>`; }).join('') : '<div style="padding:10px;font-size:12px;color:var(--muted)">مفيش نتايج</div>';
+      box.style.display = 'block';
+    }catch(e){ box.innerHTML = `<div style="padding:10px;color:var(--danger);font-size:12px">❌ ${escapeHtml(e.message)}</div>`; box.style.display = 'block'; }
+  }, 300);
+}
+function _tmxFlash(vid){
+  setTimeout(() => {
+    const el = document.getElementById('tmx-left-' + vid)?.closest('tr');
+    if(el){ el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.style.outline = '3px solid #06b6d4'; setTimeout(() => el.style.outline = '', 2500); }
+  }, 60);
+}
+async function tmxAddPick(i){
+  const p = _tmxAddRes[i]; if(!p || !_tmx.data) return;
+  const vid = String(p.variant_id), d = _tmx.data;
+  $('tmx-add-res').style.display = 'none'; $('tmx-add-q').value = '';
+  // منع التكرار: لو موجود بنروحله بدل ما نضيفه تاني
+  if(d.items.some(x => String(x.variant_id) === vid)){
+    _tmx.removed?.delete(vid);
+    _tmx.srcF = ''; _tmx.talF = ''; _tmx.onlyNew = false; _tmx.q = '';
+    if(!_tmx.showSmart && d.items.find(x => String(x.variant_id) === vid)?.source === 'smart') _tmx.showSmart = true;
+    tmxRender(); _tmxFlash(vid);
+    toast('ℹ️ الصنف ده موجود في التحويل بالفعل — وديتك عليه');
+    return;
+  }
+  const qs = new URLSearchParams({ from: d.from.id, to: d.to.map(w => w.id).join(','), poIds: '', smart: '0', extra: vid,
+    days: $('tmx-days').value, target: $('tmx-target').value, keep: $('tmx-keep').value });
+  const r = await apiFetch('/api/transfer-mix?' + qs);
+  const it = r?.items?.find(x => String(x.variant_id) === vid);
+  if(!it){ toast('❌ ' + _errText(r?.error || _apiLastErr, 'مالقيتش الصنف')); return; }
+  it.source = 'manual';
+  d.items.unshift(it);
+  _tmx.qty[vid] = {}; for(const w of d.to) _tmx.qty[vid][w.id] = it.wh[w.id]?.suggest || 0;
+  _tmx.manualIds = [...new Set([...(_tmx.manualIds || []), vid])];
+  _tmx.srcF = ''; _tmx.onlyNew = false; _tmx.q = '';
+  tmxRender(); _tmxFlash(vid);
+  toast('✅ اتضاف — حط الكمية');
+}
 function tmxRemove(vid){
   _tmx.removed = _tmx.removed || new Set();
   _tmx.removed.add(vid);
@@ -38642,7 +38698,7 @@ function tmxRender(){
   const _poOf = it => String(it.po?.po_numbers || '').split(/[،,]\s*/).map(s => s.trim()).filter(Boolean);
   const rows = d.items.filter(it => !_tmx.removed.has(it.variant_id) && (_tmx.showSmart || it.source === 'po') && (!_tmx.onlyNew || NI[it.variant_id])
     && (!TF || (TF === 'yes' ? !!it.talabat : it.talabat === null))
-    && (!SF || (SF === '__smart' ? it.source === 'smart' : _poOf(it).includes(SF)))
+    && (!SF || (SF === '__smart' ? it.source === 'smart' : SF === '__manual' ? it.source === 'manual' : _poOf(it).includes(SF)))
     && (!q || [it.title, it.variant_title, it.sku, it.barcode].join(' ').toLowerCase().includes(q)));
   const nPo = d.items.filter(i => i.source === 'po').length, nSm = d.items.length - nPo;
   const head = d.to.map(w => `<th style="min-width:120px;text-align:center">📥 ${escapeHtml(w.name)}<div style="font-size:10px;font-weight:400;color:var(--muted)">الكمية اللي هتتحوّل</div></th>`).join('');
@@ -38650,6 +38706,8 @@ function tmxRender(){
   const body = rows.map(it => {
     const src = it.source === 'po'
       ? `<span style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:800">📦 ${escapeHtml(it.po.po_numbers || '')} · مطلوب <span style="font-family:Roboto,sans-serif">${it.po.ordered}</span>${it.po.received ? ` · وصل <span style="font-family:Roboto,sans-serif">${it.po.received}</span>` : ''}${it.po.incoming ? ` · جاي <span style="font-family:Roboto,sans-serif">${it.po.incoming}</span>` : ''}</span>`
+      : it.source === 'manual'
+      ? `<span style="background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:800">✋ مضاف يدوي</span>`
       : `<span style="background:#f5f3ff;color:#5b21b6;border:1px solid #ddd6fe;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:800">🧠 من رصيد المخزن</span>`;
     const left = _tmxTot(it) - _tmxRowTotal(it.variant_id);
     const cells = d.to.map(w => { const x = it.wh[w.id] || {};
@@ -38688,15 +38746,20 @@ function tmxRender(){
         <label style="font-size:12px;display:flex;gap:5px;align-items:center"><input type="checkbox" ${_tmx.showSmart ? 'checked' : ''} onchange="_tmx.showSmart=this.checked;tmxRender()" title="لو مقفولة اقتراحات الذكاء مش هتتبعت"> اعرض اقتراحات الذكاء</label>
         <input class="form-input" placeholder="🔎 بحث" value="${escapeHtml(_tmx.q || '')}" oninput="_tmx.q=this.value;clearTimeout(window._tmxQt);window._tmxQt=setTimeout(tmxRender,250)" style="max-width:180px;padding:4px 8px;font-size:12px">
         ${(() => { const cnt = {}; for(const i of d.items) for(const p of _poOf(i)) cnt[p] = (cnt[p] || 0) + 1;
-          const ks = Object.keys(cnt).sort(); const nS = d.items.filter(i => i.source === 'smart').length;
-          return (ks.length + (nS ? 1 : 0)) > 1 ? `<select class="form-input" style="width:auto;padding:3px 6px;font-size:12px;font-weight:700;${SF ? 'border-color:#6366f1;background:#eef2ff' : ''}" onchange="_tmx.srcF=this.value;tmxRender()">
+          const ks = Object.keys(cnt).sort(); const nS = d.items.filter(i => i.source === 'smart').length, nM = d.items.filter(i => i.source === 'manual').length;
+          return (ks.length + (nS ? 1 : 0) + (nM ? 1 : 0)) > 1 ? `<select class="form-input" style="width:auto;padding:3px 6px;font-size:12px;font-weight:700;${SF ? 'border-color:#6366f1;background:#eef2ff' : ''}" onchange="_tmx.srcF=this.value;tmxRender()">
             <option value="">📋 المصدر: الكل</option>
             ${ks.map(k => `<option value="${escapeAttr(k)}" ${SF === k ? 'selected' : ''}>📦 ${escapeHtml(k)} (${cnt[k]})</option>`).join('')}
-            ${nS ? `<option value="__smart" ${SF === '__smart' ? 'selected' : ''}>🧠 الذكاء بس (${nS})</option>` : ''}</select>` : ''; })()}
+            ${nS ? `<option value="__smart" ${SF === '__smart' ? 'selected' : ''}>🧠 الذكاء بس (${nS})</option>` : ''}
+            ${nM ? `<option value="__manual" ${SF === '__manual' ? 'selected' : ''}>✋ المضاف يدوي (${nM})</option>` : ''}</select>` : ''; })()}
         ${d.items.some(i => i.talabat !== undefined) ? `<select class="form-input" style="width:auto;padding:3px 6px;font-size:12px" onchange="_tmx.talF=this.value;tmxRender()">
           <option value="" ${!TF ? 'selected' : ''}>🛵 طلبات: الكل</option>
           <option value="yes" ${TF === 'yes' ? 'selected' : ''}>🛵 على طلبات (${d.items.filter(i => i.talabat).length})</option>
           <option value="no" ${TF === 'no' ? 'selected' : ''}>✖ مش على طلبات (${d.items.filter(i => i.talabat === null).length})</option></select>` : ''}
+        <span style="position:relative">
+          <input id="tmx-add-q" class="form-input" placeholder="➕ ضيف صنف (اسم/باركود)" style="width:190px;padding:4px 8px;font-size:12px;border-color:#06b6d4" oninput="tmxAddSearch()" onblur="setTimeout(()=>{const b=$('tmx-add-res');if(b)b.style.display='none'},250)" autocomplete="off">
+          <div id="tmx-add-res" style="display:none;position:absolute;top:100%;inset-inline-start:0;z-index:50;width:360px;max-height:300px;overflow:auto;background:var(--card,#fff);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15)"></div>
+        </span>
         <button class="btn btn-ghost btn-xs" onclick="tmxFill('suggest')">↺ رجّع الاقتراح</button>
         <button class="btn btn-ghost btn-xs" onclick="tmxFill('zero')">⓪ صفّر الكل</button>
         ${Object.keys(NI).length ? `<label style="font-size:12px;display:flex;gap:5px;align-items:center;background:#fef9c3;border-radius:6px;padding:2px 8px;font-weight:700"><input type="checkbox" ${_tmx.onlyNew ? 'checked' : ''} onchange="_tmx.onlyNew=this.checked;tmxRender()"> 🆕 الجديد بس (<span style="font-family:Roboto,sans-serif">${Object.keys(NI).length}</span>)</label>
