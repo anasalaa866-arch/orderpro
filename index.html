@@ -12420,7 +12420,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1022';
+const UI_BUILD = 'v1023';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -26187,7 +26187,7 @@ function _gffFiltered(){
     if(fd && !r.diff) return false;
     if(!isNaN(pmin) && r.price < pmin) return false;
     if(!isNaN(pmax) && r.price > pmax) return false;
-    return !q || `${r.title} ${r.variant||''} ${r.sku||''} ${r.type||''} ${r.vendor||''} ${r.id}`.toLowerCase().includes(q);
+    return !q || matchTokens(`${r.title} ${r.variant||''} ${r.sku||''} ${r.type||''} ${r.vendor||''} ${r.id}`, q);
   });
 }
 function gffRender(){
@@ -26312,7 +26312,7 @@ function _wsFiltered(){
     if(ins === 'gstar' && !(r.g_ok && r.poas >= 2)) return false;
     if(ins === 'nog' && r.g_ok) return false;
     if(ins === 'nocost' && r.margin_pct != null) return false;
-    return !q || `${r.title} ${r.variant||''} ${r.sku||''} ${r.type||''} ${r.vendor||''}`.toLowerCase().includes(q);
+    return !q || matchTokens(`${r.title} ${r.variant||''} ${r.sku||''} ${r.type||''} ${r.vendor||''}`, q);
   });
 }
 function wsRender(){
@@ -38699,7 +38699,7 @@ function tmxRender(){
   const rows = d.items.filter(it => !_tmx.removed.has(it.variant_id) && (_tmx.showSmart || it.source === 'po') && (!_tmx.onlyNew || NI[it.variant_id])
     && (!TF || (TF === 'yes' ? !!it.talabat : it.talabat === null))
     && (!SF || (SF === '__smart' ? it.source === 'smart' : SF === '__manual' ? it.source === 'manual' : _poOf(it).includes(SF)))
-    && (!q || [it.title, it.variant_title, it.sku, it.barcode].join(' ').toLowerCase().includes(q)));
+    && (!q || matchTokens([it.title, it.variant_title, it.sku, it.barcode].join(' '), q)));
   const nPo = d.items.filter(i => i.source === 'po').length, nSm = d.items.length - nPo;
   const head = d.to.map(w => `<th style="min-width:120px;text-align:center">📥 ${escapeHtml(w.name)}<div style="font-size:10px;font-weight:400;color:var(--muted)">الكمية اللي هتتحوّل</div></th>`).join('');
   const multi = d.to.length > 1;
@@ -42930,7 +42930,7 @@ function cgRenderLedger(){
   const r = _cgLed, b = document.getElementById('cg-body'); if(!r || !b) return;
   const ev = r.events || [];
   const q = _cgLedQ.trim().toLowerCase();
-  const rows = (r.rows || []).filter(x => !q || (x.title + ' ' + (x.sku||'') + ' ' + (x.barcode||'')).toLowerCase().includes(q));
+  const rows = (r.rows || []).filter(x => !q || matchTokens(x.title + ' ' + (x.sku||'') + ' ' + (x.barcode||''), q));
   const N = v => v ? _cgN(v) : '';
   const dIdx = ev.map((e, i) => [e, i]).filter(([e]) => e.type !== 'cut');
   const cIdx = ev.map((e, i) => [e, i]).filter(([e]) => e.type === 'cut');
@@ -46725,11 +46725,8 @@ function applyReorderFilters(){
   if(_reorderFilters.search){
     const q = _reorderFilters.search;
     list = list.filter(({p}) => {
-      const title = (p.product_title || '').toLowerCase();
-      const variant = (p.variant_title || '').toLowerCase();
-      const sku = (p.sku || '').toLowerCase();
-      const barcode = (p.barcode || '').toLowerCase();
-      return title.includes(q) || variant.includes(q) || sku.includes(q) || barcode.includes(q);
+      // 🔎 v1023: كل كلمة لوحدها وبأي ترتيب — «borbone gro» تلاقي Borbone ... Ground
+      return matchTokens([p.product_title, p.variant_title, p.sku, p.barcode].join(' '), q);
     });
   }
   
@@ -47515,7 +47512,7 @@ function wlRenderProducts(){
       const sku = (p.sku || '').toLowerCase();
       const barcode = (p.barcode || '').toLowerCase();
       const notes = (p.notes || '').toLowerCase();
-      return title.includes(q) || variant.includes(q) || sku.includes(q) || barcode.includes(q) || notes.includes(q);
+      return matchTokens([title, variant, sku, barcode, notes].join(' '), q);
     });
   }
   
@@ -61289,7 +61286,7 @@ function _neoFiltered(){
     if(q){
       const hay = [o.product_title, o.variant_title, o.sku, o.barcode]
         .map(x => String(x||'').toLowerCase()).join(' ');
-      if(!hay.includes(q)) return false;
+      if(!matchTokens(hay, q)) return false;
     }
     if(kind && String(o.kind||'') !== kind) return false;
     if(risk){
