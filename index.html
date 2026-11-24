@@ -2039,6 +2039,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="day-analysis" onclick="goPage(this,'day-analysis')"><span class="ni-icon">📅</span><span class="ni-label">تحليل يوم</span></div>
         <div class="ni" data-p="snapshots" onclick="goPage(this,'snapshots')"><span class="ni-icon">📸</span><span class="ni-label">حفظ المخزون اليومي</span></div>
         <div class="ni" data-p="zero-stocks" onclick="goPage(this,'zero-stocks')"><span class="ni-icon">⛔</span><span class="ni-label">المنتجات اللي خلصت</span></div>
+        <div class="ni" data-p="inv-adjustments" onclick="goPage(this,'inv-adjustments')"><span class="ni-icon">✋</span><span class="ni-label">التعديلات اليدوية</span></div>
         <div class="ni" data-p="expiry" onclick="goPage(this,'expiry')"><span class="ni-icon">⏳</span><span class="ni-label">تواريخ الصلاحية</span><span class="nbadge" id="nb-expiry" style="background:var(--danger)"></span></div>
         <div class="ni" data-p="near-expiry-offers" onclick="goPage(this,'near-expiry-offers')"><span class="ni-icon">🏷️</span><span class="ni-label">عروض قرب الانتهاء</span><span class="nbadge" id="nb-neo" style="background:#ea580c"></span></div>
         <div class="ni" data-p="store-batches" onclick="goPage(this,'store-batches')"><span class="ni-icon">🏪</span><span class="ni-label">صلاحيات المحلات</span><span class="nbadge" id="nb-sb" style="background:var(--danger)"></span></div>
@@ -9425,6 +9426,31 @@ tr:hover td{background:#fafbff}
 </div>
 
 <!-- 🆕 v271: ZERO STOCKS PAGE -->
+<!-- ✋ v1029: التعديلات اليدوية على المخزون -->
+<div class="page" id="page-inv-adjustments">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:10px">
+    <h2 style="margin:0">✋ التعديلات اليدوية على المخزون</h2>
+    <button class="btn btn-ghost btn-sm" onclick="iaSweep()">🔍 افحص دلوقتي</button>
+  </div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:12px">تغييرات في رصيد شوبيفاي مالقيناش ليها طلب ولا بيع ستارز ولا تحويل ولا جرد — غالباً حد عدّلها بإيده. شوبيفاي مابيقولش مين.</div>
+  <div class="card" style="margin-bottom:12px"><div style="padding:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <select id="ia-status" class="form-input" style="width:auto;padding:5px 8px;font-size:12px" onchange="iaLoad()">
+      <option value="unexplained">✋ محتاجة مراجعة</option><option value="reviewed">✓ اتراجعت</option>
+      <option value="explained">🔗 ليها تفسير</option><option value="all">الكل</option></select>
+    <select id="ia-days" class="form-input" style="width:auto;padding:5px 8px;font-size:12px" onchange="iaLoad()">
+      <option value="1">آخر يوم</option><option value="7" selected>آخر 7 أيام</option><option value="30">آخر 30 يوم</option><option value="90">آخر 90 يوم</option></select>
+    <select id="ia-wh" class="form-input" style="width:auto;padding:5px 8px;font-size:12px" onchange="iaRender()"><option value="">كل المخازن</option></select>
+    <select id="ia-dir" class="form-input" style="width:auto;padding:5px 8px;font-size:12px" onchange="iaRender()">
+      <option value="">زيادة ونقص</option><option value="minus">🔻 نقص بس</option><option value="plus">🔺 زيادة بس</option></select>
+    <input id="ia-q" class="form-input" placeholder="🔎 صنف / باركود" style="max-width:220px;padding:5px 8px;font-size:12px" oninput="iaRender()">
+    <span id="ia-sum" style="margin-inline-start:auto;font-size:12px;color:var(--muted)"></span>
+  </div></div>
+  <div class="card"><div style="overflow:auto"><table class="tbl" style="width:100%">
+    <thead><tr><th>الوقت</th><th>المخزن</th><th></th><th>الصنف</th><th style="text-align:center">كان</th><th style="text-align:center">بقى</th><th style="text-align:center">الفرق</th><th>الحالة</th><th></th></tr></thead>
+    <tbody id="ia-body"><tr><td colspan="9" style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</td></tr></tbody>
+  </table></div></div>
+</div>
+
 <div class="page" id="page-zero-stocks">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <h2 style="margin:0">⛔ المنتجات اللي خلصت</h2>
@@ -12419,12 +12445,12 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','shopify-transfers':'🚚 ترانسفيرات شوبيفاي','abandoned':'🛒 سلات متسابة','delivery-areas':'🗺️ إعدادات التوصيل','google-feed':'🏷️ فيد جوجل (Custom Labels)','winners':'🏆 تقييم المنتجات — Winners','meta-ads':'📘 أداء Meta','gads-perf':'📈 أداء Google Ads','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','shopify-transfers':'🚚 ترانسفيرات شوبيفاي','abandoned':'🛒 سلات متسابة','delivery-areas':'🗺️ إعدادات التوصيل','google-feed':'🏷️ فيد جوجل (Custom Labels)','winners':'🏆 تقييم المنتجات — Winners','meta-ads':'📘 أداء Meta','gads-perf':'📈 أداء Google Ads','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','inv-adjustments':'✋ التعديلات اليدوية على المخزون','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1028';
+const UI_BUILD = 'v1029';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -38821,6 +38847,65 @@ async function tmxSend(){
 }
 
 // ============================================================
+// ✋ v1029: التعديلات اليدوية على المخزون
+// ============================================================
+let _ia = [];
+const _iaKind = { order:'🛒 طلب أونلاين', pos:'🏪 بيع ستارز', transfer:'🔄 تحويل', stocktake:'🔍 جرد', system:'⚙️ حركة من السيستم' };
+async function iaLoad(){
+  const body = $('ia-body'); if(body) body.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--muted)">⏳ جاري التحميل...</td></tr>';
+  try{
+    const r = await apiFetch(`/api/inventory/adjustments?status=${$('ia-status').value}&days=${$('ia-days').value}`);
+    if(!r || r.error){ body.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--danger)">❌ ${escapeHtml(_errText(r?.error || _apiLastErr, 'فشل'))}</td></tr>`; return; }
+    _ia = r.changes || [];
+    const sel = $('ia-wh'), cur = sel.value;
+    const whs = [...new Map(_ia.map(c => [String(c.warehouse_id), c.warehouse_name || ('#' + c.warehouse_id)])).entries()];
+    sel.innerHTML = '<option value="">كل المخازن</option>' + whs.map(([id, n]) => `<option value="${id}">${escapeHtml(n)}</option>`).join('');
+    if(whs.some(([id]) => id === cur)) sel.value = cur;
+    iaRender();
+  }catch(e){ if(body) body.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--danger)">❌ ${escapeHtml(e.message)}</td></tr>`; }
+}
+function iaRender(){
+  const body = $('ia-body'); if(!body) return;
+  const wh = $('ia-wh').value, dir = $('ia-dir').value, q = String($('ia-q').value || '').trim();
+  const rows = _ia.filter(c => (!wh || String(c.warehouse_id) === wh)
+    && (!dir || (dir === 'minus' ? c.delta < 0 : c.delta > 0))
+    && (!q || matchTokens([c.product_title, c.variant_title, c.sku, c.variant_id].join(' '), q)));
+  const minus = rows.filter(c => c.delta < 0).reduce((s, c) => s + c.delta, 0), plus = rows.filter(c => c.delta > 0).reduce((s, c) => s + c.delta, 0);
+  $('ia-sum').innerHTML = `<b style="font-family:Roboto,sans-serif">${rows.length}</b> حركة · <span dir="ltr" style="color:#dc2626;font-family:Roboto,sans-serif">${minus}</span> · <span dir="ltr" style="color:#16a34a;font-family:Roboto,sans-serif">+${plus}</span> قطعة`;
+  const fmt = d => new Date(d).toLocaleString('en-GB', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+  body.innerHTML = rows.length ? rows.map(c => {
+    const st = c.status === 'unexplained' ? '<span style="background:#fef3c7;color:#92400e;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:800">✋ محتاجة مراجعة</span>'
+      : c.status === 'reviewed' ? `<span style="background:#dcfce7;color:#166534;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:800" title="${escapeAttr((c.reviewed_by || '') + ' · ' + (c.reviewed_at ? fmt(c.reviewed_at) : ''))}">✓ اتراجعت</span>${c.review_note ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">${escapeHtml(c.review_note)}</div>` : ''}`
+      : c.status === 'explained' ? `<span style="background:#e0e7ff;color:#3730a3;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:700">${_iaKind[c.matched_kind] || '🔗'} ${escapeHtml(c.matched_ref || '')}</span>`
+      : '<span style="color:var(--muted);font-size:11px">⏳ لسه بيتفحص</span>';
+    const act = c.status === 'unexplained' ? `<button class="btn btn-ghost btn-xs" onclick="iaReview(${c.id})">✓ معروفة</button>`
+      : c.status === 'reviewed' ? `<button class="btn btn-ghost btn-xs" onclick="iaReview(${c.id}, true)" title="رجّعها محتاجة مراجعة">↩️</button>` : '';
+    return `<tr>
+      <td style="font-family:Roboto,sans-serif;font-size:12px;white-space:nowrap">${fmt(c.at)}</td>
+      <td style="font-size:12px;font-weight:700">${escapeHtml(c.warehouse_name || '')}</td>
+      <td style="width:40px">${_imgThumb ? _imgThumb(c.image_url, 34) : ''}</td>
+      <td><div style="font-weight:700;font-size:12px">${escapeHtml(c.product_title || c.variant_id)}${c.variant_title && c.variant_title !== 'Default Title' ? ' · ' + escapeHtml(c.variant_title) : ''}</div>
+        <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(c.sku || '')}</div></td>
+      <td style="text-align:center;font-family:Roboto,sans-serif">${c.old_qty}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:700">${c.new_qty}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:900;font-size:15px;color:${c.delta < 0 ? '#dc2626' : '#16a34a'}"><span dir="ltr">${c.delta > 0 ? '+' : ''}${c.delta}</span></td>
+      <td>${st}</td><td>${act}</td></tr>`;
+  }).join('') : '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--muted)">✅ مفيش حركات</td></tr>';
+}
+async function iaReview(id, undo){
+  let note = '';
+  if(!undo){ note = prompt('ملاحظة (اختياري) — مثلاً: هالك / اتنقل Unavailable / غلطة'); if(note === null) return; }
+  const r = await apiFetch(`/api/inventory/adjustments/${id}/review`, 'POST', undo ? { undo: true } : { note });
+  if(!r || r.error){ toast('❌ ' + _errText(r?.error || _apiLastErr, 'فشل')); return; }
+  iaLoad();
+}
+async function iaSweep(){
+  toast('⏳ بيفحص...');
+  await apiFetch('/api/inventory/adjustments/sweep', 'POST');
+  iaLoad();
+}
+
+// ============================================================
 // 🛒 v252: PURCHASE SUGGESTIONS (ذكاء الشراء)
 // ============================================================
 let _psData = { suggestions: [], stats: {} };
@@ -63881,6 +63966,7 @@ function goPage(el,page){
   if(page==='replenishment') loadReplenishmentDashboard();
   if(page==='snapshots') loadSnapshotsPage();
   if(page==='zero-stocks') initZeroStocksPage();
+  if(page==='inv-adjustments') iaLoad();
   if(page==='unsynced-sales') loadUnsyncedSales();
   // 🆕 v274: POS team & settlements
   if(page==='pos-team') renderPosTeam();
