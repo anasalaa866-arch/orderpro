@@ -12390,7 +12390,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1011';
+const UI_BUILD = 'v1012';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -38519,7 +38519,8 @@ function tmxRender(){
   const rows = d.items.filter(it => (_tmx.showSmart || it.source === 'po')
     && (!q || [it.title, it.variant_title, it.sku, it.barcode].join(' ').toLowerCase().includes(q)));
   const nPo = d.items.filter(i => i.source === 'po').length, nSm = d.items.length - nPo;
-  const head = d.to.map(w => `<th style="min-width:120px;text-align:center">📥 ${escapeHtml(w.name)}</th>`).join('');
+  const head = d.to.map(w => `<th style="min-width:120px;text-align:center">📥 ${escapeHtml(w.name)}<div style="font-size:10px;font-weight:400;color:var(--muted)">الكمية اللي هتتحوّل</div></th>`).join('');
+  const multi = d.to.length > 1;
   const body = rows.map(it => {
     const src = it.source === 'po'
       ? `<span style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:800">📦 ${escapeHtml(it.po.po_numbers || '')} · مطلوب <span style="font-family:Roboto,sans-serif">${it.po.ordered}</span>${it.po.received ? ` · وصل <span style="font-family:Roboto,sans-serif">${it.po.received}</span>` : ''}${it.po.incoming ? ` · جاي <span style="font-family:Roboto,sans-serif">${it.po.incoming}</span>` : ''}</span>`
@@ -38537,6 +38538,8 @@ function tmxRender(){
         <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(it.sku || it.barcode || '')}</div>${src}</td>
       <td style="text-align:center;font-family:Roboto,sans-serif"><b style="font-size:15px">${it.avail}</b>
         <div style="font-size:10px;color:var(--muted)">رصيد ${it.from_stock}${it.po?.incoming ? ' + جاي ' + it.po.incoming : ''}${it.src_keep ? ' − يحتفظ ' + it.src_keep : ''}</div></td>
+      <td style="text-align:center;font-family:Roboto,sans-serif">${d.to.map(w => { const s = it.wh[w.id]?.suggest || 0, nd = it.wh[w.id]?.need || 0;
+        return `<div title="اضغط عشان تحطه في الكمية" onclick="_tmx.qty['${it.variant_id}'][${w.id}]=${s};tmxRender()" style="cursor:pointer;line-height:1.3">${multi ? `<span style="font-size:10px;color:var(--muted)">${escapeHtml(w.name)}: </span>` : ''}<b style="font-size:15px;color:#16a34a">${s}</b>${nd > s ? `<div style="font-size:10px;color:#b45309">محتاج ${nd}</div>` : ''}</div>`; }).join('')}</td>
       ${cells}
       <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:${left < 0 ? '#dc2626' : 'var(--muted)'}" id="tmx-left-${it.variant_id}">${left}</td>
     </tr>`;
@@ -38552,8 +38555,8 @@ function tmxRender(){
         <button class="btn btn-ghost btn-xs" onclick="tmxFill('zero')">⓪ صفّر الكل</button>
       </div>
       <div style="overflow:auto"><table class="tbl" style="width:100%">
-        <thead><tr><th></th><th>المنتج</th><th style="text-align:center">المتاح للتحويل</th>${head}<th style="text-align:center">يفضل</th></tr></thead>
-        <tbody>${body || `<tr><td colspan="${4 + d.to.length}" style="text-align:center;color:var(--muted);padding:20px">مفيش منتجات</td></tr>`}</tbody>
+        <thead><tr><th></th><th>المنتج</th><th style="text-align:center">المتاح للتحويل</th><th style="text-align:center">💡 المقترح</th>${head}<th style="text-align:center">يفضل</th></tr></thead>
+        <tbody>${body || `<tr><td colspan="${5 + d.to.length}" style="text-align:center;color:var(--muted);padding:20px">مفيش منتجات</td></tr>`}</tbody>
       </table></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;font-size:12px">
         <div id="tmx-foot" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"></div>
