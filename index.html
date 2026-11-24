@@ -12424,7 +12424,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1027';
+const UI_BUILD = 'v1028';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -46851,7 +46851,7 @@ function renderReorderTable(){
         <thead style="position:sticky;top:0;z-index:5;box-shadow:0 2px 4px rgba(0,0,0,.25)"><tr>${headerCells}</tr></thead>
         <tbody>
           <tr>
-            <td colspan="${_reorderWarehouses.length + 8}" style="padding:40px;text-align:center;color:var(--muted)">
+            <td colspan="${_reorderWarehouses.length + 9}" style="padding:40px;text-align:center;color:var(--muted)">
               <div style="font-size:36px;opacity:.3;margin-bottom:8px">🔍</div>
               <div style="font-size:13px;font-weight:700;margin-bottom:4px">مفيش نتائج للفلتر ده</div>
               <div style="font-size:11px;margin-bottom:10px">جرّب تغير الفلاتر أو</div>
@@ -46869,7 +46869,8 @@ function renderReorderTable(){
     <th style="padding:8px;text-align:right;background:#1e293b;color:#fff;position:sticky;left:0;z-index:2;min-width:200px">المنتج</th>
     <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px">مقترح</th>
     <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px;min-width:90px">الكمية المطلوبة</th>
-    <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px;min-width:80px">السعر</th>
+    <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px;min-width:80px">سعر الشراء</th>
+    <th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px;min-width:70px">💰 سعر البيع</th>
   `;   // 🔧 v961: الكمية جنب الصورة والاسم
   _reorderWarehouses.forEach(w => {
     headerCells += `<th style="padding:8px;text-align:center;background:#1e293b;color:#fff;font-size:11px;min-width:60px" title="${escapeHtml(w.name)}">${escapeHtml(w.name.slice(0, 12))}</th>`;
@@ -46942,6 +46943,12 @@ function renderReorderTable(){
                  onchange="updateReorderCost(${idx}, this.value)"
                  style="width:70px;padding:6px;background:var(--elev);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:Cairo,sans-serif;font-size:12px;text-align:center">
         </td>
+        <td style="padding:6px;text-align:center;font-family:Roboto,sans-serif;white-space:nowrap" title="سعر البيع على الموقع">${(() => {
+          const sp = parseFloat(p.sell_price) || 0, c = parseFloat(p.unit_cost) || 0;
+          if(!sp) return '<span style="color:var(--muted)">—</span>';
+          const m = c > 0 ? ((sp - c) / sp * 100) : null;
+          return `<b style="font-size:13px">${sp.toLocaleString('en-US')}</b>${m != null ? `<div style="font-size:10px;font-weight:700;color:${m < 10 ? '#dc2626' : m < 20 ? '#d97706' : '#16a34a'}">ربح ${m.toFixed(0)}%</div>` : ''}`;
+        })()}</td>
         ${whCells}
         <td style="padding:6px;text-align:center;font-weight:800;color:${p.total_stock === 0 ? '#ef4444' : p.total_stock < 10 ? '#f97316' : '#3b82f6'}">${p.total_stock}</td>
         <td style="padding:6px;text-align:center;font-size:11px" title="${_buildBreakdownTooltip(p, 'avg_7d')}">${p.avg_7d.toFixed(1)}</td>
@@ -46972,6 +46979,7 @@ function updateReorderQty(idx, val){
 function updateReorderCost(idx, val){
   const cost = parseFloat(val) || 0;
   _reorderProducts[idx].unit_cost = cost;
+  renderReorderTable();   // 💰 v1028: نسبة الربح جنب سعر البيع تتحدث
   updateReorderTotals();
 }
 
