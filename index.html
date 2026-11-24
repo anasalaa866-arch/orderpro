@@ -2351,12 +2351,15 @@ tr:hover td{background:#fafbff}
           <option value="">active: الكل</option><option value="1">✅ active = 1</option><option value="0">⛔ active = 0</option><option value="locked">🔒 مقفول يدوي</option></select>
         <select id="tal-f-stock" class="form-input" style="width:auto;padding:4px 6px;font-size:12px" onchange="talabatFiltersChanged()">
           <option value="">المخزون: الكل</option><option value="in">📦 فيه مخزون</option><option value="out">🚫 خلصان</option><option value="sold_out">🔥 بيتباع وخلصان</option></select>
+        <select id="tal-f-obour" class="form-input" style="width:auto;padding:4px 6px;font-size:12px" onchange="talabatFiltersChanged()">
+          <option value="">🏭 العبور: الكل</option><option value="in">🏭 ليه مخزون في العبور</option><option value="out">🏭 مالوش في العبور</option></select>
         <select id="tal-f-sales" class="form-input" style="width:auto;padding:4px 6px;font-size:12px" onchange="talabatFiltersChanged()">
           <option value="">المبيعات: الكل</option><option value="yes">🛒 اتباع آخر 30 يوم</option><option value="no">💤 ماتباعش</option></select>
         <select id="tal-sort" class="form-input" style="width:auto;padding:4px 6px;font-size:12px;font-weight:700" onchange="talabatFiltersChanged()">
           <option value="sales">↓ الأفضل مبيعاً</option><option value="sales_asc">↑ الأقل مبيعاً</option>
           <option value="orders">↓ عدد الأوردرات</option>
           <option value="stock">↓ المخزون الأعلى</option><option value="stock_asc">↑ المخزون الأقل</option>
+          <option value="obour">↓ مخزون العبور الأعلى</option>
           <option value="price">↓ السعر النهائي الأعلى</option><option value="price_asc">↑ السعر النهائي الأقل</option>
           <option value="name">أ-ي الاسم</option><option value="default">ترتيب الشيت</option></select>
         <span id="tal-summary" style="font-size:12px;color:var(--muted);margin-inline-start:auto"></span>
@@ -12417,7 +12420,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1020';
+const UI_BUILD = 'v1021';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -38565,7 +38568,7 @@ function _tmxSnapshot(){
     from: $('tmx-from')?.value || '', to: [...document.querySelectorAll('#tmx-to input:checked')].map(i => i.value),
     poIds: [..._tmx.selPos], days: $('tmx-days')?.value, target: $('tmx-target')?.value, keep: $('tmx-keep')?.value,
     smart: !!$('tmx-smart')?.checked, data: _tmx.data, qty: _tmx.qty, removed: [...(_tmx.removed || [])],
-    showSmart: _tmx.showSmart, newInfo: _tmx.newInfo || {}, onlyNew: !!_tmx.onlyNew, savedAt: new Date().toISOString(),
+    showSmart: _tmx.showSmart, newInfo: _tmx.newInfo || {}, onlyNew: !!_tmx.onlyNew, srcF: _tmx.srcF || '', talF: _tmx.talF || '', savedAt: new Date().toISOString(),
   };
 }
 function _tmxSave(){
@@ -38605,7 +38608,7 @@ async function _tmxRestore(){
     if(snap.keep != null) $('tmx-keep').value = snap.keep; if($('tmx-smart')) $('tmx-smart').checked = !!snap.smart;
     _tmx.data = snap.data; _tmx.qty = snap.qty || {}; _tmx.removed = new Set(snap.removed || []);
     _tmx.showSmart = snap.showSmart !== false; _tmx.savedAt = snap.savedAt;
-    _tmx.newInfo = snap.newInfo || {}; _tmx.onlyNew = !!snap.onlyNew;
+    _tmx.newInfo = snap.newInfo || {}; _tmx.onlyNew = !!snap.onlyNew; _tmx.srcF = snap.srcF || ''; _tmx.talF = snap.talF || '';
     tmxRender();
     toast('📝 رجّعتلك التحويل اللي كنت شغال عليه');
   } finally { _tmx.restoring = false; }
@@ -38626,7 +38629,8 @@ function tmxFooter(){
     return `<span style="background:var(--elev);border-radius:8px;padding:5px 10px;font-weight:800">📥 ${escapeHtml(w.name)}: <span style="font-family:Roboto,sans-serif">${n}</span> صنف · <span style="font-family:Roboto,sans-serif">${q}</span> قطعة</span>`;
   }).join('');
   const over = _tmxItems().filter(it => _tmxRowTotal(it.variant_id) > _tmxTot(it)).length;
-  box.innerHTML = per + (over ? `<span style="color:#dc2626;font-weight:800">⚠️ ${over} صنف الكمية فيه أكبر من المتاح</span>` : '');
+  const filtered = !!(_tmx.srcF || _tmx.talF || _tmx.onlyNew || _tmx.q);
+  box.innerHTML = (filtered ? '<span style="font-size:11px;color:#4f46e5;font-weight:700">🔎 الجدول متفلتر — الإجمالي ده للتحويل كله:</span>' : '') + per + (over ? `<span style="color:#dc2626;font-weight:800">⚠️ ${over} صنف الكمية فيه أكبر من المتاح</span>` : '');
 }
 function tmxRender(){
   const d = _tmx.data, box = $('tmx-result'); if(!d || !box) return;
@@ -38634,8 +38638,11 @@ function tmxRender(){
   _tmx.removed = _tmx.removed || new Set();
   const NI = _tmx.newInfo || {};
   const TF = _tmx.talF || '';
+  const SF = _tmx.srcF || '';   // 🆕 v1021: فلتر المصدر — أمر شراء معيّن أو الذكاء
+  const _poOf = it => String(it.po?.po_numbers || '').split(/[،,]\s*/).map(s => s.trim()).filter(Boolean);
   const rows = d.items.filter(it => !_tmx.removed.has(it.variant_id) && (_tmx.showSmart || it.source === 'po') && (!_tmx.onlyNew || NI[it.variant_id])
     && (!TF || (TF === 'yes' ? !!it.talabat : it.talabat === null))
+    && (!SF || (SF === '__smart' ? it.source === 'smart' : _poOf(it).includes(SF)))
     && (!q || [it.title, it.variant_title, it.sku, it.barcode].join(' ').toLowerCase().includes(q)));
   const nPo = d.items.filter(i => i.source === 'po').length, nSm = d.items.length - nPo;
   const head = d.to.map(w => `<th style="min-width:120px;text-align:center">📥 ${escapeHtml(w.name)}<div style="font-size:10px;font-weight:400;color:var(--muted)">الكمية اللي هتتحوّل</div></th>`).join('');
@@ -38680,6 +38687,12 @@ function tmxRender(){
         <span style="font-size:12px;color:var(--muted)">📦 ${nPo} من أوامر الشراء · 🧠 ${nSm} اقتراح ذكاء</span>
         <label style="font-size:12px;display:flex;gap:5px;align-items:center"><input type="checkbox" ${_tmx.showSmart ? 'checked' : ''} onchange="_tmx.showSmart=this.checked;tmxRender()" title="لو مقفولة اقتراحات الذكاء مش هتتبعت"> اعرض اقتراحات الذكاء</label>
         <input class="form-input" placeholder="🔎 بحث" value="${escapeHtml(_tmx.q || '')}" oninput="_tmx.q=this.value;clearTimeout(window._tmxQt);window._tmxQt=setTimeout(tmxRender,250)" style="max-width:180px;padding:4px 8px;font-size:12px">
+        ${(() => { const cnt = {}; for(const i of d.items) for(const p of _poOf(i)) cnt[p] = (cnt[p] || 0) + 1;
+          const ks = Object.keys(cnt).sort(); const nS = d.items.filter(i => i.source === 'smart').length;
+          return (ks.length + (nS ? 1 : 0)) > 1 ? `<select class="form-input" style="width:auto;padding:3px 6px;font-size:12px;font-weight:700;${SF ? 'border-color:#6366f1;background:#eef2ff' : ''}" onchange="_tmx.srcF=this.value;tmxRender()">
+            <option value="">📋 المصدر: الكل</option>
+            ${ks.map(k => `<option value="${escapeAttr(k)}" ${SF === k ? 'selected' : ''}>📦 ${escapeHtml(k)} (${cnt[k]})</option>`).join('')}
+            ${nS ? `<option value="__smart" ${SF === '__smart' ? 'selected' : ''}>🧠 الذكاء بس (${nS})</option>` : ''}</select>` : ''; })()}
         ${d.items.some(i => i.talabat !== undefined) ? `<select class="form-input" style="width:auto;padding:3px 6px;font-size:12px" onchange="_tmx.talF=this.value;tmxRender()">
           <option value="" ${!TF ? 'selected' : ''}>🛵 طلبات: الكل</option>
           <option value="yes" ${TF === 'yes' ? 'selected' : ''}>🛵 على طلبات (${d.items.filter(i => i.talabat).length})</option>
@@ -52435,13 +52448,13 @@ function talabatToggleSort(){
 function talabatFiltersChanged(){
   _talSort = $('tal-sort')?.value || 'sales';
   try{ localStorage.setItem('tal_sort', _talSort);
-       localStorage.setItem('tal_filters', JSON.stringify({ a:$('tal-f-active')?.value||'', s:$('tal-f-stock')?.value||'', q:$('tal-f-sales')?.value||'' })); }catch(e){}
+       localStorage.setItem('tal_filters', JSON.stringify({ a:$('tal-f-active')?.value||'', s:$('tal-f-stock')?.value||'', q:$('tal-f-sales')?.value||'', o:$('tal-f-obour')?.value||'' })); }catch(e){}
   talabatRender();
 }
 function _talRestoreFilters(){
   if(_talRestoreFilters.done) return; _talRestoreFilters.done = true;
   try{ const f = JSON.parse(localStorage.getItem('tal_filters') || '{}');
-       if($('tal-f-active')) $('tal-f-active').value = f.a || ''; if($('tal-f-stock')) $('tal-f-stock').value = f.s || ''; if($('tal-f-sales')) $('tal-f-sales').value = f.q || ''; }catch(e){}
+       if($('tal-f-active')) $('tal-f-active').value = f.a || ''; if($('tal-f-stock')) $('tal-f-stock').value = f.s || ''; if($('tal-f-sales')) $('tal-f-sales').value = f.q || ''; if($('tal-f-obour')) $('tal-f-obour').value = f.o || ''; }catch(e){}
 }
 function talabatRender(){
   _talRestoreFilters();
@@ -52462,6 +52475,9 @@ function talabatRender(){
   if(fS==='in') rows=rows.filter(l=>l.matched&&(Number(l.trivium_qty)||0)>0);
   else if(fS==='out') rows=rows.filter(l=>l.matched&&(Number(l.trivium_qty)||0)<=0);
   else if(fS==='sold_out') rows=rows.filter(l=>l.matched&&(Number(l.trivium_qty)||0)<=0&&(l.tal_qty_30d||0)>0);
+  const fO=$('tal-f-obour')?.value||'';
+  if(fO==='in') rows=rows.filter(l=>l.matched&&(Number(l.obour_qty)||0)>0);
+  else if(fO==='out') rows=rows.filter(l=>l.matched&&(Number(l.obour_qty)||0)<=0);
   if(fQ==='yes') rows=rows.filter(l=>(l.tal_qty_30d||0)>0);
   else if(fQ==='no') rows=rows.filter(l=>l.matched&&!(l.tal_qty_30d>0));
   const N=v=>Number(v)||0, nm=l=>String(l.talabat_name||l.matched_name||'');
@@ -52470,6 +52486,7 @@ function talabatRender(){
     sales_asc:(x,y)=>N(x.tal_qty_30d)-N(y.tal_qty_30d),
     orders:(x,y)=>N(y.tal_orders_30d)-N(x.tal_orders_30d)||N(y.tal_qty_30d)-N(x.tal_qty_30d),
     stock:(x,y)=>N(y.trivium_qty)-N(x.trivium_qty), stock_asc:(x,y)=>N(x.trivium_qty)-N(y.trivium_qty),
+    obour:(x,y)=>N(y.obour_qty)-N(x.obour_qty),
     price:(x,y)=>N(y.final_price)-N(x.final_price), price_asc:(x,y)=>N(x.final_price)-N(y.final_price),
     name:(x,y)=>nm(x).localeCompare(nm(y),'ar'),
   }[_talSort];
@@ -52478,10 +52495,10 @@ function talabatRender(){
   const activeCount=_talLinks.filter(l=>l.active===1).length;
   const lockedCount=_talLinks.filter(l=>l.force_inactive).length;
   const pinnedCount=_talLinks.filter(l=>l.price_override!=null && l.price_override!=='').length;   // 🆕 v627
-  if($('tal-summary')) $('tal-summary').textContent=`${_talLinks.length} منتج · مطابق ${matchedCount} · متاح (active) ${activeCount}${pinnedCount?` · 📌 سعر مثبّت ${pinnedCount}`:''}${lockedCount?` · 🔒 مقفول يدوياً ${lockedCount}`:''}${(onlyU||onlyP||q||fA||fS||fQ)?` — معروض ${rows.length}`:''}`;
+  if($('tal-summary')) $('tal-summary').textContent=`${_talLinks.length} منتج · مطابق ${matchedCount} · متاح (active) ${activeCount}${pinnedCount?` · 📌 سعر مثبّت ${pinnedCount}`:''}${lockedCount?` · 🔒 مقفول يدوياً ${lockedCount}`:''}${(onlyU||onlyP||q||fA||fS||fQ||fO)?` — معروض ${rows.length}`:''}`;
   if(!rows.length){ box.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted)">مفيش منتجات — ارفع شيت طلبات الأول</div>'; return; }
   box.innerHTML=`<table style="width:100%;font-size:13px"><thead><tr>
-    <th style="text-align:right">المنتج على طلبات</th><th style="text-align:right">منتجك على الموقع</th><th>sku طلبات</th><th>مخزون ترفيوم</th><th onclick="talabatToggleSort()" style="cursor:pointer;user-select:none" title="دوس للترتيب بالمبيعات">مبيعات طلبات<div style="font-weight:400;font-size:10px;color:var(--muted)">آخر 30 يوم ${_talSort==='sales'?'▼':_talSort==='sales_asc'?'▲':'↕'}</div></th><th>سعر الموقع</th><th>÷${(1-_talMarginCur/100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}<div style="font-weight:400;font-size:10px;color:var(--muted)">نسبة ${_talMarginCur}%</div></th><th>سعر مثبّت</th><th>السعر النهائي</th><th>active</th>
+    <th style="text-align:right">المنتج على طلبات</th><th style="text-align:right">منتجك على الموقع</th><th>sku طلبات</th><th>مخزون ترفيوم</th><th>🏭 مخزون العبور</th><th onclick="talabatToggleSort()" style="cursor:pointer;user-select:none" title="دوس للترتيب بالمبيعات">مبيعات طلبات<div style="font-weight:400;font-size:10px;color:var(--muted)">آخر 30 يوم ${_talSort==='sales'?'▼':_talSort==='sales_asc'?'▲':'↕'}</div></th><th>سعر الموقع</th><th>÷${(1-_talMarginCur/100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}<div style="font-weight:400;font-size:10px;color:var(--muted)">نسبة ${_talMarginCur}%</div></th><th>سعر مثبّت</th><th>السعر النهائي</th><th>active</th>
     </tr></thead><tbody>${rows.slice(0,800).map(l=>`<tr style="${l.matched?'':'background:#fef2f2'}">
       <td style="font-weight:600">${escapeHtml(l.talabat_name||'—')}</td>
       <td>${l.matched
@@ -52495,6 +52512,7 @@ function talabatRender(){
           : `<button class="btn" style="background:#2563eb;color:#fff;padding:4px 12px;font-size:12px" onclick="talabatOpenLink(${l.id})">🔗 ربط</button>`}</td>
       <td style="text-align:center;font-family:Roboto,sans-serif">${escapeHtml(l.talabat_sku)}</td>
       <td style="text-align:center;font-weight:700">${l.matched?l.trivium_qty:'—'}</td>
+      <td style="text-align:center;font-weight:800;font-family:Roboto,sans-serif;color:${(Number(l.obour_qty)||0)>0?'#1d4ed8':'#94a3b8'}">${l.matched?(l.obour_qty??'—'):'—'}</td>
       <td style="text-align:center;font-family:Roboto,sans-serif">${l.matched
           ? (l.tal_qty_30d>0
               ? `<span style="font-weight:800;color:#FF5A00">${l.tal_qty_30d}</span><div style="font-size:10px;color:var(--muted)">${l.tal_orders_30d} أوردر</div>`
