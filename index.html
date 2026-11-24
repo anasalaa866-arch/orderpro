@@ -12356,7 +12356,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1009';
+const UI_BUILD = 'v1010';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -25763,6 +25763,7 @@ async function loadChks(force){
         phone: s.phone || '',
         note: s.note || ''
       }));
+      _chkApplyRecent();   // 🐞 v1010
       // احفظ في localStorage
       try{
         localStorage.setItem('chk_books',JSON.stringify(chkBooks));
@@ -29021,9 +29022,21 @@ async function saveChk(){
     closeM('m-chk');chkRenderActive();toast('✅ تم حفظ الشيك');
   }finally{ _chkSavingNow = false; }
 }
+// 🐞 v1010: آخر تغيير حالة عملناه على الجهاز — عشان تحميل من السيرفر سبق الحفظ مايرجّعهوش
+const _chkRecentStatus = {};
+function _chkApplyRecent(){
+  const now = Date.now();
+  for(const id in _chkRecentStatus){
+    const r = _chkRecentStatus[id];
+    if(now - r.at > 60000){ delete _chkRecentStatus[id]; continue; }
+    const c = chkList.find(x => x.id === id);
+    if(c && c.status !== r.status){ c.status = r.status; c.doneAt = r.doneAt || null; }
+  }
+}
 async function chkMarkDone(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
   c.status='done';c.doneAt=new Date().toISOString();
+  _chkRecentStatus[id] = { status:'done', doneAt:c.doneAt, at:Date.now() };
   saveChks(true);
   chkRenderActive();
   // 🆕 v291: ما نبعتش "__lazy__" placeholder كـ img — هـ يدمر الصورة الأصلية
@@ -29061,6 +29074,7 @@ async function chkMarkDone(id){
 async function chkMarkPending(id){
   const c=chkList.find(x=>x.id===id);if(!c)return;
   c.status='pending';delete c.doneAt;
+  _chkRecentStatus[id] = { status:'pending', doneAt:null, at:Date.now() };
   saveChks(true);
   chkRenderActive();
   // 🚑 v437: ماتبعتش img إلا لو حقيقية (كان بيمسح الصورة)
