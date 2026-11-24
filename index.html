@@ -7455,7 +7455,9 @@ tr:hover td{background:#fafbff}
       </div>
     </div>
     <div class="modal-footer" style="flex-shrink:0">
-      <button class="btn btn-ghost" onclick="closeM('m-reorder')">إلغاء</button>
+      <button class="btn btn-ghost" onclick="closeM('m-reorder')">إغلاق</button>
+      <button class="btn btn-ghost" onclick="poDraftRestart()" style="color:#dc2626" title="امسح الشغل المحفوظ وابدأ الطلب من الأول بالاقتراحات">↺ ابدأ من الأول</button>
+      <span id="po-draft-badge" style="font-size:11px;color:#16a34a;font-weight:700;align-self:center"></span>
       <button class="btn btn-secondary" onclick="exportReorderPDF()">🖨️ معاينة + PDF</button>
       <button class="btn btn-primary" onclick="saveReorderAsPO('draft')">💾 حفظ كمسودة</button>
       <button class="btn btn-primary" onclick="saveReorderAsPO('sent')">📤 حفظ وإرسال</button>
@@ -12420,7 +12422,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1023';
+const UI_BUILD = 'v1024';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -46552,6 +46554,7 @@ async function removeSPProduct(variantId){
 
 // ─── Reorder Modal (إنشاء PO من مورد) ───
 async function openSupplierReorder(supplierId){
+  _poDraft.ready = false; _poDraft.dirty = false; clearTimeout(_poDraft.t);   // 📝 v1024
   _reorderSupplierId = supplierId;
   const sup = _suppliers.find(s => s.id == supplierId);
   if(!sup) return;
@@ -46617,10 +46620,14 @@ async function openSupplierReorder(supplierId){
     //   ويطبّق كل الاقتراحات لوحده
     const _mr = document.querySelector('input[name="ai_source"][value="master"]');
     if(_mr){ _mr.checked = true; try{ updateAISourceHint(); }catch(e){} }
+    _poDraft.ready = false; _poDraft.orig = new Set(_reorderProducts.map(p => String(p.variant_id)));
+    if($('po-draft-badge')) $('po-draft-badge').textContent = '';
     (async () => {
-      await runAIAssistant();
-      if(_reorderSupplierId != supplierId || !_aiAnalysis?.suggestions?.length) return;
-      applyAISuggestions(false);
+      try{
+        await runAIAssistant();
+        if(_reorderSupplierId == supplierId && _aiAnalysis?.suggestions?.length) applyAISuggestions(false);
+      }catch(e){ console.warn('[v960] auto AI:', e); }
+      if(_reorderSupplierId == supplierId) await _poDraftRestore(supplierId);   // 📝 v1024
     })().catch(e => console.warn('[v960] auto AI:', e));
 
     // 🖼️ v612: لو السيرفر لسه ماببعتش الصور (أقدم من v560) — هاتها وأعد الرسم
@@ -46982,7 +46989,73 @@ function removeReorderProduct(idx){
   updateReorderTotals();
 }
 
+// 📝 v1024: مسودة الطلب من المورد — بتتحفظ لوحدها وترجع لما تفتح نفس المورد
+const _poDraft = { ready: false, dirty: false, orig: new Set(), t: null };
+function _poDraftKey(id){ return 'po_supplier_' + id; }
+function _poDraftSnap(){
+  const qty = {}, cost = {};
+  for(const p of _reorderProducts){ const v = String(p.variant_id); qty[v] = p.requested_qty || 0; cost[v] = p.unit_cost; }
+  const cur = new Set(_reorderProducts.map(p => String(p.variant_id)));
+  return { qty, cost, removed: [..._poDraft.orig].filter(v => !cur.has(v)),
+    warehouse: $('reorder-warehouse')?.value || '', expected: $('reorder-expected')?.value || '',
+    notes: $('reorder-notes')?.value || '', days: $('reorder-days')?.value || '', savedAt: new Date().toISOString() };
+}
+function _poDraftSave(){
+  if(!_poDraft.ready || !_poDraft.dirty || !_reorderSupplierId) return;   // بنحفظ بس بعد ما انت تعدّل
+  clearTimeout(_poDraft.t);
+  const sid = _reorderSupplierId;
+  _poDraft.t = setTimeout(async () => {
+    if(sid != _reorderSupplierId || !_poDraft.ready) return;
+    const snap = _poDraftSnap();
+    try{ localStorage.setItem(_poDraftKey(sid), JSON.stringify(snap)); }catch(e){}
+    try{ await apiFetch('/api/ui-drafts/' + _poDraftKey(sid), 'PUT', { draft: snap }); }catch(e){}
+    if($('po-draft-badge')) $('po-draft-badge').textContent = '📝 محفوظ ' + new Date(snap.savedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  }, 1200);
+}
+async function _poDraftClear(id){
+  clearTimeout(_poDraft.t);
+  try{ localStorage.removeItem(_poDraftKey(id)); }catch(e){}
+  try{ await apiFetch('/api/ui-drafts/' + _poDraftKey(id), 'DELETE'); }catch(e){}
+}
+async function _poDraftRestore(id){
+  let snap = null;
+  try{ const r = await apiFetch('/api/ui-drafts/' + _poDraftKey(id)); snap = r?.draft || null; }catch(e){}
+  if(!snap){ try{ snap = JSON.parse(localStorage.getItem(_poDraftKey(id)) || 'null'); }catch(e){} }
+  if(snap && id == _reorderSupplierId){
+    const rm = new Set(snap.removed || []);
+    _reorderProducts = _reorderProducts.filter(p => !rm.has(String(p.variant_id)));
+    for(const p of _reorderProducts){
+      const v = String(p.variant_id);
+      if(snap.qty && v in snap.qty) p.requested_qty = parseInt(snap.qty[v]) || 0;
+      if(snap.cost && v in snap.cost && snap.cost[v] != null) p.unit_cost = parseFloat(snap.cost[v]) || 0;
+    }
+    if(snap.warehouse && $('reorder-warehouse')) $('reorder-warehouse').value = snap.warehouse;
+    if($('reorder-expected')) $('reorder-expected').value = snap.expected || '';
+    if($('reorder-notes')) $('reorder-notes').value = snap.notes || '';
+    if(snap.days && $('reorder-days')) $('reorder-days').value = snap.days;
+    renderReorderTable();
+    _poDraft.dirty = true;
+    if($('po-draft-badge')) $('po-draft-badge').textContent = '📝 محفوظ ' + new Date(snap.savedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    toast('📝 رجّعتلك الطلب اللي كنت شغال عليه');
+  }
+  _poDraft.ready = true;
+  updateReorderTotals();
+}
+async function poDraftRestart(){
+  if(!_reorderSupplierId) return;
+  if(!confirm('تمسح الشغل المحفوظ للطلب ده وتبدأ من الأول بالاقتراحات؟')) return;
+  const id = _reorderSupplierId;
+  _poDraft.ready = false;
+  await _poDraftClear(id);
+  openSupplierReorder(id);
+}
+document.addEventListener('input', e => { if(e.target?.closest?.('#m-reorder .modal-body')){ _poDraft.dirty = true; _poDraftSave(); } }, true);
+document.addEventListener('change', e => { if(e.target?.closest?.('#m-reorder .modal-body')){ _poDraft.dirty = true; _poDraftSave(); } }, true);
+// أي زرار جوه الطلب (طبّق، امسح صنف، ضيف...) = تعديل
+document.addEventListener('click', e => { if(e.target?.closest?.('#m-reorder .modal-body button')){ _poDraft.dirty = true; setTimeout(_poDraftSave, 50); } }, true);
+
 function updateReorderTotals(){
+  _poDraftSave();
   const requested = _reorderProducts.filter(p => p.requested_qty > 0);
   const totalQty = requested.reduce((s, p) => s + p.requested_qty, 0);
   const totalCost = requested.reduce((s, p) => s + (p.requested_qty * p.unit_cost), 0);
@@ -47111,6 +47184,7 @@ async function saveReorderAsPO(status){
     const r = await apiFetch('/api/purchase-orders', 'POST', data);
     if(r?.success){
       toast(status === 'sent' ? '✅ تم الإنشاء والإرسال' : '✅ تم الحفظ كمسودة', 'success');
+      _poDraft.ready = false; await _poDraftClear(_reorderSupplierId);   // 📝 الطلب اتعمل — المسودة خلصت
       closeM('m-reorder');
       loadSuppliersPage();
     }
