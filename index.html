@@ -9479,7 +9479,41 @@ tr:hover td{background:#fafbff}
       <h2 style="margin:0">🧠 ذكاء التحويلات بين المخازن</h2>
       <div style="font-size:11px;color:var(--muted);margin-top:4px">اختر مخزن مصدر ومخزن وجهة، والنظام يقترح المنتجات اللي محتاجة تحويل</div>
     </div>
-    <button class="btn btn-ghost btn-sm" onclick="tpToggleSettings()">⚙️ إعدادات التحليل</button>
+    <button class="btn btn-ghost btn-sm" id="tp-settings-btn" onclick="tpToggleSettings()">⚙️ إعدادات التحليل</button>
+  </div>
+  <!-- 📦🧠 v1011: تبويبات — تحليل بين مخزنين / تحويل مجمّع -->
+  <div id="tp-tabs" style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn btn-sm btn-primary" id="tp-tab-main" onclick="tsTab('main')">🧠 تحليل بين مخزنين</button>
+    <button class="btn btn-sm btn-ghost" id="tp-tab-mix" onclick="tsTab('mix')">📦🧠 تحويل مجمّع — أوامر شراء + ذكاء</button>
+  </div>
+  <div id="tmx-wrap" style="display:none">
+    <div class="card" style="margin-bottom:12px"><div style="padding:14px;display:grid;gap:12px">
+      <div style="display:grid;grid-template-columns:minmax(200px,1fr) 2fr;gap:12px">
+        <div>
+          <label style="font-weight:700;font-size:12px;color:#991b1b;display:block;margin-bottom:5px">📤 المخزن المُرسِل</label>
+          <select id="tmx-from" class="form-input" style="width:100%;font-weight:700" onchange="tmxRenderTo()"></select>
+        </div>
+        <div>
+          <label style="font-weight:700;font-size:12px;color:#065f46;display:block;margin-bottom:5px">📥 المخازن المستقبِلة (اختار واحد أو أكتر)</label>
+          <div id="tmx-to" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">
+          <label style="font-weight:700;font-size:12px">📋 أوامر الشراء (اختياري — اختار واحد أو أكتر)</label>
+          <input id="tmx-po-q" class="form-input" placeholder="🔎 رقم الأمر أو المورد" style="max-width:220px;padding:5px 8px;font-size:12px" oninput="tmxRenderPos()">
+        </div>
+        <div id="tmx-pos" style="max-height:190px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px;display:grid;gap:3px"></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;font-size:12px">
+        <label style="display:flex;gap:6px;align-items:center;font-weight:700"><input type="checkbox" id="tmx-smart" checked> 🧠 ضيف اقتراحات ذكاء التحويلات من رصيد المخزن</label>
+        <div><div style="font-size:11px;color:var(--muted)">فترة حساب البيع</div><select id="tmx-days" class="form-input" style="padding:4px 6px"><option value="7">7 أيام</option><option value="14">14 يوم</option><option value="30" selected>30 يوم</option></select></div>
+        <div><div style="font-size:11px;color:var(--muted)">تغطية الوجهة</div><select id="tmx-target" class="form-input" style="padding:4px 6px"><option value="7">7 أيام</option><option value="14" selected>14 يوم</option><option value="21">21 يوم</option><option value="30">30 يوم</option></select></div>
+        <div><div style="font-size:11px;color:var(--muted)">المُرسِل يحتفظ بـ</div><select id="tmx-keep" class="form-input" style="padding:4px 6px"><option value="0">ولا يوم</option><option value="3">3 أيام</option><option value="7" selected>7 أيام</option><option value="14">14 يوم</option></select></div>
+        <button class="btn btn-primary" id="tmx-load-btn" onclick="tmxLoad()" style="margin-inline-start:auto">🔍 هات المنتجات</button>
+      </div>
+    </div></div>
+    <div id="tmx-result"></div>
   </div>
 
   <!-- Warehouse Picker -->
@@ -12356,7 +12390,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1010';
+const UI_BUILD = 'v1011';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -38367,6 +38401,196 @@ async function tpCreateBulkTransfer(){
     toast('❌ ' + e.message);
     if(btn){ btn.disabled = false; btn.textContent = '✅ أنشئ تحويل واحد بكل المحدد'; }
   }
+}
+
+// ============================================================
+// 📦🧠 v1011: تحويل مجمّع — أوامر شراء + ذكاء التحويلات، لكذا مخزن
+// ============================================================
+let _tmx = { pos: [], selPos: new Set(), data: null, qty: {}, showSmart: true, q: '' };
+function tsTab(which){
+  const page = document.getElementById('page-transfer-suggestions');
+  if(!page) return;
+  const mix = which === 'mix';
+  [...page.children].forEach(el => {
+    if(el.id === 'tp-tabs' || el === page.firstElementChild) return;
+    if(el.id === 'tmx-wrap'){ el.style.display = mix ? '' : 'none'; return; }
+    if(mix){ if(el.dataset.tmxHid == null){ el.dataset.tmxHid = el.style.display || ''; } el.style.display = 'none'; }
+    else if(el.dataset.tmxHid != null){ el.style.display = el.dataset.tmxHid; delete el.dataset.tmxHid; }
+  });
+  const sb = $('tp-settings-btn'); if(sb) sb.style.display = mix ? 'none' : '';
+  $('tp-tab-main').className = 'btn btn-sm ' + (mix ? 'btn-ghost' : 'btn-primary');
+  $('tp-tab-mix').className = 'btn btn-sm ' + (mix ? 'btn-primary' : 'btn-ghost');
+  if(mix) tmxInit();
+}
+async function tmxInit(){
+  await tpLoadWarehouses();
+  const fromSel = $('tmx-from');
+  if(fromSel && !fromSel.options.length){
+    fromSel.innerHTML = _tpWarehouses.map(w => `<option value="${w.id}">${w.is_pos ? '🏪' : '📦'} ${escapeHtml(w.name)}${w.is_master ? ' ⭐' : ''}</option>`).join('');
+    const m = _tpWarehouses.find(w => w.is_master); if(m) fromSel.value = String(m.id);
+    tmxRenderTo();
+  }
+  if(!_tmx.pos.length){
+    try{
+      const r = await apiFetch('/api/purchase-orders?limit=60');
+      _tmx.pos = (r?.orders || r?.purchase_orders || (Array.isArray(r) ? r : []))
+        .filter(p => !['cancelled','canceled'].includes(String(p.status || '').toLowerCase()));
+    }catch(e){ _tmx.pos = []; }
+    tmxRenderPos();
+  }
+}
+function tmxRenderTo(){
+  const from = $('tmx-from')?.value, box = $('tmx-to'); if(!box) return;
+  const prev = new Set([...box.querySelectorAll('input:checked')].map(i => i.value));
+  box.innerHTML = _tpWarehouses.filter(w => String(w.id) !== String(from)).map(w =>
+    `<label style="display:flex;gap:5px;align-items:center;border:1px solid var(--border);border-radius:8px;padding:5px 9px;font-size:12px;font-weight:700;cursor:pointer">
+       <input type="checkbox" value="${w.id}" ${prev.has(String(w.id)) ? 'checked' : ''}> ${w.is_pos ? '🏪' : '📦'} ${escapeHtml(w.name)}</label>`).join('');
+}
+const _tmxPoSt = { draft:'مسودة', sent:'اتبعت', ordered:'اتطلب', partial:'استلام جزئي', received:'اتستلم', completed:'خلص', closed:'مقفول' };
+function tmxRenderPos(){
+  const box = $('tmx-pos'); if(!box) return;
+  const q = String($('tmx-po-q')?.value || '').trim().toLowerCase();
+  const list = _tmx.pos.filter(p => !q || [p.po_number, p.supplier_name, p.supplier_name_ref].join(' ').toLowerCase().includes(q)).slice(0, 60);
+  box.innerHTML = list.length ? list.map(p => {
+    const d = p.order_date || p.created_at; const st = String(p.status || '');
+    return `<label style="display:flex;gap:8px;align-items:center;font-size:12px;padding:4px 6px;border-radius:6px;cursor:pointer;${_tmx.selPos.has(p.id) ? 'background:#eef2ff' : ''}">
+      <input type="checkbox" ${_tmx.selPos.has(p.id) ? 'checked' : ''} onchange="tmxTogglePo(${p.id}, this.checked)">
+      <b style="font-family:Roboto,sans-serif">${escapeHtml(p.po_number || '#' + p.id)}</b>
+      <span>${escapeHtml(p.supplier_name_ref || p.supplier_name || '')}</span>
+      <span style="color:var(--muted)">${escapeHtml(p.warehouse_name || '')}</span>
+      <span style="margin-inline-start:auto;font-size:10px;background:var(--elev);border-radius:6px;padding:1px 6px">${escapeHtml(_tmxPoSt[st] || st)}</span>
+      <span style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${d ? new Date(d).toLocaleDateString('en-GB') : ''}</span>
+    </label>`; }).join('') : '<div style="color:var(--muted);font-size:12px;padding:8px">مفيش أوامر شراء</div>';
+}
+function tmxTogglePo(id, on){
+  if(on) _tmx.selPos.add(id); else _tmx.selPos.delete(id);
+  // أمر شراء واحد مختار → مخزنه يبقى المُرسِل
+  if(on && _tmx.selPos.size === 1){
+    const p = _tmx.pos.find(x => x.id === id);
+    if(p?.warehouse_id && $('tmx-from')){ $('tmx-from').value = String(p.warehouse_id); tmxRenderTo(); }
+  }
+  tmxRenderPos();
+}
+async function tmxLoad(){
+  const from = $('tmx-from')?.value;
+  const to = [...document.querySelectorAll('#tmx-to input:checked')].map(i => i.value);
+  if(!from){ toast('⚠️ اختار المخزن المُرسِل'); return; }
+  if(!to.length){ toast('⚠️ اختار مخزن وجهة واحد على الأقل'); return; }
+  const smart = $('tmx-smart')?.checked;
+  if(!_tmx.selPos.size && !smart){ toast('⚠️ اختار أمر شراء أو فعّل اقتراحات الذكاء'); return; }
+  const btn = $('tmx-load-btn'); if(btn){ btn.disabled = true; btn.textContent = '⏳ بيحسب...'; }
+  try{
+    const qs = new URLSearchParams({ from, to: to.join(','), poIds: [..._tmx.selPos].join(','),
+      days: $('tmx-days').value, target: $('tmx-target').value, keep: $('tmx-keep').value, smart: smart ? '1' : '0' });
+    const r = await apiFetch('/api/transfer-mix?' + qs);
+    if(!r || r.error){ toast('❌ ' + _errText(r?.error || _apiLastErr, 'فشل')); return; }
+    _tmx.data = r; _tmx.qty = {};
+    for(const it of r.items){ _tmx.qty[it.variant_id] = {}; for(const w of r.to) _tmx.qty[it.variant_id][w.id] = it.wh[w.id]?.suggest || 0; }
+    tmxRender();
+  }finally{ if(btn){ btn.disabled = false; btn.textContent = '🔍 هات المنتجات'; } }
+}
+function _tmxRowTotal(vid){ return Object.values(_tmx.qty[vid] || {}).reduce((s, n) => s + (parseInt(n) || 0), 0); }
+function tmxSetQty(vid, w, val){
+  _tmx.qty[vid][w] = Math.max(0, parseInt(val) || 0);
+  const it = _tmx.data.items.find(x => x.variant_id === vid);
+  const left = it.avail - _tmxRowTotal(vid);
+  const el = document.getElementById('tmx-left-' + vid);
+  if(el){ el.textContent = left; el.style.color = left < 0 ? '#dc2626' : 'var(--muted)'; }
+  tmxFooter();
+}
+function tmxFill(mode){
+  for(const it of _tmx.data.items) for(const w of _tmx.data.to)
+    _tmx.qty[it.variant_id][w.id] = mode === 'zero' ? 0 : (it.wh[w.id]?.suggest || 0);
+  tmxRender();
+}
+function tmxFooter(){
+  const d = _tmx.data, box = $('tmx-foot'); if(!d || !box) return;
+  const per = d.to.map(w => {
+    let q = 0, n = 0;
+    for(const it of d.items){ const x = parseInt(_tmx.qty[it.variant_id]?.[w.id]) || 0; if(x > 0){ q += x; n++; } }
+    return `<span style="background:var(--elev);border-radius:8px;padding:5px 10px;font-weight:800">📥 ${escapeHtml(w.name)}: <span style="font-family:Roboto,sans-serif">${n}</span> صنف · <span style="font-family:Roboto,sans-serif">${q}</span> قطعة</span>`;
+  }).join('');
+  const over = d.items.filter(it => _tmxRowTotal(it.variant_id) > it.avail).length;
+  box.innerHTML = per + (over ? `<span style="color:#dc2626;font-weight:800">⚠️ ${over} صنف الكمية فيه أكبر من المتاح</span>` : '');
+}
+function tmxRender(){
+  const d = _tmx.data, box = $('tmx-result'); if(!d || !box) return;
+  const q = (_tmx.q || '').toLowerCase();
+  const rows = d.items.filter(it => (_tmx.showSmart || it.source === 'po')
+    && (!q || [it.title, it.variant_title, it.sku, it.barcode].join(' ').toLowerCase().includes(q)));
+  const nPo = d.items.filter(i => i.source === 'po').length, nSm = d.items.length - nPo;
+  const head = d.to.map(w => `<th style="min-width:120px;text-align:center">📥 ${escapeHtml(w.name)}</th>`).join('');
+  const body = rows.map(it => {
+    const src = it.source === 'po'
+      ? `<span style="background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:800">📦 ${escapeHtml(it.po.po_numbers || '')} · مطلوب <span style="font-family:Roboto,sans-serif">${it.po.ordered}</span>${it.po.received ? ` · وصل <span style="font-family:Roboto,sans-serif">${it.po.received}</span>` : ''}${it.po.incoming ? ` · جاي <span style="font-family:Roboto,sans-serif">${it.po.incoming}</span>` : ''}</span>`
+      : `<span style="background:#f5f3ff;color:#5b21b6;border:1px solid #ddd6fe;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:800">🧠 من رصيد المخزن</span>`;
+    const left = it.avail - _tmxRowTotal(it.variant_id);
+    const cells = d.to.map(w => { const x = it.wh[w.id] || {};
+      return `<td style="text-align:center">
+        <input type="number" min="0" value="${_tmx.qty[it.variant_id][w.id] || 0}" onchange="tmxSetQty('${it.variant_id}',${w.id},this.value)" oninput="tmxSetQty('${it.variant_id}',${w.id},this.value)"
+          style="width:64px;text-align:center;font-family:Roboto,sans-serif;font-weight:800;font-size:15px;padding:4px;border:1.5px solid ${x.suggest ? '#16a34a' : 'var(--border)'};border-radius:7px">
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;font-family:Roboto,sans-serif">رصيد ${x.stock || 0} · ${x.velocity || 0}/يوم${x.days_left != null ? ' · ' + x.days_left + 'ي' : ''}</div>
+      </td>`; }).join('');
+    return `<tr>
+      <td style="width:44px">${it.image_url ? `<img src="${escapeHtml(it.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">` : ''}</td>
+      <td><div style="font-weight:700;font-size:12px">${escapeHtml(it.title)}${it.variant_title && it.variant_title !== 'Default Title' ? ` <span style="color:var(--muted);font-weight:400">${escapeHtml(it.variant_title)}</span>` : ''}</div>
+        <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(it.sku || it.barcode || '')}</div>${src}</td>
+      <td style="text-align:center;font-family:Roboto,sans-serif"><b style="font-size:15px">${it.avail}</b>
+        <div style="font-size:10px;color:var(--muted)">رصيد ${it.from_stock}${it.po?.incoming ? ' + جاي ' + it.po.incoming : ''}${it.src_keep ? ' − يحتفظ ' + it.src_keep : ''}</div></td>
+      ${cells}
+      <td style="text-align:center;font-family:Roboto,sans-serif;font-weight:800;color:${left < 0 ? '#dc2626' : 'var(--muted)'}" id="tmx-left-${it.variant_id}">${left}</td>
+    </tr>`;
+  }).join('');
+  box.innerHTML = `
+    <div class="card"><div style="padding:12px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <b>📤 ${escapeHtml(d.from.name)}</b>
+        <span style="font-size:12px;color:var(--muted)">📦 ${nPo} من أوامر الشراء · 🧠 ${nSm} اقتراح ذكاء</span>
+        <label style="font-size:12px;display:flex;gap:5px;align-items:center"><input type="checkbox" ${_tmx.showSmart ? 'checked' : ''} onchange="_tmx.showSmart=this.checked;tmxRender()"> اعرض اقتراحات الذكاء</label>
+        <input class="form-input" placeholder="🔎 بحث" value="${escapeHtml(_tmx.q || '')}" oninput="_tmx.q=this.value;clearTimeout(window._tmxQt);window._tmxQt=setTimeout(tmxRender,250)" style="max-width:180px;padding:4px 8px;font-size:12px">
+        <button class="btn btn-ghost btn-xs" onclick="tmxFill('suggest')">↺ رجّع الاقتراح</button>
+        <button class="btn btn-ghost btn-xs" onclick="tmxFill('zero')">⓪ صفّر الكل</button>
+      </div>
+      <div style="overflow:auto"><table class="tbl" style="width:100%">
+        <thead><tr><th></th><th>المنتج</th><th style="text-align:center">المتاح للتحويل</th>${head}<th style="text-align:center">يفضل</th></tr></thead>
+        <tbody>${body || `<tr><td colspan="${4 + d.to.length}" style="text-align:center;color:var(--muted);padding:20px">مفيش منتجات</td></tr>`}</tbody>
+      </table></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;font-size:12px">
+        <div id="tmx-foot" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"></div>
+        <button class="btn btn-primary" id="tmx-send-btn" onclick="tmxSend()" style="margin-inline-start:auto">🚚 ابعت التحويلات لشوبيفاي</button>
+      </div>
+    </div></div>`;
+  tmxFooter();
+}
+async function tmxSend(){
+  const d = _tmx.data; if(!d) return;
+  const over = d.items.filter(it => _tmxRowTotal(it.variant_id) > it.avail);
+  const plan = d.to.map(w => ({ w, items: d.items.map(it => ({ variantId: it.variant_id, qty: parseInt(_tmx.qty[it.variant_id]?.[w.id]) || 0 })).filter(x => x.qty > 0) }))
+    .filter(p => p.items.length);
+  if(!plan.length){ toast('⚠️ مفيش كميات'); return; }
+  const poNums = d.pos.map(p => p.po_number).join('، ');
+  const msg = `هيتعمل ${plan.length} تحويل على شوبيفاي من «${d.from.name}»:\n\n` +
+    plan.map(p => `📥 ${p.w.name}: ${p.items.length} صنف · ${p.items.reduce((s, x) => s + x.qty, 0)} قطعة`).join('\n') +
+    (poNums ? `\n\n📦 أوامر الشراء: ${poNums}` : '') +
+    (over.length ? `\n\n⚠️ ${over.length} صنف الكمية فيه أكبر من المتاح — هيتبعت برضه.` : '') + '\n\nأكمّل؟';
+  if(!confirm(msg)) return;
+  const btn = $('tmx-send-btn'); if(btn){ btn.disabled = true; btn.textContent = '⏳ بيتبعت...'; }
+  const out = [];
+  for(const p of plan){
+    try{
+      const r = await apiFetch('/api/transfers', 'POST', {
+        fromWarehouseId: d.from.id, toWarehouseId: p.w.id, items: p.items, pushToShopify: true,
+        notes: `تحويل مجمّع${poNums ? ' — أوامر شراء: ' + poNums : ''}${d.items.some(i => i.source === 'smart') ? ' + ذكاء التحويلات' : ''} (${new Date().toLocaleDateString('en-GB')})`,
+      });
+      const sh = r?.shopify;
+      out.push(`📥 ${p.w.name}: ` + (r && (r.success || r.id)
+        ? (sh?.ok ? `✅ ${r.transferNumber} → شوبيفاي ${sh.name}${(sh.skipped || []).length ? ` (⚠️ ${sh.skipped.length} صنف مش مربوط اتشال)` : ''}`
+                  : `⚠️ ${r.transferNumber} اتسجل عندنا بس ماوصلش شوبيفاي: ${_errText(sh?.error, '')}`)
+        : `❌ ${_errText(r?.error || _apiLastErr, 'فشل')}`));
+    }catch(e){ out.push(`📥 ${p.w.name}: ❌ ${e.message}`); }
+  }
+  if(btn){ btn.disabled = false; btn.textContent = '🚚 ابعت التحويلات لشوبيفاي'; }
+  infoModal('نتيجة التحويلات', out.join('\n') + '\n\nكمّل الشحن والاستلام من شوبيفاي — الأرصدة هترجعلنا لوحدها.');
 }
 
 // ============================================================
