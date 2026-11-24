@@ -2346,6 +2346,19 @@ tr:hover td{background:#fafbff}
         <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="tal-only-unmatched" onchange="talabatRender()"> غير المتطابق بس</label>
         <!-- 🆕 v627: فلتر المنتجات اللي ليها سعر مثبّت (مابتتأثرش بالنسبة) -->
         <label style="font-size:12px;display:flex;align-items:center;gap:4px" title="المنتجات اللي ليها سعر مثبّت يدوي — دي اللي النسبة مابتغيّرهاش"><input type="checkbox" id="tal-only-pinned" onchange="talabatRender()"> 📌 سعر مثبّت بس</label>
+        <!-- 🆕 v1019: فلاتر وترتيب -->
+        <select id="tal-f-active" class="form-input" style="width:auto;padding:4px 6px;font-size:12px" onchange="talabatFiltersChanged()">
+          <option value="">active: الكل</option><option value="1">✅ active = 1</option><option value="0">⛔ active = 0</option><option value="locked">🔒 مقفول يدوي</option></select>
+        <select id="tal-f-stock" class="form-input" style="width:auto;padding:4px 6px;font-size:12px" onchange="talabatFiltersChanged()">
+          <option value="">المخزون: الكل</option><option value="in">📦 فيه مخزون</option><option value="out">🚫 خلصان</option><option value="sold_out">🔥 بيتباع وخلصان</option></select>
+        <select id="tal-f-sales" class="form-input" style="width:auto;padding:4px 6px;font-size:12px" onchange="talabatFiltersChanged()">
+          <option value="">المبيعات: الكل</option><option value="yes">🛒 اتباع آخر 30 يوم</option><option value="no">💤 ماتباعش</option></select>
+        <select id="tal-sort" class="form-input" style="width:auto;padding:4px 6px;font-size:12px;font-weight:700" onchange="talabatFiltersChanged()">
+          <option value="sales">↓ الأفضل مبيعاً</option><option value="sales_asc">↑ الأقل مبيعاً</option>
+          <option value="orders">↓ عدد الأوردرات</option>
+          <option value="stock">↓ المخزون الأعلى</option><option value="stock_asc">↑ المخزون الأقل</option>
+          <option value="price">↓ السعر النهائي الأعلى</option><option value="price_asc">↑ السعر النهائي الأقل</option>
+          <option value="name">أ-ي الاسم</option><option value="default">ترتيب الشيت</option></select>
         <span id="tal-summary" style="font-size:12px;color:var(--muted);margin-inline-start:auto"></span>
       </div>
       <div id="tal-list" style="padding:6px 14px;overflow-x:auto"></div>
@@ -12404,7 +12417,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1018';
+const UI_BUILD = 'v1019';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -52394,7 +52407,7 @@ async function talabatUpload(file){
   }catch(e){ rep.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
 }
 // 🆕 v506: ترتيب بمبيعات طلبات (آخر 30 يوم)
-let _talSort = 'default';   // default | sales
+let _talSort = (()=>{ try{ return localStorage.getItem('tal_sort') || 'sales'; }catch(e){ return 'sales'; } })();   // 🆕 v1019: الافتراضي الأفضل مبيعاً
 // 🆕 v537: قفل/فتح صنف على طلبات يدوياً
 async function talabatToggleLock(id, lock){
   try{
@@ -52405,10 +52418,24 @@ async function talabatToggleLock(id, lock){
   }catch(e){ toast('❌ '+e.message); }
 }
 function talabatToggleSort(){
-  _talSort = _talSort === 'sales' ? 'default' : 'sales';
+  _talSort = _talSort === 'sales' ? 'sales_asc' : 'sales';
+  if($('tal-sort')) $('tal-sort').value = _talSort;
+  try{ localStorage.setItem('tal_sort', _talSort); }catch(e){}
   talabatRender();
 }
+function talabatFiltersChanged(){
+  _talSort = $('tal-sort')?.value || 'sales';
+  try{ localStorage.setItem('tal_sort', _talSort);
+       localStorage.setItem('tal_filters', JSON.stringify({ a:$('tal-f-active')?.value||'', s:$('tal-f-stock')?.value||'', q:$('tal-f-sales')?.value||'' })); }catch(e){}
+  talabatRender();
+}
+function _talRestoreFilters(){
+  if(_talRestoreFilters.done) return; _talRestoreFilters.done = true;
+  try{ const f = JSON.parse(localStorage.getItem('tal_filters') || '{}');
+       if($('tal-f-active')) $('tal-f-active').value = f.a || ''; if($('tal-f-stock')) $('tal-f-stock').value = f.s || ''; if($('tal-f-sales')) $('tal-f-sales').value = f.q || ''; }catch(e){}
+}
 function talabatRender(){
+  _talRestoreFilters();
   const box=$('tal-list'); if(!box) return;
   const q=($('tal-search')?.value||'').trim().toLowerCase();
   const onlyU=$('tal-only-unmatched')?.checked;
@@ -52417,15 +52444,35 @@ function talabatRender(){
   if(onlyU) rows=rows.filter(l=>!l.matched);
   if(onlyP) rows=rows.filter(l=>l.price_override!=null && l.price_override!=='');
   if(q) rows=rows.filter(l=>matchTokens([l.talabat_name,l.matched_name,l.talabat_sku].join(' '), q));
-  if(_talSort==='sales') rows=[...rows].sort((x,y)=>(y.tal_qty_30d||0)-(x.tal_qty_30d||0));
+  // 🆕 v1019: فلاتر وترتيب
+  if($('tal-sort') && $('tal-sort').value !== _talSort) $('tal-sort').value = _talSort;
+  const fA=$('tal-f-active')?.value||'', fS=$('tal-f-stock')?.value||'', fQ=$('tal-f-sales')?.value||'';
+  if(fA==='1') rows=rows.filter(l=>l.matched&&l.active===1);
+  else if(fA==='0') rows=rows.filter(l=>l.matched&&l.active!==1);
+  else if(fA==='locked') rows=rows.filter(l=>l.force_inactive);
+  if(fS==='in') rows=rows.filter(l=>l.matched&&(Number(l.trivium_qty)||0)>0);
+  else if(fS==='out') rows=rows.filter(l=>l.matched&&(Number(l.trivium_qty)||0)<=0);
+  else if(fS==='sold_out') rows=rows.filter(l=>l.matched&&(Number(l.trivium_qty)||0)<=0&&(l.tal_qty_30d||0)>0);
+  if(fQ==='yes') rows=rows.filter(l=>(l.tal_qty_30d||0)>0);
+  else if(fQ==='no') rows=rows.filter(l=>l.matched&&!(l.tal_qty_30d>0));
+  const N=v=>Number(v)||0, nm=l=>String(l.talabat_name||l.matched_name||'');
+  const cmp={
+    sales:(x,y)=>N(y.tal_qty_30d)-N(x.tal_qty_30d)||N(y.tal_orders_30d)-N(x.tal_orders_30d),
+    sales_asc:(x,y)=>N(x.tal_qty_30d)-N(y.tal_qty_30d),
+    orders:(x,y)=>N(y.tal_orders_30d)-N(x.tal_orders_30d)||N(y.tal_qty_30d)-N(x.tal_qty_30d),
+    stock:(x,y)=>N(y.trivium_qty)-N(x.trivium_qty), stock_asc:(x,y)=>N(x.trivium_qty)-N(y.trivium_qty),
+    price:(x,y)=>N(y.final_price)-N(x.final_price), price_asc:(x,y)=>N(x.final_price)-N(y.final_price),
+    name:(x,y)=>nm(x).localeCompare(nm(y),'ar'),
+  }[_talSort];
+  if(cmp) rows=[...rows].sort((x,y)=>(x.matched===y.matched?0:x.matched?-1:1)||cmp(x,y));
   const matchedCount=_talLinks.filter(l=>l.matched).length;
   const activeCount=_talLinks.filter(l=>l.active===1).length;
   const lockedCount=_talLinks.filter(l=>l.force_inactive).length;
   const pinnedCount=_talLinks.filter(l=>l.price_override!=null && l.price_override!=='').length;   // 🆕 v627
-  if($('tal-summary')) $('tal-summary').textContent=`${_talLinks.length} منتج · مطابق ${matchedCount} · متاح (active) ${activeCount}${pinnedCount?` · 📌 سعر مثبّت ${pinnedCount}`:''}${lockedCount?` · 🔒 مقفول يدوياً ${lockedCount}`:''}${(onlyU||onlyP||q)?` — معروض ${rows.length}`:''}`;
+  if($('tal-summary')) $('tal-summary').textContent=`${_talLinks.length} منتج · مطابق ${matchedCount} · متاح (active) ${activeCount}${pinnedCount?` · 📌 سعر مثبّت ${pinnedCount}`:''}${lockedCount?` · 🔒 مقفول يدوياً ${lockedCount}`:''}${(onlyU||onlyP||q||fA||fS||fQ)?` — معروض ${rows.length}`:''}`;
   if(!rows.length){ box.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted)">مفيش منتجات — ارفع شيت طلبات الأول</div>'; return; }
   box.innerHTML=`<table style="width:100%;font-size:13px"><thead><tr>
-    <th style="text-align:right">المنتج على طلبات</th><th style="text-align:right">منتجك على الموقع</th><th>sku طلبات</th><th>مخزون ترفيوم</th><th onclick="talabatToggleSort()" style="cursor:pointer;user-select:none" title="دوس للترتيب بالمبيعات">مبيعات طلبات<div style="font-weight:400;font-size:10px;color:var(--muted)">آخر 30 يوم ${_talSort==='sales'?'▼':'↕'}</div></th><th>سعر الموقع</th><th>÷${(1-_talMarginCur/100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}<div style="font-weight:400;font-size:10px;color:var(--muted)">نسبة ${_talMarginCur}%</div></th><th>سعر مثبّت</th><th>السعر النهائي</th><th>active</th>
+    <th style="text-align:right">المنتج على طلبات</th><th style="text-align:right">منتجك على الموقع</th><th>sku طلبات</th><th>مخزون ترفيوم</th><th onclick="talabatToggleSort()" style="cursor:pointer;user-select:none" title="دوس للترتيب بالمبيعات">مبيعات طلبات<div style="font-weight:400;font-size:10px;color:var(--muted)">آخر 30 يوم ${_talSort==='sales'?'▼':_talSort==='sales_asc'?'▲':'↕'}</div></th><th>سعر الموقع</th><th>÷${(1-_talMarginCur/100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}<div style="font-weight:400;font-size:10px;color:var(--muted)">نسبة ${_talMarginCur}%</div></th><th>سعر مثبّت</th><th>السعر النهائي</th><th>active</th>
     </tr></thead><tbody>${rows.slice(0,800).map(l=>`<tr style="${l.matched?'':'background:#fef2f2'}">
       <td style="font-weight:600">${escapeHtml(l.talabat_name||'—')}</td>
       <td>${l.matched
