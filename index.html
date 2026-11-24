@@ -7188,6 +7188,20 @@ tr:hover td{background:#fafbff}
         <div id="sp-search-results" style="max-height:200px;overflow-y:auto;background:var(--elev);border-radius:6px;margin-top:6px;display:none"></div>
       </div>
       
+      <!-- 🔗 v1018: ربط بكوليكشن شوبيفاي -->
+      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+          <div style="font-weight:700;color:#166534;font-size:13px">🔗 كوليكشنز شوبيفاي مربوطة</div>
+          <div style="font-size:11px;color:#166534">أي منتج يتضاف أو يتشال من الكوليكشن بيتضاف أو يتشال من المورد لوحده</div>
+        </div>
+        <div id="sp-coll-links" style="display:grid;gap:5px;margin-bottom:8px"></div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input id="sp-coll-q" class="form-input" list="sp-coll-dl" placeholder="🔎 اكتب اسم الكوليكشن..." style="flex:1;min-width:200px;padding:6px 8px;font-size:12px" onfocus="spCollLoadList()">
+          <datalist id="sp-coll-dl"></datalist>
+          <button class="btn btn-success btn-xs" onclick="spCollLink()">🔗 اربط</button>
+        </div>
+      </div>
+      
       <!-- Products list -->
       <div id="sp-products-list"></div>
     </div>
@@ -12390,7 +12404,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1017';
+const UI_BUILD = 'v1018';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -46057,7 +46071,81 @@ async function openSupplierProducts(supplierId){
   document.getElementById('sp-products-list').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">⏳ جاري التحميل...</div>';
   
   openM('m-supplier-products');
+  _spColl.links = []; spCollRender();
+  await spCollLoadLinks();
   await loadSupplierProductsList();
+}
+
+// 🔗 v1018: كوليكشنز المورد
+let _spColl = { links: [], all: null, excluded: 0 };
+async function spCollLoadLinks(){
+  try{
+    const r = await apiFetch('/api/suppliers/' + _spCurrentSupplierId + '/collections');
+    _spColl.links = r?.links || []; _spColl.excluded = r?.excluded || 0;
+  }catch(e){ _spColl.links = []; }
+  spCollRender();
+}
+function spCollRender(){
+  const box = $('sp-coll-links'); if(!box) return;
+  const fmt = d => d ? new Date(d).toLocaleString('en-GB', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+  box.innerHTML = (_spColl.links.length ? _spColl.links.map(l => `
+    <div style="display:flex;gap:8px;align-items:center;background:#fff;border:1px solid #bbf7d0;border-radius:7px;padding:6px 9px;font-size:12px;flex-wrap:wrap">
+      <b>🔗 ${escapeHtml(l.title || l.collection_gid)}</b>
+      <span style="color:var(--muted)"><span style="font-family:Roboto,sans-serif">${l.last_count ?? 0}</span> منتج · آخر مزامنة ${fmt(l.last_synced_at)}${l.last_added || l.last_removed ? ` · <span style="color:#16a34a">+${l.last_added || 0}</span> <span style="color:#dc2626">−${l.last_removed || 0}</span>` : ''}</span>
+      ${l.last_error ? `<span style="color:#dc2626">❌ ${escapeHtml(l.last_error)}</span>` : ''}
+      <span style="margin-inline-start:auto;display:flex;gap:4px">
+        <button class="btn btn-ghost btn-xs" onclick="spCollSync(${l.id})" title="زامن دلوقتي">🔄</button>
+        <button class="btn btn-ghost btn-xs" onclick="spCollUnlink(${l.id})" style="color:var(--danger)" title="فك الربط">✕</button>
+      </span>
+    </div>`).join('') : '<div style="font-size:11px;color:var(--muted)">مفيش كوليكشن مربوط</div>')
+    + (_spColl.excluded ? `<div style="font-size:11px;color:#92400e">🚫 <span style="font-family:Roboto,sans-serif">${_spColl.excluded}</span> منتج من الكوليكشن مسحته بإيدك فمش بيتضاف تاني · <a href="#" onclick="spCollRestoreExcl();return false">رجّعهم</a></div>` : '');
+}
+async function spCollLoadList(){
+  if(_spColl.all) return;
+  try{
+    const r = await apiFetch('/api/collection-sort/list');
+    _spColl.all = r?.collections || [];
+    const dl = $('sp-coll-dl');
+    if(dl) dl.innerHTML = _spColl.all.map(c => `<option value="${escapeAttr(c.title)}">${c.count} منتج</option>`).join('');
+  }catch(e){ toast('❌ فشل تحميل الكوليكشنز'); }
+}
+async function spCollLink(){
+  await spCollLoadList();
+  const q = String($('sp-coll-q')?.value || '').trim();
+  const c = (_spColl.all || []).find(x => x.title === q) || (_spColl.all || []).find(x => x.title.toLowerCase() === q.toLowerCase());
+  if(!c){ toast('⚠️ اختار كوليكشن من القايمة'); return; }
+  toast('⏳ بيربط ويزامن...');
+  const r = await apiFetch('/api/suppliers/' + _spCurrentSupplierId + '/collections', 'POST', { gid: c.gid, title: c.title });
+  if(!r || r.error){ toast('❌ ' + _errText(r?.error || _apiLastErr, 'فشل الربط')); return; }
+  $('sp-coll-q').value = '';
+  toast(`✅ اتربط «${c.title}» — اتضاف ${r.added} منتج جديد (${r.count} في الكوليكشن)`);
+  await spCollLoadLinks(); await loadSupplierProductsList();
+}
+async function spCollSync(id){
+  toast('⏳ بيزامن...');
+  const r = await apiFetch('/api/suppliers/' + _spCurrentSupplierId + '/collections/' + id + '/sync', 'POST');
+  if(!r || r.error){ toast('❌ ' + _errText(r?.error || _apiLastErr, 'فشل')); }
+  else toast(`✅ اتزامن — +${r.added} · −${r.removed}`);
+  await spCollLoadLinks(); await loadSupplierProductsList();
+}
+async function spCollUnlink(id){
+  const l = _spColl.links.find(x => x.id === id);
+  const keep = confirm(`فك ربط «${l?.title || ''}»\n\nOK = سيب منتجاته مع المورد (تتحوّل يدوي)\nCancel = اختيارات تانية`);
+  let body = { keepProducts: true };
+  if(!keep){
+    if(!confirm('تشيل منتجات الكوليكشن من المورد؟ (المنتجات اللي ضفتها بإيدك مش هتتشال)')) return;
+    body = {};
+  }
+  const r = await apiFetch('/api/suppliers/' + _spCurrentSupplierId + '/collections/' + id, 'DELETE', body);
+  if(!r || r.error){ toast('❌ ' + _errText(r?.error || _apiLastErr, 'فشل')); return; }
+  toast(body.keepProducts ? '✅ اتفك الربط — المنتجات فضلت' : `✅ اتفك الربط — اتشال ${r.removed} منتج`);
+  await spCollLoadLinks(); await loadSupplierProductsList();
+}
+async function spCollRestoreExcl(){
+  if(!confirm('ترجّع المنتجات اللي مسحتها من الكوليكشن؟ هتتضاف في المزامنة الجاية.')) return;
+  await apiFetch('/api/suppliers/' + _spCurrentSupplierId + '/collection-excl', 'DELETE');
+  for(const l of _spColl.links) await apiFetch('/api/suppliers/' + _spCurrentSupplierId + '/collections/' + l.id + '/sync', 'POST').catch(()=>{});
+  await spCollLoadLinks(); await loadSupplierProductsList();
 }
 
 async function loadSupplierProductsList(){
@@ -46077,6 +46165,8 @@ async function loadSupplierProductsList(){
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span style="font-weight:700;font-size:13px">${escapeHtml(p.product_title || '')}${p.variant_title ? ' - '+escapeHtml(p.variant_title) : ''}</span>
             ${p.is_primary ? '<span class="badge" style="background:#fef3c7;color:#92400e;font-size:10px">⭐ Primary</span>' : ''}
+            ${(p.src_collections || []).length ? `<span class="badge" style="background:#dcfce7;color:#166534;font-size:10px" title="جاي من كوليكشن شوبيفاي">🔗 ${escapeHtml((p.src_collections || []).map(g => (_spColl.links.find(l => l.collection_gid === g) || {}).title || 'كوليكشن').join('، '))}</span>` : ''}
+            ${p.manual === false ? '' : ((p.src_collections || []).length ? '<span class="badge" style="background:#e0e7ff;color:#3730a3;font-size:10px">✋ يدوي</span>' : '')}
           </div>
           <div style="font-size:11px;color:var(--muted);margin-top:2px;font-family:monospace">
             ${p.sku ? 'SKU: '+escapeHtml(p.sku) : ''}
@@ -46351,7 +46441,10 @@ async function toggleSPPrimary(variantId){
 }
 
 async function removeSPProduct(variantId){
-  if(!confirm('حذف المنتج من قائمة المورد ده؟')) return;
+  const _p = (_spProducts || []).find(x => String(x.variant_id) === String(variantId));
+  if(!confirm((_p?.src_collections || []).length
+    ? 'المنتج ده جاي من كوليكشن مربوط — لو مسحته مش هيرجع تاني في المزامنة (تقدر ترجّعه من «رجّعهم»). تمسحه؟'
+    : 'حذف المنتج من قائمة المورد ده؟')) return;
   try {
     await apiFetch('/api/suppliers/' + _spCurrentSupplierId + '/products/' + variantId, 'DELETE');
     toast('✅ تم الحذف');
