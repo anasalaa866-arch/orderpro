@@ -12390,7 +12390,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1016';
+const UI_BUILD = 'v1017';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -38479,18 +38479,44 @@ async function tmxLoad(){
   if(!to.length){ toast('⚠️ اختار مخزن وجهة واحد على الأقل'); return; }
   const smart = $('tmx-smart')?.checked;
   if(!_tmx.selPos.size && !smart){ toast('⚠️ اختار أمر شراء أو فعّل اقتراحات الذكاء'); return; }
-  if(_tmx.data && !confirm('فيه تحويل شغال عليه — هيتبدل بالمنتجات الجديدة والكميات اللي عدّلتها هتضيع. أكمّل؟')) return;
+  // 🆕 v1017: لو فيه تحويل شغال بنفس المخزن المُرسِل → بندمج: الكميات اللي عدّلتها بتفضل،
+  //   والجديد (صنف جديد أو كمية زادت من أمر شراء اتضاف) بيتعلّم
+  const merging = !!(_tmx.data && String(_tmx.data.from?.id) === String(from));
+  if(_tmx.data && !merging && !confirm('غيّرت المخزن المُرسِل — التحويل الحالي هيتبدل والكميات اللي عدّلتها هتضيع. أكمّل؟')) return;
   const btn = $('tmx-load-btn'); if(btn){ btn.disabled = true; btn.textContent = '⏳ بيحسب...'; }
   try{
     const qs = new URLSearchParams({ from, to: to.join(','), poIds: [..._tmx.selPos].join(','),
       days: $('tmx-days').value, target: $('tmx-target').value, keep: $('tmx-keep').value, smart: smart ? '1' : '0' });
     const r = await apiFetch('/api/transfer-mix?' + qs);
     if(!r || r.error){ toast('❌ ' + _errText(r?.error || _apiLastErr, 'فشل')); return; }
-    _tmx.data = r; _tmx.qty = {}; _tmx.removed = new Set();
-    for(const it of r.items){ _tmx.qty[it.variant_id] = {}; for(const w of r.to) _tmx.qty[it.variant_id][w.id] = it.wh[w.id]?.suggest || 0; }
+    if(merging){
+      const old = new Map(_tmx.data.items.map(i => [i.variant_id, i]));
+      const oldQty = _tmx.qty || {}, oldTo = new Set(_tmx.data.to.map(w => String(w.id)));
+      _tmx.newInfo = _tmx.newInfo || {};
+      let nNew = 0, nMore = 0;
+      const qty = {};
+      for(const it of r.items){
+        const o = old.get(it.variant_id);
+        qty[it.variant_id] = {};
+        for(const w of r.to){
+          const keepOld = o && oldTo.has(String(w.id)) && oldQty[it.variant_id] && oldQty[it.variant_id][w.id] != null;
+          qty[it.variant_id][w.id] = keepOld ? oldQty[it.variant_id][w.id] : (it.wh[w.id]?.suggest || 0);
+        }
+        const oIn = o?.po?.ordered || 0, nIn = it.po?.ordered || 0;
+        if(it.source !== 'po') continue;   // بنعلّم اللي جه من أوامر الشراء بس
+        if(!o || o.source !== 'po'){ _tmx.newInfo[it.variant_id] = { kind: 'new', at: Date.now() }; nNew++; _tmx.removed?.delete(it.variant_id); }
+        else if(nIn > oIn){ _tmx.newInfo[it.variant_id] = { kind: 'more', delta: nIn - oIn, at: Date.now() }; nMore++; _tmx.removed?.delete(it.variant_id); }
+      }
+      _tmx.data = r; _tmx.qty = qty;
+      toast(nNew || nMore ? `🆕 اتضاف ${nNew} صنف جديد${nMore ? ` · ${nMore} صنف زادت كميته` : ''} — متعلّمين بالأصفر` : 'مفيش أصناف جديدة');
+    } else {
+      _tmx.data = r; _tmx.qty = {}; _tmx.removed = new Set(); _tmx.newInfo = {}; _tmx.onlyNew = false;
+      for(const it of r.items){ _tmx.qty[it.variant_id] = {}; for(const w of r.to) _tmx.qty[it.variant_id][w.id] = it.wh[w.id]?.suggest || 0; }
+    }
     tmxRender();
-  }finally{ if(btn){ btn.disabled = false; btn.textContent = '🔍 هات المنتجات'; } }
+  }finally{ if(btn){ btn.disabled = false; _tmxLoadLbl(); } }
 }
+function _tmxLoadLbl(){ const b = $('tmx-load-btn'); if(b) b.textContent = _tmx.data ? '➕ ضيف للتحويل الحالي' : '🔍 هات المنتجات'; }
 function _tmxRowTotal(vid){ return Object.values(_tmx.qty[vid] || {}).reduce((s, n) => s + (parseInt(n) || 0), 0); }
 function tmxSetQty(vid, w, val){
   _tmx.qty[vid][w] = Math.max(0, parseInt(val) || 0);
@@ -38512,7 +38538,7 @@ function _tmxSnapshot(){
     from: $('tmx-from')?.value || '', to: [...document.querySelectorAll('#tmx-to input:checked')].map(i => i.value),
     poIds: [..._tmx.selPos], days: $('tmx-days')?.value, target: $('tmx-target')?.value, keep: $('tmx-keep')?.value,
     smart: !!$('tmx-smart')?.checked, data: _tmx.data, qty: _tmx.qty, removed: [...(_tmx.removed || [])],
-    showSmart: _tmx.showSmart, savedAt: new Date().toISOString(),
+    showSmart: _tmx.showSmart, newInfo: _tmx.newInfo || {}, onlyNew: !!_tmx.onlyNew, savedAt: new Date().toISOString(),
   };
 }
 function _tmxSave(){
@@ -38533,8 +38559,9 @@ async function _tmxClearDraft(){
 async function tmxDiscardDraft(){
   if(!confirm('تمسح التحويل اللي شغال عليه وتبدأ من الأول؟')) return;
   await _tmxClearDraft();
-  _tmx.data = null; _tmx.qty = {}; _tmx.removed = new Set();
+  _tmx.data = null; _tmx.qty = {}; _tmx.removed = new Set(); _tmx.newInfo = {}; _tmx.onlyNew = false;
   const box = $('tmx-result'); if(box) box.innerHTML = '';
+  _tmxLoadLbl();
   toast('🗑️ اتمسحت المسودة');
 }
 async function _tmxRestore(){
@@ -38551,6 +38578,7 @@ async function _tmxRestore(){
     if(snap.keep != null) $('tmx-keep').value = snap.keep; if($('tmx-smart')) $('tmx-smart').checked = !!snap.smart;
     _tmx.data = snap.data; _tmx.qty = snap.qty || {}; _tmx.removed = new Set(snap.removed || []);
     _tmx.showSmart = snap.showSmart !== false; _tmx.savedAt = snap.savedAt;
+    _tmx.newInfo = snap.newInfo || {}; _tmx.onlyNew = !!snap.onlyNew;
     tmxRender();
     toast('📝 رجّعتلك التحويل اللي كنت شغال عليه');
   } finally { _tmx.restoring = false; }
@@ -38577,7 +38605,8 @@ function tmxRender(){
   const d = _tmx.data, box = $('tmx-result'); if(!d || !box) return;
   const q = (_tmx.q || '').toLowerCase();
   _tmx.removed = _tmx.removed || new Set();
-  const rows = d.items.filter(it => !_tmx.removed.has(it.variant_id) && (_tmx.showSmart || it.source === 'po')
+  const NI = _tmx.newInfo || {};
+  const rows = d.items.filter(it => !_tmx.removed.has(it.variant_id) && (_tmx.showSmart || it.source === 'po') && (!_tmx.onlyNew || NI[it.variant_id])
     && (!q || [it.title, it.variant_title, it.sku, it.barcode].join(' ').toLowerCase().includes(q)));
   const nPo = d.items.filter(i => i.source === 'po').length, nSm = d.items.length - nPo;
   const head = d.to.map(w => `<th style="min-width:120px;text-align:center">📥 ${escapeHtml(w.name)}<div style="font-size:10px;font-weight:400;color:var(--muted)">الكمية اللي هتتحوّل</div></th>`).join('');
@@ -38597,10 +38626,12 @@ function tmxRender(){
         </div>
         <div style="font-size:10px;color:var(--muted);margin-top:2px;font-family:Roboto,sans-serif">بيبيع ${x.velocity || 0}/يوم${x.days_left != null ? ' · يكفّي ' + x.days_left + ' يوم' : ''}</div>
       </td>`; }).join('');
-    return `<tr>
+    const ni = NI[it.variant_id];
+    const niBadge = ni ? `<span style="background:#fef08a;color:#713f12;border:1px solid #facc15;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:900;margin-inline-start:4px">🆕 ${ni.kind === 'new' ? 'جديد' : 'زاد +' + ni.delta}</span>` : '';
+    return `<tr style="${ni ? 'background:#fefce8;box-shadow:inset 4px 0 0 #facc15' : ''}">
       <td style="width:44px">${it.image_url ? `<img src="${escapeHtml(it.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">` : ''}</td>
       <td><div style="font-weight:700;font-size:12px">${escapeHtml(it.title)}${it.variant_title && it.variant_title !== 'Default Title' ? ` <span style="color:var(--muted);font-weight:400">${escapeHtml(it.variant_title)}</span>` : ''}</div>
-        <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(it.sku || it.barcode || '')}</div>${src}</td>
+        <div style="font-size:10px;color:var(--muted);font-family:Roboto,sans-serif">${escapeHtml(it.sku || it.barcode || '')}</div>${src}${niBadge}</td>
       <td style="text-align:center;font-family:Roboto,sans-serif"><b style="font-size:15px">${_tmxTot(it)}</b>
         <div style="font-size:10px;color:var(--muted)">رصيد ${it.from_stock}${it.po?.incoming ? ' + جاي ' + it.po.incoming : ''}</div></td>
       <td style="text-align:center;font-family:Roboto,sans-serif">${d.to.map(w => { const s = it.wh[w.id]?.suggest || 0, nd = it.wh[w.id]?.need || 0;
@@ -38619,6 +38650,8 @@ function tmxRender(){
         <input class="form-input" placeholder="🔎 بحث" value="${escapeHtml(_tmx.q || '')}" oninput="_tmx.q=this.value;clearTimeout(window._tmxQt);window._tmxQt=setTimeout(tmxRender,250)" style="max-width:180px;padding:4px 8px;font-size:12px">
         <button class="btn btn-ghost btn-xs" onclick="tmxFill('suggest')">↺ رجّع الاقتراح</button>
         <button class="btn btn-ghost btn-xs" onclick="tmxFill('zero')">⓪ صفّر الكل</button>
+        ${Object.keys(NI).length ? `<label style="font-size:12px;display:flex;gap:5px;align-items:center;background:#fef9c3;border-radius:6px;padding:2px 8px;font-weight:700"><input type="checkbox" ${_tmx.onlyNew ? 'checked' : ''} onchange="_tmx.onlyNew=this.checked;tmxRender()"> 🆕 الجديد بس (<span style="font-family:Roboto,sans-serif">${Object.keys(NI).length}</span>)</label>
+          <button class="btn btn-ghost btn-xs" onclick="_tmx.newInfo={};_tmx.onlyNew=false;tmxRender()" title="شيل علامة الجديد من كل الأصناف">✓ شيل علامة الجديد</button>` : ''}
         <span id="tmx-saved" style="font-size:11px;color:#16a34a;font-weight:700">${_tmx.savedAt ? '📝 محفوظ ' + new Date(_tmx.savedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
         <button class="btn btn-ghost btn-xs" onclick="tmxDiscardDraft()" style="color:#dc2626">🗑️ ابدأ من الأول</button>
         ${_tmx.removed.size ? `<button class="btn btn-ghost btn-xs" onclick="_tmx.removed.clear();tmxRender()">↩️ رجّع المحذوف (<span style="font-family:Roboto,sans-serif">${_tmx.removed.size}</span>)</button>` : ''}
@@ -38633,6 +38666,7 @@ function tmxRender(){
       </div>
     </div></div>`;
   tmxFooter();
+  _tmxLoadLbl();
   _tmxSave();
 }
 async function tmxSend(){
@@ -38670,8 +38704,9 @@ async function tmxSend(){
   }
   if(allOk){   // 📝 خلص — المسودة مالهاش لازمة
     await _tmxClearDraft();
-    _tmx.data = null; _tmx.qty = {}; _tmx.removed = new Set(); _tmx.savedAt = null;
+    _tmx.data = null; _tmx.qty = {}; _tmx.removed = new Set(); _tmx.savedAt = null; _tmx.newInfo = {}; _tmx.onlyNew = false;
     const box = $('tmx-result'); if(box) box.innerHTML = '';
+    _tmxLoadLbl();
   }
   infoModal('نتيجة التحويلات', out.join('\n') + (allOk ? '' : '\n\n📝 التحويل لسه محفوظ كمسودة — تقدر تعدّل وتبعت تاني.') + '\n\nكمّل الشحن والاستلام من شوبيفاي — الأرصدة هترجعلنا لوحدها.');
 }
