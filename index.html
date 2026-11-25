@@ -9450,7 +9450,7 @@ tr:hover td{background:#fafbff}
     <select id="ia-wh" class="form-input" style="width:auto;padding:5px 8px;font-size:12px" onchange="iaRender()"><option value="">كل المخازن</option></select>
     <select id="ia-dir" class="form-input" style="width:auto;padding:5px 8px;font-size:12px" onchange="iaRender()">
       <option value="">زيادة ونقص</option><option value="minus">🔻 نقص بس</option><option value="plus">🔺 زيادة بس</option></select>
-    <input id="ia-q" class="form-input" placeholder="🔎 صنف / باركود" style="max-width:220px;padding:5px 8px;font-size:12px" oninput="iaRender()">
+    <input id="iadj-q" class="form-input" placeholder="🔎 صنف / باركود" style="max-width:220px;padding:5px 8px;font-size:12px" oninput="iaRender()">
     <span id="ia-sum" style="margin-inline-start:auto;font-size:12px;color:var(--muted)"></span>
   </div></div>
   <div class="card"><div style="overflow:auto"><table class="tbl" style="width:100%">
@@ -10955,7 +10955,7 @@ tr:hover td{background:#fafbff}
         </select>
         <div><label style="font-size:11px;color:var(--muted)">اليوم</label><input type="date" id="pm-date" class="form-input"></div>
         <div><label style="font-size:11px;color:var(--muted)">الساعات</label><input type="number" id="pm-hours" class="form-input" min="0.5" step="0.5" oninput="pmCalc()"></div>
-        <input type="text" id="pm-reason" class="form-input" placeholder="السبب (اختياري)">
+        <input type="text" id="hp-reason" class="form-input" placeholder="السبب (اختياري)">
       </div>
       <div style="margin-top:10px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;cursor:pointer">
@@ -10968,12 +10968,12 @@ tr:hover td{background:#fafbff}
   <div class="card" style="margin-bottom:14px">
     <div style="padding:12px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--border)">
       <span style="font-weight:800">⏱️ الأذونات</span>
-      <input type="month" id="pm-f-month" class="form-input" style="max-width:160px" onchange="pmLoad()">
-      <select id="pm-f-status" class="form-input" style="max-width:150px" onchange="pmLoad()">
+      <input type="month" id="pm-f-month" class="form-input" style="max-width:160px" onchange="hpLoad()">
+      <select id="pm-f-status" class="form-input" style="max-width:150px" onchange="hpLoad()">
         <option value="">كل الحالات</option><option value="pending">مستنية</option><option value="approved">مقبولة</option><option value="rejected">مرفوضة</option>
       </select>
-      <button class="btn btn-ghost btn-sm" onclick="pmLoad()">🔄 تحديث</button>
-      <span id="pm-sum" style="font-size:12px;color:var(--muted);margin-inline-start:auto"></span>
+      <button class="btn btn-ghost btn-sm" onclick="hpLoad()">🔄 تحديث</button>
+      <span id="hp-sum" style="font-size:12px;color:var(--muted);margin-inline-start:auto"></span>
     </div>
     <div id="pm-list" style="padding:8px 14px;overflow-x:auto"></div>
   </div>
@@ -12458,7 +12458,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1032';
+const UI_BUILD = 'v1033';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -38874,7 +38874,7 @@ async function iaLoad(){
 }
 function iaRender(){
   const body = $('ia-body'); if(!body) return;
-  const wh = $('ia-wh').value, dir = $('ia-dir').value, q = String($('ia-q').value || '').trim();
+  const wh = $('ia-wh').value, dir = $('ia-dir').value, q = String($('iadj-q').value || '').trim();
   const rows = _ia.filter(c => (!wh || String(c.warehouse_id) === wh)
     && (!dir || (dir === 'minus' ? c.delta < 0 : c.delta > 0))
     && (!q || matchTokens([c.product_title, c.variant_title, c.sku, c.variant_id].join(' '), q)));
@@ -46712,7 +46712,7 @@ async function openSupplierReorder(supplierId){
         await runAIAssistant();
         if(_reorderSupplierId == supplierId && _aiAnalysis?.suggestions?.length) applyAISuggestions(false);
       }catch(e){ console.warn('[v960] auto AI:', e); }
-      if(_reorderSupplierId == supplierId) await _poDraftRestore(supplierId);   // 📝 v1024
+      if(_reorderSupplierId == supplierId) await _posDraftRestore(supplierId);   // 📝 v1024
     })().catch(e => console.warn('[v960] auto AI:', e));
 
     // 🖼️ v612: لو السيرفر لسه ماببعتش الصور (أقدم من v560) — هاتها وأعد الرسم
@@ -47084,7 +47084,7 @@ function removeReorderProduct(idx){
 
 // 📝 v1024: مسودة الطلب من المورد — بتتحفظ لوحدها وترجع لما تفتح نفس المورد
 const _poDraft = { ready: false, dirty: false, orig: new Set(), t: null };
-function _poDraftKey(id){ return 'po_supplier_' + id; }
+function _posDraftKey(id){ return 'po_supplier_' + id; }
 function _poDraftSnap(){
   const qty = {}, cost = {};
   for(const p of _reorderProducts){ const v = String(p.variant_id); qty[v] = p.requested_qty || 0; cost[v] = p.unit_cost; }
@@ -47093,27 +47093,27 @@ function _poDraftSnap(){
     warehouse: $('reorder-warehouse')?.value || '', expected: $('reorder-expected')?.value || '',
     notes: $('reorder-notes')?.value || '', days: $('reorder-days')?.value || '', savedAt: new Date().toISOString() };
 }
-function _poDraftSave(){
+function _posDraftSave(){
   if(!_poDraft.ready || !_poDraft.dirty || !_reorderSupplierId) return;   // بنحفظ بس بعد ما انت تعدّل
   clearTimeout(_poDraft.t);
   const sid = _reorderSupplierId;
   _poDraft.t = setTimeout(async () => {
     if(sid != _reorderSupplierId || !_poDraft.ready) return;
     const snap = _poDraftSnap();
-    try{ localStorage.setItem(_poDraftKey(sid), JSON.stringify(snap)); }catch(e){}
-    try{ await apiFetch('/api/ui-drafts/' + _poDraftKey(sid), 'PUT', { draft: snap }); }catch(e){}
+    try{ localStorage.setItem(_posDraftKey(sid), JSON.stringify(snap)); }catch(e){}
+    try{ await apiFetch('/api/ui-drafts/' + _posDraftKey(sid), 'PUT', { draft: snap }); }catch(e){}
     if($('po-draft-badge')) $('po-draft-badge').textContent = '📝 محفوظ ' + new Date(snap.savedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   }, 1200);
 }
-async function _poDraftClear(id){
+async function _posDraftClear(id){
   clearTimeout(_poDraft.t);
-  try{ localStorage.removeItem(_poDraftKey(id)); }catch(e){}
-  try{ await apiFetch('/api/ui-drafts/' + _poDraftKey(id), 'DELETE'); }catch(e){}
+  try{ localStorage.removeItem(_posDraftKey(id)); }catch(e){}
+  try{ await apiFetch('/api/ui-drafts/' + _posDraftKey(id), 'DELETE'); }catch(e){}
 }
-async function _poDraftRestore(id){
+async function _posDraftRestore(id){
   let snap = null;
-  try{ const r = await apiFetch('/api/ui-drafts/' + _poDraftKey(id)); snap = r?.draft || null; }catch(e){}
-  if(!snap){ try{ snap = JSON.parse(localStorage.getItem(_poDraftKey(id)) || 'null'); }catch(e){} }
+  try{ const r = await apiFetch('/api/ui-drafts/' + _posDraftKey(id)); snap = r?.draft || null; }catch(e){}
+  if(!snap){ try{ snap = JSON.parse(localStorage.getItem(_posDraftKey(id)) || 'null'); }catch(e){} }
   if(snap && id == _reorderSupplierId){
     const rm = new Set(snap.removed || []);
     _reorderProducts = _reorderProducts.filter(p => !rm.has(String(p.variant_id)));
@@ -47139,16 +47139,16 @@ async function poDraftRestart(){
   if(!confirm('تمسح الشغل المحفوظ للطلب ده وتبدأ من الأول بالاقتراحات؟')) return;
   const id = _reorderSupplierId;
   _poDraft.ready = false;
-  await _poDraftClear(id);
+  await _posDraftClear(id);
   openSupplierReorder(id);
 }
-document.addEventListener('input', e => { if(e.target?.closest?.('#m-reorder .modal-body')){ _poDraft.dirty = true; _poDraftSave(); } }, true);
-document.addEventListener('change', e => { if(e.target?.closest?.('#m-reorder .modal-body')){ _poDraft.dirty = true; _poDraftSave(); } }, true);
+document.addEventListener('input', e => { if(e.target?.closest?.('#m-reorder .modal-body')){ _poDraft.dirty = true; _posDraftSave(); } }, true);
+document.addEventListener('change', e => { if(e.target?.closest?.('#m-reorder .modal-body')){ _poDraft.dirty = true; _posDraftSave(); } }, true);
 // أي زرار جوه الطلب (طبّق، امسح صنف، ضيف...) = تعديل
-document.addEventListener('click', e => { if(e.target?.closest?.('#m-reorder .modal-body button')){ _poDraft.dirty = true; setTimeout(_poDraftSave, 50); } }, true);
+document.addEventListener('click', e => { if(e.target?.closest?.('#m-reorder .modal-body button')){ _poDraft.dirty = true; setTimeout(_posDraftSave, 50); } }, true);
 
 function updateReorderTotals(){
-  _poDraftSave();
+  _posDraftSave();
   const requested = _reorderProducts.filter(p => p.requested_qty > 0);
   const totalQty = requested.reduce((s, p) => s + p.requested_qty, 0);
   const totalCost = requested.reduce((s, p) => s + (p.requested_qty * p.unit_cost), 0);
@@ -47277,7 +47277,7 @@ async function saveReorderAsPO(status){
     const r = await apiFetch('/api/purchase-orders', 'POST', data);
     if(r?.success){
       toast(status === 'sent' ? '✅ تم الإنشاء والإرسال' : '✅ تم الحفظ كمسودة', 'success');
-      _poDraft.ready = false; await _poDraftClear(_reorderSupplierId);   // 📝 الطلب اتعمل — المسودة خلصت
+      _poDraft.ready = false; await _posDraftClear(_reorderSupplierId);   // 📝 الطلب اتعمل — المسودة خلصت
       closeM('m-reorder');
       loadSuppliersPage();
     }
@@ -60647,7 +60647,7 @@ async function loadHrLeaves(){
   list.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted)">⏳...</div>';
   try{
     const qs=[]; if(status)qs.push('status='+status); if(year)qs.push('year='+year);
-    pmLoad();   // ⏱️ v1003
+    hpLoad();   // ⏱️ v1003
     const r=await apiFetch('/api/hr/leaves'+(qs.length?'?'+qs.join('&'):''),'GET');
     if(!r) apiNN(r, '/api/hr/leaves');   // 🚑 v797
     const rows=r.leaves||[];
@@ -60687,7 +60687,7 @@ function pmCalc(){
   if(!el) return;
   el.textContent = $('pm-deduct')?.checked && h > 0 ? `= ${Math.round(h / wd * 100) / 100} يوم من رصيد السنوية (لما يتوافق عليه)` : 'مش هيتخصم من الرصيد';
 }
-async function pmLoad(){
+async function hpLoad(){
   const box = $('pm-list'); if(!box) return;
   const sel = $('pm-emp');
   if(sel && sel.options.length <= 1 && _lvEmployees.length)
@@ -60706,7 +60706,7 @@ async function pmLoad(){
   const rows = r.permissions || [];
   const lim = r.month_limit || 0;
   const pend = rows.filter(x => x.status === 'pending').length;
-  $('pm-sum').textContent = rows.length ? `${rows.length} إذن${pend ? ' · ' + pend + ' مستني' : ''}${lim ? ' · الحد ' + lim + ' في الشهر' : ''}` : '';
+  $('hp-sum').textContent = rows.length ? `${rows.length} إذن${pend ? ' · ' + pend + ' مستني' : ''}${lim ? ' · الحد ' + lim + ' في الشهر' : ''}` : '';
   if(!rows.length){ box.innerHTML = '<div style="padding:18px;text-align:center;color:var(--muted)">مفيش أذونات</div>'; return; }
   box.innerHTML = `<table style="width:100%;font-size:13px"><thead><tr>
     <th style="text-align:right">الموظف</th><th>النوع</th><th>اليوم</th><th>ساعات</th><th>من الرصيد</th><th>في الشهر</th><th style="text-align:right">السبب</th><th>الحالة</th><th>إجراء</th>
@@ -60730,24 +60730,24 @@ async function pmLoad(){
 }
 async function pmSubmit(){
   const b = { employee_id: $('pm-emp')?.value, perm_type: $('pm-type')?.value, perm_date: $('pm-date')?.value,
-    hours: Number($('pm-hours')?.value) || 0, deduct: !!$('pm-deduct')?.checked, reason: $('pm-reason')?.value || '' };
+    hours: Number($('pm-hours')?.value) || 0, deduct: !!$('pm-deduct')?.checked, reason: $('hp-reason')?.value || '' };
   if(!b.employee_id) return toast('اختار الموظف');
   if(!b.perm_date) return toast('حدد اليوم');
   const r = await apiFetch('/api/hr/leaves/permissions', 'POST', b);
   if(!r || r.error) return toast('❌ ' + (r?.error || _errText(_apiLastErr, 'فشل')));
   toast(r.over_limit ? `⚠️ اتسجّل — بس ده الإذن رقم ${r.month_count} في الشهر (الحد ${r.month_limit})` : '✅ اتسجّل الإذن', r.over_limit ? 'error' : 'success', r.over_limit ? 7000 : 3000);
-  $('pm-reason').value = ''; $('pm-deduct').checked = false; pmCalc();
-  pmLoad();
+  $('hp-reason').value = ''; $('pm-deduct').checked = false; pmCalc();
+  hpLoad();
 }
 async function pmAction(id, a){
   const r = await apiFetch(`/api/hr/leaves/permissions/${id}/${a}`, 'POST', {});
   if(!r || r.error) return toast('❌ ' + (r?.error || _errText(_apiLastErr, 'فشل')));
-  pmLoad(); lvLoadBalance();
+  hpLoad(); lvLoadBalance();
 }
 async function pmDelete(id){
   if(!confirm('تمسح الإذن ده؟')) return;
   await apiFetch(`/api/hr/leaves/permissions/${id}`, 'DELETE');
-  pmLoad(); lvLoadBalance();
+  hpLoad(); lvLoadBalance();
 }
 function lvCalcDays(){
   const f=$('lv-from')?.value, t=$('lv-to')?.value; const el=$('lv-days');
@@ -63934,7 +63934,7 @@ function goPage(el,page){
   if(page==='settings')cfgOpen();              // ⚙️ v776
   if(page==='settings')lkSetOpen();            // 🔒 v731
   if(page==='settings')pcOpen();               // 🖥️ v735
-  if(page==='settings')pmOpen();               // 🔑 v755
+  if(page==='settings')pmSetOpen();               // 🔑 v755
   if(page==='settings')vcOpen();               // 🧾 v760
   if(page==='bank')bkOpen();                   // 🏦 v770 — صفحة مستقلة
   if(page==='tz')tzOpen();                     // 🧾 v931
@@ -72226,7 +72226,7 @@ async function vcConfirm(paymentId, amount){
 //   وهي مش موجودة في الملف. فكان بيرمي ReferenceError، والكارت
 //   مابيظهرش، **وكل اللي بعده في نفس الدالة كان بيقف**: القنوات،
 //   التليجرام، أقسام الخزنة، وتقرير المناديب. نفس أسلوب باقي الكروت.
-function pmOpen(){
+function pmSetOpen(){
   const box = document.getElementById('pm-settings');
   if(!box) return;
   if(currentUser?.username !== 'admin' && currentUser?.role !== 'admin'){ box.style.display = 'none'; return; }
