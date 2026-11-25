@@ -2358,6 +2358,8 @@ tr:hover td{background:#fafbff}
           <option value="">active: الكل</option><option value="1">✅ active = 1</option><option value="0">⛔ active = 0</option><option value="locked">🔒 مقفول يدوي</option></select>
         <select id="tal-f-stock" class="form-input" style="width:auto;padding:4px 6px;font-size:12px" onchange="talabatFiltersChanged()">
           <option value="">المخزون: الكل</option><option value="in">📦 فيه مخزون</option><option value="out">🚫 خلصان</option><option value="sold_out">🔥 بيتباع وخلصان</option></select>
+        <select id="tal-f-offer" class="form-input" style="width:auto;padding:4px 6px;font-size:12px" onchange="talabatFiltersChanged()">
+          <option value="">🏷️ العروض: الكل</option><option value="any">🏷️ عليه عرض (شغال أو جاي)</option><option value="active">✅ عرض شغال</option><option value="scheduled">⏳ عرض لسه هيبدأ</option><option value="expired">⌛ عرض خلص</option></select>
         <select id="tal-f-obour" class="form-input" style="width:auto;padding:4px 6px;font-size:12px" onchange="talabatFiltersChanged()">
           <option value="">🏭 العبور: الكل</option><option value="in">🏭 ليه مخزون في العبور</option><option value="out">🏭 مالوش في العبور</option></select>
         <select id="tal-f-sales" class="form-input" style="width:auto;padding:4px 6px;font-size:12px" onchange="talabatFiltersChanged()">
@@ -12456,7 +12458,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1030';
+const UI_BUILD = 'v1031';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -52671,16 +52673,79 @@ function talabatToggleSort(){
   try{ localStorage.setItem('tal_sort', _talSort); }catch(e){}
   talabatRender();
 }
+// 🏷️ v1031: عروض طلبات — صنف صنف
+function _talOfferCell(l){
+  const o = l.offer;
+  const fmt = d => new Date(d).toLocaleString('en-GB', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+  if(!o) return `<div><button class="btn btn-ghost btn-xs" style="margin-top:3px;font-size:10px" onclick="talOfferOpen(${l.id})">🏷️ عرض</button></div>`;
+  const col = o.state === 'active' ? '#dc2626' : o.state === 'scheduled' ? '#d97706' : '#94a3b8';
+  const lbl = o.state === 'active' ? 'عرض' : o.state === 'scheduled' ? 'يبدأ ' + fmt(o.start) : 'خلص';
+  return `<div onclick="talOfferOpen(${l.id})" title="${escapeAttr((o.reason||'') + ' · ' + fmt(o.start) + ' ← ' + fmt(o.end))}" style="cursor:pointer;margin-top:3px;background:${col}14;border:1px solid ${col};color:${col};border-radius:6px;padding:1px 6px;font-size:10px;font-weight:800;white-space:nowrap">
+    🏷️ ${o.price.toLocaleString()} · ${lbl}${o.state !== 'expired' ? ' · لحد ' + fmt(o.end) : ''}</div>`;
+}
+function talOfferOpen(id){
+  const l = _talLinks.find(x => x.id === id); if(!l) return;
+  const o = l.offer && l.offer.state !== 'expired' ? l.offer : null;
+  const loc = d => { const x = new Date(d); x.setMinutes(x.getMinutes() - x.getTimezoneOffset()); return x.toISOString().slice(0, 16); };
+  const now = new Date(), wk = new Date(Date.now() + 7 * 864e5);
+  const reasons = ['Competitiveness','Overstock','Expiring Soon','Festival / Event','Trading','Delisting'];
+  const html = `<div id="tal-offer-box" style="display:grid;gap:10px;font-size:13px">
+    <div style="font-weight:800">${escapeHtml(l.talabat_name || l.matched_name || '')}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;font-family:Roboto,sans-serif;font-size:12px;color:var(--muted)">
+      <span>سعر طلبات الحالي: <b style="color:var(--text)">${l.final_price}</b></span><span>سعر الموقع: <b style="color:var(--text)">${l.web_price || '—'}</b></span></div>
+    <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+      <label style="display:grid;gap:3px">سعر العرض<input id="tof-price" type="number" min="1" class="form-input" style="width:110px;font-family:Roboto,sans-serif;font-weight:800" value="${o ? o.price : ''}" oninput="talOfferCalc(${id},'p')"></label>
+      <span style="padding-bottom:8px">أو</span>
+      <label style="display:grid;gap:3px">خصم %<input id="tof-pct" type="number" min="1" max="90" class="form-input" style="width:80px;font-family:Roboto,sans-serif" oninput="talOfferCalc(${id},'%')"></label>
+      <div id="tof-info" style="padding-bottom:8px;font-size:12px;font-weight:700"></div>
+    </div>
+    <label style="display:grid;gap:3px">السبب (زي طلبات)<select id="tof-reason" class="form-input">${reasons.map(r => `<option ${(o?.reason || 'Competitiveness') === r ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <label style="display:grid;gap:3px">من<input id="tof-start" type="datetime-local" class="form-input" value="${loc(o ? o.start : now)}"></label>
+      <label style="display:grid;gap:3px">لحد<input id="tof-end" type="datetime-local" class="form-input" value="${loc(o ? o.end : wk)}"></label>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      ${l.offer ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="talOfferSave(${id}, true)">🗑️ شيل العرض</button>` : ''}
+      <button class="btn btn-primary btn-sm" onclick="talOfferSave(${id})">💾 حفظ العرض</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted)">العرض بيتبعت في شيت طلبات وستارز (وضع طلبات) بياخد سعره طول مدته. لما يخلص الشيت بيرجع للسعر العادي لوحده.</div>
+  </div>`;
+  infoModal('🏷️ عرض على طلبات', html, { html: true });
+  setTimeout(() => talOfferCalc(id, 'p'), 30);
+}
+function talOfferCalc(id, src){
+  const l = _talLinks.find(x => x.id === id); if(!l) return;
+  const pE = $('tof-price'), cE = $('tof-pct'), info = $('tof-info'); if(!pE) return;
+  if(src === '%' && cE.value) pE.value = Math.round(l.final_price * (1 - (+cE.value || 0) / 100));
+  const p = +pE.value || 0;
+  if(src === 'p' && p && l.final_price) cE.value = Math.round((1 - p / l.final_price) * 100);
+  if(!p){ info.innerHTML = ''; return; }
+  const offT = l.final_price ? Math.round((1 - p / l.final_price) * 100) : 0;
+  const vsWeb = l.web_price ? Math.round((p / l.web_price - 1) * 100) : null;
+  info.innerHTML = `<span style="color:#dc2626">−${offT}% من سعر طلبات</span>${vsWeb != null ? ` · <span style="color:${vsWeb < 0 ? '#dc2626' : '#16a34a'}">${vsWeb >= 0 ? '+' : ''}${vsWeb}% عن الموقع</span>` : ''}`;
+}
+async function talOfferSave(id, clear){
+  let body;
+  if(clear){ if(!confirm('تشيل العرض؟')) return; body = { clear: true }; }
+  else body = { price: +$('tof-price').value, reason: $('tof-reason').value,
+                start: $('tof-start').value ? new Date($('tof-start').value).toISOString() : null,
+                end: $('tof-end').value ? new Date($('tof-end').value).toISOString() : null };
+  const r = await apiFetch('/api/talabat/offer/' + id, 'POST', body);
+  if(!r || r.error){ toast('❌ ' + _errText(r?.error || _apiLastErr, 'فشل')); return; }
+  toast(clear ? '🗑️ اتشال العرض' : '✅ اتحفظ العرض — هيتبعت مع الشيت الجاي');
+  document.getElementById('tal-offer-box')?.closest('[style*=position]')?.remove();
+  talabatLoadLinks();
+}
 function talabatFiltersChanged(){
   _talSort = $('tal-sort')?.value || 'sales';
   try{ localStorage.setItem('tal_sort', _talSort);
-       localStorage.setItem('tal_filters', JSON.stringify({ a:$('tal-f-active')?.value||'', s:$('tal-f-stock')?.value||'', q:$('tal-f-sales')?.value||'', o:$('tal-f-obour')?.value||'' })); }catch(e){}
+       localStorage.setItem('tal_filters', JSON.stringify({ a:$('tal-f-active')?.value||'', s:$('tal-f-stock')?.value||'', q:$('tal-f-sales')?.value||'', o:$('tal-f-obour')?.value||'', of:$('tal-f-offer')?.value||'' })); }catch(e){}
   talabatRender();
 }
 function _talRestoreFilters(){
   if(_talRestoreFilters.done) return; _talRestoreFilters.done = true;
   try{ const f = JSON.parse(localStorage.getItem('tal_filters') || '{}');
-       if($('tal-f-active')) $('tal-f-active').value = f.a || ''; if($('tal-f-stock')) $('tal-f-stock').value = f.s || ''; if($('tal-f-sales')) $('tal-f-sales').value = f.q || ''; if($('tal-f-obour')) $('tal-f-obour').value = f.o || ''; }catch(e){}
+       if($('tal-f-active')) $('tal-f-active').value = f.a || ''; if($('tal-f-stock')) $('tal-f-stock').value = f.s || ''; if($('tal-f-sales')) $('tal-f-sales').value = f.q || ''; if($('tal-f-obour')) $('tal-f-obour').value = f.o || ''; if($('tal-f-offer')) $('tal-f-offer').value = f.of || ''; }catch(e){}
 }
 function talabatRender(){
   _talRestoreFilters();
@@ -52702,6 +52767,11 @@ function talabatRender(){
   else if(fS==='out') rows=rows.filter(l=>l.matched&&(Number(l.trivium_qty)||0)<=0);
   else if(fS==='sold_out') rows=rows.filter(l=>l.matched&&(Number(l.trivium_qty)||0)<=0&&(l.tal_qty_30d||0)>0);
   const fO=$('tal-f-obour')?.value||'';
+  const fOf=$('tal-f-offer')?.value||'';   // 🏷️ v1031
+  if(fOf==='any') rows=rows.filter(l=>l.offer&&l.offer.state!=='expired');
+  else if(fOf==='active') rows=rows.filter(l=>l.offer&&l.offer.state==='active');
+  else if(fOf==='scheduled') rows=rows.filter(l=>l.offer&&l.offer.state==='scheduled');
+  else if(fOf==='expired') rows=rows.filter(l=>l.offer&&l.offer.state==='expired');
   if(fO==='in') rows=rows.filter(l=>l.matched&&(Number(l.obour_qty)||0)>0);
   else if(fO==='out') rows=rows.filter(l=>l.matched&&(Number(l.obour_qty)||0)<=0);
   if(fQ==='yes') rows=rows.filter(l=>(l.tal_qty_30d||0)>0);
@@ -52721,7 +52791,7 @@ function talabatRender(){
   const activeCount=_talLinks.filter(l=>l.active===1).length;
   const lockedCount=_talLinks.filter(l=>l.force_inactive).length;
   const pinnedCount=_talLinks.filter(l=>l.price_override!=null && l.price_override!=='').length;   // 🆕 v627
-  if($('tal-summary')) $('tal-summary').textContent=`${_talLinks.length} منتج · مطابق ${matchedCount} · متاح (active) ${activeCount}${pinnedCount?` · 📌 سعر مثبّت ${pinnedCount}`:''}${lockedCount?` · 🔒 مقفول يدوياً ${lockedCount}`:''}${(onlyU||onlyP||q||fA||fS||fQ||fO)?` — معروض ${rows.length}`:''}`;
+  if($('tal-summary')) $('tal-summary').textContent=`${_talLinks.length} منتج · مطابق ${matchedCount} · متاح (active) ${activeCount}${pinnedCount?` · 📌 سعر مثبّت ${pinnedCount}`:''}${lockedCount?` · 🔒 مقفول يدوياً ${lockedCount}`:''}${(()=>{const n=_talLinks.filter(l=>l.offer&&l.offer.state==='active').length;return n?` · 🏷️ عليه عرض ${n}`:''})()}${(onlyU||onlyP||q||fA||fS||fQ||fO||fOf)?` — معروض ${rows.length}`:''}`;
   if(!rows.length){ box.innerHTML='<div style="padding:16px;text-align:center;color:var(--muted)">مفيش منتجات — ارفع شيت طلبات الأول</div>'; return; }
   box.innerHTML=`<table style="width:100%;font-size:13px"><thead><tr>
     <th style="text-align:right">المنتج على طلبات</th><th style="text-align:right">منتجك على الموقع</th><th>sku طلبات</th><th>مخزون ترفيوم</th><th>🏭 مخزون العبور</th><th onclick="talabatToggleSort()" style="cursor:pointer;user-select:none" title="دوس للترتيب بالمبيعات">مبيعات طلبات<div style="font-weight:400;font-size:10px;color:var(--muted)">آخر 30 يوم ${_talSort==='sales'?'▼':_talSort==='sales_asc'?'▲':'↕'}</div></th><th>سعر الموقع</th><th>÷${(1-_talMarginCur/100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}<div style="font-weight:400;font-size:10px;color:var(--muted)">نسبة ${_talMarginCur}%</div></th><th>سعر مثبّت</th><th>السعر النهائي</th><th>active</th>
@@ -52747,7 +52817,7 @@ function talabatRender(){
       <td style="text-align:center;font-family:Roboto,sans-serif">${l.web_price?l.web_price.toLocaleString():'—'}</td>
       <td style="text-align:center;color:var(--muted);font-family:Roboto,sans-serif">${l.matched?l.auto_price.toLocaleString():'—'}</td>
       <td style="text-align:center"><input type="number" min="0" value="${l.price_override!=null?l.price_override:''}" placeholder="—" ${l.matched?'':'disabled'} onchange="talabatSetPrice(${l.id}, this.value)" style="width:70px;padding:4px;border:1px solid var(--border);border-radius:6px;text-align:center;font-family:Roboto,sans-serif"></td>
-      <td style="text-align:center;font-weight:800;color:${l.price_override!=null?'#b45309':'#16a34a'};font-family:Roboto,sans-serif">${l.matched?l.final_price.toLocaleString():'—'}</td>
+      <td style="text-align:center;font-weight:800;color:${l.price_override!=null?'#b45309':'#16a34a'};font-family:Roboto,sans-serif">${l.matched?l.final_price.toLocaleString():'—'}${l.matched?_talOfferCell(l):''}</td>
       <td style="text-align:center;white-space:nowrap">${l.matched
           ? `${l.active?'<span style="color:#16a34a;font-weight:700">1</span>':'<span style="color:#dc2626">0</span>'}
              <button onclick="talabatToggleLock(${l.id},${l.force_inactive?'false':'true'})"
