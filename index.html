@@ -1411,6 +1411,8 @@
 <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{});});}</script>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
+/* 🔢 v1034: خانات الأرقام دايماً LTR — في صفحة RTL الرقم الطويل كان بيتقص من الشمال: 12500 كانت بتظهر 2500 */
+input[type=number]{direction:ltr;text-align:right}
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --primary:#0f172a;--accent:#6366f1;--accent-h:#4f46e5;--accent-light:#eef2ff;
@@ -12458,7 +12460,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1033';
+const UI_BUILD = 'v1034';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -42847,6 +42849,7 @@ async function _loadPOPricingSection(poId){
 
     // 💾 v609: استرجع اللي كان مكتوب قبل الريفريش
     window._poPricingId = poId;
+    setTimeout(() => _poFitAll(container), 0);   // 🔢 v1034
     const restored = _poDraftRestore(poId);
     if(restored){
       const slot = document.getElementById('po-draft-slot');
@@ -45044,6 +45047,17 @@ function _poOfferChip(off){
   </div>`;
 }
 
+// 🔢 v1034: الرقم الصحيح من غير .00 — أقصر، فمايتقصّش على الموبايل
+function _poNumIn(v){ v = Math.round((Number(v) || 0) * 100) / 100; return Number.isInteger(v) ? String(v) : v.toFixed(2); }
+// 🔢 v1034: صغّر خط الخانة لحد ما الرقم كله يبان (مهما كانت الشاشة ضيقة)
+function _poFitNum(el){
+  if(!el) return; el.style.fontSize = ''; const base = parseFloat(getComputedStyle(el).fontSize) || 12;
+  let fs = base; while(fs > 8 && el.scrollWidth > el.clientWidth + 1){ fs -= 0.5; el.style.fontSize = fs + 'px'; }
+}
+function _poFitAll(scope){ (scope || document).querySelectorAll('[data-price-kind]').forEach(_poFitNum); }
+document.addEventListener('input', e => { if(e.target?.matches?.('[data-price-kind]')) _poFitNum(e.target); });
+window.addEventListener('resize', () => _poFitAll());
+
 function _renderPOPricingRow(poId, item){
   const list = parseFloat(item.list_price != null ? item.list_price : item.purchase_price) || 0;
   const disc = parseFloat(item.discount_pct) || 0;
@@ -45090,7 +45104,7 @@ function _renderPOPricingRow(poId, item){
                اللي تكتبه هنا هو اللي بيتحفظ كتكلفة وبيروح لـ Shopify زي ما هو. -->
           <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px" title="السعر الصافي بعد الخصم والضريبة — ده اللي بيتحفظ كتكلفة">💰 شراء (صافي)</label>
           <input type="number" step="0.01" min="0"
-            value="${net.toFixed(2)}"
+            value="${_poNumIn(net)}"
             data-original="${net.toFixed(2)}"
             data-price-item="${item.id}" data-price-kind="purchase"
             oninput="_markPOPriceDirty(this)"
@@ -45103,7 +45117,7 @@ function _renderPOPricingRow(poId, item){
             ${item.offer ? `title="الصنف عليه عرض صلاحية — الرقم ده هو السعر الحقيقي، وبيرجع تلقائي أول ما العرض يخلص"` : ''}
             >${item.offer ? '🏷️ السعر الحقيقي ⏸️' : '🏷️ بيع (Shopify)'}</label>
           <input type="number" step="0.01" min="0"
-            value="${sale.toFixed(2)}"
+            value="${_poNumIn(sale)}"
             data-original="${sale.toFixed(2)}"
             data-price-item="${item.id}" data-price-kind="sale"
             oninput="_markPOPriceDirty(this)"
@@ -45112,7 +45126,7 @@ function _renderPOPricingRow(poId, item){
         <div>
           <label style="display:block;font-size:10px;color:var(--muted);margin-bottom:2px" title="السعر المشطوب على الموقع — صفر يعني مفيش">🔖 مقارنة</label>
           <input type="number" step="0.01" min="0"
-            value="${cmp > 0 ? cmp.toFixed(2) : ''}"
+            value="${cmp > 0 ? _poNumIn(cmp) : ''}"
             placeholder="مفيش"
             data-original="${cmp > 0 ? cmp.toFixed(2) : '0.00'}"
             data-price-item="${item.id}" data-price-kind="compare"
