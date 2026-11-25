@@ -12458,7 +12458,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1031';
+const UI_BUILD = 'v1032';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -53022,7 +53022,24 @@ async function talUpNow(force){
   }
 }
 
-function talabatExport(){
+// 🏷️ v1032: الشيت بقى بيتنزل من السيرفر — نفس اللي بيترفع تلقائي بالظبط
+//   (فيه أعمدة العروض). لو السيرفر مش متاح بنرجع للطريقة القديمة.
+async function talabatExport(){
+  try{
+    const r = await fetch(API_URL.replace(/\/$/,'') + '/api/talabat/sheet.csv?mark=1', {
+      headers: window._adminToken ? { 'Authorization': 'Bearer ' + window._adminToken } : {} });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const blob = await r.blob();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `Cafelax_1105302.csv`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('⬇️ اتنزّل شيت التحديث' + (r.headers.get('X-Sheet-Rows') ? ` (${r.headers.get('X-Sheet-Rows')} صف)` : ''));
+    try{ talPubStatus && talPubStatus(); }catch(e){}
+    return;
+  }catch(e){ console.warn('[v1032] server sheet failed, local fallback:', e.message); }
+  talabatExportLocal();
+}
+function talabatExportLocal(){
   if(!_talLinks.length){ toast('مفيش منتجات'); return; }
   const header=['SKU','Barcode','reason','start_date','end_date','Campaing_status','discounted_price','maximum_sales_quantity','original_Price','active'];
   const esc=v=>{ const s=String(v==null?'':v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
