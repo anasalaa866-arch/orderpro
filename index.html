@@ -6635,6 +6635,7 @@ body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
     <h2 style="margin:0">💬 محادثات واتساب</h2>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
       <div id="wai-top" style="font-size:12px;color:var(--muted)"></div>
+      <button class="btn btn-ghost btn-sm" id="wai-learnbtn" style="display:none" onclick="waiLearnOpen()" title="الـ AI بيتعلّم إزاي من ردودكم">🎓 تعلّم الـ AI</button>
       <button class="btn btn-ghost btn-sm wai-solo-hide" onclick="window.open(_waiLink(),'_blank')" title="الصفحة لوحدها من غير القايمة">↗ تاب منفصل</button>
       <button class="btn btn-ghost btn-sm" onclick="_waiCopy(_waiLink())">🔗 نسخ اللينك</button>
     </div>
@@ -8775,6 +8776,17 @@ body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- 🎓 v1044: الـ AI بيتعلّم من التصحيحات -->
+<div id="m-wai-learn" class="modal-overlay" style="display:none;z-index:1150">
+  <div class="modal" style="max-width:880px">
+    <div class="modal-header">
+      <h3 style="margin:0">🎓 تعلّم الـ AI — الرد المقترح ↔ اللي اتبعت</h3>
+      <button class="modal-close" onclick="closeM('m-wai-learn')">×</button>
+    </div>
+    <div class="modal-body" id="wai-learn-body"></div>
   </div>
 </div>
 
@@ -12529,7 +12541,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1043';
+const UI_BUILD = 'v1044';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45161,6 +45173,7 @@ async function waiLoad(){
 }
 function waiRenderList(){
   const m = _wai.meta, c = m.counts || {};
+  const lb = $('wai-learnbtn'); if(lb) lb.style.display = m.ai_can ? '' : 'none';
   const F = [['all','الكل'],['mine','بتاعتي',c.mine],['unread','مش مقروءة',c.unread],['waiting','مستنية رد'],['unassigned','مش متوزعة',c.unassigned]];
   $('wai-f').innerHTML = F.map(([k,l,n]) => `<button class="${_wai.f===k?'on':''}" onclick="_wai.f='${k}';waiLoad()">${l}${n ? ` <b style="font-family:Roboto,sans-serif">${n}</b>` : ''}</button>`).join('');
   const alertMin = Number(m.wait_alert_min) || 15;
@@ -45277,6 +45290,52 @@ function waiRenderChat(scroll){
 }
 // 🤖 v1042: AI — 📝 ملخص + 💡 رد مقترح (صلاحية wa-ai)
 function _waiLastIn(){ for(let i = _wai.msgs.length - 1; i >= 0; i--) if(_wai.msgs[i].dir === 'in') return _wai.msgs[i]; return null; }
+const _wl = { days:30, f:'fixes', d:null };
+async function waiLearnOpen(){ openM('m-wai-learn'); waiLearnLoad(); }
+async function waiLearnLoad(){
+  const b = $('wai-learn-body'); if(!b) return;
+  if(!_wl.d) b.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">⏳</div>';
+  const r = await apiFetch('/api/wa/ai/feedback?days=' + _wl.days + '&f=' + _wl.f, 'GET');
+  if(!r || r.error){ b.innerHTML = `<div style="color:#dc2626">❌ ${escapeHtml(r?.error || _errText(_apiLastErr, 'فشل'))}</div>`; return; }
+  _wl.d = r;
+  const card = (l, v, col) => `<div style="flex:1;min-width:120px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px"><div style="font-size:11.5px;color:var(--muted)">${l}</div><div style="font-size:21px;font-weight:800;font-family:Roboto,sans-serif;color:${col||'inherit'}">${v}</div></div>`;
+  const O = { as_is:['✅','اتبعت زي ما هو','#047857'], edited:['✏️','اتعدّل','#b45309'], ignored:['❌','اتجاهل واتكتب غيره','#b91c1c'] };
+  const users = (r.by_user || []).map(u => `<span style="margin-inline-end:10px">👤 ${escapeHtml(u.sent_by)}: <b style="font-family:Roboto,sans-serif">${u.ok}/${u.n}</b></span>`).join('');
+  b.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      ${card('اتبعت من غير تعديل', r.pct == null ? '—' : r.pct + '%', '#047857')}${card('✅ زي ما هو', r.as_is)}${card('✏️ اتعدّل', r.edited)}${card('❌ اتجاهل', r.ignored)}
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.8">
+      الـ AI بياخد آخر <b style="font-family:Roboto,sans-serif">${r.examples}</b> تصحيح (✏️ و❌) من ردود: <b>${escapeHtml((r.learn_from || []).join('، ') || 'الكل')}</b> — تغيّرهم من الإعدادات ← واتساب — AI.
+      ${users ? '<br>' + users : ''}
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      ${[['fixes','✏️❌ التصحيحات'],['edited','✏️ اتعدّل'],['ignored','❌ اتجاهل'],['as_is','✅ زي ما هو'],['all','الكل']].map(([k,l]) => `<button class="btn btn-sm ${_wl.f===k?'btn-primary':'btn-ghost'}" onclick="_wl.f='${k}';waiLearnLoad()">${l}</button>`).join('')}
+      <select class="form-input" style="width:auto;padding:4px 8px;font-size:12px;margin-inline-start:auto" onchange="_wl.days=+this.value;waiLearnLoad()">${[7,30,90].map(d => `<option value="${d}" ${_wl.days===d?'selected':''}>آخر ${d} يوم</option>`).join('')}</select>
+    </div>
+    ${(r.rows || []).length ? r.rows.map(x => { const o = O[x.outcome] || ['','',''];
+      return `<div style="border:1px solid var(--border);border-radius:10px;padding:9px 11px;margin-bottom:8px;${x.excluded?'opacity:.55':''}">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-bottom:5px">
+          <b style="color:${o[2]}">${o[0]} ${o[1]}</b><span>· 👤 ${escapeHtml(x.sent_by || '')}</span><span>· ${escapeHtml(x.name || _waiPhone(x.wa_id))}</span>
+          <span style="font-family:Roboto,sans-serif">· ${_waiDay(x.at)} ${_waiTime(x.at)}</span>
+          <a href="${_waiLink(x.wa_id)}" target="_blank" style="margin-inline-start:auto">فتح المحادثة ↗</a>
+        </div>
+        <div style="font-size:12.5px;line-height:1.7"><div style="color:var(--muted)">💬 العميل: ${escapeHtml(x.cust_text || '')}</div>
+          ${x.outcome !== 'as_is' ? `<div style="background:#fef2f2;border-radius:6px;padding:4px 8px;margin-top:4px;white-space:pre-wrap"><b>💡 اقتراح الـ AI:</b> ${escapeHtml(x.suggest_text || '')}</div>` : ''}
+          <div style="background:#ecfdf5;border-radius:6px;padding:4px 8px;margin-top:4px;white-space:pre-wrap"><b>${x.outcome === 'as_is' ? '💡✅ اتبعت:' : '✍️ اللي اتبعت:'}</b> ${escapeHtml(x.sent_text || '')}</div></div>
+        ${x.outcome !== 'as_is' ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+          ${r.can_kb ? (x.kb_added ? '<span style="font-size:11.5px;color:#047857">✅ اتضافت للمعلومات</span>' : `<button class="btn btn-ghost btn-sm" onclick="waiLearnKb(${x.id})">➕ ضيف معلومة للـ AI</button>`) : ''}
+          <button class="btn btn-ghost btn-sm" onclick="waiLearnEx(${x.id},${!x.excluded})">${x.excluded ? '↩️ رجّعه للتعلّم' : '🚫 ماتتعلمش من ده'}</button></div>` : ''}
+      </div>`; }).join('') : '<div style="padding:24px;text-align:center;color:var(--muted)">لسه مفيش ردود هنا — أول ما حد يبعت رد بعد رد مقترح هيظهر.</div>'}`;
+}
+async function waiLearnEx(id, ex){ const r = await apiFetch('/api/wa/ai/feedback/' + id + '/exclude', 'POST', { excluded:ex }); if(!r || r.error) return toast('❌ ' + (r?.error || 'فشل')); waiLearnLoad(); }
+async function waiLearnKb(id){
+  const x = (_wl.d?.rows || []).find(r => r.id === id); if(!x) return;
+  const t = prompt('المعلومة اللي الـ AI يحفظها (هتتضاف كسطر في «معلومات للـ AI»):', x.sent_text || ''); if(!t || !t.trim()) return;
+  const r = await apiFetch('/api/wa/ai/feedback/' + id + '/kb', 'POST', { text:t.trim() });
+  if(!r || r.error) return toast('❌ ' + (r?.error || _errText(_apiLastErr, 'فشل')));
+  toast(`✅ اتضافت (${r.length}/${r.max} حرف)`); waiLearnLoad();
+}
 function _waiNeedsReply(){ const l = _wai.msgs[_wai.msgs.length - 1]; return !!l && l.dir === 'in'; }
 function _waiAiRender(){
   const a = _wai.ai || {};
