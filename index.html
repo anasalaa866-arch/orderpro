@@ -12519,7 +12519,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1035';
+const UI_BUILD = 'v1036';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45153,7 +45153,7 @@ function waiRenderList(){
         </div>
         <div style="font-size:10px;color:var(--muted);display:flex;gap:6px;margin-top:1px">
           ${x.status?`<span>${escapeHtml(x.status)}</span>`:''}${ag?`<span>· 👤 ${escapeHtml(ag)}</span>`:'<span style="color:#d97706">· مش متوزعة</span>'}
-          ${late?'<span style="color:#dc2626;font-weight:700">· ⏰ مستني</span>':''}${!x.window_open?'<span>· 🔒</span>':''}
+          ${late && !x.standby?'<span style="color:#dc2626;font-weight:700">· ⏰ مستني</span>':''}${x.standby?'<span>· 👀 '+escapeHtml(m.other_label||'الشركة')+'</span>':''}${!x.window_open?'<span>· 🔒</span>':''}
         </div>
       </div></div>`;
   }).join('') : '<div style="padding:24px;text-align:center;color:var(--muted);font-size:12.5px">مفيش محادثات</div>';
@@ -45203,7 +45203,7 @@ function waiRenderChat(scroll){
   const canAssign = m.supervisor || !c.assigned_to || c.assigned_to === me;
   let last = '', rows = '';
   for(const x of _wai.msgs){ const d = _waiDay(x.ts); if(d !== last){ rows += `<div class="wai-day">${d}</div>`; last = d; } rows += _waiBubble(x); }
-  const locked = !c.window_open;
+  const locked = !c.window_open || !!c.standby;
   $('wai-chat').innerHTML = `
     <div class="wai-head">
       <button class="btn btn-ghost btn-sm wai-back" onclick="waiBack()">→</button>
@@ -45212,7 +45212,7 @@ function waiRenderChat(scroll){
         <div style="font-weight:800;font-size:13.5px">${escapeHtml(c.name || _waiPhone(_wai.cur))}</div>
         <div style="font-size:11px;color:var(--muted);font-family:Roboto,sans-serif;direction:ltr;text-align:right">${_waiPhone(_wai.cur)}</div>
       </div>
-      <span style="font-size:11px;padding:3px 8px;border-radius:10px;${locked?'background:#fee2e2;color:#b91c1c':'background:#e7f8ee;color:#047857'}">${locked?'🔒 النافذة مقفولة':'⏱️ فاضل <b style="font-family:Roboto,sans-serif">'+left+'</b>'}</span>
+      <span style="font-size:11px;padding:3px 8px;border-radius:10px;${locked?'background:#fee2e2;color:#b91c1c':'background:#e7f8ee;color:#047857'}">${c.standby?'👀 للعرض بس':!c.window_open?'🔒 النافذة مقفولة':'⏱️ فاضل <b style="font-family:Roboto,sans-serif">'+left+'</b>'}</span>
       <select class="form-input" style="width:auto;padding:4px 6px;font-size:12px" ${canAssign?'':'disabled'} onchange="waiAssign(this.value)">
         <option value="">— مش متوزعة —</option>${agents.map(a => `<option value="${escapeHtml(a.username)}" ${c.assigned_to===a.username?'selected':''}>👤 ${escapeHtml(a.name)}</option>`).join('')}
         ${c.assigned_to && !agents.find(a => a.username === c.assigned_to) ? `<option selected>${escapeHtml(c.assigned_to)}</option>` : ''}
@@ -45223,7 +45223,7 @@ function waiRenderChat(scroll){
     </div>
     <div class="wai-msgs" id="wai-msgs">${rows || '<div style="margin:auto;color:#667781">مفيش رسايل</div>'}</div>
     <div class="wai-comp">
-      ${locked ? `<div style="text-align:center;font-size:12.5px;color:#b91c1c;padding:8px">عدّى 24 ساعة من آخر رسالة من العميل — Meta مش بتسمح برسالة حرة. الرد بقالب هيتعمل في المرحلة الجاية.</div>` : `
+      ${c.standby ? `<div style="text-align:center;font-size:12.5px;color:#92400e;background:#fffbeb;border-radius:8px;padding:8px">👀 المحادثة دي بيرد عليها ${escapeHtml(m.other_label || 'الشركة')} — OrderPro بيشوفها بس. عشان ترد من هنا لازم تحوّل «Conversation routing» لـ CAFELAX API.</div>` : locked ? `<div style="text-align:center;font-size:12.5px;color:#b91c1c;padding:8px">عدّى 24 ساعة من آخر رسالة من العميل — Meta مش بتسمح برسالة حرة. الرد بقالب هيتعمل في المرحلة الجاية.</div>` : `
       <div id="wai-rbar"></div>
       ${(m.quick||[]).length ? `<div class="wai-qr">${m.quick.map((t,i) => `<button title="${escapeHtml(t)}" onclick="waiQuick(${i})">⚡ ${escapeHtml(t)}</button>`).join('')}</div>` : ''}
       <div style="display:flex;gap:6px;align-items:flex-end">
