@@ -12564,7 +12564,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1051';
+const UI_BUILD = 'v1052';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45268,10 +45268,12 @@ function _waiBubble(m){
     else if(m.type === 'video') inner += `<video controls data-wam="${m.media_id}" style="max-width:260px;max-height:300px"></video>`;
     else inner += `<a href="#" onclick="waiDownload('${m.media_id}', ${JSON.stringify(m.filename||'file').replace(/"/g,'&quot;')});return false" style="display:inline-block;padding:6px 10px;background:#0000000d;border-radius:6px">📄 ${escapeHtml(m.filename || 'ملف')}</a>`;
   }
-  if(m.type === 'image' && m.dir === 'in') inner += _waiProofBox(m);
+  // 🧹 v1052: زرار الفحص بس في المحادثات اللي فيها طلب InstaPay (أو الصورة اتفحصت قبل كده)
+  if(m.type === 'image' && m.dir === 'in' && ((m.wamid && _wai.proofs[m.wamid]) || _wai.contact?.flow_order)) inner += _waiProofBox(m);
   if(m.type === 'template' && !m.body) inner += '<i style="color:#667781">📋 قالب</i>';
   if(m.body) inner += `<div class="tx">${escapeHtml(m.body).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')}</div>`;
-  if(!m.body && !m.media_id && m.type !== 'template') inner += `<i style="color:#667781">(${escapeHtml(m.type || 'رسالة')})</i>`;
+  const _WT = { unsupported:'⚠️ العميل بعت نوع رسالة واتساب مابيوصلناش (زي View once أو استفتاء أو رسالة معدّلة) — اطلب منه يبعتها تاني عادي', reaction:'👍 رد بإيموجي', location:'📍 لوكيشن', contacts:'👤 جهة اتصال', button:'🔘 داس زرار', interactive:'🔘 داس زرار', deleted:'🗑️ رسالة اتمسحت' };
+  if(!m.body && !m.media_id && m.type !== 'template') inner += `<i style="color:#667781">${escapeHtml(_WT[m.type] || '(' + (m.type || 'رسالة') + ')')}</i>`;
   const by = m.dir === 'out' && m.sent_by ? `<span>${escapeHtml(((_wai.meta.agents||[]).find(a => a.username === m.sent_by)?.name) || m.sent_by)}</span>` : '';
   return `<div class="wai-b ${m.dir}" id="wam-${m.id}">${m.dir==='in'&&m.wamid?`<button class="rp" title="رد على الرسالة" onclick="waiReply(${m.id})">↩️</button>`:''}${inner}
     <div class="meta">${by}<span>${_waiTime(m.ts)}</span>${m.dir==='out'?`<span title="${escapeHtml(m.error||m.status||'')}">${_waiTick(m.status)}</span>`:''}</div>
