@@ -6588,7 +6588,7 @@ tr:hover td{background:#fafbff}
 <div class="page" id="page-wa-pay-review">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
     <h2 style="margin:0">🏦 مراجعة تحويلات InstaPay</h2>
-    <div style="font-size:12px;color:var(--muted)">الطلبات دي اتصفّرت لما الموظف بعت «وصل التحويل». افتح حساب البنك وأكد كل تحويل.</div>
+    <div style="font-size:12px;color:var(--muted)">الطلبات دي اتعلّمت مدفوعة على شوبيفاي لما الموظف بعت «وصل التحويل». افتح حساب البنك وأكد كل تحويل.</div>
   </div>
   <div id="pay-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
   <div id="pay-list"><div style="padding:30px;text-align:center;color:var(--muted)">⏳</div></div>
@@ -12564,7 +12564,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1050';
+const UI_BUILD = 'v1051';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45366,12 +45366,12 @@ async function payLoad(){
 }
 async function payAct(id, act, btn){
   let note = '';
-  if(act === 'reject'){ note = prompt('❌ التحويل مش موجود في البنك؟ التصفير هيترجع والمندوب/بوسطة هيحصّلوا تاني.\nملاحظة (اختياري):', ''); if(note === null) return; }
-  else if(!confirm('✅ التحويل وصل في البنك؟' + '\nهيتعلّم مدفوع على شوبيفاي كمان.')) return;
+  if(act === 'reject'){ note = prompt('❌ التحويل مش موجود في البنك؟ التحصيل هيرجع في أوردر برو/بوسطة/المندوب — وعدّل الطلب على شوبيفاي بإيدك (لسه Paid هناك).\nملاحظة (اختياري):', ''); if(note === null) return; }
+  else if(!confirm('✅ التحويل وصل في البنك؟')) return;
   if(btn){ btn.disabled = true; }
   const r = await apiFetch('/api/wa/pay-reviews/' + id + '/' + act, 'POST', { note });
   if(!r || r.error){ toast('❌ ' + (r?.error || _errText(_apiLastErr, 'فشل'))); if(btn) btn.disabled = false; return; }
-  if(act === 'confirm') toast(r.shopify_paid === false ? '✅ اتأكد — بس شوبيفاي: ' + (r.shopify_error || 'فشل') : '✅ اتأكد' + (r.shopify_paid ? ' واتعلّم مدفوع على شوبيفاي' : ''), r.shopify_paid === false ? 'warn' : undefined, 6000);
+  if(act === 'confirm') toast(r.shopify_paid === false ? '✅ اتأكد — بس شوبيفاي لسه مش Paid: ' + (r.shopify_error || 'فشل') : '✅ اتأكد', r.shopify_paid === false ? 'warn' : undefined, 6000);
   else toast('❌ اترفض — التحصيل رجع' + (r.cod_back && r.cod_back.ok === false ? ' (⚠️ بوسطة: ' + (r.cod_back.error || 'عدّل بإيدك') + ')' : ''), 'warn', 6000);
   payLoad();
 }
@@ -45603,7 +45603,7 @@ async function waiSend(force){
     if(_wai.readySend && _wai.ready) body.ready = true;
     const r = await apiFetch('/api/wa/conversations/' + _wai.cur + '/send', 'POST', body);
     if(r?.ok && body.ready){ _wai.ready = null; _wai.readySend = false; if(_wai.contact) _wai.contact.flow = 'paid_ok';
-      if(r.zero) toast(r.zero.ok ? '💳 الطلب اتصفّر — ' + r.zero.result + ' · راح لمراجعة المحاسب' : '⚠️ التصفير فشل: ' + r.zero.error + ' — صفّره بإيدك', r.zero.ok && !/⚠️/.test(r.zero.result) ? undefined : 'warn', 7000); }
+      if(r.zero) toast(r.zero.ok ? '💳 ' + r.zero.result + ' · راح لمراجعة المحاسب' : '⚠️ ماتعلّمش مدفوع على شوبيفاي: ' + r.zero.error + ' — علّمه Paid بإيدك', r.zero.ok && !/⚠️/.test(r.zero.result) ? undefined : 'warn', 7000); }
     if(r && r.locked_to){
       _wai.busy = false; if(btn) btn.disabled = false;
       const nm = ((_wai.meta.agents||[]).find(a => a.username === r.locked_to)?.name) || r.locked_to;
