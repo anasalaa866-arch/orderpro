@@ -12564,7 +12564,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1054';
+const UI_BUILD = 'v1055';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45548,10 +45548,18 @@ function waiRenderSide(orders){
     <div style="font-weight:800;margin:8px 0 6px">📦 طلباته (${orders.length})</div>
     ${c.flow_order ? `<div style="background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;padding:7px 8px;margin-bottom:8px;color:#5b21b6;font-weight:700">🧾 ${c.flow==='proof_review'?'صورة تحويل للطلب':'مستني صورة تحويل للطلب'} <span style="font-family:Roboto,sans-serif">${escapeHtml(String(c.flow_order).replace(/^SH-/,''))}</span></div>` : ''}
     ${orders.length ? orders.map(o => `<div onclick="waiOpenOrder('${escapeHtml(o.id)}')" style="border:${o.id===c.flow_order?'2px solid #7c3aed':'1px solid var(--border)'};border-radius:8px;padding:7px 8px;margin-bottom:6px;cursor:pointer;background:var(--bg)">
-        <div style="display:flex;justify-content:space-between"><b style="font-family:Roboto,sans-serif">${escapeHtml(o.id)}</b><span style="font-family:Roboto,sans-serif">${Number(o.total||0).toLocaleString('en-US')} ج</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><b style="font-family:Roboto,sans-serif">${escapeHtml(o.id)}</b><span style="margin-inline-start:auto;font-family:Roboto,sans-serif">${Number(o.total||0).toLocaleString('en-US')} ج</span><button class="btn btn-ghost btn-sm" style="padding:0 6px;font-size:11px" title="لينك الفاتورة على cafelax.com" onclick="event.stopPropagation();waiInvLink('${escapeHtml(o.id)}')">🧾</button></div>
         <div style="color:var(--muted);margin-top:2px">${escapeHtml(o.status||'')}${o.payment_gateway?' · '+escapeHtml(o.payment_gateway):''}${o.paid?' · ✅ مدفوع':''}</div>
         <div style="color:var(--muted);font-family:Roboto,sans-serif;font-size:10.5px">${o.created_at?_waiDay(o.created_at):''}</div></div>`).join('')
       : '<div style="color:var(--muted)">مفيش طلبات بالرقم ده</div>'}`;
+}
+// 🧾 v1055: لينك الفاتورة على cafelax.com — ينفع يتبعت للعميل
+async function waiInvLink(id){
+  const r = await apiFetch('/api/invoice-link/' + encodeURIComponent(id), 'GET');
+  if(!r || !r.url) return toast('❌ ' + (r?.error || 'فشل'));
+  const ta = $('wai-text');
+  if(ta && _wai.contact?.window_open && !_wai.contact?.standby && confirm('🧾 لينك الفاتورة:\n' + r.url + '\n\nأحطه في خانة الرسالة؟')){ ta.value = (ta.value ? ta.value + '\n' : '') + r.url; ta.focus(); }
+  else _waiCopy(r.url);
 }
 function waiOpenOrder(id){
   if(typeof orders !== 'undefined' && orders.find(x => x.id === id)) return openEditOrder(id);
