@@ -6655,7 +6655,9 @@ body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
   <div class="wai" id="wai">
     <div class="wai-list">
       <div style="padding:8px 8px 0"><input id="wai-q" class="form-input" placeholder="🔎 اسم أو رقم" style="width:100%;padding:6px 10px;font-size:12.5px" oninput="clearTimeout(window._waiQT);window._waiQT=setTimeout(()=>waiLoad(),350)"></div>
+      <div id="wai-box" style="display:flex;gap:4px;padding:8px 8px 0;align-items:center"></div>
       <div class="wai-f" id="wai-f"></div>
+      <div id="wai-bulk"></div>
       <div class="wai-convs" id="wai-convs"><div style="padding:20px;text-align:center;color:var(--muted)">⏳</div></div>
     </div>
     <div class="wai-chat" id="wai-chat">
@@ -12565,7 +12567,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1059';
+const UI_BUILD = 'v1060';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45202,7 +45204,7 @@ function _waiLeft(s){ if(s == null || s <= 0) return null; const h = Math.floor(
 async function waiLoad(){
   try{
     const q = $('wai-q')?.value || '';
-    const r = await apiFetch('/api/wa/conversations?f=' + _wai.f + (_wai.ch ? '&ch=' + _wai.ch : '') + (q ? '&q=' + encodeURIComponent(q) : ''), 'GET');
+    const r = await apiFetch('/api/wa/conversations?f=' + _wai.f + '&box=' + (_wai.box || 'open') + (_wai.ch ? '&ch=' + _wai.ch : '') + (q ? '&q=' + encodeURIComponent(q) : ''), 'GET');
     if(!r || r.error) throw new Error(r?.error || _errText(_apiLastErr, 'فشل'));
     _wai.convs = r.conversations || []; _wai.meta = r; _wai.listT = Date.now();
     waiRenderList();
@@ -45212,6 +45214,24 @@ async function waiLoad(){
 function waiRenderList(){
   const m = _wai.meta, c = m.counts || {};
   const lb = $('wai-learnbtn'); if(lb) lb.style.display = m.ai_can ? '' : 'none';
+  // 📂 v1060: مفتوحة / مقفولة + تحديد جماعي
+  const bx = _wai.box || 'open', sel = _wai.sel;
+  const bb = $('wai-box');
+  if(bb) bb.innerHTML = [['open','📂 مفتوحة',c.open_n],['closed','✅ مقفولة',c.closed_n]].map(([k,l,n]) =>
+      `<button class="btn btn-sm ${bx===k?'btn-primary':'btn-ghost'}" style="flex:1;padding:4px 6px;font-size:12px" onclick="_wai.box='${k}';_wai.sel=null;waiLoad()">${l} <b style="font-family:Roboto,sans-serif">${n ?? ''}</b></button>`).join('')
+    + `<button class="btn btn-sm ${sel?'btn-primary':'btn-ghost'}" style="padding:4px 8px;font-size:12px" title="تحديد جماعي" onclick="waiSelToggle()">☑️</button>`;
+  const bk = $('wai-bulk');
+  if(bk) bk.innerHTML = !sel ? '' : `<div style="padding:6px 8px;background:#eef2ff;border-bottom:1px solid #c7d2fe;font-size:12px;display:flex;flex-wrap:wrap;gap:5px;align-items:center">
+      <b>☑️ <span style="font-family:Roboto,sans-serif">${sel.size}</span> محددة</b>
+      <button class="btn btn-ghost btn-sm" style="padding:1px 7px;font-size:11px" onclick="waiSelAll()">${_wai.convs.length && _wai.convs.every(x => sel.has(x.wa_id)) ? 'إلغاء الكل' : 'تحديد الكل'}</button>
+      <span style="flex:1"></span>
+      ${bx === 'open' ? `<button class="btn btn-sm" style="padding:1px 8px;font-size:11px;background:#16a34a;color:#fff;border-color:#16a34a" onclick="waiBulk('close')">✅ اقفل</button>` : `<button class="btn btn-sm btn-ghost" style="padding:1px 8px;font-size:11px" onclick="waiBulk('open')">📂 افتح</button>`}
+      <button class="btn btn-ghost btn-sm" style="padding:1px 7px;font-size:11px" onclick="waiBulk('read')">👁️ مقروءة</button>
+      <select class="form-input" style="width:auto;padding:1px 4px;font-size:11px" onchange="if(this.value!=='—')waiBulk('assign',this.value==='∅'?null:this.value);this.value='—'">
+        <option value="—">👤 وزّع على…</option><option value="∅">— شيل التوزيع —</option>${(m.agents||[]).map(a => `<option value="${escapeHtml(a.username)}">${escapeHtml(a.name)}</option>`).join('')}</select>
+      <select class="form-input" style="width:auto;padding:1px 4px;font-size:11px" onchange="if(this.value!=='—')waiBulk('status',this.value);this.value='—'">
+        <option value="—">🏷️ الحالة…</option>${(m.statuses||[]).map(s => `<option>${escapeHtml(s)}</option>`).join('')}</select>
+    </div>`;
   const F = [['all','الكل'],['mine','بتاعتي',c.mine],['unread','مش مقروءة',c.unread],['waiting','مستنية رد'],['unassigned','مش متوزعة',c.unassigned]];
   $('wai-f').innerHTML = F.map(([k,l,n]) => `<button class="${_wai.f===k?'on':''}" onclick="_wai.f='${k}';waiLoad()">${l}${n ? ` <b style="font-family:Roboto,sans-serif">${n}</b>` : ''}</button>`).join('')
     // 📘📸 v1057: فلتر القناة (بيظهر لما يبقى فيه محادثات ماسنجر/إنستجرام)
@@ -45220,7 +45240,8 @@ function waiRenderList(){
   $('wai-convs').innerHTML = _wai.convs.length ? _wai.convs.map(x => {
     const late = x.last_dir === 'in' && x.waiting_since && (Date.now() - new Date(x.waiting_since)) > alertMin * 60000 && x.status !== m.closed;
     const ag = x.assigned_to ? ((m.agents||[]).find(a => a.username === x.assigned_to)?.name || x.assigned_to) : '';
-    return `<div class="wai-c ${_wai.cur===x.wa_id?'cur':''}" onclick="waiOpen('${x.wa_id}')">
+    return `<div class="wai-c ${_wai.cur===x.wa_id?'cur':''}" onclick="${sel ? `waiSelOne('${x.wa_id}')` : `waiOpen('${x.wa_id}')`}" ${sel && sel.has(x.wa_id) ? 'style="background:#e0e7ff"' : ''}>
+      ${sel ? `<input type="checkbox" ${sel.has(x.wa_id) ? 'checked' : ''} style="flex:none;width:17px;height:17px;margin:0 2px" onclick="event.stopPropagation();waiSelOne('${x.wa_id}')">` : ''}
       <div class="wai-av" style="position:relative">${x.avatar ? `<img src="${escapeHtml(x.avatar)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover" onerror="this.remove()">` : escapeHtml(_waiInit(x.name, x.wa_id))}${_waiChIcon(x.channel)}</div>
       <div style="flex:1;min-width:0">
         <div style="display:flex;justify-content:space-between;gap:6px">
@@ -45331,6 +45352,7 @@ function waiRenderChat(scroll){
       ${_wai.ai?.can ? `<button class="btn btn-ghost btn-sm" title="ملخص المحادثة بالـ AI" onclick="waiAi('summary', !!_wai.ai.summary && _wai.ai.showSum)">📝 ملخص</button>` : ''}
       <button class="btn btn-ghost btn-sm" title="نسخ لينك المحادثة دي" onclick="_waiCopy(_waiLink(_wai.cur))">🔗</button>
       ${(_wai.orders || []).length || _wai.contact?.flow_order ? `<button class="btn btn-ghost btn-sm" title="لينك فاتورة الطلب على cafelax.com" onclick="waiInvPick()">🧾 فاتورة</button>` : ''}
+      <button class="btn btn-sm ${c.status === m.closed ? 'btn-ghost' : ''}" style="${c.status === m.closed ? '' : 'background:#16a34a;color:#fff;border-color:#16a34a;'}padding:3px 10px" onclick="waiCloseToggle()">${c.status === m.closed ? '📂 افتح' : '✅ اقفل'}</button>
       <select class="form-input" style="width:auto;padding:4px 6px;font-size:12px" onchange="waiStatus(this.value)">
         ${(m.statuses||[]).map(s => `<option ${c.status===s?'selected':''}>${escapeHtml(s)}</option>`).join('')}
       </select>
@@ -45685,6 +45707,24 @@ async function waiAssign(to){
   if(!r || r.error) { toast('❌ ' + (r?.error || _errText(_apiLastErr, 'فشل'))); return waiRenderChat(false); }
   _wai.contact.assigned_to = to || null; const cc = _wai.convs.find(x => x.wa_id === _wai.cur); if(cc) cc.assigned_to = to || null;
   toast('✅ اتوزعت'); waiRenderList();
+}
+function waiSelToggle(){ _wai.sel = _wai.sel ? null : new Set(); waiRenderList(); }
+function waiSelOne(id){ const s = _wai.sel; if(!s) return; s.has(id) ? s.delete(id) : s.add(id); waiRenderList(); }
+function waiSelAll(){ const s = _wai.sel; if(!s) return; const all = _wai.convs.every(x => s.has(x.wa_id)); _wai.convs.forEach(x => all ? s.delete(x.wa_id) : s.add(x.wa_id)); waiRenderList(); }
+async function waiBulk(action, value){
+  const ids = [..._wai.sel || []]; if(!ids.length) return toast('⚠️ اختار محادثات الأول');
+  if(action === 'close' && !confirm(`تقفل ${ids.length} محادثة؟ (هتتفتح لوحدها لو العميل بعت تاني)`)) return;
+  const r = await apiFetch('/api/wa/bulk', 'POST', { ids, action, value });
+  if(!r || r.error) return toast('❌ ' + (r?.error || _errText(_apiLastErr, 'فشل')));
+  toast(`✅ اتعدّل ${r.updated}` + (r.skipped ? ` · ⚠️ ${r.skipped} مع موظفين تانيين مااتلمسوش` : ''));
+  _wai.sel = new Set(); waiLoad();
+}
+// ✅ اقفل / افتح المحادثة المفتوحة
+async function waiCloseToggle(){
+  const m = _wai.meta, c = _wai.contact || {};
+  await waiStatus(c.status === m.closed ? ((m.statuses || []).find(s => s !== m.closed) || (m.statuses || [])[0]) : m.closed);
+  const keep = $('wai-text')?.value || ''; waiRenderChat(false); if($('wai-text')) $('wai-text').value = keep;
+  waiLoad();
 }
 async function waiStatus(s){
   const r = await apiFetch('/api/wa/conversations/' + _wai.cur + '/status', 'POST', { status:s });
