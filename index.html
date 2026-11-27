@@ -12564,7 +12564,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1055';
+const UI_BUILD = 'v1056';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45235,6 +45235,7 @@ async function waiOpen(waId){
     if(!r || r.error) throw new Error(r?.error || _errText(_apiLastErr, 'فشل'));
     if(_wai.cur !== waId) return;
     _wai.contact = r.contact; _wai.msgs = r.messages || []; _wai.proofs = r.proofs || {}; _wai.ai = { ...(r.ai || {}), showSum:false }; _wai.ready = r.ready || null; _wai.readySend = false; _wai.lastId = _wai.msgs.length ? _wai.msgs[_wai.msgs.length-1].id : 0;
+    _wai.orders = r.orders || [];
     waiRenderChat(true); waiRenderSide(r.orders || []); _waiAiAuto();
     if(r.contact?.unread > 0){ apiFetch('/api/wa/conversations/' + waId + '/read', 'POST', {}).catch(()=>{});
       const cc = _wai.convs.find(x => x.wa_id === waId); if(cc){ cc.unread = 0; if(_wai.meta.counts) _wai.meta.counts.unread = Math.max(0, (_wai.meta.counts.unread||1) - 1); waiRenderList(); } }
@@ -45306,6 +45307,7 @@ function waiRenderChat(scroll){
       </select>
       ${_wai.ai?.can ? `<button class="btn btn-ghost btn-sm" title="ملخص المحادثة بالـ AI" onclick="waiAi('summary', !!_wai.ai.summary && _wai.ai.showSum)">📝 ملخص</button>` : ''}
       <button class="btn btn-ghost btn-sm" title="نسخ لينك المحادثة دي" onclick="_waiCopy(_waiLink(_wai.cur))">🔗</button>
+      ${(_wai.orders || []).length || _wai.contact?.flow_order ? `<button class="btn btn-ghost btn-sm" title="لينك فاتورة الطلب على cafelax.com" onclick="waiInvPick()">🧾 فاتورة</button>` : ''}
       <select class="form-input" style="width:auto;padding:4px 6px;font-size:12px" onchange="waiStatus(this.value)">
         ${(m.statuses||[]).map(s => `<option ${c.status===s?'selected':''}>${escapeHtml(s)}</option>`).join('')}
       </select>
@@ -45554,6 +45556,15 @@ function waiRenderSide(orders){
       : '<div style="color:var(--muted)">مفيش طلبات بالرقم ده</div>'}`;
 }
 // 🧾 v1055: لينك الفاتورة على cafelax.com — ينفع يتبعت للعميل
+// 📱 v1056: على الموبايل اللوحة الجانبية مخفية — زرار في رأس المحادثة
+function waiInvPick(){
+  const os = (_wai.orders || []).map(o => o.id), f = _wai.contact?.flow_order;
+  if(f && !os.includes(f)) os.unshift(f);
+  if(!os.length) return toast('مفيش طلبات على الرقم ده');
+  if(os.length === 1) return waiInvLink(os[0]);
+  const pick = prompt('لينك فاتورة أنهي طلب؟\n' + os.map((x, i) => (i + 1) + ') ' + String(x).replace(/^SH-/, '')).join('\n'), '1');
+  const i = Number(pick) - 1; if(os[i]) waiInvLink(os[i]);
+}
 async function waiInvLink(id){
   const r = await apiFetch('/api/invoice-link/' + encodeURIComponent(id), 'GET');
   if(!r || !r.url) return toast('❌ ' + (r?.error || 'فشل'));
