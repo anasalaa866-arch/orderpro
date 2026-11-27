@@ -12564,7 +12564,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1056';
+const UI_BUILD = 'v1058';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45189,7 +45189,7 @@ function _waiLeft(s){ if(s == null || s <= 0) return null; const h = Math.floor(
 async function waiLoad(){
   try{
     const q = $('wai-q')?.value || '';
-    const r = await apiFetch('/api/wa/conversations?f=' + _wai.f + (q ? '&q=' + encodeURIComponent(q) : ''), 'GET');
+    const r = await apiFetch('/api/wa/conversations?f=' + _wai.f + (_wai.ch ? '&ch=' + _wai.ch : '') + (q ? '&q=' + encodeURIComponent(q) : ''), 'GET');
     if(!r || r.error) throw new Error(r?.error || _errText(_apiLastErr, 'فشل'));
     _wai.convs = r.conversations || []; _wai.meta = r; _wai.listT = Date.now();
     waiRenderList();
@@ -45200,16 +45200,18 @@ function waiRenderList(){
   const m = _wai.meta, c = m.counts || {};
   const lb = $('wai-learnbtn'); if(lb) lb.style.display = m.ai_can ? '' : 'none';
   const F = [['all','الكل'],['mine','بتاعتي',c.mine],['unread','مش مقروءة',c.unread],['waiting','مستنية رد'],['unassigned','مش متوزعة',c.unassigned]];
-  $('wai-f').innerHTML = F.map(([k,l,n]) => `<button class="${_wai.f===k?'on':''}" onclick="_wai.f='${k}';waiLoad()">${l}${n ? ` <b style="font-family:Roboto,sans-serif">${n}</b>` : ''}</button>`).join('');
+  $('wai-f').innerHTML = F.map(([k,l,n]) => `<button class="${_wai.f===k?'on':''}" onclick="_wai.f='${k}';waiLoad()">${l}${n ? ` <b style="font-family:Roboto,sans-serif">${n}</b>` : ''}</button>`).join('')
+    // 📘📸 v1057: فلتر القناة (بيظهر لما يبقى فيه محادثات ماسنجر/إنستجرام)
+    + (c.meta_total || _wai.ch ? [['','كل القنوات'],['wa','💬 واتساب',c.ch_wa],['fb','📘 ماسنجر',c.ch_fb],['ig','📸 إنستجرام',c.ch_ig]].map(([k,l,n]) => `<button class="${(_wai.ch||'')===k?'on':''}" onclick="_wai.ch='${k}';waiLoad()">${l}${n ? ` <b style="font-family:Roboto,sans-serif">${n}</b>` : ''}</button>`).join('') : '');
   const alertMin = Number(m.wait_alert_min) || 15;
   $('wai-convs').innerHTML = _wai.convs.length ? _wai.convs.map(x => {
     const late = x.last_dir === 'in' && x.waiting_since && (Date.now() - new Date(x.waiting_since)) > alertMin * 60000 && x.status !== m.closed;
     const ag = x.assigned_to ? ((m.agents||[]).find(a => a.username === x.assigned_to)?.name || x.assigned_to) : '';
     return `<div class="wai-c ${_wai.cur===x.wa_id?'cur':''}" onclick="waiOpen('${x.wa_id}')">
-      <div class="wai-av">${escapeHtml(_waiInit(x.name, x.wa_id))}</div>
+      <div class="wai-av" style="position:relative">${x.avatar ? `<img src="${escapeHtml(x.avatar)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover" onerror="this.remove()">` : escapeHtml(_waiInit(x.name, x.wa_id))}${_waiChIcon(x.channel)}</div>
       <div style="flex:1;min-width:0">
         <div style="display:flex;justify-content:space-between;gap:6px">
-          <b style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(x.name || _waiPhone(x.wa_id))}</b>
+          <b style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(x.name || (x.channel && x.channel !== 'wa' ? (x.handle ? '@' + x.handle : 'عميل') : _waiPhone(x.wa_id)))}</b>
           <span style="font-size:10.5px;color:${x.unread>0?'#25d366':'var(--muted)'};font-family:Roboto,sans-serif;flex:none">${_waiAgo(x.last_msg_at)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;gap:6px;align-items:center">
@@ -45242,6 +45244,8 @@ async function waiOpen(waId){
   }catch(e){ $('wai-chat').innerHTML = `<div style="margin:auto;color:#dc2626">❌ ${escapeHtml(e.message)}</div>`; }
 }
 // ⏎ v1054: على الموبايل Enter = سطر جديد (الإرسال بالزرار الأخضر) — على الكمبيوتر Enter = إرسال
+function _waiMeta(){ const ch = _wai.contact?.channel; return !!ch && ch !== 'wa'; }
+function _waiChIcon(ch){ return ch === 'fb' ? '<span style="position:absolute;bottom:-2px;inset-inline-end:-2px;font-size:12px">📘</span>' : ch === 'ig' ? '<span style="position:absolute;bottom:-2px;inset-inline-end:-2px;font-size:12px">📸</span>' : ''; }
 function _waiTouch(){ return window.matchMedia('(hover: none) and (pointer: coarse)').matches; }
 function waiBack(){ $('wai')?.classList.remove('open'); _wai.cur = null; waiRenderList(); }
 // 👉 v1048: على الموبايل — سحب من الشمال لليمين جوه المحادثة يرجّع لقايمة المحادثات
@@ -45267,6 +45271,12 @@ function _waiBubble(m){
   const q = m.ctx_wamid ? _wai.msgs.find(x => x.wamid === m.ctx_wamid) : null;
   let inner = '';
   if(q) inner += `<div class="q">${escapeHtml((q.body || q.type || '').slice(0,140))}</div>`;
+  if(m.media_url && !m.media_id){   // 📘📸 v1057: مرفقات ماسنجر/إنستجرام لينك مباشر
+    if(m.type === 'image' || m.type === 'sticker') inner += `<img src="${escapeHtml(m.media_url)}" alt="🖼️" style="max-width:260px;border-radius:6px" onclick="waiZoom(this)" onerror="this.replaceWith(Object.assign(document.createElement('i'),{textContent:'🖼️ الصورة مش متاحة'}))">`;
+    else if(m.type === 'video') inner += `<video controls src="${escapeHtml(m.media_url)}" style="max-width:260px;max-height:300px"></video>`;
+    else if(m.type === 'audio') inner += `<audio controls src="${escapeHtml(m.media_url)}" style="max-width:240px"></audio>`;
+    else inner += `<a href="${escapeHtml(m.media_url)}" target="_blank" rel="noopener">📄 ملف</a>`;
+  }
   if(m.media_id){
     if(m.type === 'image' || m.type === 'sticker') inner += `<img data-wam="${m.media_id}" alt="🖼️" style="min-width:80px;min-height:60px;background:#0001" onclick="waiZoom(this)">`;
     else if(m.type === 'audio') inner += `<audio controls data-wam="${m.media_id}" style="max-width:240px"></audio>`;
@@ -45297,8 +45307,8 @@ function waiRenderChat(scroll){
       <button class="btn btn-ghost btn-sm wai-back" onclick="waiBack()">→</button>
       <div class="wai-av" style="width:34px;height:34px">${escapeHtml(_waiInit(c.name))}</div>
       <div style="flex:1;min-width:120px">
-        <div style="font-weight:800;font-size:13.5px">${escapeHtml(c.name || _waiPhone(_wai.cur))}</div>
-        <div style="font-size:11px;color:var(--muted);font-family:Roboto,sans-serif;direction:ltr;text-align:right">${_waiPhone(_wai.cur)}</div>
+        <div style="font-weight:800;font-size:13.5px">${escapeHtml(c.name || (_waiMeta() ? 'عميل' : _waiPhone(_wai.cur)))}</div>
+        <div style="font-size:11px;color:var(--muted);font-family:Roboto,sans-serif;direction:ltr;text-align:right">${_waiMeta() ? ({fb:'📘 Messenger',ig:'📸 Instagram'}[c.channel]) + (c.handle ? ' · @' + escapeHtml(c.handle) : '') : _waiPhone(_wai.cur)}</div>
       </div>
       <span style="font-size:11px;padding:3px 8px;border-radius:10px;${locked?'background:#fee2e2;color:#b91c1c':'background:#e7f8ee;color:#047857'}">${c.standby?'👀 للعرض بس':!c.last_in_at?'⏳ مستني رد العميل':!c.window_open?'🔒 النافذة مقفولة':'⏱️ فاضل <b style="font-family:Roboto,sans-serif">'+left+'</b>'}</span>
       <select class="form-input" style="width:auto;padding:4px 6px;font-size:12px" ${canAssign?'':'disabled'} onchange="waiAssign(this.value)">
@@ -45315,12 +45325,12 @@ function waiRenderChat(scroll){
     <div id="wai-aisum"></div>
     <div class="wai-msgs" id="wai-msgs">${rows || '<div style="margin:auto;color:#667781">مفيش رسايل</div>'}</div>
     <div class="wai-comp">
-      ${c.standby ? `<div style="text-align:center;font-size:12.5px;color:#92400e;background:#fffbeb;border-radius:8px;padding:8px">👀 المحادثة دي بيرد عليها ${escapeHtml(m.other_label || 'الشركة')} — OrderPro بيشوفها بس. عشان ترد من هنا لازم تحوّل «Conversation routing» لـ CAFELAX API.</div>` : (locked && !c.last_in_at) ? `<div style="text-align:center;font-size:12.5px;color:#92400e;padding:8px">⏳ العميل لسه مارّدش — Meta بتسمح بالكتابة الحرة أول ما العميل يبعت أي رسالة أو يدوس زرار.</div>` : locked ? `<div style="text-align:center;font-size:12.5px;color:#b91c1c;padding:8px">عدّى 24 ساعة من آخر رسالة من العميل — Meta مش بتسمح برسالة حرة. الرد بقالب هيتعمل في المرحلة الجاية.</div>` : `
+      ${c.standby ? `<div style="text-align:center;font-size:12.5px;color:#92400e;background:#fffbeb;border-radius:8px;padding:8px">👀 المحادثة دي بيرد عليها ${escapeHtml(m.other_label || 'الشركة')} — OrderPro بيشوفها بس. عشان ترد من هنا لازم تحوّل «Conversation routing» لـ CAFELAX API.</div>` : (locked && !c.last_in_at) ? `<div style="text-align:center;font-size:12.5px;color:#92400e;padding:8px">⏳ العميل لسه مارّدش — Meta بتسمح بالكتابة الحرة أول ما العميل يبعت أي رسالة أو يدوس زرار.</div>` : locked ? `<div style="text-align:center;font-size:12.5px;color:#b91c1c;padding:8px">${_waiMeta() ? 'عدّت مدة الرد المسموحة من آخر رسالة من العميل (7 أيام) — ميتا مش بتسمح بالرد. استنى العميل يبعت تاني.' : 'عدّى 24 ساعة من آخر رسالة من العميل — Meta مش بتسمح برسالة حرة. الرد بقالب هيتعمل في المرحلة الجاية.'}</div>` : `
       <div id="wai-sugbox"></div>
       <div id="wai-rbar"></div>
       ${(m.quick||[]).length ? `<div class="wai-qr">${m.quick.map((t,i) => `<button title="${escapeHtml(t)}" onclick="waiQuick(${i})">⚡ ${escapeHtml(t)}</button>`).join('')}</div>` : ''}
       <div style="display:flex;gap:6px;align-items:flex-end">
-        <button class="btn btn-ghost btn-sm" title="صورة أو ملف" onclick="$('wai-file').click()" style="font-size:17px;padding:4px 8px">📎</button>
+        ${_waiMeta() ? '' : `<button class="btn btn-ghost btn-sm" title="صورة أو ملف" onclick="$('wai-file').click()" style="font-size:17px;padding:4px 8px">📎</button>`}
         <input type="file" id="wai-file" style="display:none" onchange="waiPickFile(this)">
         <textarea id="wai-text" rows="1" placeholder="اكتب رسالة…" title="Enter للإرسال — Shift+Enter سطر جديد" enterkeyhint="enter"
           oninput="this.style.height='auto';this.style.height=Math.min(120,this.scrollHeight)+'px'"
@@ -45471,8 +45481,9 @@ ${a.sumBusy ? '' : `<div style="display:flex;gap:6px;margin-top:4px;white-space:
   const rd = _wai.ready;
   if(rd){ const L = { ship:'🚚 شحن', pickup:'🏪 استلام من الفرع', express:'⚡ Same Day', transit:'📦 استلام من العبور' }[rd.kind] || '';
     box.innerHTML = `<div class="wai-sug" style="background:#eff6ff;border-color:#3b82f6"><div style="font-size:11px;color:#1d4ed8;font-weight:700;margin-bottom:2px">✅ رد جاهز بعد مراجعة التحويل · ${L} · طلب <span style="font-family:Roboto,sans-serif">${escapeHtml(String(rd.order_id).replace(/^SH-/,''))}</span></div><div class="tx" style="color:#1e3a8a">${escapeHtml(rd.text)}</div>
-    <div style="display:flex;gap:6px;margin-top:5px"><button class="btn btn-sm" style="background:#25d366;color:#fff;border-color:#25d366;padding:2px 12px" onclick="waiReadyUse(true)">➤ إرسال</button>
-    <button class="btn btn-ghost btn-sm" style="padding:2px 10px" onclick="waiReadyUse(false)">✏️ تعديل</button></div></div>`;
+    <div style="display:flex;gap:6px;margin-top:5px"><button class="btn btn-sm" style="background:#25d366;color:#fff;border-color:#25d366;padding:2px 12px" onclick="waiReadyUse(true)">${rd.zero ? '✅ تأكيد الدفع + إرسال' : '➤ إرسال'}</button>
+    <button class="btn btn-ghost btn-sm" style="padding:2px 10px" onclick="waiReadyUse(false)">✏️ تعديل</button></div>
+    ${rd.zero ? '<div style="font-size:11px;color:#1d4ed8;margin-top:4px">الزرار ده بيبعت الرد للعميل، وبيعلّم الطلب <b>Paid على شوبيفاي</b> (التحصيل بيتصفّر في أوردر برو/بوسطة/المندوب)، وبيبعت التحويل لمراجعة المحاسب.</div>' : ''}</div>`;
     return; }
   if(!a.can){ box.innerHTML = ''; return; }
   const s = a.suggest, fresh = s && !s.used && s.last_id >= (_waiLastIn()?.id || 0);
@@ -45480,17 +45491,24 @@ ${a.sumBusy ? '' : `<div style="display:flex;gap:6px;margin-top:4px;white-space:
   else if(fresh && _waiNeedsReply()) box.innerHTML = `<div class="wai-sug"><div style="font-size:11px;color:#15803d;font-weight:700;margin-bottom:2px">💡 رد مقترح</div><div class="tx">${escapeHtml(s.text)}</div>
     <div style="display:flex;gap:6px;margin-top:5px"><button class="btn btn-sm" style="background:#25d366;color:#fff;border-color:#25d366;padding:2px 12px" onclick="waiAiUse(true)">➤ إرسال</button>
     <button class="btn btn-ghost btn-sm" style="padding:2px 10px" onclick="waiAiUse(false)">✏️ تعديل</button>
-    <button class="btn btn-ghost btn-sm" style="padding:2px 10px" title="رد تاني" onclick="waiAi('suggest',true)">🔄</button></div></div>`;
+    <button class="btn btn-ghost btn-sm" style="padding:2px 10px" title="رد تاني" onclick="waiAi('suggest',true)">🔄</button></div>
+    <div style="display:flex;gap:5px;margin-top:6px"><input id="wai-hint" class="form-input" style="flex:1;padding:4px 8px;font-size:12px" placeholder="🗣️ قول للـ AI: «خليه أقصر» · «قوله إن التوصيل بكرة» · «رد بالإنجليزي»…"
+      onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();waiAiHint()}"><button class="btn btn-ghost btn-sm" style="padding:2px 10px" onclick="waiAiHint()">↻ عدّل</button></div></div>`;
   else box.innerHTML = _waiNeedsReply() ? `<div style="margin-bottom:5px"><button class="btn btn-ghost btn-sm" style="padding:1px 10px;font-size:11.5px;color:#15803d" onclick="waiAi('suggest',${s && !s.used ? 'true' : 'false'})">💡 اقترح رد</button></div>` : '';
 }
-async function waiAi(kind, force){
+// 🗣️ v1057: توجيه الـ AI — الموظف يقوله «قول كذا / غيّر كذا» ويرجع برد جديد
+function waiAiHint(){
+  const h = ($('wai-hint')?.value || '').trim(); if(!h) return $('wai-hint')?.focus();
+  waiAi('suggest', true, h);
+}
+async function waiAi(kind, force, hint){
   const a = _wai.ai; if(!a?.can || !_wai.cur) return;
   const waId = _wai.cur, bk = kind === 'summary' ? 'sumBusy' : 'sugBusy';
   if(a[bk]) return;
   if(kind === 'summary'){ a.showSum = true; if(a.summary && !force && a.summary.last_id >= _wai.lastId){ _waiAiRender(); return; } }
   a[bk] = true; _waiAiRender();
   try{
-    const r = await apiFetch('/api/wa/ai/' + waId + '/' + kind, 'POST', force ? { force:true } : {});
+    const r = await apiFetch('/api/wa/ai/' + waId + '/' + kind, 'POST', hint ? { force:true, hint, prev:a.suggest?.text || '' } : force ? { force:true } : {});
     if(_wai.cur !== waId) return;
     if(!r || r.error) throw new Error(r?.error || _errText(_apiLastErr, 'الـ AI فشل'));
     a[kind] = { text:r.text, last_id:r.last_id, at:r.at, used:false };
