@@ -12541,7 +12541,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1044';
+const UI_BUILD = 'v1045';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45209,7 +45209,7 @@ async function waiOpen(waId){
     const r = await apiFetch('/api/wa/conversations/' + waId + '/messages', 'GET');
     if(!r || r.error) throw new Error(r?.error || _errText(_apiLastErr, 'فشل'));
     if(_wai.cur !== waId) return;
-    _wai.contact = r.contact; _wai.msgs = r.messages || []; _wai.proofs = r.proofs || {}; _wai.ai = { ...(r.ai || {}), showSum:false }; _wai.lastId = _wai.msgs.length ? _wai.msgs[_wai.msgs.length-1].id : 0;
+    _wai.contact = r.contact; _wai.msgs = r.messages || []; _wai.proofs = r.proofs || {}; _wai.ai = { ...(r.ai || {}), showSum:false }; _wai.ready = r.ready || null; _wai.readySend = false; _wai.lastId = _wai.msgs.length ? _wai.msgs[_wai.msgs.length-1].id : 0;
     waiRenderChat(true); waiRenderSide(r.orders || []); _waiAiAuto();
     if(r.contact?.unread > 0){ apiFetch('/api/wa/conversations/' + waId + '/read', 'POST', {}).catch(()=>{});
       const cc = _wai.convs.find(x => x.wa_id === waId); if(cc){ cc.unread = 0; if(_wai.meta.counts) _wai.meta.counts.unread = Math.max(0, (_wai.meta.counts.unread||1) - 1); waiRenderList(); } }
@@ -45343,6 +45343,13 @@ function _waiAiRender(){
   if(sb) sb.innerHTML = a.can && a.showSum && (a.summary || a.sumBusy) ? `<div class="wai-ai">${a.sumBusy ? '⏳ بعمل ملخص للمحادثة…' : escapeHtml(a.summary.text)}
 ${a.sumBusy ? '' : `<div style="display:flex;gap:6px;margin-top:4px;white-space:normal">${a.summary.last_id < _wai.lastId ? '<span style="color:#b45309">⚠️ فيه رسايل جديدة بعد الملخص</span>' : ''}<button class="btn btn-ghost btn-sm" style="padding:0 7px;font-size:11px" onclick="waiAi('summary',true)">🔄 حدّث</button><button class="btn btn-ghost btn-sm" style="padding:0 7px;font-size:11px" onclick="_wai.ai.showSum=false;_waiAiRender()">✕ اقفل</button></div>`}</div>` : '';
   const box = $('wai-sugbox'); if(!box) return;
+  // ✅ v1045: رد «وصل التحويل» الجاهز — من غير AI، لكل اللي بيرد
+  const rd = _wai.ready;
+  if(rd){ const L = { ship:'🚚 شحن', pickup:'🏪 استلام من الفرع', express:'⚡ Same Day', transit:'📦 استلام من العبور' }[rd.kind] || '';
+    box.innerHTML = `<div class="wai-sug" style="background:#eff6ff;border-color:#3b82f6"><div style="font-size:11px;color:#1d4ed8;font-weight:700;margin-bottom:2px">✅ رد جاهز بعد مراجعة التحويل · ${L} · طلب <span style="font-family:Roboto,sans-serif">${escapeHtml(String(rd.order_id).replace(/^SH-/,''))}</span></div><div class="tx" style="color:#1e3a8a">${escapeHtml(rd.text)}</div>
+    <div style="display:flex;gap:6px;margin-top:5px"><button class="btn btn-sm" style="background:#25d366;color:#fff;border-color:#25d366;padding:2px 12px" onclick="waiReadyUse(true)">➤ إرسال</button>
+    <button class="btn btn-ghost btn-sm" style="padding:2px 10px" onclick="waiReadyUse(false)">✏️ تعديل</button></div></div>`;
+    return; }
   if(!a.can){ box.innerHTML = ''; return; }
   const s = a.suggest, fresh = s && !s.used && s.last_id >= (_waiLastIn()?.id || 0);
   if(a.sugBusy) box.innerHTML = `<div class="wai-sug" style="color:#15803d">⏳ بجهّز رد مقترح…</div>`;
@@ -45366,7 +45373,14 @@ async function waiAi(kind, force){
   }catch(e){ toast('🤖 ' + e.message, 'warn', 6000); if(kind === 'summary' && !a.summary) a.showSum = false; }
   finally{ if(_wai.cur === waId){ a[bk] = false; _waiAiRender(); } }
 }
+async function waiReadyUse(send){
+  const rd = _wai.ready, ta = $('wai-text'); if(!rd || !ta) return;
+  ta.value = rd.text; ta.style.height = 'auto'; ta.style.height = Math.min(120, ta.scrollHeight) + 'px';
+  _wai.readySend = true;
+  if(send) await waiSend(); else ta.focus();
+}
 function _waiAiAuto(){
+  if(_wai.ready) return;
   const a = _wai.ai; if(!a?.can || !a.auto || a.sugBusy || !_waiNeedsReply()) return;
   const c = _wai.contact || {}; if(!c.window_open || c.standby) return;
   const s = a.suggest, li = _waiLastIn();
@@ -45470,7 +45484,9 @@ async function waiSend(force){
     if(_waiFile) body.media = _waiFile;
     if(_wai.replyTo?.wamid) body.reply_to = _wai.replyTo.wamid;
     if(force) body.force = true;
+    if(_wai.readySend && _wai.ready) body.ready = true;
     const r = await apiFetch('/api/wa/conversations/' + _wai.cur + '/send', 'POST', body);
+    if(r?.ok && body.ready){ _wai.ready = null; _wai.readySend = false; if(_wai.contact) _wai.contact.flow = 'paid_ok'; }
     if(r && r.locked_to){
       _wai.busy = false; if(btn) btn.disabled = false;
       const nm = ((_wai.meta.agents||[]).find(a => a.username === r.locked_to)?.name) || r.locked_to;
@@ -45518,6 +45534,7 @@ async function waiTick(){
         if(fresh.length){ _wai.msgs.push(...fresh); _wai.lastId = Math.max(_wai.lastId, ...fresh.map(m => m.id)); changed = true;
           if(fresh.some(m => m.dir === 'in')){ apiFetch('/api/wa/conversations/' + _wai.cur + '/read', 'POST', {}).catch(()=>{}); setTimeout(_waiAiAuto, 50); } }
         const oldWin = _wai.contact?.window_open;
+        if(JSON.stringify(r.ready || null) !== JSON.stringify(_wai.ready || null)){ _wai.ready = r.ready || null; changed = true; }
         if(r.contact){ _wai.contact = { ..._wai.contact, ...r.contact, unread:0 }; if(oldWin !== r.contact.window_open) changed = true; }
         if(changed){
           const box = $('wai-msgs'); const atBottom = box ? (box.scrollHeight - box.scrollTop - box.clientHeight < 80) : true;
