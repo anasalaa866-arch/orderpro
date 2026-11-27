@@ -12519,7 +12519,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1037';
+const UI_BUILD = 'v1038';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45109,7 +45109,7 @@ function _poOfferChip(off){
 // ============================================================
 // 💬 v1035: محادثات واتساب (Cloud API) — الواجهة
 // ============================================================
-const _wai = { f:'all', convs:[], meta:{}, cur:null, contact:null, msgs:[], lastId:0, replyTo:null, timer:null, listT:0, media:{}, busy:false };
+const _wai = { f:'all', convs:[], meta:{}, cur:null, contact:null, msgs:[], lastId:0, replyTo:null, timer:null, listT:0, media:{}, busy:false, proofs:{} };
 function _waiOn(){ return document.getElementById('page-wa-inbox')?.classList.contains('active'); }
 function _waiPhone(id){ const d = String(id||''); return d.startsWith('20') && d.length === 12 ? '0' + d.slice(2) : '+' + d; }
 function _waiInit(name, id){ const n = String(name || '').trim(); return n ? n.split(/\s+/).map(w => w[0]).slice(0,2).join('').toUpperCase() : '#'; }
@@ -45153,7 +45153,7 @@ function waiRenderList(){
         </div>
         <div style="font-size:10px;color:var(--muted);display:flex;gap:6px;margin-top:1px">
           ${x.status?`<span>${escapeHtml(x.status)}</span>`:''}${ag?`<span>· 👤 ${escapeHtml(ag)}</span>`:'<span style="color:#d97706">· مش متوزعة</span>'}
-          ${late && !x.standby?'<span style="color:#dc2626;font-weight:700">· ⏰ مستني</span>':''}${x.standby?'<span>· 👀 '+escapeHtml(m.other_label||'الشركة')+'</span>':''}${x.flow==='proof_review'?'<span style="color:#7c3aed;font-weight:700">· 🧾 صورة تحويل</span>':x.flow==='await_proof'?'<span style="color:#7c3aed">· ⏳ مستني صورة التحويل</span>':''}${!x.window_open?'<span>· 🔒</span>':''}
+          ${late && !x.standby?'<span style="color:#dc2626;font-weight:700">· ⏰ مستني</span>':''}${x.standby?'<span>· 👀 '+escapeHtml(m.other_label||'الشركة')+'</span>':''}${x.flow==='proof_review'?'<span style="color:#7c3aed;font-weight:700">· 🧾 صورة تحويل'+({green:' 🟢',yellow:' 🟡',red:' 🔴'}[x.proof_level]||'')+'</span>':x.flow==='await_proof'?'<span style="color:#7c3aed">· ⏳ مستني صورة التحويل</span>':''}${!x.window_open?'<span>· 🔒</span>':''}
         </div>
       </div></div>`;
   }).join('') : '<div style="padding:24px;text-align:center;color:var(--muted);font-size:12.5px">مفيش محادثات</div>';
@@ -45169,7 +45169,7 @@ async function waiOpen(waId){
     const r = await apiFetch('/api/wa/conversations/' + waId + '/messages', 'GET');
     if(!r || r.error) throw new Error(r?.error || _errText(_apiLastErr, 'فشل'));
     if(_wai.cur !== waId) return;
-    _wai.contact = r.contact; _wai.msgs = r.messages || []; _wai.lastId = _wai.msgs.length ? _wai.msgs[_wai.msgs.length-1].id : 0;
+    _wai.contact = r.contact; _wai.msgs = r.messages || []; _wai.proofs = r.proofs || {}; _wai.lastId = _wai.msgs.length ? _wai.msgs[_wai.msgs.length-1].id : 0;
     waiRenderChat(true); waiRenderSide(r.orders || []);
     if(r.contact?.unread > 0){ apiFetch('/api/wa/conversations/' + waId + '/read', 'POST', {}).catch(()=>{});
       const cc = _wai.convs.find(x => x.wa_id === waId); if(cc){ cc.unread = 0; if(_wai.meta.counts) _wai.meta.counts.unread = Math.max(0, (_wai.meta.counts.unread||1) - 1); waiRenderList(); } }
@@ -45188,6 +45188,7 @@ function _waiBubble(m){
     else if(m.type === 'video') inner += `<video controls data-wam="${m.media_id}" style="max-width:260px;max-height:300px"></video>`;
     else inner += `<a href="#" onclick="waiDownload('${m.media_id}', ${JSON.stringify(m.filename||'file').replace(/"/g,'&quot;')});return false" style="display:inline-block;padding:6px 10px;background:#0000000d;border-radius:6px">📄 ${escapeHtml(m.filename || 'ملف')}</a>`;
   }
+  if(m.type === 'image' && m.dir === 'in') inner += _waiProofBox(m);
   if(m.type === 'template' && !m.body) inner += '<i style="color:#667781">📋 قالب</i>';
   if(m.body) inner += `<div class="tx">${escapeHtml(m.body).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')}</div>`;
   if(!m.body && !m.media_id && m.type !== 'template') inner += `<i style="color:#667781">(${escapeHtml(m.type || 'رسالة')})</i>`;
@@ -45239,6 +45240,29 @@ function waiRenderChat(scroll){
   _waiLoadMedia();
   if(scroll){ const b = $('wai-msgs'); if(b) b.scrollTop = b.scrollHeight; }
   _waiRBar();
+}
+// 🔍 v1038: نتيجة فحص صورة التحويل
+function _waiProofBox(m){
+  const p = m.wamid ? _wai.proofs[m.wamid] : null;
+  if(!p) return `<div style="margin-top:4px"><button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11px" onclick="waiCheck(${m.id},this)">🔍 افحص صورة التحويل</button></div>`;
+  const L = { green:['🟢','سليمة','#047857','#ecfdf5'], yellow:['🟡','راجعها بعينك','#92400e','#fffbeb'], red:['🔴','مشبوهة','#b91c1c','#fef2f2'] }[p.level] || ['⚪','—','#555','#f3f4f6'];
+  const r = p.result || {};
+  const lines = [...(p.reasons || []).map(t => '❌ ' + t), ...(p.warn || []).map(t => '⚠️ ' + t)];
+  return `<div style="margin-top:5px;background:${L[3]};border:1px solid ${L[2]}33;border-radius:7px;padding:5px 8px;font-size:11.5px;color:${L[2]}">
+    <b>${L[0]} ${L[1]}</b>${p.order_id ? ` · طلب <span style="font-family:Roboto,sans-serif">${escapeHtml(String(p.order_id).replace(/^SH-/, ''))}</span>` : ''}
+    ${lines.length ? '<div>' + lines.map(escapeHtml).join('<br>') + '</div>' : ''}
+    <div style="color:#667781;font-family:Roboto,sans-serif;direction:ltr;text-align:right">${r.stars != null ? 'C' + '*'.repeat(Math.min(12, r.stars)) + ' · ' : ''}${(r.amounts || []).join('/') || '—'} EGP${r.expected != null ? ' (order ' + r.expected + ')' : ''}${r.ref ? ' · ref ' + escapeHtml(r.ref) : ''}</div>
+    <button class="btn btn-ghost btn-sm" style="padding:0 6px;font-size:10.5px" onclick="waiCheck(${m.id},this)">🔄 افحص تاني</button></div>`;
+}
+async function waiCheck(id, btn){
+  const m = _wai.msgs.find(x => x.id === id); if(!m) return;
+  let oid = _wai.contact?.flow_order || '';
+  if(!oid){ oid = prompt('رقم الطلب اللي الصورة دي ليه؟ (فاضي = من غير مقارنة مبلغ)') || ''; }
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ بفحص…'; }
+  const r = await apiFetch('/api/wa/messages/' + id + '/check', 'POST', oid ? { order_id:oid } : {});
+  if(!r || r.error){ toast('❌ ' + (r?.error || _errText(_apiLastErr, 'الفحص فشل'))); if(btn){ btn.disabled = false; btn.textContent = '🔍 افحص'; } return; }
+  _wai.proofs[m.wamid || ('local-' + m.id)] = { level:r.level, reasons:r.reasons, warn:r.warn, result:{ ...r.result, expected:r.expected }, order_id: oid ? (/^SH-/.test(oid) ? oid : 'SH-' + oid) : null };
+  const keep = $('wai-text')?.value || ''; waiRenderChat(false); if($('wai-text')) $('wai-text').value = keep;
 }
 function waiRenderSide(orders){
   const c = _wai.contact || {};
@@ -45351,6 +45375,7 @@ async function waiTick(){
       if(r && !r.error && _wai.cur){
         let changed = false;
         for(const u of r.status_updates || []){ const m = _wai.msgs.find(x => x.id === u.id); if(m && (m.status !== u.status || m.error !== u.error)){ m.status = u.status; m.error = u.error; changed = true; } }
+        if(r.proofs && Object.keys(r.proofs).length){ for(const [k, v] of Object.entries(r.proofs)) if(JSON.stringify(_wai.proofs[k]) !== JSON.stringify(v)){ _wai.proofs[k] = v; changed = true; } }
         const fresh = (r.messages || []).filter(m => !_wai.msgs.find(x => x.id === m.id));
         if(fresh.length){ _wai.msgs.push(...fresh); _wai.lastId = Math.max(_wai.lastId, ...fresh.map(m => m.id)); changed = true;
           if(fresh.some(m => m.dir === 'in')) apiFetch('/api/wa/conversations/' + _wai.cur + '/read', 'POST', {}).catch(()=>{}); }
