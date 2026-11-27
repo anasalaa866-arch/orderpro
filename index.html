@@ -12567,7 +12567,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1060';
+const UI_BUILD = 'v1061';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45522,7 +45522,8 @@ ${a.sumBusy ? '' : `<div style="display:flex;gap:6px;margin-top:4px;white-space:
     return; }
   if(!a.can){ box.innerHTML = ''; return; }
   const s = a.suggest, fresh = s && !s.used && s.last_id >= (_waiLastIn()?.id || 0);
-  if(a.sugBusy) box.innerHTML = `<div class="wai-sug" style="color:#15803d">⏳ بجهّز رد مقترح…</div>`;
+  if(a.sugBusy) box.innerHTML = `<div class="wai-sug" style="color:#15803d;display:flex;align-items:center;gap:8px">⏳ بجهّز رد مقترح… <span id="wai-sug-t" style="font-family:Roboto,sans-serif;font-size:11px;color:var(--muted)">${a.sugT0 ? Math.round((Date.now() - a.sugT0) / 1000) + 's' : ''}</span>
+    <button class="btn btn-ghost btn-sm" style="margin-inline-start:auto;padding:0 8px;font-size:11px" onclick="waiAiCancel()">إلغاء</button></div>`;
   else if(fresh && _waiNeedsReply()) box.innerHTML = `<div class="wai-sug"><div style="font-size:11px;color:#15803d;font-weight:700;margin-bottom:2px">💡 رد مقترح</div><div class="tx">${escapeHtml(s.text)}</div>
     <div style="display:flex;gap:6px;margin-top:5px"><button class="btn btn-sm" style="background:#25d366;color:#fff;border-color:#25d366;padding:2px 12px" onclick="waiAiUse(true)">➤ إرسال</button>
     <button class="btn btn-ghost btn-sm" style="padding:2px 10px" onclick="waiAiUse(false)">✏️ تعديل</button>
@@ -45541,14 +45542,20 @@ async function waiAi(kind, force, hint){
   const waId = _wai.cur, bk = kind === 'summary' ? 'sumBusy' : 'sugBusy';
   if(a[bk]) return;
   if(kind === 'summary'){ a.showSum = true; if(a.summary && !force && a.summary.last_id >= _wai.lastId){ _waiAiRender(); return; } }
-  a[bk] = true; _waiAiRender();
+  a[bk] = true;
+  // ⏱️ v1061: عدّاد + مهلة — مايفضلش «بجهّز…» للأبد
+  const tk = '_t' + bk, tok = (a[tk] = (a[tk] || 0) + 1);
+  if(kind === 'suggest'){ a.sugT0 = Date.now(); clearInterval(a._ti); a._ti = setInterval(() => { const el = $('wai-sug-t'); if(el && a.sugT0) el.textContent = Math.round((Date.now() - a.sugT0) / 1000) + 's'; }, 1000); }
+  _waiAiRender();
   try{
-    const r = await apiFetch('/api/wa/ai/' + waId + '/' + kind, 'POST', hint ? { force:true, hint, prev:a.suggest?.text || '' } : force ? { force:true } : {});
+    const r = await Promise.race([apiFetch('/api/wa/ai/' + waId + '/' + kind, 'POST', hint ? { force:true, hint, prev:a.suggest?.text || '' } : force ? { force:true } : {}),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('الـ AI اتأخر — دوس 💡 اقترح رد تاني')), 100000))]);
+    if(a[tk] !== tok) return;   // اتلغى
     if(_wai.cur !== waId) return;
     if(!r || r.error) throw new Error(r?.error || _errText(_apiLastErr, 'الـ AI فشل'));
     a[kind] = { text:r.text, last_id:r.last_id, at:r.at, used:false };
   }catch(e){ toast('🤖 ' + e.message, 'warn', 6000); if(kind === 'summary' && !a.summary) a.showSum = false; }
-  finally{ if(_wai.cur === waId){ a[bk] = false; _waiAiRender(); } }
+  finally{ if(a[tk] === tok){ if(kind === 'suggest'){ clearInterval(a._ti); a.sugT0 = null; } if(_wai.cur === waId){ a[bk] = false; _waiAiRender(); } } }
 }
 async function waiReadyUse(send){
   const rd = _wai.ready, ta = $('wai-text'); if(!rd || !ta) return;
@@ -45556,9 +45563,10 @@ async function waiReadyUse(send){
   _wai.readySend = true;
   if(send) await waiSend(); else ta.focus();
 }
+function waiAiCancel(){ const a = _wai.ai; if(!a) return; a._tsugBusy = (a._tsugBusy || 0) + 1; clearInterval(a._ti); a.sugT0 = null; a.sugBusy = false; a.autoOff = true; _waiAiRender(); }
 function _waiAiAuto(){
   if(_wai.ready) return;
-  const a = _wai.ai; if(!a?.can || !a.auto || a.sugBusy || !_waiNeedsReply()) return;
+  const a = _wai.ai; if(!a?.can || !a.auto || a.autoOff || a.sugBusy || !_waiNeedsReply()) return;
   const c = _wai.contact || {}; if(!c.window_open || c.standby) return;
   const s = a.suggest, li = _waiLastIn();
   if(!li || (s && s.last_id >= li.id)) return;
