@@ -6635,6 +6635,7 @@ body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
     <h2 style="margin:0">💬 محادثات واتساب</h2>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
       <div id="wai-top" style="font-size:12px;color:var(--muted)"></div>
+      <button class="btn btn-ghost btn-sm" onclick="waiTplOpen()" title="حالة قوالب واتساب عند Meta">📋 القوالب</button>
       <button class="btn btn-ghost btn-sm" id="wai-learnbtn" style="display:none" onclick="waiLearnOpen()" title="الـ AI بيتعلّم إزاي من ردودكم">🎓 تعلّم الـ AI</button>
       <button class="btn btn-ghost btn-sm wai-solo-hide" onclick="window.open(_waiLink(),'_blank')" title="الصفحة لوحدها من غير القايمة">↗ تاب منفصل</button>
       <button class="btn btn-ghost btn-sm" onclick="_waiCopy(_waiLink())">🔗 نسخ اللينك</button>
@@ -8776,6 +8777,17 @@ body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- 📋 v1046: حالة القوالب عند Meta -->
+<div id="m-wai-tpl" class="modal-overlay" style="display:none;z-index:1150">
+  <div class="modal" style="max-width:820px">
+    <div class="modal-header">
+      <h3 style="margin:0">📋 قوالب واتساب — حالتها عند Meta</h3>
+      <button class="modal-close" onclick="closeM('m-wai-tpl')">×</button>
+    </div>
+    <div class="modal-body" id="wai-tpl-body"></div>
   </div>
 </div>
 
@@ -12541,7 +12553,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1045';
+const UI_BUILD = 'v1046';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45290,6 +45302,37 @@ function waiRenderChat(scroll){
 }
 // 🤖 v1042: AI — 📝 ملخص + 💡 رد مقترح (صلاحية wa-ai)
 function _waiLastIn(){ for(let i = _wai.msgs.length - 1; i >= 0; i--) if(_wai.msgs[i].dir === 'in') return _wai.msgs[i]; return null; }
+// 📋 v1046: حالة القوالب
+async function waiTplOpen(){
+  openM('m-wai-tpl'); const b = $('wai-tpl-body');
+  b.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">⏳ بسأل Meta…</div>';
+  const r = await apiFetch('/api/wa/templates', 'GET');
+  if(!r || r.error){ b.innerHTML = `<div style="color:#dc2626">❌ ${escapeHtml(r?.error || _errText(_apiLastErr, 'فشل'))}</div>`; return; }
+  const ST = { APPROVED:['✅','متوافق عليه','#047857','#ecfdf5'], PENDING:['⏳','قيد المراجعة','#92400e','#fffbeb'], IN_APPEAL:['⏳','في استئناف','#92400e','#fffbeb'],
+    REJECTED:['❌','مرفوض','#b91c1c','#fef2f2'], PAUSED:['⏸️','متوقف مؤقتاً','#b45309','#fff7ed'], DISABLED:['⛔','متعطّل','#b91c1c','#fef2f2'] };
+  const CAT = { UTILITY:['Utility','#1d4ed8','#eff6ff'], MARKETING:['Marketing','#be185d','#fdf2f8'], AUTHENTICATION:['Authentication','#555','#f3f4f6'] };
+  const RR = { INVALID_FORMAT:'شكل القالب غلط', TAG_CONTENT_MISMATCH:'المحتوى مش مطابق للتصنيف', PROMOTIONAL:'محتوى ترويجي', ABUSIVE_CONTENT:'محتوى مخالف', SCAM:'اشتباه احتيال', INCORRECT_CATEGORY:'التصنيف غلط' };
+  const QL = { GREEN:'🟢 جودة عالية', YELLOW:'🟡 جودة متوسطة', RED:'🔴 جودة ضعيفة' };
+  const list = (r.templates || []).slice().sort((a, b) => (b.ours - a.ours) || a.name.localeCompare(b.name));
+  const n = k => list.filter(t => t.status === k).length;
+  b.innerHTML = `<div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">${list.length} قالب · ✅ ${n('APPROVED')} · ⏳ ${n('PENDING')} · ❌ ${n('REJECTED')} — <button class="btn btn-ghost btn-sm" onclick="waiTplOpen()">🔄 تحديث</button></div>` +
+    list.map(t => { const s = ST[t.status] || ['•', t.status, '#555', '#f3f4f6'], c = CAT[t.category] || [t.category, '#555', '#f3f4f6'];
+      return `<div style="border:1px solid var(--border);border-radius:10px;padding:9px 11px;margin-bottom:8px">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <b style="font-family:Roboto,sans-serif;direction:ltr">${escapeHtml(t.name)}</b>
+          <span style="font-size:11px;color:var(--muted)">${escapeHtml(t.language)}</span>
+          ${t.ours ? '<span style="font-size:10.5px;background:#f5f3ff;color:#6d28d9;border-radius:8px;padding:1px 7px">🆕 من OrderPro</span>' : ''}
+          <span style="margin-inline-start:auto;font-size:11.5px;font-weight:700;background:${c[2]};color:${c[1]};border-radius:9px;padding:2px 9px">${c[0]}</span>
+          <span style="font-size:11.5px;font-weight:700;background:${s[3]};color:${s[2]};border-radius:9px;padding:2px 9px">${s[0]} ${s[1]}</span>
+        </div>
+        ${t.previous_category && t.previous_category !== t.category ? `<div style="font-size:11.5px;color:#be185d;margin-top:4px">⚠️ Meta غيّرت التصنيف من ${escapeHtml(t.previous_category)} لـ ${escapeHtml(t.category)}</div>` : ''}
+        ${t.rejected_reason ? `<div style="font-size:11.5px;color:#b91c1c;margin-top:4px">سبب الرفض: ${escapeHtml(RR[t.rejected_reason] || t.rejected_reason)}</div>` : ''}
+        ${t.quality && t.quality !== 'UNKNOWN' ? `<div style="font-size:11px;margin-top:3px">${QL[t.quality] || t.quality}</div>` : ''}
+        <div style="font-size:12px;color:var(--muted);white-space:pre-wrap;margin-top:5px;max-height:5.5em;overflow:hidden">${escapeHtml(t.body)}</div>
+        ${(t.buttons || []).length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${t.buttons.map(x => `<span style="font-size:11px;border:1px solid var(--border);border-radius:8px;padding:1px 8px;color:#0284c7">${escapeHtml(x)}</span>`).join('')}</div>` : ''}
+      </div>`; }).join('') +
+    ((r.submitted || []).filter(x => x.error).length ? `<div style="font-size:12px;color:#b91c1c;margin-top:6px">أخطاء التقديم: ${(r.submitted || []).filter(x => x.error).map(x => escapeHtml((x.name || '') + ': ' + x.error)).join(' · ')}</div>` : '');
+}
 const _wl = { days:30, f:'fixes', d:null };
 async function waiLearnOpen(){ openM('m-wai-learn'); waiLearnLoad(); }
 async function waiLearnLoad(){
