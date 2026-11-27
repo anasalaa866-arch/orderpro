@@ -12567,7 +12567,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1061';
+const UI_BUILD = 'v1062';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45652,7 +45652,25 @@ function _waiLoadMedia(){
     _waiBlob(el.dataset.wam).then(u => { el.src = u; }).catch(e => { el.replaceWith(Object.assign(document.createElement('div'), { textContent:'⚠️ ' + e.message, style:'font-size:11px;color:#b91c1c' })); });
   });
 }
-function waiZoom(img){ if(img.src) window.open(img.src, '_blank'); }
+// 🔍 v1062: الصورة بتتكبّر جوه الصفحة (مش تاب جديد) — Esc أو دوسة تقفلها، والعجلة/الدبل كليك للتكبير
+function waiZoom(img){
+  if(!img || !img.src) return;
+  document.getElementById('wai-lb')?.remove();
+  const box = document.createElement('div'); box.id = 'wai-lb';
+  box.style.cssText = 'position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;cursor:zoom-out;touch-action:pinch-zoom';
+  let z = 1;
+  box.innerHTML = `<img src="${img.src}" alt="" style="max-width:94vw;max-height:92vh;object-fit:contain;transition:transform .15s;border-radius:6px;cursor:zoom-in">
+    <button aria-label="اقفل" style="position:absolute;top:14px;inset-inline-start:14px;background:#fff;border:none;border-radius:50%;width:38px;height:38px;font-size:20px;cursor:pointer">✕</button>
+    <a download="image.jpg" href="${img.src}" style="position:absolute;top:14px;inset-inline-end:14px;background:#fff;border-radius:18px;padding:8px 14px;font-size:13px;color:#111;text-decoration:none">⬇️ تحميل</a>`;
+  const im = box.querySelector('img');
+  const close = () => { box.remove(); document.removeEventListener('keydown', esc); };
+  const esc = e => { if(e.key === 'Escape') close(); };
+  box.addEventListener('click', e => { if(e.target === box || e.target.tagName === 'BUTTON') close(); });
+  im.addEventListener('click', e => { e.stopPropagation(); z = z > 1 ? 1 : 2.2; im.style.transform = `scale(${z})`; im.style.cursor = z > 1 ? 'zoom-out' : 'zoom-in'; });
+  box.addEventListener('wheel', e => { e.preventDefault(); z = Math.min(5, Math.max(1, z * (e.deltaY < 0 ? 1.15 : 0.87))); im.style.transform = `scale(${z})`; }, { passive:false });
+  document.addEventListener('keydown', esc);
+  document.body.appendChild(box);
+}
 async function waiDownload(id, name){
   try{ const u = await _waiBlob(id); const a = document.createElement('a'); a.href = u; a.download = name || 'file'; a.click(); }
   catch(e){ toast('❌ ' + e.message); }
