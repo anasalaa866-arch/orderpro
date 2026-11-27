@@ -6616,6 +6616,9 @@ tr:hover td{background:#fafbff}
 #page-wa-inbox .wai-qr{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px}
 #page-wa-inbox .wai-qr button{border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:2px 9px;font-size:11px;cursor:pointer;font-family:Cairo,sans-serif;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #page-wa-inbox .wai-back{display:none}
+body.solo .sidebar,body.solo .topbar,body.solo .wai-solo-hide{display:none!important}
+body.solo .content{padding:8px!important}
+body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
 @media (max-width:1100px){ #page-wa-inbox .wai{grid-template-columns:300px 1fr} #page-wa-inbox .wai-side{display:none} }
 @media (max-width:760px){
   #page-wa-inbox .wai{grid-template-columns:1fr;height:calc(100vh - 120px)}
@@ -6627,7 +6630,11 @@ tr:hover td{background:#fafbff}
 </style>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
     <h2 style="margin:0">💬 محادثات واتساب</h2>
-    <div id="wai-top" style="font-size:12px;color:var(--muted)"></div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <div id="wai-top" style="font-size:12px;color:var(--muted)"></div>
+      <button class="btn btn-ghost btn-sm wai-solo-hide" onclick="window.open(_waiLink(),'_blank')" title="الصفحة لوحدها من غير القايمة">↗ تاب منفصل</button>
+      <button class="btn btn-ghost btn-sm" onclick="_waiCopy(_waiLink())">🔗 نسخ اللينك</button>
+    </div>
   </div>
   <div class="wai" id="wai">
     <div class="wai-list">
@@ -12519,7 +12526,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1040';
+const UI_BUILD = 'v1041';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -30241,7 +30248,7 @@ async function doLogin(){
   loadCourierRatesMap(); // 🆕 v235: تحميل أسعار المناديب الجديدة (courier_ship_rates)
   
   // روح لأول صفحة متاحة للمستخدم
-  const firstPage = getFirstAvailablePage(user);
+  const firstPage = _deepLink() ? null : getFirstAvailablePage(user);
   if(firstPage){
     const navItem = document.querySelector(`.ni[data-p="${firstPage}"]`);
     if(navItem) goPage(navItem, firstPage);
@@ -30289,6 +30296,19 @@ async function doLogout(){
 // ✅ v827: نفس منطق applyPermissions بالظبط، بس كسؤال بـ true/false.
 //   أي صفحة حساسة بتسأل بيه بدل ما تتقفل على اسم 'admin' بالهارد كود —
 //   عشان اللي أنس يديله الصفحة من الصلاحيات يدخلها عادي.
+// 🔗 v1041: ?p=صفحة يفتح الصفحة على طول، و&solo=1 يخفي القايمة والشريط
+function _deepLink(){
+  try{
+    const q = new URLSearchParams(location.search), p = q.get('p');
+    if(!p) return false;
+    const nav = document.querySelector(`.ni[data-p="${p}"]`);
+    if(!nav || !canPage(p)){ toast('⛔ مش مسموحلك بالصفحة دي', 'warn'); return false; }
+    if(q.get('solo') === '1'){ document.body.classList.add('solo'); document.title = (PAGE_T[p] || p) + ' — CAFELAX'; }
+    goPage(nav, p);
+    const c = q.get('c'); if(p === 'wa-inbox' && c) setTimeout(() => waiOpen(c.replace(/\D/g, '')), 300);
+    return true;
+  }catch(e){ return false; }
+}
 function canPage(page){
   const u = currentUser;
   if(!u) return false;                       // الجلسة مش محمّلة
@@ -32853,6 +32873,7 @@ window.addEventListener('load', function(){
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('main-app').style.display = '';
     applyPermissions(currentUser.role, currentUser.pages||null);
+    setTimeout(_deepLink, 0);
     const userBadge = document.getElementById('user-badge');
     if(userBadge) userBadge.textContent = '👤 '+currentUser.name;
     const importBtn = document.getElementById('btn-import-shopify');
@@ -45176,6 +45197,9 @@ async function waiOpen(waId){
   }catch(e){ $('wai-chat').innerHTML = `<div style="margin:auto;color:#dc2626">❌ ${escapeHtml(e.message)}</div>`; }
 }
 function waiBack(){ $('wai')?.classList.remove('open'); _wai.cur = null; waiRenderList(); }
+// 🔗 v1041: لينك منفصل — /wa/ أو /wa/?c=رقم
+function _waiLink(waId){ return new URL('wa/' + (waId ? '?c=' + encodeURIComponent(waId) : ''), location.origin + location.pathname.replace(/[^/]*$/, '')).href; }
+function _waiCopy(t){ (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('🔗 اتنسخ: ' + t), () => prompt('انسخ اللينك:', t)); }
 
 function _waiTick(s){ return { pending:'🕓', sent:'✓', delivered:'✓✓', read:'<span style="color:#53bdeb">✓✓</span>', failed:'<span style="color:#dc2626">⚠️</span>' }[s] || ''; }
 function _waiBubble(m){
@@ -45218,6 +45242,7 @@ function waiRenderChat(scroll){
         <option value="">— مش متوزعة —</option>${agents.map(a => `<option value="${escapeHtml(a.username)}" ${c.assigned_to===a.username?'selected':''}>👤 ${escapeHtml(a.name)}</option>`).join('')}
         ${c.assigned_to && !agents.find(a => a.username === c.assigned_to) ? `<option selected>${escapeHtml(c.assigned_to)}</option>` : ''}
       </select>
+      <button class="btn btn-ghost btn-sm" title="نسخ لينك المحادثة دي" onclick="_waiCopy(_waiLink(_wai.cur))">🔗</button>
       <select class="form-input" style="width:auto;padding:4px 6px;font-size:12px" onchange="waiStatus(this.value)">
         ${(m.statuses||[]).map(s => `<option ${c.status===s?'selected':''}>${escapeHtml(s)}</option>`).join('')}
       </select>
