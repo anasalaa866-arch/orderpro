@@ -12567,7 +12567,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1065';
+const UI_BUILD = 'v1066';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45204,7 +45204,7 @@ function _waiLeft(s){ if(s == null || s <= 0) return null; const h = Math.floor(
 async function waiLoad(){
   try{
     const q = $('wai-q')?.value || '';
-    const r = await apiFetch('/api/wa/conversations?f=' + _wai.f + '&box=' + (_wai.box || 'open') + (_wai.ch ? '&ch=' + _wai.ch : '') + (q ? '&q=' + encodeURIComponent(q) : ''), 'GET');
+    const r = await apiFetch('/api/wa/conversations?f=' + _wai.f + '&box=' + (_wai.box || 'open') + (_wai.ch ? '&ch=' + _wai.ch : '') + (_wai.agent ? '&agent=' + encodeURIComponent(_wai.agent) : '') + (q ? '&q=' + encodeURIComponent(q) : ''), 'GET');
     if(!r || r.error) throw new Error(r?.error || _errText(_apiLastErr, 'فشل'));
     _wai.convs = r.conversations || []; _wai.meta = r; _wai.listT = Date.now();
     waiRenderList();
@@ -45235,6 +45235,10 @@ function waiRenderList(){
   const F = [['all','الكل'],['mine','بتاعتي',c.mine],['unread','مش مقروءة',c.unread],['waiting','مستنية رد'],['unassigned','مش متوزعة',c.unassigned]];
   $('wai-f').innerHTML = F.map(([k,l,n]) => `<button class="${_wai.f===k?'on':''}" onclick="_wai.f='${k}';waiLoad()">${l}${n ? ` <b style="font-family:Roboto,sans-serif">${n}</b>` : ''}</button>`).join('')
     // 📘📸 v1057: فلتر القناة (بيظهر لما يبقى فيه محادثات ماسنجر/إنستجرام)
+    // 👤 v1066: فلتر بالموظف المتوزعة عليه
+    + `<select class="form-input" style="width:auto;padding:2px 6px;font-size:12px;border-radius:14px;${_wai.agent?'background:#dcfce7;border-color:#16a34a;font-weight:700':''}" onchange="_wai.agent=this.value;waiLoad()">
+        <option value="">👤 كل الموظفين</option>${(m.agents||[]).map(a => `<option value="${escapeHtml(a.username)}" ${_wai.agent===a.username?'selected':''}>${escapeHtml(a.name)}${(c.by_agent||{})[a.username] ? ' (' + c.by_agent[a.username] + ')' : ''}</option>`).join('')}
+        ${_wai.agent && !(m.agents||[]).some(a => a.username === _wai.agent) ? `<option selected value="${escapeHtml(_wai.agent)}">${escapeHtml(_wai.agent)}</option>` : ''}</select>`
     + (c.meta_total || _wai.ch ? [['','كل القنوات'],['wa','💬 واتساب',c.ch_wa],['fb','📘 ماسنجر',c.ch_fb],['ig','📸 إنستجرام',c.ch_ig]].map(([k,l,n]) => `<button class="${(_wai.ch||'')===k?'on':''}" onclick="_wai.ch='${k}';waiLoad()">${l}${n ? ` <b style="font-family:Roboto,sans-serif">${n}</b>` : ''}</button>`).join('') : '');
   const alertMin = Number(m.wait_alert_min) || 15;
   $('wai-convs').innerHTML = _wai.convs.length ? _wai.convs.map(x => {
