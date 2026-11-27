@@ -12567,7 +12567,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1062';
+const UI_BUILD = 'v1063';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45527,7 +45527,8 @@ ${a.sumBusy ? '' : `<div style="display:flex;gap:6px;margin-top:4px;white-space:
   else if(fresh && _waiNeedsReply()) box.innerHTML = `<div class="wai-sug"><div style="font-size:11px;color:#15803d;font-weight:700;margin-bottom:2px">💡 رد مقترح</div><div class="tx">${escapeHtml(s.text)}</div>
     <div style="display:flex;gap:6px;margin-top:5px"><button class="btn btn-sm" style="background:#25d366;color:#fff;border-color:#25d366;padding:2px 12px" onclick="waiAiUse(true)">➤ إرسال</button>
     <button class="btn btn-ghost btn-sm" style="padding:2px 10px" onclick="waiAiUse(false)">✏️ تعديل</button>
-    <button class="btn btn-ghost btn-sm" style="padding:2px 10px" title="رد تاني" onclick="waiAi('suggest',true)">🔄</button></div>
+    <button class="btn btn-ghost btn-sm" style="padding:2px 10px" title="رد تاني" onclick="waiAi('suggest',true)">🔄</button>
+    ${a.sign ? `<label style="margin-inline-start:auto;display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#15803d;cursor:pointer" title="يتضاف آخر الرد: ${escapeHtml(a.sign)}"><input type="checkbox" ${_waiSignOn() ? 'checked' : ''} onchange="_waiSignSet(this.checked)" style="width:14px;height:14px;margin:0"> توقيع ${escapeHtml(String(a.sign).replace(/^[—\-\s]+/, ''))}</label>` : ''}</div>
     <div style="display:flex;gap:5px;margin-top:6px"><input id="wai-hint" class="form-input" style="flex:1;padding:4px 8px;font-size:12px" placeholder="🗣️ قول للـ AI: «خليه أقصر» · «قوله إن التوصيل بكرة» · «رد بالإنجليزي»…"
       onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();waiAiHint()}"><button class="btn btn-ghost btn-sm" style="padding:2px 10px" onclick="waiAiHint()">↻ عدّل</button></div></div>`;
   else box.innerHTML = _waiNeedsReply() ? `<div style="margin-bottom:5px"><button class="btn btn-ghost btn-sm" style="padding:1px 10px;font-size:11.5px;color:#15803d" onclick="waiAi('suggest',${s && !s.used ? 'true' : 'false'})">💡 اقترح رد</button></div>` : '';
@@ -45572,9 +45573,12 @@ function _waiAiAuto(){
   if(!li || (s && s.last_id >= li.id)) return;
   waiAi('suggest', false);
 }
+// 🤖 v1063: توقيع Lax Bot اختياري (بيتفكر على نفس الجهاز)
+function _waiSignOn(){ try{ return localStorage.getItem('wai_sign') === '1'; }catch(e){ return false; } }
+function _waiSignSet(v){ try{ localStorage.setItem('wai_sign', v ? '1' : '0'); }catch(e){} }
 async function waiAiUse(send){
   const a = _wai.ai, s = a?.suggest, ta = $('wai-text'); if(!s || !ta) return;
-  ta.value = s.text; ta.style.height = 'auto'; ta.style.height = Math.min(120, ta.scrollHeight) + 'px';
+  ta.value = s.text + (a.sign && _waiSignOn() ? '\n\n' + a.sign : ''); ta.style.height = 'auto'; ta.style.height = Math.min(120, ta.scrollHeight) + 'px';
   s.used = true; apiFetch('/api/wa/ai/' + _wai.cur + '/suggest/used', 'POST', {}).catch(()=>{});
   if(send) await waiSend(); else { ta.focus(); _waiAiRender(); }
 }
@@ -45719,12 +45723,12 @@ async function waiSend(force){
     if(msg && !_wai.msgs.find(x => x.id === msg.id)){ _wai.msgs.push(msg); _wai.lastId = Math.max(_wai.lastId, msg.id); }
     if(!r || r.error) toast('❌ ' + (r?.error || _errText(_apiLastErr, 'الإرسال فشل')));
     else { if(ta){ ta.value = ''; ta.style.height = 'auto'; } _waiFile = null; _wai.replyTo = null; }
-    if(r?.ok && _wai.contact && !_wai.contact.assigned_to && _wai.meta.me) _wai.contact.assigned_to = _wai.meta.me;
+    // 👤 v1063: الرد مابقاش بيوزّع المحادثة على اللي رد — التوزيع يدوي
     const keep = ta?.value || '';
     waiRenderChat(true);
     if($('wai-text')) $('wai-text').value = keep;
     const cc = _wai.convs.find(x => x.wa_id === _wai.cur);
-    if(cc && r?.ok){ cc.last_dir = 'out'; cc.last_text = text || '📎'; cc.last_msg_at = new Date().toISOString(); if(!cc.assigned_to) cc.assigned_to = _wai.meta.me; if(_wai.contact && !_wai.contact.assigned_to) _wai.contact.assigned_to = _wai.meta.me; waiRenderList(); }
+    if(cc && r?.ok){ cc.last_dir = 'out'; cc.last_text = text || '📎'; cc.last_msg_at = new Date().toISOString(); waiRenderList(); }
     $('wai-text')?.focus();
   } finally { _wai.busy = false; const b2 = $('wai-sendbtn'); if(b2) b2.disabled = false; }
 }
