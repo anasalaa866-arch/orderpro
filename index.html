@@ -6617,6 +6617,9 @@ tr:hover td{background:#fafbff}
 #page-wa-inbox .wai-qr button{border:1px solid var(--border);background:var(--bg);border-radius:12px;padding:2px 9px;font-size:11px;cursor:pointer;font-family:Cairo,sans-serif;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #page-wa-inbox .wai-back{display:none}
 body.solo .sidebar,body.solo .topbar,body.solo .wai-solo-hide{display:none!important}
+#page-wa-inbox .wai-ai{background:#f5f3ff;border-bottom:1px solid #ddd6fe;padding:8px 12px;font-size:12.5px;line-height:1.75;color:#3b0764;white-space:pre-wrap;max-height:34vh;overflow:auto}
+#page-wa-inbox .wai-sug{background:#f0fdf4;border:1px dashed #22c55e;border-radius:10px;padding:7px 9px;margin-bottom:6px;font-size:12.5px}
+#page-wa-inbox .wai-sug .tx{white-space:pre-wrap;line-height:1.65;color:#14532d;max-height:140px;overflow:auto}
 body.solo .content{padding:8px!important}
 body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
 @media (max-width:1100px){ #page-wa-inbox .wai{grid-template-columns:300px 1fr} #page-wa-inbox .wai-side{display:none} }
@@ -12526,7 +12529,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1041';
+const UI_BUILD = 'v1042';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -30274,7 +30277,7 @@ function getFirstAvailablePage(user){
     if(userPages.includes(page)) return page;
   }
   
-  return userPages.find(p => p !== 'checks-void-approve' && p !== 'fin-manager-reply') || null; // fallback لأول صفحة متاحة (مش الصلاحيات)
+  return userPages.find(p => !['checks-void-approve','fin-manager-reply','wa-supervisor','wa-ai'].includes(p)) || null; // fallback لأول صفحة متاحة (مش الصلاحيات)
 }
 
 async function doLogout(){
@@ -30425,6 +30428,9 @@ function buildPermissionsGrid(checkedPages){
   items.push({ page: 'checks-void-approve', icon: '🛡️', label: 'موافقة الشيكات الهالكة' });
   // 📨 v947: مين يردّ على أسئلة المحاسب (كشف البنك / الخزنة ← زوهو)
   items.push({ page: 'fin-manager-reply', icon: '👔', label: 'الرد على المحاسب (البنك/الخزنة)' });
+  // 💬 v1042: صلاحيات المحادثات
+  items.push({ page: 'wa-supervisor', icon: '🧑‍💼', label: 'مشرف واتساب (يشوف ويوزّع كل المحادثات)' });
+  items.push({ page: 'wa-ai', icon: '🤖', label: 'AI في واتساب (ملخص + رد مقترح)' });
 
   grid.innerHTML = items.map(it => {
     const isChecked = checkedPages.includes(it.page) ? 'checked' : '';
@@ -45190,8 +45196,8 @@ async function waiOpen(waId){
     const r = await apiFetch('/api/wa/conversations/' + waId + '/messages', 'GET');
     if(!r || r.error) throw new Error(r?.error || _errText(_apiLastErr, 'فشل'));
     if(_wai.cur !== waId) return;
-    _wai.contact = r.contact; _wai.msgs = r.messages || []; _wai.proofs = r.proofs || {}; _wai.lastId = _wai.msgs.length ? _wai.msgs[_wai.msgs.length-1].id : 0;
-    waiRenderChat(true); waiRenderSide(r.orders || []);
+    _wai.contact = r.contact; _wai.msgs = r.messages || []; _wai.proofs = r.proofs || {}; _wai.ai = { ...(r.ai || {}), showSum:false }; _wai.lastId = _wai.msgs.length ? _wai.msgs[_wai.msgs.length-1].id : 0;
+    waiRenderChat(true); waiRenderSide(r.orders || []); _waiAiAuto();
     if(r.contact?.unread > 0){ apiFetch('/api/wa/conversations/' + waId + '/read', 'POST', {}).catch(()=>{});
       const cc = _wai.convs.find(x => x.wa_id === waId); if(cc){ cc.unread = 0; if(_wai.meta.counts) _wai.meta.counts.unread = Math.max(0, (_wai.meta.counts.unread||1) - 1); waiRenderList(); } }
   }catch(e){ $('wai-chat').innerHTML = `<div style="margin:auto;color:#dc2626">❌ ${escapeHtml(e.message)}</div>`; }
@@ -45242,14 +45248,17 @@ function waiRenderChat(scroll){
         <option value="">— مش متوزعة —</option>${agents.map(a => `<option value="${escapeHtml(a.username)}" ${c.assigned_to===a.username?'selected':''}>👤 ${escapeHtml(a.name)}</option>`).join('')}
         ${c.assigned_to && !agents.find(a => a.username === c.assigned_to) ? `<option selected>${escapeHtml(c.assigned_to)}</option>` : ''}
       </select>
+      ${_wai.ai?.can ? `<button class="btn btn-ghost btn-sm" title="ملخص المحادثة بالـ AI" onclick="waiAi('summary', !!_wai.ai.summary && _wai.ai.showSum)">📝 ملخص</button>` : ''}
       <button class="btn btn-ghost btn-sm" title="نسخ لينك المحادثة دي" onclick="_waiCopy(_waiLink(_wai.cur))">🔗</button>
       <select class="form-input" style="width:auto;padding:4px 6px;font-size:12px" onchange="waiStatus(this.value)">
         ${(m.statuses||[]).map(s => `<option ${c.status===s?'selected':''}>${escapeHtml(s)}</option>`).join('')}
       </select>
     </div>
+    <div id="wai-aisum"></div>
     <div class="wai-msgs" id="wai-msgs">${rows || '<div style="margin:auto;color:#667781">مفيش رسايل</div>'}</div>
     <div class="wai-comp">
       ${c.standby ? `<div style="text-align:center;font-size:12.5px;color:#92400e;background:#fffbeb;border-radius:8px;padding:8px">👀 المحادثة دي بيرد عليها ${escapeHtml(m.other_label || 'الشركة')} — OrderPro بيشوفها بس. عشان ترد من هنا لازم تحوّل «Conversation routing» لـ CAFELAX API.</div>` : (locked && !c.last_in_at) ? `<div style="text-align:center;font-size:12.5px;color:#92400e;padding:8px">⏳ العميل لسه مارّدش — Meta بتسمح بالكتابة الحرة أول ما العميل يبعت أي رسالة أو يدوس زرار.</div>` : locked ? `<div style="text-align:center;font-size:12.5px;color:#b91c1c;padding:8px">عدّى 24 ساعة من آخر رسالة من العميل — Meta مش بتسمح برسالة حرة. الرد بقالب هيتعمل في المرحلة الجاية.</div>` : `
+      <div id="wai-sugbox"></div>
       <div id="wai-rbar"></div>
       ${(m.quick||[]).length ? `<div class="wai-qr">${m.quick.map((t,i) => `<button title="${escapeHtml(t)}" onclick="waiQuick(${i})">⚡ ${escapeHtml(t)}</button>`).join('')}</div>` : ''}
       <div style="display:flex;gap:6px;align-items:flex-end">
@@ -45264,7 +45273,52 @@ function waiRenderChat(scroll){
     </div>`;
   _waiLoadMedia();
   if(scroll){ const b = $('wai-msgs'); if(b) b.scrollTop = b.scrollHeight; }
-  _waiRBar();
+  _waiRBar(); _waiAiRender();
+}
+// 🤖 v1042: AI — 📝 ملخص + 💡 رد مقترح (صلاحية wa-ai)
+function _waiLastIn(){ for(let i = _wai.msgs.length - 1; i >= 0; i--) if(_wai.msgs[i].dir === 'in') return _wai.msgs[i]; return null; }
+function _waiNeedsReply(){ const l = _wai.msgs[_wai.msgs.length - 1]; return !!l && l.dir === 'in'; }
+function _waiAiRender(){
+  const a = _wai.ai || {};
+  const sb = $('wai-aisum');
+  if(sb) sb.innerHTML = a.can && a.showSum && (a.summary || a.sumBusy) ? `<div class="wai-ai">${a.sumBusy ? '⏳ بعمل ملخص للمحادثة…' : escapeHtml(a.summary.text)}
+${a.sumBusy ? '' : `<div style="display:flex;gap:6px;margin-top:4px;white-space:normal">${a.summary.last_id < _wai.lastId ? '<span style="color:#b45309">⚠️ فيه رسايل جديدة بعد الملخص</span>' : ''}<button class="btn btn-ghost btn-sm" style="padding:0 7px;font-size:11px" onclick="waiAi('summary',true)">🔄 حدّث</button><button class="btn btn-ghost btn-sm" style="padding:0 7px;font-size:11px" onclick="_wai.ai.showSum=false;_waiAiRender()">✕ اقفل</button></div>`}</div>` : '';
+  const box = $('wai-sugbox'); if(!box) return;
+  if(!a.can){ box.innerHTML = ''; return; }
+  const s = a.suggest, fresh = s && !s.used && s.last_id >= (_waiLastIn()?.id || 0);
+  if(a.sugBusy) box.innerHTML = `<div class="wai-sug" style="color:#15803d">⏳ بجهّز رد مقترح…</div>`;
+  else if(fresh && _waiNeedsReply()) box.innerHTML = `<div class="wai-sug"><div style="font-size:11px;color:#15803d;font-weight:700;margin-bottom:2px">💡 رد مقترح</div><div class="tx">${escapeHtml(s.text)}</div>
+    <div style="display:flex;gap:6px;margin-top:5px"><button class="btn btn-sm" style="background:#25d366;color:#fff;border-color:#25d366;padding:2px 12px" onclick="waiAiUse(true)">➤ إرسال</button>
+    <button class="btn btn-ghost btn-sm" style="padding:2px 10px" onclick="waiAiUse(false)">✏️ تعديل</button>
+    <button class="btn btn-ghost btn-sm" style="padding:2px 10px" title="رد تاني" onclick="waiAi('suggest',true)">🔄</button></div></div>`;
+  else box.innerHTML = _waiNeedsReply() ? `<div style="margin-bottom:5px"><button class="btn btn-ghost btn-sm" style="padding:1px 10px;font-size:11.5px;color:#15803d" onclick="waiAi('suggest',${s && !s.used ? 'true' : 'false'})">💡 اقترح رد</button></div>` : '';
+}
+async function waiAi(kind, force){
+  const a = _wai.ai; if(!a?.can || !_wai.cur) return;
+  const waId = _wai.cur, bk = kind === 'summary' ? 'sumBusy' : 'sugBusy';
+  if(a[bk]) return;
+  if(kind === 'summary'){ a.showSum = true; if(a.summary && !force && a.summary.last_id >= _wai.lastId){ _waiAiRender(); return; } }
+  a[bk] = true; _waiAiRender();
+  try{
+    const r = await apiFetch('/api/wa/ai/' + waId + '/' + kind, 'POST', force ? { force:true } : {});
+    if(_wai.cur !== waId) return;
+    if(!r || r.error) throw new Error(r?.error || _errText(_apiLastErr, 'الـ AI فشل'));
+    a[kind] = { text:r.text, last_id:r.last_id, at:r.at, used:false };
+  }catch(e){ toast('🤖 ' + e.message, 'warn', 6000); if(kind === 'summary' && !a.summary) a.showSum = false; }
+  finally{ if(_wai.cur === waId){ a[bk] = false; _waiAiRender(); } }
+}
+function _waiAiAuto(){
+  const a = _wai.ai; if(!a?.can || !a.auto || a.sugBusy || !_waiNeedsReply()) return;
+  const c = _wai.contact || {}; if(!c.window_open || c.standby) return;
+  const s = a.suggest, li = _waiLastIn();
+  if(!li || (s && s.last_id >= li.id)) return;
+  waiAi('suggest', false);
+}
+async function waiAiUse(send){
+  const a = _wai.ai, s = a?.suggest, ta = $('wai-text'); if(!s || !ta) return;
+  ta.value = s.text; ta.style.height = 'auto'; ta.style.height = Math.min(120, ta.scrollHeight) + 'px';
+  s.used = true; apiFetch('/api/wa/ai/' + _wai.cur + '/suggest/used', 'POST', {}).catch(()=>{});
+  if(send) await waiSend(); else { ta.focus(); _waiAiRender(); }
 }
 // 🔍 v1038: نتيجة فحص صورة التحويل
 function _waiProofBox(m){
@@ -45403,7 +45457,7 @@ async function waiTick(){
         if(r.proofs && Object.keys(r.proofs).length){ for(const [k, v] of Object.entries(r.proofs)) if(JSON.stringify(_wai.proofs[k]) !== JSON.stringify(v)){ _wai.proofs[k] = v; changed = true; } }
         const fresh = (r.messages || []).filter(m => !_wai.msgs.find(x => x.id === m.id));
         if(fresh.length){ _wai.msgs.push(...fresh); _wai.lastId = Math.max(_wai.lastId, ...fresh.map(m => m.id)); changed = true;
-          if(fresh.some(m => m.dir === 'in')) apiFetch('/api/wa/conversations/' + _wai.cur + '/read', 'POST', {}).catch(()=>{}); }
+          if(fresh.some(m => m.dir === 'in')){ apiFetch('/api/wa/conversations/' + _wai.cur + '/read', 'POST', {}).catch(()=>{}); setTimeout(_waiAiAuto, 50); } }
         const oldWin = _wai.contact?.window_open;
         if(r.contact){ _wai.contact = { ..._wai.contact, ...r.contact, unread:0 }; if(oldWin !== r.contact.window_open) changed = true; }
         if(changed){
