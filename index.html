@@ -12567,7 +12567,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1063';
+const UI_BUILD = 'v1064';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45336,6 +45336,10 @@ function waiRenderChat(scroll){
   let last = '', rows = '';
   for(const x of _wai.msgs){ const d = _waiDay(x.ts); if(d !== last){ rows += `<div class="wai-day">${d}</div>`; last = d; } rows += _waiBubble(x); }
   const locked = !c.window_open || !!c.standby;
+  // 📜 v1064: نحافظ على مكان السكرول — لو كنت تحت نفضل تحت، لو طالع فوق نرجعك لنفس المكان
+  const ob = $('wai-msgs'); const prevTop = ob ? ob.scrollTop : 0;
+  if(ob) _wai.stick = (ob.scrollHeight - ob.scrollTop - ob.clientHeight < 80);
+  if(scroll) _wai.stick = true;
   $('wai-chat').innerHTML = `
     <div class="wai-head">
       <button class="btn btn-ghost btn-sm wai-back" onclick="waiBack()">→</button>
@@ -45374,10 +45378,19 @@ function waiRenderChat(scroll){
       </div>
       <div id="wai-filebar" style="font-size:11.5px;color:var(--muted);margin-top:4px"></div>`}
     </div>`;
+  const nb = $('wai-msgs');
+  if(nb){
+    nb.addEventListener('scroll', () => { _wai.stick = (nb.scrollHeight - nb.scrollTop - nb.clientHeight < 80); }, { passive:true });
+    // الصور بتحمّل بعدين وبتطوّل الشات — لو إنت تحت نفضل ننزل لآخره
+    nb.addEventListener('load', () => { if(_wai.stick) _waiBottom(); }, true);
+    try{ if(window.ResizeObserver){ _wai.ro?.disconnect(); _wai.ro = new ResizeObserver(() => { if(_wai.stick) _waiBottom(); }); _wai.ro.observe(nb); } }catch(e){}
+  }
   _waiLoadMedia();
-  if(scroll){ const b = $('wai-msgs'); if(b) b.scrollTop = b.scrollHeight; }
+  if(_wai.stick) _waiBottom(); else if(nb) nb.scrollTop = prevTop;
   _waiRBar(); _waiAiRender();
+  if(_wai.stick){ _waiBottom(); setTimeout(() => { if(_wai.stick) _waiBottom(); }, 150); setTimeout(() => { if(_wai.stick) _waiBottom(); }, 700); }
 }
+function _waiBottom(){ const b = $('wai-msgs'); if(b) b.scrollTop = b.scrollHeight; }
 // 🤖 v1042: AI — 📝 ملخص + 💡 رد مقترح (صلاحية wa-ai)
 function _waiLastIn(){ for(let i = _wai.msgs.length - 1; i >= 0; i--) if(_wai.msgs[i].dir === 'in') return _wai.msgs[i]; return null; }
 // 🏦 v1050: مراجعة تحويلات InstaPay (المحاسب)
@@ -45780,12 +45793,10 @@ async function waiTick(){
         if(JSON.stringify(r.ready || null) !== JSON.stringify(_wai.ready || null)){ _wai.ready = r.ready || null; changed = true; }
         if(r.contact){ _wai.contact = { ..._wai.contact, ...r.contact, unread:0 }; if(oldWin !== r.contact.window_open) changed = true; }
         if(changed){
-          const box = $('wai-msgs'); const atBottom = box ? (box.scrollHeight - box.scrollTop - box.clientHeight < 80) : true;
           const keep = $('wai-text')?.value || ''; const focus = document.activeElement?.id === 'wai-text';
           waiRenderChat(false);
           if($('wai-text')){ $('wai-text').value = keep; if(focus) $('wai-text').focus(); }
           if(_waiFile && $('wai-filebar')) $('wai-filebar').innerHTML = '📎 ' + escapeHtml(_waiFile.filename);
-          const b = $('wai-msgs'); if(b && atBottom) b.scrollTop = b.scrollHeight;
         }
       }
     }
