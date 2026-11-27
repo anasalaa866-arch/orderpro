@@ -12553,7 +12553,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1047';
+const UI_BUILD = 'v1048';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45228,6 +45228,20 @@ async function waiOpen(waId){
   }catch(e){ $('wai-chat').innerHTML = `<div style="margin:auto;color:#dc2626">❌ ${escapeHtml(e.message)}</div>`; }
 }
 function waiBack(){ $('wai')?.classList.remove('open'); _wai.cur = null; waiRenderList(); }
+// 👉 v1048: على الموبايل — سحب من الشمال لليمين جوه المحادثة يرجّع لقايمة المحادثات
+(function(){
+  let sx = 0, sy = 0, st = 0, ok = false;
+  document.addEventListener('touchstart', e => {
+    const chat = e.target.closest && e.target.closest('#wai-chat');
+    ok = !!chat && window.innerWidth <= 760 && $('wai')?.classList.contains('open') && !e.target.closest('textarea,input,select');
+    if(!ok) return; const t = e.touches[0]; sx = t.clientX; sy = t.clientY; st = Date.now();
+  }, { passive:true });
+  document.addEventListener('touchend', e => {
+    if(!ok) return; ok = false;
+    const t = e.changedTouches[0], dx = t.clientX - sx, dy = Math.abs(t.clientY - sy);
+    if(dx > 80 && dy < 60 && Date.now() - st < 800) waiBack();
+  }, { passive:true });
+})();
 // 🔗 v1041: لينك منفصل — /wa/ أو /wa/?c=رقم
 function _waiLink(waId){ return new URL('wa/' + (waId ? '?c=' + encodeURIComponent(waId) : ''), location.origin + location.pathname.replace(/[^/]*$/, '')).href; }
 function _waiCopy(t){ (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('🔗 اتنسخ: ' + t), () => prompt('انسخ اللينك:', t)); }
