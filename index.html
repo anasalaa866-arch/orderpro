@@ -12567,7 +12567,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1064';
+const UI_BUILD = 'v1065';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -70835,7 +70835,7 @@ function dsOrderRow(o, cls){
   return `<tr class="${cls}${isNew?' ds-new-row':''}">
     <td style="text-align:center;color:var(--muted);font-size:10px">${dsRowNum}</td>
     <td><strong style="font-size:11px">${newBadge}${o.id}</strong></td>
-    <td style="font-weight:700;font-size:12px">${o.name||''}</td>
+    <td style="font-weight:700;font-size:12px">${o.name||''}${_dsPickBadge(o)}</td>
     <td style="direction:ltr;font-size:12px;font-weight:700;white-space:nowrap">${o.phone||''}</td>
     <td style="font-size:11px;color:var(--accent)">${zone}</td>
     <td style="font-size:12px;font-weight:700;color:var(--text);white-space:normal;word-break:break-word">${addrFull}</td>
@@ -71019,8 +71019,31 @@ function _dsShopSections(list, lastPrintAt, ages){
   for(const sec of S.slice(1)) sec.orders.sort((x,y) => new Date(x.createdAt||0) - new Date(y.createdAt||0));
   return S;
 }
+// 📱 v1065: حالة رسالة «استلام من المحل» على الواتساب — جنب كل طلب في ورقة المحل
+let _dsPick = { items:{}, t:0, key:'' };
+function _dsPickBadge(o){
+  if(!_dsIsShop(window._dsCourierId)) return '';
+  const s = _dsPick.items[o.id]; if(!s) return '';
+  const [txt, bg, fg] = s.reply === 'ok' ? ['✅ بعتناله وأكد استلام محل', '#dcfce7', '#166534']
+    : s.reply === 'ship' ? ['🚚 بعتناله وطلب شحن', '#dbeafe', '#1e40af']
+    : s.sent ? ['⏳ بعتناله ومردش', '#fef3c7', '#92400e']
+    : ['⚠️ الرسالة مااتبعتتش', '#fee2e2', '#b91c1c'];
+  return `<div style="margin-top:3px"><span style="display:inline-block;background:${bg};color:${fg};font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;white-space:nowrap;-webkit-print-color-adjust:exact;print-color-adjust:exact">${txt}</span></div>`;
+}
+function _dsPickLoad(list, cId){
+  const ids = list.map(o => String(o.id)); const key = ids.slice().sort().join(',');
+  if(key === _dsPick.key && Date.now() - _dsPick.t < 60000) return;
+  _dsPick.key = key; _dsPick.t = Date.now();
+  apiFetch('/api/wa/pickup-status', 'POST', { ids }).then(r => {
+    if(!r || r.error) return;
+    const changed = JSON.stringify(r.items || {}) !== JSON.stringify(_dsPick.items);
+    _dsPick.items = r.items || {};
+    if(changed && String(window._dsCourierId) === String(cId)) dsRender();
+  }).catch(() => {});
+}
 function _dsRenderShop(c, cId, list){
   const meta = _dsShopMeta[String(cId)];
+  if(list.length) _dsPickLoad(list, cId);
   window._dsNoted = [];
   if(!meta){                                   // أول مرة — هات آخر طباعة وارسم تاني
     $('ds-sheet').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">⏳ جاري التحميل...</div>';
