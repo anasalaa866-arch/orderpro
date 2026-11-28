@@ -12570,7 +12570,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1071';
+const UI_BUILD = 'v1072';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -55971,10 +55971,17 @@ async function approveStocktake(){
   const counted = _stkCurrentItems.filter(i => i.counted_qty != null);
   const differences = _stkCurrentItems.filter(i => i.counted_qty != null && i.system_qty != null && i.counted_qty !== i.system_qty).length;
   
-  if(!counted.length){ toast('❌ لازم تعد منتج واحد على الأقل'); return; }
-  
   // اعرض mode info في الـ confirm
   const sessionMode = _stkCurrentSession?.stk_mode || 'partial';
+  // 🧮 v1072: الجرد الكلي مسموح يتعتمد من غير ما يتعد ولا صنف = تصفير المخزن كله
+  //   (القاعدة: في الكلي اللي مااتعدّش = صفر، موجب أو سالب)
+  if(!counted.length && sessionMode !== 'full'){ toast('❌ لازم تعد منتج واحد على الأقل (أو افتح جرد كلي لو عايز تصفّر المخزن)'); return; }
+  if(!counted.length && sessionMode === 'full'){
+    const nz = _stkCurrentItems.filter(i => i.system_qty != null && Number(i.system_qty) !== 0).length;
+    if(!confirm(`⚠️ مفيش ولا صنف متعدّ — كده هتصفّر المخزن كله.\n\n${nz} صنف رصيده مش صفر (موجب أو سالب) هيبقى 0 على شوبيفاي.\n\nمتأكد؟`)) return;
+    await _doApproveStocktake(true);
+    return;
+  }
   const modeLabels = {
     full: '📦 جرد كلي (المعدوش = صفر)',
     partial: '📋 جرد جزئي (المعدوش = تجاهل)',
