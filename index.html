@@ -1940,6 +1940,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="reports" onclick="goPage(this,'reports')"><span class="ni-icon">📈</span><span class="ni-label">التقارير</span></div>
         <div class="ni" data-p="wa-inbox" onclick="goPage(this,'wa-inbox')"><span class="ni-icon">💬</span><span class="ni-label">محادثات واتساب</span><span class="nbadge" id="nb-wa-inbox" style="display:none;background:#25d366">0</span></div>
         <div class="ni" data-p="wa-flows" onclick="goPage(this,'wa-flows')"><span class="ni-icon">🗺️</span><span class="ni-label">فلوهات واتساب</span></div>
+        <div class="ni" data-p="segments" onclick="goPage(this,'segments')"><span class="ni-icon">👥</span><span class="ni-label">عملاء حسب الكوليكشن</span></div>
         <div class="ni" data-p="wa-pay-review" onclick="goPage(this,'wa-pay-review')"><span class="ni-icon">🏦</span><span class="ni-label">مراجعة تحويلات InstaPay</span><span class="nbadge" id="nb-wa-pay" style="display:none">0</span></div>
         <div class="ni" data-p="orders" onclick="goPage(this,'orders')"><span class="ni-icon">📋</span><span class="ni-label">الطلبات</span><span class="nbadge" id="nb-orders">0</span></div>
         <div class="ni" data-p="tasks" onclick="goPage(this,'tasks')"><span class="ni-icon">✅</span><span class="ni-label">التاسكات</span><span class="nbadge" id="nb-tasks" style="background:var(--purple)">0</span></div>
@@ -7903,6 +7904,21 @@ body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
     </div>
   </div>
 </div>
+<!-- 👥 v1083: عملاء حسب الكوليكشن -->
+<div class="page" id="page-segments">
+  <div class="card" style="padding:14px 16px;margin-bottom:12px">
+    <div style="font-weight:900;font-size:15px;margin-bottom:4px">👥 عملاء حسب الكوليكشن</div>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:10px">كل اللي اشتروا من الكوليكشن من أول طلب على شوبيفاي (ديسمبر 2022) — أونلاين والمحل</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input id="seg-col" class="form-input" list="seg-col-list" placeholder="اكتب اسم الكوليكشن… (Chocolates)" style="width:320px">
+      <datalist id="seg-col-list"></datalist>
+      <button class="btn btn-primary" onclick="segRun()">🔎 طلّع العملاء</button>
+      <span id="seg-msg" style="font-size:12.5px;color:var(--muted)"></span>
+    </div>
+  </div>
+  <div class="card" style="padding:12px 14px;margin-bottom:12px"><div style="font-weight:800;margin-bottom:8px">📂 اللستات</div><div id="seg-lists" style="display:flex;gap:8px;flex-wrap:wrap"></div></div>
+  <div class="card" id="seg-view" style="padding:12px 14px;display:none"></div>
+</div>
 <!-- 🗺️ v1078: فلوهات واتساب — Builder -->
 <div class="page" id="page-wa-flows">
   <style>
@@ -12654,12 +12670,12 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','shopify-transfers':'🚚 ترانسفيرات شوبيفاي','abandoned':'🛒 سلات متسابة','delivery-areas':'🗺️ إعدادات التوصيل','google-feed':'🏷️ فيد جوجل (Custom Labels)','winners':'🏆 تقييم المنتجات — Winners','meta-ads':'📘 أداء Meta','gads-perf':'📈 أداء Google Ads','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','inv-adjustments':'✋ التعديلات اليدوية على المخزون','wa-inbox':'💬 محادثات واتساب','wa-flows':'🗺️ فلوهات واتساب','wa-pay-review':'🏦 مراجعة تحويلات InstaPay','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','shopify-transfers':'🚚 ترانسفيرات شوبيفاي','abandoned':'🛒 سلات متسابة','delivery-areas':'🗺️ إعدادات التوصيل','google-feed':'🏷️ فيد جوجل (Custom Labels)','winners':'🏆 تقييم المنتجات — Winners','meta-ads':'📘 أداء Meta','gads-perf':'📈 أداء Google Ads','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','inv-adjustments':'✋ التعديلات اليدوية على المخزون','wa-inbox':'💬 محادثات واتساب','wa-flows':'🗺️ فلوهات واتساب','segments':'👥 عملاء حسب الكوليكشن','wa-pay-review':'🏦 مراجعة تحويلات InstaPay','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1082';
+const UI_BUILD = 'v1083';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -30394,7 +30410,7 @@ async function doLogin(){
 
   applyPermissions(user.role, user.pages||null);
   try{ _tbWaSet(0); _notifOrderOff(); }catch(_){}   // 💬🔔 v1077
-  try{ const nf = document.querySelector('.ni[data-p=wa-flows]'); if(nf && !(user.username === 'admin' || user.role === 'admin')) nf.style.display = 'none'; }catch(_){}
+  try{ document.querySelectorAll('.ni[data-p=wa-flows],.ni[data-p=segments]').forEach(nf => { if(!(user.username === 'admin' || user.role === 'admin')) nf.style.display = 'none'; }); }catch(_){}
   lkLoad();        // 🔒 v731: هات الصفحات المقفولة وعلّم عليها
 
   const userBadge = document.getElementById('user-badge');
@@ -33048,7 +33064,7 @@ window.addEventListener('load', function(){
     document.getElementById('main-app').style.display = '';
     applyPermissions(currentUser.role, currentUser.pages||null);
     try{ _tbWaSet(0); _notifOrderOff(); }catch(_){}   // 💬🔔 v1077
-    try{ const nf = document.querySelector('.ni[data-p=wa-flows]'); if(nf && !(currentUser.username === 'admin' || currentUser.role === 'admin')) nf.style.display = 'none'; }catch(_){}
+    try{ document.querySelectorAll('.ni[data-p=wa-flows],.ni[data-p=segments]').forEach(nf => { if(!(currentUser.username === 'admin' || currentUser.role === 'admin')) nf.style.display = 'none'; }); }catch(_){}
     setTimeout(_deepLink, 0);
     const userBadge = document.getElementById('user-badge');
     if(userBadge) userBadge.textContent = '👤 '+currentUser.name;
@@ -45631,6 +45647,63 @@ async function waiTplAssign(name, user, el){
   toast(user ? '✅ القالب هيتوزّع على ' + (_waiTplA.agents.find(a => a.username === user)?.name || user) : '✅ القالب مش هيتوزّع على حد');
 }
 const _wl = { days:30, f:'fixes', d:null };
+// ═══ 👥 v1083: عملاء حسب الكوليكشن ═══
+const _seg = { cols:null, cur:null, poll:null };
+async function segPageLoad(){
+  if(!_seg.cols){
+    const r = await apiFetch('/api/seg/collections', 'GET');
+    if(r && !r.error){ _seg.cols = r.collections || []; $('seg-col-list').innerHTML = _seg.cols.map(c => `<option value="${escapeHtml(c.title)}">${c.count} منتج</option>`).join(''); }
+    else $('seg-msg').textContent = '❌ ' + (r?.error || 'مقدرتش أجيب الكوليكشنز');
+  }
+  segListsLoad();
+}
+async function segListsLoad(){
+  const r = await apiFetch('/api/seg/lists', 'GET'); if(!r || r.error) return;
+  const L = r.lists || [];
+  $('seg-lists').innerHTML = L.length ? L.map(l => `<div class="wf-card ${_seg.cur === l.id ? 'on' : ''}" onclick="segOpen(${l.id})" style="display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer;font-size:12.5px;${_seg.cur === l.id ? 'border-color:#6366f1;background:#eef2ff' : ''}">
+      <span>${l.status === 'done' ? '✅' : l.status === 'error' ? '❌' : '⏳'}</span><b>${escapeHtml(l.name)}</b>
+      <span style="font-family:Roboto;color:var(--muted)">${l.status === 'done' ? l.n.toLocaleString('en-US') + ' عميل' : escapeHtml(l.progress || l.error || '')}</span>
+      <span style="font-family:Roboto;color:var(--muted);font-size:11px">${new Date(l.created_at).toLocaleDateString('en-GB')}</span></div>`).join('') : '<span style="color:var(--muted);font-size:12.5px">لسه مفيش</span>';
+  if(L.some(l => l.status === 'running')){ clearTimeout(_seg.poll); _seg.poll = setTimeout(() => { segListsLoad(); if(_seg.cur) segOpen(_seg.cur, true); }, 3000); }
+}
+async function segRun(){
+  const t = $('seg-col').value.trim();
+  const c = (_seg.cols || []).find(x => x.title.toLowerCase() === t.toLowerCase());
+  if(!c){ toast('اختار كوليكشن من القايمة'); return; }
+  const r = await apiFetch('/api/seg/run', 'POST', { collection_id:c.id, name:c.title });
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
+  _seg.cur = r.id; $('seg-msg').textContent = '⏳ بيجيب من شوبيفاي… ممكن ياخد دقيقة';
+  segListsLoad(); segOpen(r.id, true);
+}
+async function segOpen(id, quiet){
+  _seg.cur = id;
+  const r = await apiFetch('/api/seg/lists/' + id, 'GET'); if(!r || r.error){ if(!quiet) toast('❌ ' + (r?.error || 'فشل')); return; }
+  const l = r.list, v = $('seg-view'); v.style.display = '';
+  if(l.status !== 'done'){ v.innerHTML = l.status === 'error' ? `<div style="color:var(--danger)">❌ ${escapeHtml(l.error || '')}</div>` : `<div>⏳ ${escapeHtml(l.progress || 'شغّال…')}</div>`; return; }
+  $('seg-msg').textContent = '';
+  const rows = l.rows || [], withPh = rows.filter(x => x.phone).length, spent = rows.reduce((s, x) => s + (x.spent || 0), 0);
+  _seg.rows = rows; _seg.name = l.name;
+  v.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <b style="font-size:15px">${escapeHtml(l.name)}</b>
+      <span class="chip" style="font-family:Roboto">${rows.length.toLocaleString('en-US')} عميل</span>
+      <span class="chip" style="font-family:Roboto">📱 ${withPh.toLocaleString('en-US')} برقم صحيح</span>
+      <span class="chip" style="font-family:Roboto">💰 ${spent.toLocaleString('en-US')} ج إجمالي مشترياتهم (كل المتجر)</span>
+      <span style="margin-inline-start:auto"></span>
+      <button class="btn btn-sm" onclick="segExport()">📥 Excel</button>
+      <button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="segDel(${l.id})">🗑️</button></div>
+    <div style="max-height:60vh;overflow:auto"><table class="tbl" style="width:100%;font-size:12.5px"><thead><tr><th>#</th><th>الاسم</th><th>الموبايل</th><th>المدينة</th><th>عدد الطلبات</th><th>إجمالي المشتريات</th></tr></thead><tbody>
+    ${rows.slice(0, 300).map((x, i) => `<tr><td style="font-family:Roboto">${i + 1}</td><td>${escapeHtml(x.name)}</td><td style="font-family:Roboto;direction:ltr;text-align:right">${x.phone || '<span style="color:#dc2626">—</span>'}</td><td>${escapeHtml(x.city || '')}</td><td style="font-family:Roboto">${x.orders}</td><td style="font-family:Roboto">${(x.spent || 0).toLocaleString('en-US')}</td></tr>`).join('')}
+    </tbody></table>${rows.length > 300 ? `<div style="color:var(--muted);font-size:12px;margin-top:6px">ظاهر أول 300 — الباقي في الـ Excel</div>` : ''}</div>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:8px">عدد الطلبات والإجمالي = كل مشتريات العميل من المتجر (مش الكوليكشن بس) — من شوبيفاي. مستبعد: العميل العام بتاع المحل، طلبات، وحساب CAFELAX.</div>`;
+}
+function segExport(){
+  const rows = (_seg.rows || []).map(x => ({ 'الاسم':x.name, 'الموبايل':x.phone || '', 'المدينة':x.city || '', 'عدد الطلبات':x.orders, 'إجمالي المشتريات':x.spent }));
+  const ws = XLSX.utils.json_to_sheet(rows), wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'عملاء');
+  XLSX.writeFile(wb, `عملاء_${String(_seg.name || 'كوليكشن').replace(/[^\w؀-ۿ-]+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+async function segDel(id){ if(!confirm('تمسح اللستة دي؟')) return; await apiFetch('/api/seg/lists/' + id, 'DELETE'); _seg.cur = null; $('seg-view').style.display = 'none'; segListsLoad(); }
+
 // ═══ 🗺️ v1078: فلوهات واتساب — Builder ═══
 const _wf = { list:[], id:null, f:null, g:null, sel:null, dirty:false, zoom:1, stats:{}, regions:[], users:[], menu:null };
 const WF_TYPES = {
@@ -65445,6 +65518,7 @@ function goPage(el,page){
   if(page==='delivery-areas')daOpen();         // 🗺️ v966
   if(page==='google-feed')gffLoad();           // 🏷️ v972
   if(page==='wa-flows')wfPageLoad();           // 🗺️ v1078
+  if(page==='segments')segPageLoad();          // 👥 v1083
   if(page==='winners')wsLoad('live');          // 🏆 v977
   if(page==='meta-ads')mtaLoad();              // 📘 v981
   if(page==='gads-perf')gapLoad();             // 📈 v983
