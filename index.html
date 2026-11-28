@@ -7919,6 +7919,8 @@ body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
     .wfn.t-ship{border-color:#c4b5fd} .wfn.t-ship .hd{background:#ede9fe;color:#5b21b6}
     .wfn.t-cond{border-color:#fcd34d} .wfn.t-cond .hd{background:#fef3c7;color:#92400e}
     .wfn.t-act{border-color:#86efac} .wfn.t-act .hd{background:#dcfce7;color:#166534}
+    .wfn.t-tpl{border-color:#5eead4} .wfn.t-tpl .hd{background:#ccfbf1;color:#115e59}
+    .wfn.t-wait{border-color:#cbd5e1} .wfn.t-wait .hd{background:#f1f5f9;color:#334155}
     .wfadd{position:absolute;width:30px;height:30px;border-radius:50%;border:2px dashed #94a3b8;background:#fff;color:#64748b;font-size:18px;line-height:24px;text-align:center;cursor:pointer}
     .wfadd:hover{border-color:#6366f1;color:#6366f1;background:#eef2ff}
     .wfedge{position:absolute;transform:translate(-50%,-50%);background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:6px;font-size:10.5px;font-weight:700;padding:1px 7px;white-space:nowrap;max-width:190px;overflow:hidden;text-overflow:ellipsis}
@@ -12654,7 +12656,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1078';
+const UI_BUILD = 'v1079';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45633,10 +45635,17 @@ const WF_TYPES = {
   ship:{ ic:'🚚', t:'مناطق الشحن' },
   cond:{ ic:'🔀', t:'شرط' },
   act:{ ic:'⚙️', t:'أكشن' },
+  tpl:{ ic:'📋', t:'قالب Meta' },
+  wait:{ ic:'⏳', t:'استنى' },
 };
+const WF_VARS_ORDER = ['{order_no}','{due}','{total}','{courier_name}','{courier_phone}','{area}'];
+const WF_STATUSES = ['جاري التوصيل','مكتمل','مرتجع','ملغي'];
 const WF_ACTS = { open_human:'🧑‍💼 حوّل لخدمة العملاء (الشات يتفتح)', close:'🔒 اقفل الشات', done:'✅ خلّص (من غير انتظار رد)', assign:'👤 وزّع على موظف' };
-const WF_CONDS = { in_hours:'🕐 جوه مواعيد العمل؟', has_orders:'🛍️ العميل طلب مننا قبل كده؟' };
-const WF_TRIG = { wa_first:'👋 أول رسالة من العميل (أو بعد غياب)', wa_keyword:'🔤 العميل كتب كلمة معيّنة' };
+const WF_CONDS = { in_hours:'🕐 جوه مواعيد العمل؟', has_orders:'🛍️ العميل طلب مننا قبل كده؟', paid:'💳 الطلب مدفوع؟', total_gt:'💰 إجمالي الطلب أكبر من…؟' };
+const WF_TRIG = { wa_first:'👋 أول رسالة من العميل (أو بعد غياب)', wa_keyword:'🔤 العميل كتب كلمة معيّنة',
+  order_courier:'🛵 الطلب اتوزّع على مندوب', order_printed:'🖨️ ورقة التوصيل اتطبعت', order_status:'🔄 حالة الطلب اتغيّرت' };
+const _wfIsOrder = () => /^order_/.test(_wf.g?.nodes?.[_wf.g.start]?.data?.trigger?.type || '');
+const _wfTpl = d => (_wf.tpls || []).find(t => t.name === d?.name && t.lang === (d?.lang || 'ar'));
 const _wfLen = s => [...String(s || '')].length;
 const _wfNid = p => (p || 'n') + Math.random().toString(36).slice(2, 8);
 
@@ -45663,6 +45672,7 @@ async function wfOpen(id){
   if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
   _wf.id = id; _wf.f = r.flow; _wf.g = JSON.parse(JSON.stringify(r.flow.graph || {})); _wf.sel = _wf.g.start; _wf.dirty = false;
   _wf.regions = r.regions || []; _wf.users = r.users || [];
+  if(!_wf.tpls) apiFetch('/api/wf/templates/list', 'GET').then(t => { _wf.tpls = (t && t.templates) || []; wfDraw(); if(_wf.g.nodes[_wf.sel]?.type === 'tpl') wfSide(); }).catch(() => {});
   _wf.stats = {}; for(const s of (r.stats || [])){ const k = s.node_id + '|' + s.ev + (s.ev === 'click' ? '|' + s.info : ''); _wf.stats[k] = (_wf.stats[k] || 0) + s.n; }
   $('wf-editor').style.display = ''; $('wf-name').value = r.flow.name || '';
   wfListRender(); wfDraw(); wfSide(); wfBar();
@@ -45684,6 +45694,8 @@ function _wfOuts(n){
   if(n.type === 'msg' && (d.mode === 'buttons' || d.mode === 'list')) return (d.buttons || []).map(b => ({ key:b.id, label:b.label || '…' }));
   if(n.type === 'cond') return [{ key:'yes', label:'✅ آه', cls:'yes' }, { key:'no', label:'❌ لأ', cls:'no' }];
   if(n.type === 'ship') return [{ key:'out', label:'بعد ما يختار المنطقة' }];
+  if(n.type === 'wait') return [{ key:'out', label:`بعد ${_wfDur(d.minutes)}` }];
+  if(n.type === 'tpl'){ const t = _wfTpl(d); const q = (t?.buttons || []).map((b, i) => b.type === 'QUICK_REPLY' ? { key:'q' + i, label:b.text } : null).filter(Boolean); return q.length ? q : [{ key:'out', label:'' }]; }
   return [{ key:'out', label:'' }];
 }
 // ── رسم: layout شجري ──
@@ -45738,20 +45750,29 @@ function wfDraw(){
   cv.style.width = maxX + 'px'; cv.style.height = (maxY + 200) + 'px'; cv.style.transform = `scale(${_wf.zoom})`;
   cv.innerHTML = svg + labels + items.join('');
 }
+function _wfDur(m){ m = Number(m) || 60; return m % 1440 === 0 ? (m / 1440) + ' يوم' : m % 60 === 0 ? (m / 60) + ' ساعة' : m + ' دقيقة'; }
 function _wfNodeTitle(n){
   const d = n.data || {};
   if(n.type === 'start') return WF_TRIG[d.trigger?.type] || 'البداية';
   if(n.type === 'msg') return ({ text:'رسالة', buttons:'رسالة بزراير', list:'رسالة بقايمة', link:'رسالة بلينك' })[d.mode || 'text'] || 'رسالة';
   if(n.type === 'cond') return WF_CONDS[d.kind] || 'شرط';
   if(n.type === 'act') return WF_ACTS[d.kind] || 'أكشن';
+  if(n.type === 'tpl') return 'قالب: ' + (d.name ? d.name.replace(/^cafelax_/, '') : '— اختار —');
+  if(n.type === 'wait') return 'استنى ' + _wfDur(d.minutes);
   return (WF_TYPES[n.type] || {}).t || n.type;
 }
 function _wfNodeBody(n){
   const d = n.data || {};
-  if(n.type === 'start'){ const t = d.trigger || {}; return t.type === 'wa_keyword' ? 'الكلمات: ' + (t.words || '—') : 'عميل جديد أو ما كلّمناش من ' + (t.days ?? 30) + ' يوم'; }
+  if(n.type === 'start'){ const t = d.trigger || {};
+    if(t.type === 'wa_keyword') return 'الكلمات: ' + (t.words || '—');
+    if(/^order_/.test(t.type)) return (t.type === 'order_status' ? 'بقت: ' + (t.status || '—') + '\n' : '') + (Number(t.delay_min) ? `بعدها بـ ${_wfDur(t.delay_min)}` : 'على طول') + (t.own_only !== false ? ' · مناديبنا بس' : '');
+    return 'عميل جديد أو ما كلّمناش من ' + (t.days ?? 30) + ' يوم'; }
+  if(n.type === 'tpl'){ const t = _wfTpl(d); if(!t) return d.name ? '⏳ بيحمّل…' : ''; const st = t.status === 'APPROVED' ? '' : `[${t.status}] `;
+    return st + t.body.replace(/\{\{(\d+)\}\}/g, (m, k) => (d.vars || [])[k - 1] || m); }
+  if(n.type === 'wait') return '';
   if(n.type === 'msg') return (d.text || '') + (d.mode === 'link' ? `\n🔗 ${d.link_label || ''}` : '');
   if(n.type === 'ship') return (d.text || '') + `\n(${_wf.regions.length} منطقة — السعر من إعدادات التوصيل)`;
-  if(n.type === 'cond') return d.kind === 'in_hours' ? `${d.hours || '10-17'} · إجازة: ${d.off_days || '—'}` : '';
+  if(n.type === 'cond') return d.kind === 'in_hours' ? `${d.hours || '10-17'} · إجازة: ${d.off_days || '—'}` : d.kind === 'total_gt' ? `> ${d.value || 0} ج` : '';
   if(n.type === 'act') return d.kind === 'assign' ? (d.user || '— اختار موظف —') : ({ open_human:'الشات يتفتح ويبقى «مستني رد»', close:'الشات يتقفل', done:'الفلو يخلص من غير انتظار' })[d.kind] || '';
   return '';
 }
@@ -45760,7 +45781,7 @@ function wfMenuClose(){ document.querySelectorAll('.wf-menu').forEach(m => m.rem
 function wfAddMenu(el, pid, key){
   wfMenuClose();
   const m = document.createElement('div'); m.className = 'wf-menu';
-  const add = [['msg','text','💬 رسالة نص'],['msg','buttons','🔘 رسالة بزراير (لحد 3)'],['msg','list','📋 رسالة بقايمة (لحد 10)'],['msg','link','🔗 رسالة بزرار لينك'],['ship','','🚚 مناطق الشحن والأسعار'],['cond','in_hours','🕐 شرط: مواعيد العمل'],['cond','has_orders','🛍️ شرط: طلب قبل كده؟'],['act','open_human','🧑‍💼 حوّل لخدمة العملاء'],['act','assign','👤 وزّع على موظف'],['act','done','✅ خلّص'],['act','close','🔒 اقفل الشات']];
+  const add = [['tpl','','📋 قالب Meta (يتبعت أي وقت)'],['wait','','⏳ استنى وقت'],['msg','text','💬 رسالة نص'],['msg','buttons','🔘 رسالة بزراير (لحد 3)'],['msg','list','📋 رسالة بقايمة (لحد 10)'],['msg','link','🔗 رسالة بزرار لينك'],['ship','','🚚 مناطق الشحن والأسعار'],['cond','in_hours','🕐 شرط: مواعيد العمل'],['cond','has_orders','🛍️ شرط: طلب قبل كده؟'],['cond','paid','💳 شرط: مدفوع؟'],['cond','total_gt','💰 شرط: الإجمالي أكبر من'],['act','open_human','🧑‍💼 حوّل لخدمة العملاء'],['act','assign','👤 وزّع على موظف'],['act','done','✅ خلّص'],['act','close','🔒 اقفل الشات']];
   m.innerHTML = add.map((a, i) => `<div onclick="wfAdd('${pid}','${key}',${i})">${a[2]}</div>`).join('');
   m.style.left = (parseFloat(el.style.left) - 95) + 'px'; m.style.top = (parseFloat(el.style.top) + 34) + 'px';
   $('wf-canvas').appendChild(m);
@@ -45772,6 +45793,8 @@ function wfAdd(pid, key, i){
   if(a[0] === 'msg') n = { type:'msg', data:{ mode:a[1], text:'', buttons: a[1] === 'buttons' || a[1] === 'list' ? [{ id:_wfNid('o'), label:'' }] : undefined, url: a[1] === 'link' ? '{site}' : undefined, link_label: a[1] === 'link' ? 'افتح الموقع' : undefined }, next:{} };
   else if(a[0] === 'ship') n = { type:'ship', data:{ text:'اختار منطقتك وهنقولك مصاريف الشحن ومدة التوصيل 👇', days:'1-3', days_far:'1-4', far:'BA,MT,SIN,JS' }, next:{} };
   else if(a[0] === 'cond') n = { type:'cond', data:{ kind:a[1], hours:'10-17', off_days:'fri' }, next:{} };
+  else if(a[0] === 'tpl') n = { type:'tpl', data:{ name:'', lang:'ar', vars:[], url:{} }, next:{} };
+  else if(a[0] === 'wait') n = { type:'wait', data:{ minutes:60 }, next:{} };
   else n = { type:'act', data:{ kind:a[1] }, next:{} };
   _wf.g.nodes[id] = n;
   const p = _wf.g.nodes[pid]; p.next = p.next || {}; p.next[key] = id;
@@ -45807,7 +45830,7 @@ function wfSide(){
   const ta = (fld, lab, ph, rows = 4, max = 1024) => `<label>${lab}</label><textarea id="wfx-${fld}" class="form-input" rows="${rows}" maxlength="${max}" placeholder="${ph || ''}" style="line-height:1.8"
       oninput="_wfSet('data.${fld}', this.value)">${escapeHtml(d[fld] || '')}</textarea>`;
   const inp = (fld, lab, ph, max = 60, ltr) => `<label>${lab}</label><input type="text" class="form-input" maxlength="${max}" placeholder="${ph || ''}" ${ltr ? 'style="direction:ltr"' : ''} value="${escapeHtml(d[fld] ?? '')}" oninput="_wfSet('data.${fld}', this.value)">`;
-  const vars = fld => `<div style="margin-top:3px">${['{name}','{site}','{app_link}'].map(v => `<span class="wf-var" onclick="wfVarIns('${fld}','${v}')">${v}</span>`).join('')}<span style="font-size:10.5px;color:var(--muted)"> ← دوس تضيف</span></div>`;
+  const vars = fld => `<div style="margin-top:3px">${['{name}','{site}','{app_link}', ...(_wfIsOrder() ? WF_VARS_ORDER : [])].map(v => `<span class="wf-var" onclick="wfVarIns('${fld}','${v}')">${v}</span>`).join('')}<span style="font-size:10.5px;color:var(--muted)"> ← دوس تضيف</span></div>`;
   const en = (inner) => `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:#4338ca">🇬🇧 نسخة إنجليزي (للعميل اللي بيكتب إنجليزي)</summary>${inner}</details>`;
   let h = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:18px">${T.ic || ''}</span><b style="font-size:14px">${escapeHtml(_wfNodeTitle(n))}</b></div>`;
   if(n.type === 'start'){
@@ -45815,6 +45838,12 @@ function wfSide(){
     h += `<label>الفلو يبدأ لما…</label><select class="form-input" onchange="_wfSet('data.trigger.type', this.value);wfSide()">${Object.entries(WF_TRIG).map(([k, v]) => `<option value="${k}" ${t.type === k ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
     if(t.type === 'wa_first') h += `<label>يعتبر «راجع» لو ما كلّمناش بقاله كام يوم</label><input type="number" class="form-input" min="1" value="${t.days ?? 30}" style="width:110px" oninput="_wfSet('data.trigger.days', Number(this.value)||30)">
       <div style="font-size:11px;color:var(--muted);margin-top:6px">العميل الجديد خالص بيدخل على طول. لو فيه أكتر من فلو ترحيب منشور، أقدم واحد بس اللي بيشتغل.</div>`;
+    else if(/^order_/.test(t.type)){
+      if(t.type === 'order_status') h += `<label>لما الحالة تبقى</label><select class="form-input" onchange="_wfSet('data.trigger.status', this.value)">${['', ...WF_STATUSES].map(s => `<option value="${s}" ${t.status === s ? 'selected' : ''}>${s || '— اختار —'}</option>`).join('')}</select>`;
+      h += `<label>${t.type === 'order_printed' ? 'بعد الطباعة بكام دقيقة' : 'بعدها بكام دقيقة'} (0 = على طول)</label><input type="number" class="form-input" min="0" value="${t.delay_min ?? 0}" style="width:110px" oninput="_wfSet('data.trigger.delay_min', Number(this.value)||0)">
+        <label style="display:flex;gap:6px;align-items:center;font-weight:600"><input type="checkbox" ${t.own_only !== false ? 'checked' : ''} onchange="_wfSet('data.trigger.own_only', this.checked)"> مناديبنا بس (من غير بوسطة والمحل)</label>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">بيشتغل مرة واحدة لكل طلب، وعلى الطلبات اللي بعد ما تنشر بس. أول خطوة لازم تكون <b>قالب Meta</b> — العميل ممكن مايكونش كلّمنا في آخر 24 ساعة.<br>المتغيرات المتاحة: ${WF_VARS_ORDER.join(' ')}</div>`;
+    }
     else h += `<label>الكلمات (مفصولة بفاصلة)</label><textarea class="form-input" rows="3" oninput="_wfSet('data.trigger.words', this.value)">${escapeHtml(t.words || '')}</textarea>
       <label style="display:flex;gap:6px;align-items:center;font-weight:600"><input type="checkbox" ${t.exact ? 'checked' : ''} onchange="_wfSet('data.trigger.exact', this.checked)"> الرسالة لازم تكون الكلمة بالظبط (مش جواها)</label>`;
   }
@@ -45844,6 +45873,7 @@ function wfSide(){
   }
   if(n.type === 'cond'){
     h += `<label>الشرط</label><select class="form-input" onchange="_wfSet('data.kind', this.value);wfSide()">${Object.entries(WF_CONDS).map(([k, v]) => `<option value="${k}" ${d.kind === k ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
+    if(d.kind === 'total_gt') h += inp('value', 'المبلغ (ج)', '2000', 10, true);
     if(d.kind === 'in_hours') h += inp('hours', 'المواعيد (من-لحد بالساعة)', '10-17', 10, true) + inp('off_days', 'أيام الإجازة', 'fri', 40, true) + `<div style="font-size:11px;color:var(--muted)">sat sun mon tue wed thu fri — مفصولة بفاصلة</div>`;
     h += `<div style="font-size:11.5px;margin-top:8px">الرسمة بتتفرع لـ <b style="color:#16a34a">✅ آه</b> و <b style="color:#dc2626">❌ لأ</b> — كمّل كل فرع من الـ ＋ اللي تحته.</div>`;
   }
@@ -45855,6 +45885,13 @@ function wfSide(){
     }
     h += `<div style="font-size:11px;color:var(--muted);margin-top:8px">${d.kind === 'open_human' ? 'الشات بيتفتح ويبقى «مستني رد» — من غيره الشات بيفضل مقفول طول ما العميل بيدوس زراير.' : d.kind === 'done' ? 'الفلو يخلص والشات مش هيبان إنه مستني رد.' : ''}</div>`;
   }
+  if(n.type === 'wait'){
+    h += `<label>استنى قد إيه</label><div style="display:flex;gap:6px"><input type="number" class="form-input" min="1" value="${(Number(d.minutes) || 60) % 1440 === 0 ? (Number(d.minutes) || 60) / 1440 : (Number(d.minutes) || 60) % 60 === 0 ? (Number(d.minutes) || 60) / 60 : (Number(d.minutes) || 60)}" style="width:90px" id="wf-wait-n">
+      <select class="form-input" id="wf-wait-u" style="width:auto">${[[1,'دقيقة'],[60,'ساعة'],[1440,'يوم']].map(([k, v]) => `<option value="${k}" ${((Number(d.minutes) || 60) % 1440 === 0 ? 1440 : (Number(d.minutes) || 60) % 60 === 0 ? 60 : 1) === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+      <button class="btn btn-sm" onclick="_wfSet('data.minutes', Math.max(1,(Number($('wf-wait-n').value)||1)*Number($('wf-wait-u').value)));wfSide()">✓</button></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">لو اللي بعدها رسالة عادية (مش قالب) والعميل ماكلّمناش في آخر 24 ساعة، واتساب هيرفضها — خلّي اللي بعد الاستنى قالب.</div>`;
+  }
+  if(n.type === 'tpl') h += _wfTplPanel(d);
   if(id !== _wf.g.start) h += `<hr style="margin:14px 0;border:none;border-top:1px solid var(--border)"><button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="wfDelNode()">🗑️ امسح الخطوة دي واللي بعدها</button>`;
   box.innerHTML = h;
 }
@@ -45921,6 +45958,80 @@ async function wfLogOpen(){
     document.body.appendChild(m); }
   $('wf-log-body').innerHTML = rows ? `<div style="max-height:65vh;overflow:auto"><table class="tbl" style="width:100%;font-size:12px"><thead><tr><th>الوقت</th><th>العميل</th><th>إيه حصل</th><th>الخطوة</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div style="color:var(--muted)">لسه مفيش حاجة</div>';
   openM('m-wf-log');
+}
+
+// ── 📋 v1079: لوحة القالب ──
+function _wfTplPanel(d){
+  const T = _wf.tpls;
+  if(!T) return '<div style="color:var(--muted)">⏳ بيحمّل القوالب…</div>';
+  const usable = T.filter(t => t.category !== 'AUTHENTICATION');
+  const st = s => s === 'APPROVED' ? '✅' : s === 'REJECTED' ? '❌' : '⏳';
+  let h = `<label>القالب</label><select class="form-input" onchange="const [n,l]=this.value.split('|');_wfSet('data.name',n,false);_wfSet('data.lang',l||'ar',false);_wfSet('data.vars',[],false);_wfSet('data.url',{});wfSide()">
+    <option value="">— اختار قالب —</option>${usable.map(t => `<option value="${escapeHtml(t.name)}|${t.lang}" ${d.name === t.name && (d.lang || 'ar') === t.lang ? 'selected' : ''}>${st(t.status)} ${escapeHtml(t.name)} (${t.lang})</option>`).join('')}</select>
+    <div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-sm btn-ghost" onclick="wfTplNew()">＋ قالب جديد</button><button class="btn btn-sm btn-ghost" onclick="_wf.tpls=null;apiFetch('/api/wf/templates/list?fresh=1','GET').then(t=>{_wf.tpls=(t&&t.templates)||[];wfDraw();wfSide()})">🔄 حدّث الحالة</button></div>`;
+  const t = _wfTpl(d);
+  if(!t) return h + (d.name ? `<div style="color:#b45309;margin-top:8px">القالب «${escapeHtml(d.name)}» مش لاقيه — يمكن اتمسح أو لسه بيتعمل</div>` : '');
+  h += `<div style="margin-top:8px;padding:8px 10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:12.5px;white-space:pre-wrap;line-height:1.7">${escapeHtml(t.body)}</div>
+    <div style="font-size:11.5px;margin-top:4px">${t.status === 'APPROVED' ? '<span style="color:#16a34a">✅ متوافق عليه</span>' : t.status === 'REJECTED' ? '<span style="color:#dc2626">❌ مرفوض من Meta</span>' : '<span style="color:#b45309">⏳ مستني موافقة Meta — مش هيتبعت لحد ما يتقبل</span>'}</div>`;
+  const nv = Math.max(0, ...[...t.body.matchAll(/\{\{(\d+)\}\}/g)].map(x => Number(x[1])));
+  const opts = ['{name}', ...WF_VARS_ORDER, '{site}'];
+  for(let i = 0; i < nv; i++){
+    const v = (d.vars || [])[i] || '';
+    h += `<label>{{${i + 1}}} =</label><div style="display:flex;gap:6px"><select class="form-input" style="width:48%" onchange="if(this.value){const a=[...(_wf.g.nodes[_wf.sel].data.vars||[])];a[${i}]=this.value;_wfSet('data.vars',a);wfSide()}">
+      <option value="">اختار…</option>${opts.map(o => `<option ${v === o ? 'selected' : ''}>${o}</option>`).join('')}</select>
+      <input type="text" class="form-input" value="${escapeHtml(v)}" placeholder="أو اكتب" oninput="const a=[...(_wf.g.nodes[_wf.sel].data.vars||[])];a[${i}]=this.value;_wfSet('data.vars',a)"></div>`;
+  }
+  (t.buttons || []).forEach((b, i) => {
+    if(b.type === 'URL' && b.dyn){
+      const v = (d.url || {})[i] || '';
+      h += `<label>زرار «${escapeHtml(b.text)}» يفتح</label><select class="form-input" onchange="const u={...(_wf.g.nodes[_wf.sel].data.url||{})};u[${i}]=this.value;_wfSet('data.url',u)">
+        ${[['','— اختار —'],['{call_code}','📞 اتصال بالمندوب'],['{wa_code}','💬 واتساب المندوب']].map(([k, l]) => `<option value="${k}" ${v === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+    }
+  });
+  const q = (t.buttons || []).filter(b => b.type === 'QUICK_REPLY');
+  if(q.length) h += `<div style="font-size:11.5px;margin-top:8px">الردود السريعة (${q.map(b => '«' + escapeHtml(b.text) + '»').join('، ')}) بقت فروع في الرسمة — كمّل كل واحد من الـ ＋.</div>`;
+  return h;
+}
+function wfTplNew(){
+  const d = _wf.g.nodes[_wf.sel]?.data || {};
+  let m = document.getElementById('m-wf-tpl');
+  if(!m){ m = document.createElement('div'); m.id = 'm-wf-tpl'; m.className = 'modal-overlay'; m.style.cssText = 'display:none;z-index:1160'; document.body.appendChild(m); }
+  const chips = ['{name}', ...WF_VARS_ORDER].map(v => `<span class="wf-var" onclick="const t=$('wft-body');const p=t.selectionStart??t.value.length;t.value=t.value.slice(0,p)+'${v}'+t.value.slice(p);t.focus()">${v}</span>`).join('');
+  m.innerHTML = `<div class="modal" style="max-width:600px"><div class="modal-header"><h3 style="margin:0">📋 قالب جديد لـ Meta</h3><button class="modal-close" onclick="closeM('m-wf-tpl')">×</button></div>
+    <div class="modal-body" id="wft-b">
+      <label style="font-size:12px;font-weight:700">اسم القالب (إنجليزي)</label><input id="wft-name" class="form-input" style="width:100%;direction:ltr" placeholder="out_for_delivery">
+      <label style="font-size:12px;font-weight:700;margin-top:10px;display:block">النص</label>
+      <textarea id="wft-body" class="form-input" rows="6" style="width:100%;font-family:Cairo,sans-serif;line-height:1.8" placeholder="أهلاً {name} 👋&#10;طلبك رقم {order_no} خرج مع المندوب {courier_name} 🚚"></textarea>
+      <div>${chips}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Meta مش بتقبل النص يبدأ أو يخلص بمتغير. خليه عن الطلب ده بس (من غير عروض) عشان يتقبل Utility.</div>
+      <label style="font-size:12px;font-weight:700;margin-top:10px;display:block">الزراير</label><div id="wft-btns"></div>
+      <button class="btn btn-sm btn-ghost" onclick="wfTplBtnAdd()">＋ زرار</button>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost btn-sm" onclick="closeM('m-wf-tpl')">إلغاء</button><button class="btn btn-primary btn-sm" id="wft-go" onclick="wfTplSubmit()">📤 قدّمه لـ Meta</button></div>
+    </div></div>`;
+  _wf._tb = [{ type:'call', text:'📞 اتصل بالمندوب' }, { type:'wa', text:'💬 واتساب المندوب' }, { type:'qr', text:'✅ تمام أنا موجود' }];
+  wfTplBtnDraw(); openM('m-wf-tpl');
+}
+function wfTplBtnAdd(){ if(_wf._tb.length >= 10) return; _wf._tb.push({ type:'qr', text:'' }); wfTplBtnDraw(); }
+function wfTplBtnDraw(){
+  $('wft-btns').innerHTML = _wf._tb.map((b, i) => `<div class="wf-opt"><select class="form-input" style="width:42%" onchange="_wf._tb[${i}].type=this.value;wfTplBtnDraw()">
+      ${[['qr','↩️ رد سريع (فرع)'],['call','📞 اتصال بالمندوب'],['wa','💬 واتساب المندوب'],['url','🔗 لينك']].map(([k, l]) => `<option value="${k}" ${b.type === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <input class="form-input" maxlength="25" value="${escapeHtml(b.text)}" placeholder="اسم الزرار" oninput="_wf._tb[${i}].text=this.value">
+      ${b.type === 'url' ? `<input class="form-input" style="direction:ltr" value="${escapeHtml(b.url || '')}" placeholder="https://" oninput="_wf._tb[${i}].url=this.value">` : ''}
+      <button class="btn btn-xs btn-ghost" style="color:var(--danger)" onclick="_wf._tb.splice(${i},1);wfTplBtnDraw()">✕</button></div>`).join('');
+}
+async function wfTplSubmit(){
+  const b = $('wft-go'); b.disabled = true;
+  try{
+    const r = await apiFetch('/api/wf/tpl', 'POST', { name:$('wft-name').value, body:$('wft-body').value, buttons:_wf._tb });
+    if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
+    const n = _wf.g.nodes[_wf.sel];
+    if(n?.type === 'tpl'){ n.data = { name:r.name, lang:r.lang, vars:r.vars, url:r.url }; _wf.dirty = true; wfBar(); }
+    toast('📤 اتقدّم لـ Meta — هيتراجع في خلال دقايق لساعات');
+    closeM('m-wf-tpl');
+    const t = await apiFetch('/api/wf/templates/list?fresh=1', 'GET'); _wf.tpls = (t && t.templates) || [];
+    if(!_wf.tpls.some(x => x.name === r.name)) _wf.tpls.push({ name:r.name, lang:r.lang, status:r.status || 'PENDING', category:'UTILITY', body:$('wft-body').value.replace(/\{(\w+)\}/g, (m, k) => { const i = r.vars.indexOf(m); return i >= 0 ? '{{' + (i + 1) + '}}' : m; }), buttons:_wf._tb.map(x => ({ type: x.type === 'qr' ? 'QUICK_REPLY' : 'URL', text:x.text, dyn: x.type === 'call' || x.type === 'wa' })) });
+    wfDraw(); wfSide();
+  } finally { b.disabled = false; }
 }
 
 async function waiLearnOpen(){ openM('m-wai-learn'); waiLearnLoad(); }
