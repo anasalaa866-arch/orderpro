@@ -6632,7 +6632,10 @@ body.solo .sidebar,body.solo .topbar,body.solo .wai-solo-hide{display:none!impor
 #page-wa-inbox .wai-sug .tx{white-space:pre-wrap;line-height:1.65;color:#14532d;max-height:140px;overflow:auto}
 body.solo .content{padding:8px!important}
 body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
-@media (max-width:1100px){ #page-wa-inbox .wai{grid-template-columns:300px 1fr} #page-wa-inbox .wai-side{display:none} }
+@media (max-width:1100px){ #page-wa-inbox .wai{grid-template-columns:300px 1fr} #page-wa-inbox .wai-side{display:none}
+  #page-wa-inbox .wai-sidebtn{display:inline-flex!important}
+  #page-wa-inbox .wai.side-open .wai-side{display:block;position:fixed;inset:0;z-index:3000;background:var(--card,#fff);padding:14px 14px 30px;font-size:14px;overflow:auto}
+  #page-wa-inbox .wai.side-open .wai-side-x{display:flex!important} }
 @media (max-width:760px){
   #page-wa-inbox .wai{grid-template-columns:1fr;height:calc(100vh - 120px)}
   #page-wa-inbox .wai.open .wai-list{display:none}
@@ -12567,7 +12570,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1067';
+const UI_BUILD = 'v1068';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45267,7 +45270,7 @@ function waiRenderList(){
 
 async function waiOpen(waId){
   _wai.cur = waId; _wai.msgs = []; _wai.lastId = 0; _wai.replyTo = null;
-  $('wai')?.classList.add('open');
+  $('wai')?.classList.add('open'); waiSideToggle(false);
   waiRenderList();
   $('wai-chat').innerHTML = '<div style="margin:auto;color:#667781">⏳</div>';
   try{
@@ -45358,6 +45361,7 @@ function waiRenderChat(scroll){
         ${c.assigned_to && !agents.find(a => a.username === c.assigned_to) ? `<option selected>${escapeHtml(c.assigned_to)}</option>` : ''}
       </select>
       ${_wai.ai?.can ? `<button class="btn btn-ghost btn-sm" title="ملخص المحادثة بالـ AI" onclick="waiAi('summary', !!_wai.ai.summary && _wai.ai.showSum)">📝 ملخص</button>` : ''}
+      <button class="btn btn-ghost btn-sm wai-sidebtn" style="display:none" title="بيانات العميل وطلباته" onclick="waiSideToggle(true)">👤 العميل</button>
       <button class="btn btn-ghost btn-sm" title="نسخ لينك المحادثة دي" onclick="_waiCopy(_waiLink(_wai.cur))">🔗</button>
       ${(_wai.orders || []).length || _wai.contact?.flow_order ? `<button class="btn btn-ghost btn-sm" title="لينك فاتورة الطلب على cafelax.com" onclick="waiInvPick()">🧾 فاتورة</button>` : ''}
       <button class="btn btn-sm ${c.status === m.closed ? 'btn-ghost' : ''}" style="${c.status === m.closed ? '' : 'background:#16a34a;color:#fff;border-color:#16a34a;'}padding:3px 10px" onclick="waiCloseToggle()">${c.status === m.closed ? '📂 افتح' : '✅ اقفل'}</button>
@@ -45622,10 +45626,14 @@ async function waiCheck(id, btn){
   _wai.proofs[m.wamid || ('local-' + m.id)] = { level:r.level, reasons:r.reasons, warn:r.warn, result:{ ...r.result, expected:r.expected }, order_id: oid ? (/^SH-/.test(oid) ? oid : 'SH-' + oid) : null };
   const keep = $('wai-text')?.value || ''; waiRenderChat(false); if($('wai-text')) $('wai-text').value = keep;
 }
+// 📱 v1068: على الموبايل/الشاشة الصغيرة الشاشة الجانبية بتفتح كاملة من زرار «👤 العميل»
+function waiSideToggle(on){ document.querySelector('#page-wa-inbox .wai')?.classList.toggle('side-open', !!on); }
 function waiRenderSide(orders){
   const c = _wai.contact || {};
   const side = $('wai-side'); if(!side) return;
   side.innerHTML = `
+    <div class="wai-side-x" style="display:none;align-items:center;justify-content:space-between;margin:-4px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+      <b>👤 بيانات العميل</b><button class="btn btn-ghost btn-sm" onclick="waiSideToggle(false)">✕ رجوع للشات</button></div>
     <div style="font-weight:800;margin-bottom:6px">👤 ${escapeHtml(c.name || '—')}</div>
     ${_waiMeta() ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">${({fb:'📘 Messenger',ig:'📸 Instagram'})[_wai.contact?.channel] || ''}${_wai.contact?.handle ? ' · @' + escapeHtml(_wai.contact.handle) : ''}</div>` : `<div style="font-family:Roboto,sans-serif;direction:ltr;text-align:right;margin-bottom:10px">${_waiPhone(_wai.cur)}
       <button class="btn btn-ghost btn-sm" style="padding:0 6px" onclick="navigator.clipboard.writeText('${_waiPhone(_wai.cur)}');toast('✅ اتنسخ')">📋</button></div>`}
@@ -45655,6 +45663,7 @@ async function waiInvLink(id){
   else _waiCopy(r.url);
 }
 function waiOpenOrder(id){
+  waiSideToggle(false);
   if(typeof orders !== 'undefined' && orders.find(x => x.id === id)) return openEditOrder(id);
   toast('الطلب مش في القايمة المحمّلة — دوّر عليه في صفحة الطلبات: ' + id);
 }
