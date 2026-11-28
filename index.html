@@ -12675,7 +12675,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1083';
+const UI_BUILD = 'v1084';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -46170,7 +46170,7 @@ async function waiStartOpen(phone, name){
   openM('m-wai-start');
   const r = await apiFetch('/api/wa/start/templates', 'GET');
   if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
-  _waiSt.list = (r.templates || []).filter(t => !t.dynUrl); _waiSt.def = r.def;
+  _waiSt.list = (r.templates || []).filter(t => !t.dynUrl); _waiSt.def = r.def; _waiSt.missing = r.missing || [];
   const st = s => s === 'APPROVED' ? '✅' : s === 'REJECTED' ? '❌' : '⏳';
   const sorted = [..._waiSt.list].sort((a, b) => (b.name === r.def) - (a.name === r.def) || (b.status === 'APPROVED') - (a.status === 'APPROVED'));
   $('wst-tpl').innerHTML = sorted.map(t => `<option value="${escapeHtml(t.name)}|${t.lang}" ${t.status !== 'APPROVED' ? 'disabled' : ''}>${st(t.status)} ${escapeHtml(t.name)} (${t.lang})${t.status !== 'APPROVED' ? ' — مستني موافقة' : ''}</option>`).join('');
@@ -46180,7 +46180,9 @@ async function waiStartOpen(phone, name){
 function _waiStCur(){ const [n, l] = String($('wst-tpl')?.value || '').split('|'); return _waiSt.list.find(t => t.name === n && t.lang === l); }
 function waiStartVars(){
   const t = _waiStCur(), box = $('wst-vars'); if(!box) return;
-  box.innerHTML = !t ? '<div style="color:#b45309;margin-top:8px">⏳ مفيش قالب متوافق عليه لسه — قالب «متابعة المكالمة» اتقدّم لـ Meta ومستني الموافقة</div>'
+  box.innerHTML = !t ? (_waiSt.missing.length
+      ? `<div style="color:#b45309;margin-top:8px">⚠️ قالب «متابعة المكالمة» (${escapeHtml(_waiSt.missing.join('، '))}) مش متقدّم لـ Meta لسه <button class="btn btn-sm btn-primary" onclick="waiStartSubmitTpl(this)">📤 قدّمه دلوقتي</button></div>`
+      : (_waiSt.list.length ? '<div style="color:#b45309;margin-top:8px">⏳ القالب متقدّم ومستني موافقة Meta — جرّب بعد شوية</div>' : '<div style="color:#b45309;margin-top:8px">مفيش قوالب — حددها من الإعدادات (واتساب ← القوالب اللي تظهر في «محادثة جديدة»)</div>'))
     : Array.from({ length:t.nvars }, (_, i) => `<label style="font-size:12px;font-weight:700;margin-top:8px;display:block">{{${i + 1}}}${i === 0 ? ' (لو فاضي = الاسم)' : ''}</label><input class="form-input wst-v" style="width:100%" oninput="waiStartPreview()">`).join('');
   waiStartPreview();
 }
@@ -46194,6 +46196,12 @@ function waiStartPreview(){
   if(!t){ p.style.display = 'none'; return; } p.style.display = '';
   const v = _waiStVals();
   p.innerHTML = escapeHtml(t.body.replace(/\{\{(\d+)\}\}/g, (m, k) => v[k - 1] || m)) + (t.buttons.length ? '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">' + t.buttons.map(b => `<span style="background:#fff;border-radius:8px;padding:3px 10px;color:#0b7a5c;font-weight:700">${escapeHtml(b)}</span>`).join('') + '</div>' : '');
+}
+async function waiStartSubmitTpl(b){
+  b.disabled = true;
+  const r = await apiFetch('/api/wa/start/submit-tpl', 'POST', {});
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); b.disabled = false; return; }
+  toast('📤 اتقدّم — Meta بتراجعه في دقايق لساعات'); waiStartOpen($('wst-phone').value, $('wst-name').value);
 }
 async function waiStartSend(){
   const t = _waiStCur(); if(!t){ toast('اختار قالب'); return; }
