@@ -12570,7 +12570,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1069';
+const UI_BUILD = 'v1070';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45462,6 +45462,13 @@ async function waiTplOpen(){
   const QL = { GREEN:'🟢 جودة عالية', YELLOW:'🟡 جودة متوسطة', RED:'🔴 جودة ضعيفة' };
   const list = (r.templates || []).slice().sort((a, b) => (b.ours - a.ours) || a.name.localeCompare(b.name));
   const n = k => list.filter(t => t.status === k).length;
+  _waiTplA = { map: { ...(r.assign || {}) }, agents: r.agents || [] };
+  const agSel = t => { const cur = String(_waiTplA.map[t.name] || '').toLowerCase();
+    const sel = _waiTplA.agents.find(a => a.username.toLowerCase() === cur || String(a.name).toLowerCase() === cur);
+    return `<div style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px"><span style="color:var(--muted)">👤 يتوزّع على:</span>
+      <select class="form-input" style="width:auto;padding:2px 6px;font-size:12px;${sel ? 'background:#ecfdf5;border-color:#16a34a;font-weight:700' : ''}" onchange="waiTplAssign('${escapeHtml(t.name)}', this.value, this)">
+        <option value="">— مش متوزّع —</option>${_waiTplA.agents.map(a => `<option value="${escapeHtml(a.username)}" ${sel && sel.username === a.username ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}
+      </select></div>`; };
   b.innerHTML = `<div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">${list.length} قالب · ✅ ${n('APPROVED')} · ⏳ ${n('PENDING')} · ❌ ${n('REJECTED')} — <button class="btn btn-ghost btn-sm" onclick="waiTplOpen()">🔄 تحديث</button></div>` +
     list.map(t => { const s = ST[t.status] || ['•', t.status, '#555', '#f3f4f6'], c = CAT[t.category] || [t.category, '#555', '#f3f4f6'];
       return `<div style="border:1px solid var(--border);border-radius:10px;padding:9px 11px;margin-bottom:8px">
@@ -45476,9 +45483,20 @@ async function waiTplOpen(){
         ${t.rejected_reason ? `<div style="font-size:11.5px;color:#b91c1c;margin-top:4px">سبب الرفض: ${escapeHtml(RR[t.rejected_reason] || t.rejected_reason)}</div>` : ''}
         ${t.quality && t.quality !== 'UNKNOWN' ? `<div style="font-size:11px;margin-top:3px">${QL[t.quality] || t.quality}</div>` : ''}
         <div dir="auto" style="font-size:12px;color:var(--muted);white-space:pre-wrap;margin-top:5px;max-height:5.5em;overflow:hidden;text-align:start">${escapeHtml(t.body)}</div>
+        ${agSel(t)}
         ${(t.buttons || []).length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px">${t.buttons.map(x => `<span style="font-size:11px;border:1px solid var(--border);border-radius:8px;padding:1px 8px;color:#0284c7">${escapeHtml(x)}</span>`).join('')}</div>` : ''}
       </div>`; }).join('') +
     ((r.submitted || []).filter(x => x.error).length ? `<div style="font-size:12px;color:#b91c1c;margin-top:6px">أخطاء التقديم: ${(r.submitted || []).filter(x => x.error).map(x => escapeHtml((x.name || '') + ': ' + x.error)).join(' · ')}</div>` : '');
+}
+// 👤 v1070: توزيع القالب على موظف — من القايمة بدل ما تكتب في الإعدادات
+let _waiTplA = { map:{}, agents:[] };
+async function waiTplAssign(name, user, el){
+  if(user) _waiTplA.map[name] = user; else delete _waiTplA.map[name];
+  const value = Object.entries(_waiTplA.map).map(([k, v]) => k + ' = ' + v).join('\n');
+  const r = await apiFetch('/api/config', 'POST', { key:'wa_tpl_assign', value });
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'ماتحفظش'), 'error'); return; }
+  if(el) el.style.cssText += user ? ';background:#ecfdf5;border-color:#16a34a;font-weight:700' : ';background:;border-color:;font-weight:400';
+  toast(user ? '✅ القالب هيتوزّع على ' + (_waiTplA.agents.find(a => a.username === user)?.name || user) : '✅ القالب مش هيتوزّع على حد');
 }
 const _wl = { days:30, f:'fixes', d:null };
 async function waiLearnOpen(){ openM('m-wai-learn'); waiLearnLoad(); }
