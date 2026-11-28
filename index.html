@@ -6651,6 +6651,7 @@ body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
       <a class="btn btn-ghost btn-sm wai-solo-only" href="./" style="text-decoration:none;align-items:center" title="افتح أوردر برو كامل">🏠 أوردر برو</a>
       <button class="btn btn-ghost btn-sm" id="wai-tplbtn" style="display:none" onclick="waiTplOpen()" title="حالة قوالب واتساب عند Meta">📋 القوالب</button>
       <button class="btn btn-ghost btn-sm" id="wai-learnbtn" style="display:none" onclick="waiLearnOpen()" title="الـ AI بيتعلّم إزاي من ردودكم">🎓 تعلّم الـ AI</button>
+      <button class="btn btn-ghost btn-sm" id="wai-teachbtn" style="display:none" onclick="waiTeachOpen()" title="ضيف معلومة للـ AI في سطر">🎓 علّمه</button>
       <button class="btn btn-ghost btn-sm wai-solo-hide" onclick="window.open(_waiLink(),'_blank')" title="الصفحة لوحدها من غير القايمة">↗ تاب منفصل</button>
       <button class="btn btn-ghost btn-sm" onclick="_waiCopy(_waiLink())">🔗 نسخ اللينك</button>
     </div>
@@ -8805,6 +8806,27 @@ body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
       <button class="modal-close" onclick="closeM('m-wai-tpl')">×</button>
     </div>
     <div class="modal-body" id="wai-tpl-body"></div>
+  </div>
+</div>
+
+<!-- 🎓 v1075: علّمه — معلومة جديدة للـ AI في سطر -->
+<div id="m-wai-teach" class="modal-overlay" style="display:none;z-index:1160">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <h3 style="margin:0">🎓 علّم Lax AI معلومة</h3>
+      <button class="modal-close" onclick="closeM('m-wai-teach')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">اكتبها زي ما تحب الـ AI يعرفها — جملة واضحة. هتتضاف لـ «معلومات للـ AI» وهيستخدمها من الاقتراح الجاي.</div>
+      <textarea id="wai-teach-txt" class="form-input" rows="4" maxlength="500" placeholder="مثال: الاستبدال خلال 14 يوم بشرط إن العبوة متتفتحش"
+        style="width:100%;font-family:Cairo,sans-serif;font-size:13.5px;line-height:1.9;padding:10px 12px;border-radius:10px"
+        onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey))waiTeachSave()"></textarea>
+      <div id="wai-teach-info" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <button class="btn btn-ghost btn-sm" onclick="closeM('m-wai-teach')">إلغاء</button>
+        <button class="btn btn-primary btn-sm" id="wai-teach-go" onclick="waiTeachSave()">🎓 علّمه</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -12571,7 +12593,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1074';
+const UI_BUILD = 'v1076';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45239,6 +45261,7 @@ function waiRenderList(){
   // 🔒 v1071: القوالب وتعلّم الـ AI للمدير بس
   const isMgr = currentUser?.username === 'admin' || currentUser?.role === 'admin';
   const lb = $('wai-learnbtn'); if(lb) lb.style.display = m.ai_can && isMgr ? '' : 'none';
+  const thb = $('wai-teachbtn'); if(thb) thb.style.display = m.ai_can && isMgr ? '' : 'none';
   const tb = $('wai-tplbtn'); if(tb) tb.style.display = isMgr ? '' : 'none';
   // 📂 v1060: مفتوحة / مقفولة + تحديد جماعي
   const bx = _wai.box || 'open', sel = _wai.sel;
@@ -45523,6 +45546,25 @@ async function waiTplAssign(name, user, el){
 }
 const _wl = { days:30, f:'fixes', d:null };
 async function waiLearnOpen(){ openM('m-wai-learn'); waiLearnLoad(); }
+// 🎓 v1075: علّمه — سطر واحد يتضاف لـ «معلومات للـ AI»
+function waiTeachOpen(){
+  const t = $('wai-teach-txt'); if(t) t.value = '';
+  const i = $('wai-teach-info'); if(i) i.textContent = 'Ctrl + Enter للحفظ';
+  openM('m-wai-teach'); setTimeout(() => t && t.focus(), 50);
+}
+async function waiTeachSave(){
+  const t = $('wai-teach-txt'), b = $('wai-teach-go');
+  const text = String(t?.value || '').trim();
+  if(!text){ toast('اكتب المعلومة الأول'); return; }
+  if(b) b.disabled = true;
+  try{
+    const r = await apiFetch('/api/wa/ai/feedback/0/kb', 'POST', { text });
+    if(!r || r.error){ toast('❌ ' + (r?.error || _errText(_apiLastErr, 'فشل'))); return; }
+    toast(`✅ اتعلّمها — المعلومات بقت ${r.length} / ${r.max} حرف`);
+    closeM('m-wai-teach');
+  }catch(e){ toast('❌ ' + e.message); }
+  finally{ if(b) b.disabled = false; }
+}
 async function waiLearnLoad(){
   const b = $('wai-learn-body'); if(!b) return;
   if(!_wl.d) b.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted)">⏳</div>';
@@ -72622,7 +72664,7 @@ function _cfgRow(r){
   if(k === 'bool') ctl = `<button class="cfsw ${Number(r.value) ? 'on' : ''}" onclick="cfgSet('${key}', this.classList.contains('on') ? '0' : '1')" title="${Number(r.value) ? 'شغّال' : 'مقفول'}"></button>`;
   else if(k === 'time') ctl = `<input type="time" class="form-input" style="width:120px;direction:ltr" value="${escapeHtml(r.value)}" onchange="cfgSet('${key}', this.value)">`;
   else if(k === 'weekday') ctl = `<select class="form-input" style="width:130px" onchange="cfgSet('${key}', this.value)">${days.map((d, i) => `<option value="${i}" ${Number(r.value) === i ? 'selected' : ''}>${d}</option>`).join('')}</select>`;
-  else if(r.type === 'text' && (r.max || 0) > 100) ctl = `<textarea class="form-input" rows="3" maxlength="${r.max}" placeholder="فاضي = مقفول" style="width:min(380px,60vw);font-size:12.5px" onchange="cfgSet('${key}', this.value)">${escapeHtml(r.value ?? '')}</textarea>`;
+  else if(r.type === 'text' && (r.max || 0) > 100) ctl = _cfgBigText(key, r.value, r.max, `cfgSet('${key}', this.value)`);
   else if(r.type === 'text') ctl = `<input class="form-input" type="text" maxlength="${r.max || 60}" placeholder="فاضي = مقفول" style="width:220px;direction:ltr" value="${escapeHtml(r.value ?? '')}" onchange="cfgSet('${key}', this.value)">`;
   else ctl = `<input class="form-input" type="number" step="any" inputmode="decimal" style="width:120px;direction:ltr;text-align:center;font-family:Roboto,sans-serif;font-weight:700" value="${r.value}" onchange="cfgSet('${key}', this.value)">`;
   const defTxt = k === 'bool' ? (Number(r.def) ? 'شغّال' : 'مقفول') : k === 'weekday' ? days[Number(r.def)] || r.def : (r.def === '' ? 'فاضي' : r.def);
@@ -72702,9 +72744,7 @@ async function cfgLoad(){
               ${r.expires?`<div style="font-size:10.5px;color:var(--muted)">لحد ${escapeHtml(r.expires)}</div>`:''}
             </span>
             ${r.type==='text' && (r.max||0) > 100
-              ? `<textarea class="form-input" rows="4" maxlength="${r.max}" placeholder="فاضي = مقفول"
-                   style="width:min(420px,90vw);padding:6px 8px;font-family:Cairo,sans-serif;font-size:12.5px"
-                   onchange="cfgSave('${r.key}', this)">${escapeHtml(r.value ?? '')}</textarea>`
+              ? _cfgBigText(r.key, r.value, r.max, `cfgSave('${r.key}', this)`)
               : r.type==='text'
               ? `<input class="form-input" type="text" maxlength="${r.max||60}" placeholder="فاضي = مقفول"
                    style="width:200px;padding:4px 7px;direction:ltr" value="${escapeHtml(r.value ?? '')}"
@@ -72720,6 +72760,20 @@ async function cfgLoad(){
   }catch(e){ body.innerHTML = '<span style="color:#dc2626">❌ ' + escapeHtml(e.message) + '</span>'; }
 }
 
+// 🆕 v1075: خانات النص الطويل — عرض كامل، بتكبر مع الكلام، وعدّاد حروف
+function _cfgBigText(key, value, max, onchange){
+  const v = String(value ?? '').replace(/\\n/g, '\n');
+  const big = (max || 0) >= 1000;
+  const rows = big ? Math.min(22, Math.max(6, v.split('\n').length + 1)) : 4;
+  const cnt = `<span style="font-size:11px;color:${v.length > max * 0.9 ? '#dc2626' : 'var(--muted)'}">${v.length} / ${max}</span>`;
+  const ta = `<textarea class="form-input" rows="${rows}" maxlength="${max}" placeholder="${big ? 'سطر لكل معلومة…' : 'فاضي = مقفول'}"
+      style="width:${big ? '100%' : 'min(420px,90vw)'};padding:${big ? '10px 12px' : '6px 8px'};font-family:Cairo,sans-serif;font-size:13px;line-height:1.9;resize:vertical${big ? ';background:#fafbff;border:1px solid #c7d2fe;border-radius:10px' : ''}"
+      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,620)+'px';const c=this.parentElement.querySelector('.cfg-cnt');if(c){c.textContent=this.value.length+' / ${max}';c.style.color=this.value.length>${max}*0.9?'#dc2626':'var(--muted)'}"
+      onchange="${onchange.replace(/"/g, '&quot;')}">${escapeHtml(v)}</textarea>`;
+  if(!big) return ta;
+  return `<div style="flex-basis:100%;display:flex;flex-direction:column;gap:4px">${ta}
+    <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;color:var(--muted)">💾 بيتحفظ لما تضغط برّه الخانة</span><span class="cfg-cnt">${cnt}</span></div></div>`;
+}
 async function cfgSave(key, el, reset){
   const msg = document.getElementById('cfg-msg');
   const send = async confirmed => {
