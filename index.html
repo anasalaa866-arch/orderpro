@@ -2174,6 +2174,7 @@ tr:hover td{background:#fafbff}
     <div class="api-badge wait desktop-only" id="api-badge">⏳ جاري...</div>
     <button class="btn btn-ghost desktop-only" onclick="syncNow()">🔄 مزامنة</button>
       <button class="btn btn-ghost desktop-only" id="btn-import-shopify" onclick="openImportModal()" style="color:var(--purple);border-color:var(--purple)">📥 استيراد من Shopify</button>
+    <button id="tb-wa" class="btn btn-ghost" style="display:none;position:relative;padding:6px 10px;border-color:#25d366" title="محادثات واتساب" onclick="goPage(document.querySelector('.ni[data-p=wa-inbox]'),'wa-inbox')">💬<span id="tb-wa-n" style="display:none;position:absolute;top:-6px;left:-6px;background:#25d366;color:#fff;border-radius:99px;font-size:10px;font-weight:800;min-width:18px;height:18px;line-height:18px;padding:0 4px;font-family:Roboto,sans-serif">0</span></button>
     <button class="btn btn-primary" onclick="openM('m-order')">＋ طلب جديد</button>
     <div class="desktop-only" style="display:flex;align-items:center;gap:8px;margin-right:8px;border-right:1px solid var(--border);padding-right:12px">
       <span id="user-badge" style="font-size:12px;color:var(--muted);font-family:Roboto,sans-serif">👤</span>
@@ -12593,7 +12594,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1076';
+const UI_BUILD = 'v1077';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -14292,12 +14293,14 @@ orders=data.orders.map(o=>{
     const newO=orders[0];
     const isExpress = isSameDay(newO);
     pushNotif('📦','طلب جديد من Shopify!',`${newO.id} — ${newO.name} — ${newO.total} ج`);
-    toast('🛍 طلب جديد: '+newO.name+' ('+newO.total+' ج)');
-    playNotifSound(isExpress);
-    sendPushNotif(
-      isExpress ? '⚡ طلب مستعجل جديد!' : '📦 طلب جديد من Shopify!',
-      `${newO.name} — ${newO.total.toLocaleString()} ج — ${newO.area||''}`
-    );
+    if(!_notifOrderOff()){                       // 🔔 v1077: مقفول لبعض المستخدمين من الإعدادات
+      toast('🛍 طلب جديد: '+newO.name+' ('+newO.total+' ج)');
+      playNotifSound(isExpress);
+      sendPushNotif(
+        isExpress ? '⚡ طلب مستعجل جديد!' : '📦 طلب جديد من Shopify!',
+        `${newO.name} — ${newO.total.toLocaleString()} ج — ${newO.area||''}`
+      );
+    }
   }
   try{
     const rc=await apiFetch('/api/couriers');
@@ -14358,6 +14361,19 @@ function getAudioCtx(){
   return _audioCtx;
 }
 
+// 🔔 v1077: هل المستخدم الحالي مقفول عنه إشعار «طلب جديد»؟ (بيتحمّل مرة وبيتحدّث كل 10 دقايق)
+let _notifOffList = null, _notifOffT = 0;
+function _notifOrderOff(){
+  if(Date.now() - _notifOffT > 600000){
+    _notifOffT = Date.now();
+    apiFetch('/api/config', 'GET').then(r => {
+      const row = (r && r.rows || []).find(x => x.key === 'notif_order_off_users');
+      if(row) _notifOffList = String(row.value || '').split(/[\s,،]+/).map(x => x.trim().toLowerCase()).filter(Boolean);
+    }).catch(() => {});
+  }
+  const me = String(currentUser?.username || '').toLowerCase();
+  return !!(me && _notifOffList && _notifOffList.includes(me));
+}
 function playNotifSound(isExpress=false){
   try{
     const ctx = getAudioCtx(); if(!ctx) return;
@@ -30312,6 +30328,7 @@ async function doLogin(){
   document.getElementById('main-app').style.display = '';
 
   applyPermissions(user.role, user.pages||null);
+  try{ _tbWaSet(0); _notifOrderOff(); }catch(_){}   // 💬🔔 v1077
   lkLoad();        // 🔒 v731: هات الصفحات المقفولة وعلّم عليها
 
   const userBadge = document.getElementById('user-badge');
@@ -32964,6 +32981,7 @@ window.addEventListener('load', function(){
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('main-app').style.display = '';
     applyPermissions(currentUser.role, currentUser.pages||null);
+    try{ _tbWaSet(0); _notifOrderOff(); }catch(_){}   // 💬🔔 v1077
     setTimeout(_deepLink, 0);
     const userBadge = document.getElementById('user-badge');
     if(userBadge) userBadge.textContent = '👤 '+currentUser.name;
@@ -45311,7 +45329,7 @@ function waiRenderList(){
         </div>
       </div></div>`;
   }).join('') : '<div style="padding:24px;text-align:center;color:var(--muted);font-size:12.5px">مفيش محادثات</div>';
-  const tot = c.unread || 0; const nb = $('nb-wa-inbox'); if(nb){ nb.textContent = tot; nb.style.display = tot ? '' : 'none'; }
+  const tot = c.unread || 0; const nb = $('nb-wa-inbox'); if(nb){ nb.textContent = tot; nb.style.display = tot ? '' : 'none'; } _tbWaSet(tot);
 }
 
 async function waiOpen(waId){
@@ -45928,10 +45946,17 @@ async function waiTick(){
     if(Date.now() - _wai.listT > 9000) waiLoad();
   }catch(e){}
 }
+// 💬 v1077: أيقونة واتساب ثابتة فوق — بتظهر لمين ليه صلاحية المحادثات
+function _tbWaSet(n){
+  const b = $('tb-wa'); if(!b) return;
+  b.style.display = (typeof canPage === 'function' && canPage('wa-inbox')) ? '' : 'none';
+  const c = $('tb-wa-n'); if(c){ c.textContent = n > 99 ? '99+' : n; c.style.display = n ? '' : 'none'; }
+}
+setTimeout(() => _tbWaSet(0), 3000);
 // 🔔 العدّاد في القايمة الجانبية — كل 30 ثانية لو ليك صلاحية
 setInterval(async () => {
   if(!window._adminToken || typeof canPage !== 'function' || !canPage('wa-inbox') || _waiOn()) return;
-  try{ const r = await apiFetch('/api/wa/unread', 'GET'); const nb = $('nb-wa-inbox'); if(nb && r){ nb.textContent = r.unread || 0; nb.style.display = r.unread ? '' : 'none'; } }catch(e){}
+  try{ const r = await apiFetch('/api/wa/unread', 'GET'); const nb = $('nb-wa-inbox'); if(nb && r){ nb.textContent = r.unread || 0; nb.style.display = r.unread ? '' : 'none'; } if(r) _tbWaSet(r.unread || 0); }catch(e){}
 }, 30000);
 
 // 🔢 v1034: الرقم الصحيح من غير .00 — أقصر، فمايتقصّش على الموبايل
@@ -72558,7 +72583,8 @@ function setShellOpen(){
       .cfr{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)}
       .cfr:last-child{border-bottom:none} .cfr.chg{background:#eff6ff}
       .cfr .nm{font-weight:800;font-size:13px} .cfr .nt{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.6}
-      .cfr .ctl{display:flex;align-items:center;gap:6px;flex-shrink:0}
+      .cfr .ctl{display:flex;align-items:center;gap:6px;flex-shrink:0}
+      .cfr.wide{flex-wrap:wrap} .cfr.wide>div:first-child{flex:1 1 100%} .cfr.wide .ctl{flex:1 1 100%;flex-wrap:wrap}
       .cfsw{width:42px;height:24px;border-radius:12px;background:#cbd5e1;position:relative;cursor:pointer;transition:background .15s;border:none;padding:0}
       .cfsw::after{content:'';position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:right .15s}
       .cfsw.on{background:#16a34a} .cfsw.on::after{right:21px}
@@ -72664,17 +72690,42 @@ function _cfgRow(r){
   if(k === 'bool') ctl = `<button class="cfsw ${Number(r.value) ? 'on' : ''}" onclick="cfgSet('${key}', this.classList.contains('on') ? '0' : '1')" title="${Number(r.value) ? 'شغّال' : 'مقفول'}"></button>`;
   else if(k === 'time') ctl = `<input type="time" class="form-input" style="width:120px;direction:ltr" value="${escapeHtml(r.value)}" onchange="cfgSet('${key}', this.value)">`;
   else if(k === 'weekday') ctl = `<select class="form-input" style="width:130px" onchange="cfgSet('${key}', this.value)">${days.map((d, i) => `<option value="${i}" ${Number(r.value) === i ? 'selected' : ''}>${d}</option>`).join('')}</select>`;
+  else if(key === 'notif_order_off_users') ctl = _cfgUserPick(key, r.value);
   else if(r.type === 'text' && (r.max || 0) > 100) ctl = _cfgBigText(key, r.value, r.max, `cfgSet('${key}', this.value)`);
   else if(r.type === 'text') ctl = `<input class="form-input" type="text" maxlength="${r.max || 60}" placeholder="فاضي = مقفول" style="width:220px;direction:ltr" value="${escapeHtml(r.value ?? '')}" onchange="cfgSet('${key}', this.value)">`;
   else ctl = `<input class="form-input" type="number" step="any" inputmode="decimal" style="width:120px;direction:ltr;text-align:center;font-family:Roboto,sans-serif;font-weight:700" value="${r.value}" onchange="cfgSet('${key}', this.value)">`;
   const defTxt = k === 'bool' ? (Number(r.def) ? 'شغّال' : 'مقفول') : k === 'weekday' ? days[Number(r.def)] || r.def : (r.def === '' ? 'فاضي' : r.def);
-  return `<div class="cfr ${r.changed ? 'chg' : ''}" data-cfg-key="${key}">
+  const wide = key === 'notif_order_off_users' || (r.type === 'text' && (r.max || 0) >= 1000);
+  return `<div class="cfr ${r.changed ? 'chg' : ''} ${wide ? 'wide' : ''}" data-cfg-key="${key}">
     <div style="flex:1;min-width:0"><div class="nm">${escapeHtml(_cfgCleanLabel(r.label))}${r.changed ? ' <span style="font-size:10.5px;color:#1d4ed8;font-weight:700">● معدّل</span>' : ''}
       ${r.expired ? ' <span style="font-size:10.5px;color:#dc2626">⏰ العقد خلص</span>' : r.expiring ? ' <span style="font-size:10.5px;color:#92400e">⏳ قرب يخلص</span>' : ''}</div>
       ${r.note ? `<div class="nt">${escapeHtml(r.note)}</div>` : ''}${r.expires ? `<div class="nt">لحد ${escapeHtml(r.expires)}</div>` : ''}</div>
     <div class="ctl">${ctl}${u ? `<span style="font-size:12px;color:var(--muted);min-width:26px">${u}</span>` : ''}
       ${r.changed ? `<button class="btn btn-ghost btn-xs" title="رجّعه للأصلي" onclick="cfgSet('${key}', null, true)">↩️ ${escapeHtml(String(defTxt))}</button>` : ''}</div></div>`;
 }
+// 🔔 v1077: اختيار المستخدمين بـ checkboxes — القيمة = usernames مفصولة بفاصلة
+let _cfgUsersCache = null;
+function _cfgUserPick(key, value){
+  const sel = new Set(String(value || '').split(/[\s,،]+/).map(x => x.trim().toLowerCase()).filter(Boolean));
+  const id = 'cup-' + key;
+  const on = u => sel.has(String(u.username).toLowerCase());
+  const draw = () => {
+    const box = document.getElementById(id); if(!box || !_cfgUsersCache) return;
+    const U = _cfgUsersCache.filter(u => u.active !== false);
+    box.innerHTML = U.map(u => `<label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid ${on(u) ? '#fca5a5' : 'var(--border)'};border-radius:99px;background:${on(u) ? '#fef2f2' : 'var(--bg)'};cursor:pointer;font-size:12.5px">
+        <input type="checkbox" data-u="${escapeHtml(u.username)}" ${on(u) ? 'checked' : ''} onchange="_cfgUserPickSave('${key}')">
+        ${on(u) ? '🔕' : '🔔'} ${escapeHtml(u.name || u.username)}</label>`).join('')
+      + `<div style="flex-basis:100%;font-size:11px;color:var(--muted);margin-top:4px">🔕 = مايجيلوش إشعار · ${sel.size ? sel.size + ' متعلّم' : 'الكل بيجيله دلوقتي'}</div>`;
+  };
+  if(_cfgUsersCache) setTimeout(draw, 0);
+  else apiFetch('/api/users', 'GET').then(r => { _cfgUsersCache = (r && r.users) || []; draw(); }).catch(() => {});
+  return `<div id="${id}" style="display:flex;flex-wrap:wrap;gap:6px;width:100%"><span style="color:var(--muted);font-size:12px">⏳</span></div>`;
+}
+async function _cfgUserPickSave(key){
+  const box = document.getElementById('cup-' + key); if(!box) return;
+  const v = [...box.querySelectorAll('input[data-u]:checked')].map(i => i.dataset.u).join(',');
+  await cfgSet(key, v);
+}
 function cfgRender(){
   const body = document.getElementById('cfg-body'); if(!body || !_cfgRows) return;
   const q = String(_setQ || '').trim().toLowerCase();
