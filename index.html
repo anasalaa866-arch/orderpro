@@ -7921,6 +7921,7 @@ body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
     .wfn.t-cond{border-color:#fcd34d} .wfn.t-cond .hd{background:#fef3c7;color:#92400e}
     .wfn.t-act{border-color:#86efac} .wfn.t-act .hd{background:#dcfce7;color:#166534}
     .wfn.t-tpl{border-color:#5eead4} .wfn.t-tpl .hd{background:#ccfbf1;color:#115e59}
+    .wfn.t-sms{border-color:#fda4af} .wfn.t-sms .hd{background:#ffe4e6;color:#9f1239}
     .wfn.t-wait{border-color:#cbd5e1} .wfn.t-wait .hd{background:#f1f5f9;color:#334155}
     .wfadd{position:absolute;width:30px;height:30px;border-radius:50%;border:2px dashed #94a3b8;background:#fff;color:#64748b;font-size:18px;line-height:24px;text-align:center;cursor:pointer}
     .wfadd:hover{border-color:#6366f1;color:#6366f1;background:#eef2ff}
@@ -7940,6 +7941,7 @@ body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
       <span style="font-weight:900;font-size:15px">🗺️ فلوهات واتساب</span>
       <span style="color:var(--muted);font-size:12px">ارسم الفلو، جرّبه على رقمك، وبعدين انشره</span>
       <span style="margin-inline-start:auto"></span>
+      <button class="btn btn-sm btn-ghost" onclick="wfSmsOpen()" title="ربط SMS Misr والتجربة">📱 SMS</button>
       <button class="btn btn-sm btn-ghost" onclick="wfImportWelcome()" title="ينقل الترحيبي اللي شغال دلوقتي لرسمة">⬇️ استورد الترحيبي الحالي</button>
       <button class="btn btn-sm btn-primary" onclick="wfNew()">＋ فلو جديد</button>
     </div>
@@ -12657,7 +12659,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1081';
+const UI_BUILD = 'v1082';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45639,6 +45641,7 @@ const WF_TYPES = {
   act:{ ic:'⚙️', t:'أكشن' },
   tpl:{ ic:'📋', t:'قالب Meta' },
   wait:{ ic:'⏳', t:'استنى' },
+  sms:{ ic:'📱', t:'SMS' },
 };
 const WF_VARS_ORDER = ['{order_no}','{due}','{total}','{courier_name}','{courier_phone}','{area}'];
 const WF_STATUSES = ['جاري التوصيل','مكتمل','مرتجع','ملغي'];
@@ -45761,6 +45764,7 @@ function _wfNodeTitle(n){
   if(n.type === 'act') return WF_ACTS[d.kind] || 'أكشن';
   if(n.type === 'tpl') return 'قالب: ' + (d.name ? d.name.replace(/^cafelax_/, '') : '— اختار —');
   if(n.type === 'wait') return 'استنى ' + _wfDur(d.minutes);
+  if(n.type === 'sms') return 'SMS';
   return (WF_TYPES[n.type] || {}).t || n.type;
 }
 function _wfNodeBody(n){
@@ -45772,6 +45776,7 @@ function _wfNodeBody(n){
   if(n.type === 'tpl'){ const t = _wfTpl(d); if(!t) return d.name ? '⏳ بيحمّل…' : ''; const st = t.status === 'APPROVED' ? '' : `[${t.status}] `;
     return st + t.body.replace(/\{\{(\d+)\}\}/g, (m, k) => (d.vars || [])[k - 1] || m); }
   if(n.type === 'wait') return '';
+  if(n.type === 'sms') return d.text || '';
   if(n.type === 'msg') return (d.text || '') + (d.mode === 'link' ? `\n🔗 ${d.link_label || ''}` : '');
   if(n.type === 'ship') return (d.text || '') + `\n(${_wf.regions.length} منطقة — السعر من إعدادات التوصيل)`;
   if(n.type === 'cond') return d.kind === 'in_hours' ? `${d.hours || '10-17'} · إجازة: ${d.off_days || '—'}` : d.kind === 'total_gt' ? `> ${d.value || 0} ج` : '';
@@ -45783,7 +45788,7 @@ function wfMenuClose(){ document.querySelectorAll('.wf-menu').forEach(m => m.rem
 function wfAddMenu(el, pid, key){
   wfMenuClose();
   const m = document.createElement('div'); m.className = 'wf-menu';
-  const add = [['tpl','','📋 قالب Meta (يتبعت أي وقت)'],['wait','','⏳ استنى وقت'],['msg','text','💬 رسالة نص'],['msg','buttons','🔘 رسالة بزراير (لحد 3)'],['msg','list','📋 رسالة بقايمة (لحد 10)'],['msg','link','🔗 رسالة بزرار لينك'],['ship','','🚚 مناطق الشحن والأسعار'],['cond','in_hours','🕐 شرط: مواعيد العمل'],['cond','has_orders','🛍️ شرط: طلب قبل كده؟'],['cond','paid','💳 شرط: مدفوع؟'],['cond','total_gt','💰 شرط: الإجمالي أكبر من'],['act','open_human','🧑‍💼 حوّل لخدمة العملاء'],['act','assign','👤 وزّع على موظف'],['act','done','✅ خلّص'],['act','close','🔒 اقفل الشات']];
+  const add = [['tpl','','📋 قالب Meta (يتبعت أي وقت)'],['wait','','⏳ استنى وقت'],['sms','','📱 SMS'],['msg','text','💬 رسالة نص'],['msg','buttons','🔘 رسالة بزراير (لحد 3)'],['msg','list','📋 رسالة بقايمة (لحد 10)'],['msg','link','🔗 رسالة بزرار لينك'],['ship','','🚚 مناطق الشحن والأسعار'],['cond','in_hours','🕐 شرط: مواعيد العمل'],['cond','has_orders','🛍️ شرط: طلب قبل كده؟'],['cond','paid','💳 شرط: مدفوع؟'],['cond','total_gt','💰 شرط: الإجمالي أكبر من'],['act','open_human','🧑‍💼 حوّل لخدمة العملاء'],['act','assign','👤 وزّع على موظف'],['act','done','✅ خلّص'],['act','close','🔒 اقفل الشات']];
   m.innerHTML = add.map((a, i) => `<div onclick="wfAdd('${pid}','${key}',${i})">${a[2]}</div>`).join('');
   m.style.left = (parseFloat(el.style.left) - 95) + 'px'; m.style.top = (parseFloat(el.style.top) + 34) + 'px';
   $('wf-canvas').appendChild(m);
@@ -45797,6 +45802,7 @@ function wfAdd(pid, key, i){
   else if(a[0] === 'cond') n = { type:'cond', data:{ kind:a[1], hours:'10-17', off_days:'fri' }, next:{} };
   else if(a[0] === 'tpl') n = { type:'tpl', data:{ name:'', lang:'ar', vars:[], url:{} }, next:{} };
   else if(a[0] === 'wait') n = { type:'wait', data:{ minutes:60 }, next:{} };
+  else if(a[0] === 'sms') n = { type:'sms', data:{ text:'' }, next:{} };
   else n = { type:'act', data:{ kind:a[1] }, next:{} };
   _wf.g.nodes[id] = n;
   const p = _wf.g.nodes[pid]; p.next = p.next || {}; p.next[key] = id;
@@ -45893,7 +45899,10 @@ function wfSide(){
       <button class="btn btn-sm" onclick="_wfSet('data.minutes', Math.max(1,(Number($('wf-wait-n').value)||1)*Number($('wf-wait-u').value)));wfSide()">✓</button></div>
       <div style="font-size:11px;color:var(--muted);margin-top:6px">لو اللي بعدها رسالة عادية (مش قالب) والعميل ماكلّمناش في آخر 24 ساعة، واتساب هيرفضها — خلّي اللي بعد الاستنى قالب.</div>`;
   }
-  if(n.type === 'tpl') h += _wfTplPanel(d);
+  if(n.type === 'tpl'){ h += _wfTplPanel(d);
+    h += `<details style="margin-top:10px" ${d.sms_fb ? 'open' : ''}><summary style="cursor:pointer;font-size:12px;color:#4338ca">📱 SMS بديل لو الواتساب فشل (الرقم مش عليه واتساب)</summary>${ta('sms_fb', 'نص الـ SMS (فاضي = مفيش بديل)', 'طلبك رقم {order_no} خرج مع المندوب…', 3, 600)}${vars('sms_fb')}${_wfSmsCount(d.sms_fb)}</details>`; }
+  if(n.type === 'sms') h += ta('text', 'نص الـ SMS', '', 4, 600) + vars('text') + _wfSmsCount(d.text)
+    + `<div style="font-size:11px;color:var(--muted);margin-top:6px">بيتبعت من SMS Misr — لازم يكون شغّال من الإعدادات (SMS). مفيش زراير في الـ SMS، فالفلو بيكمّل على طول.</div>`;
   if(id !== _wf.g.start) h += `<hr style="margin:14px 0;border:none;border-top:1px solid var(--border)"><button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="wfDelNode()">🗑️ امسح الخطوة دي واللي بعدها</button>`;
   box.innerHTML = h;
 }
@@ -46034,6 +46043,37 @@ async function wfTplSubmit(){
     if(!_wf.tpls.some(x => x.name === r.name)) _wf.tpls.push({ name:r.name, lang:r.lang, status:r.status || 'PENDING', category:'UTILITY', body:$('wft-body').value.replace(/\{(\w+)\}/g, (m, k) => { const i = r.vars.indexOf(m); return i >= 0 ? '{{' + (i + 1) + '}}' : m; }), buttons:_wf._tb.map(x => ({ type: x.type === 'qr' ? 'QUICK_REPLY' : 'URL', text:x.text, dyn: x.type === 'call' || x.type === 'wa' })) });
     wfDraw(); wfSide();
   } finally { b.disabled = false; }
+}
+
+function _wfSmsCount(t){ t = String(t || ''); if(!t) return ''; const ar = /[^\x00-\x7F]/.test(t), n = [...t].length, per = ar ? (n > 70 ? 67 : 70) : (n > 160 ? 153 : 160);
+  return `<div style="font-size:11px;color:var(--muted);margin-top:3px;font-family:Roboto">${n} حرف · ${Math.max(1, Math.ceil(n / per))} رسالة SMS${ar ? ' (عربي: 70 حرف للرسالة)' : ''}</div>`; }
+// 📱 v1082: لوحة SMS
+async function wfSmsOpen(bal){
+  const r = await apiFetch('/api/sms/status' + (bal ? '?balance=1' : ''), 'GET');
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
+  let m = document.getElementById('m-wf-sms');
+  if(!m){ m = document.createElement('div'); m.id = 'm-wf-sms'; m.className = 'modal-overlay'; m.style.cssText = 'display:none;z-index:1150';
+    m.innerHTML = `<div class="modal" style="max-width:640px"><div class="modal-header"><h3 style="margin:0">📱 SMS Misr</h3><button class="modal-close" onclick="closeM('m-wf-sms')">×</button></div><div class="modal-body" id="wf-sms-b"></div></div>`;
+    document.body.appendChild(m); }
+  const ok = (b, t, f) => `<div>${b ? '✅' : '❌'} ${b ? t : f}</div>`;
+  $('wf-sms-b').innerHTML = `<div style="font-size:13px;line-height:2">
+      ${ok(r.has_creds, 'اليوزر والباسورد متسجّلين في Railway', 'ناقص SMSMISR_USERNAME و SMSMISR_PASSWORD في Railway (Variables)')}
+      ${ok(r.on, 'SMS شغّال', 'SMS مقفول — الإعدادات ← SMS ← «SMS شغّال» = 1')}
+      <div>${r.live ? '🟢 وضع حقيقي (Live)' : '🧪 وضع التجربة — بيستخدم رصيد وSender التجربة'}</div>
+      ${r.balance != null ? `<div>💰 الرصيد: <span style="font-family:Roboto">${escapeHtml(r.balance)}</span></div>` : `<button class="btn btn-sm btn-ghost" onclick="wfSmsOpen(true)">💰 اعرف الرصيد</button>`}
+    </div>
+    <div style="display:flex;gap:6px;margin-top:10px;align-items:center"><input id="wf-sms-ph" class="form-input" style="width:160px;direction:ltr;font-family:Roboto" placeholder="01xxxxxxxxx" value="${escapeHtml(localStorage.getItem('wf_test_phone') || '')}">
+      <input id="wf-sms-tx" class="form-input" style="flex:1" value="رسالة تجربة من كافيلاكس ☕"><button class="btn btn-sm btn-primary" onclick="wfSmsTest()">📤 جرّب</button></div>
+    <div style="margin-top:12px;max-height:40vh;overflow:auto"><table class="tbl" style="width:100%;font-size:12px"><thead><tr><th>الوقت</th><th>الرقم</th><th>الرسالة</th><th>الحالة</th></tr></thead><tbody>
+      ${(r.last || []).map(x => `<tr><td style="font-family:Roboto;white-space:nowrap">${new Date(x.at).toLocaleString('en-GB', { timeZone:'Africa/Cairo', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}</td>
+        <td style="font-family:Roboto">${escapeHtml(x.mobile || '')}</td><td>${escapeHtml(String(x.body || '').slice(0, 60))}</td>
+        <td>${x.ok ? '✅' + (x.test ? ' 🧪' : '') : '❌ ' + escapeHtml(x.error || '')}</td></tr>`).join('') || '<tr><td colspan="4" style="color:var(--muted)">لسه مفيش</td></tr>'}</tbody></table></div>`;
+  openM('m-wf-sms');
+}
+async function wfSmsTest(){
+  const r = await apiFetch('/api/sms/test', 'POST', { phone:$('wf-sms-ph').value, text:$('wf-sms-tx').value });
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); } else toast('📤 اتبعت' + (r.cost ? ' · التكلفة ' + r.cost : ''));
+  wfSmsOpen();
 }
 
 async function waiLearnOpen(){ openM('m-wai-learn'); waiLearnLoad(); }
