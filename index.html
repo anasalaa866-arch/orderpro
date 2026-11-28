@@ -12677,7 +12677,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1085';
+const UI_BUILD = 'v1086';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45767,7 +45767,7 @@ ${d.bank ? `<div class="notes"><b>بيانات التحويل: </b>${esc(d.bank)
 
 // ═══ 🧾 v1085: فواتير جروسرجي — PDF بس، مالهاش أي أثر على السيستم ═══
 const GJ_DEF = { company:{ name:'جروسرجي للتوزيع والتجارة', cr:'275516', tax:'778-019-774', addr:'محل LG-20، المركز التجاري تريفيوم سكوير، شارع التسعين الشمالي، القطاع الإداري الثالث، القاهرة الجديدة', phone:'01124255377', email:'',
-  bank:'كريدي أجريكول (Crédit Agricole) — اسم الحساب: Grocerjy — رقم الحساب: 11018180380614', title:'فاتورة ضريبية', titleEn:'TAX INVOICE', prefix:'GJ', notes:'' }, items:[], customers:[] };
+  bank:'كريدي أجريكول (Crédit Agricole) — اسم الحساب: Grocerjy — رقم الحساب: 11018180380614', title:'فاتورة ضريبية', titleEn:'TAX INVOICE', prefix:'GJ', notes:'', costPct:20 }, items:[], customers:[] };
 const _gj = { d:null, inv:null, t:null };
 async function gjPageLoad(){
   if(!_gj.d){
@@ -45825,6 +45825,12 @@ function gjRender(){
         <td><button class="btn btn-xs btn-ghost" style="color:var(--danger)" onclick="_gj.inv.items.splice(${i},1);gjRender()">✕</button></td></tr>`).join('')}
       </tbody></table>
       <div style="display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap"><button class="btn btn-sm btn-ghost" onclick="_gj.inv.items.push({name:'',unit:'',qty:1,price:0,tax:14,disc:0});gjRender()">＋ صنف</button>
+        <span style="display:inline-flex;gap:4px;align-items:center;background:var(--bg2,#f1f5f9);border-radius:8px;padding:3px 6px">
+          <button class="btn btn-sm btn-ghost" id="gj-rnd-btn" onclick="gjRandom()">🎲 ضيف أصناف عشوائي</button>
+          <input id="gj-rnd-n" class="form-input" type="number" min="1" max="50" value="${_gj.rndN || 3}" style="width:52px;font-family:Roboto" title="عدد الأصناف" oninput="_gj.rndN=this.value">
+          <span style="font-size:11.5px">صنف · التكلفة = البيع −</span>
+          <input class="form-input" type="number" min="0" max="90" step="any" value="${C.costPct ?? 20}" style="width:52px;font-family:Roboto" oninput="_gjSet('co.costPct', this.value)"><span style="font-size:11.5px">%</span>
+        </span>
         <span style="margin-inline-start:auto;font-size:12px">خصم إضافي</span>${inp('inv.discount', I.discount, '0', 'width:90px;font-family:Roboto', 'number')}</div>
     </div>
     <div class="card" style="padding:12px 14px;margin-bottom:10px">
@@ -45865,6 +45871,17 @@ function _gjSet(path, v){
 function gjPick(i, name){
   const x = _gj.d.items.find(z => z.name === name); const it = _gj.inv.items[i]; it.name = name;
   if(x){ it.unit = x.unit || ''; it.price = x.price; it.tax = x.tax; it.code = x.code || ''; gjRender(); } else gjPrev();
+}
+async function gjRandom(){
+  const n = Math.max(1, Math.min(50, parseInt(_gj.rndN || 3) || 3)), pct = Number(_gj.d.company.costPct ?? 20) || 0;
+  const btn = document.getElementById('gj-rnd-btn'); if(btn){ btn.disabled = true; btn.textContent = '⏳…'; }
+  const have = _gj.inv.items.map(i => String(i.name).split(' — ')[0]).filter(Boolean).join('|');
+  const r = await apiFetch('/api/gj/random-items?n=' + n + '&exclude=' + encodeURIComponent(have), 'GET');
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'مفيش رد')); gjRender(); return; }
+  _gj.inv.items = _gj.inv.items.filter(i => String(i.name).trim());
+  for(const x of r.items) _gj.inv.items.push({ name:x.name, code:x.code, unit:'قطعة', qty:1, price:Math.max(1, Math.round(x.price * (1 - pct / 100))), tax:'14', disc:0 });
+  if(!_gj.inv.items.length) _gj.inv.items.push({ name:'', unit:'', qty:1, price:0, tax:14, disc:0 });
+  toast(`🎲 ${r.items.length} صنف — التكلفة = سعر البيع −${pct}% متقربة لأقرب جنيه`); gjRender();
 }
 function gjSaveItems(){
   let n = 0;
