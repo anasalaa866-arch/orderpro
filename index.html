@@ -7908,6 +7908,7 @@ body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
       <button class="btn btn-sm btn-ghost" style="margin-inline-start:auto" onclick="gffLoad()">🔄 تحديث</button>
       <button class="btn btn-sm btn-primary" onclick="gffBuild(this)" title="ينشر الـ labels الحالية في الفيد اللي Merchant Center بيسحبه">📤 ابني وانشر الفيد</button>
     </div>
+    <div id="gff-link" style="padding:10px 16px 0;font-size:13px"></div>
     <div id="gff-cards" style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap"></div>
     <div style="padding:0 16px 8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <input id="gff-q" class="form-input" style="flex:1;min-width:200px;font-size:12px" placeholder="🔎 اسم / SKU / نوع / براند / id" oninput="_gffPage=1;gffRender()">
@@ -12570,7 +12571,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1073';
+const UI_BUILD = 'v1074';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -26304,7 +26305,25 @@ function _gffChip(v, old){
   return `<span style="display:inline-block;padding:1px 7px;border-radius:99px;font-size:10.5px;font-weight:700;color:${c};border:1px solid ${c}33;background:${c}11;font-family:Roboto,sans-serif">${escapeHtml(v)}</span>`
     + (old != null && old !== v ? `<div style="font-size:9.5px;color:var(--muted);text-decoration:line-through;font-family:Roboto,sans-serif">${escapeHtml(old || '—')}</div>` : '');
 }
+// 🆕 v1074: لينك الفيد + آخر سحب من جوجل
+function _gfLinkHtml(r){
+  const L = r.fetch_log || []; const g = L.find(x => x.google);
+  return `${r.url?`<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 10px;margin-bottom:8px">
+        <div style="font-weight:800;margin-bottom:4px">🔗 لينك الفيد — ده اللي يتحط في Merchant Center (Supplemental source)</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input readonly value="${escapeHtml(r.url)}" style="flex:1;direction:ltr;font-family:Roboto,monospace;font-size:11px;padding:6px;border:1px solid var(--border);border-radius:6px" onclick="this.select()">
+          <button class="btn btn-sm btn-primary" onclick="navigator.clipboard.writeText(this.previousElementSibling.value).then(()=>toast('✅ اتنسخ'))">📋 انسخ</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">فيه كلمة السر — متبعتهوش لحد</div>
+      </div>`:'<div style="color:#dc2626;font-weight:700;margin-bottom:8px">⚠️ مفيش token — اللينك مقفول</div>'}
+      <div style="margin-bottom:4px;font-weight:700;color:${g?'#16a34a':'#b45309'}">${g?`✅ جوجل سحب الفيد آخر مرة: ${new Date(g.at).toLocaleString('ar-EG-u-nu-latn')}`:'⏳ جوجل لسه ما سحبش الفيد'}${L.length?` <span style="color:var(--muted);font-weight:400">· آخر سحب من أي حد: ${new Date(L[0].at).toLocaleString('ar-EG-u-nu-latn')}</span>`:''}</div>`;
+}
+async function gffLinkLoad(){
+  const box = $('gff-link'); if(!box) return;
+  try{ const r = await apiFetch('/api/google-feed/status','GET'); if(r && !r.error) box.innerHTML = _gfLinkHtml(r); }catch(_){}
+}
 async function gffLoad(){
+  gffLinkLoad();
   $('gff-list').innerHTML = '⏳ بيحسب…';
   try{ _gff = await apiFetch('/api/google-feed/rows'); _gffPage = 1; gffRender(); }
   catch(e){ $('gff-list').innerHTML = `<span style="color:#dc2626">${escapeHtml(e.message)}</span>`; }
@@ -26799,6 +26818,7 @@ async function gfLoad(){
         <span style="color:var(--muted)">آخر بناء: ${r.built_at? new Date(r.built_at).toLocaleString('ar-EG-u-nu-latn'):'—'}</span>
         <span style="color:${r.has_token?'#16a34a':'#dc2626'}">${r.has_token?'✅ token متظبط':'⚠️ محطش token — الرابط مقفول'}</span>
       </div>
+      ${_gfLinkHtml(r)}
       ${r.preview?`<pre style="background:var(--bg);padding:8px;border-radius:8px;overflow:auto;font-size:11px;font-family:Roboto,monospace;direction:ltr;text-align:left">${escapeHtml(r.preview)}</pre>`:''}`;
   }catch(e){ box.innerHTML=`<span style="color:var(--danger)">❌ ${escapeHtml(e.message)}</span>`; }
 }
