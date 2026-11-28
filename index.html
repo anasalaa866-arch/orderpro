@@ -12570,7 +12570,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1068';
+const UI_BUILD = 'v1069';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45278,7 +45278,7 @@ async function waiOpen(waId){
     if(!r || r.error) throw new Error(r?.error || _errText(_apiLastErr, 'فشل'));
     if(_wai.cur !== waId) return;
     _wai.contact = r.contact; _wai.msgs = r.messages || []; _wai.proofs = r.proofs || {}; _wai.ai = { ...(r.ai || {}), showSum:false }; _wai.ready = r.ready || null; _wai.readySend = false; _wai.lastId = _wai.msgs.length ? _wai.msgs[_wai.msgs.length-1].id : 0;
-    _wai.orders = r.orders || [];
+    _wai.orders = r.orders || []; _wai.carts = r.carts || [];
     waiRenderChat(true); waiRenderSide(r.orders || []); _waiAiAuto();
     if(r.contact?.unread > 0){ apiFetch('/api/wa/conversations/' + waId + '/read', 'POST', {}).catch(()=>{});
       const cc = _wai.convs.find(x => x.wa_id === waId); if(cc){ cc.unread = 0; if(_wai.meta.counts) _wai.meta.counts.unread = Math.max(0, (_wai.meta.counts.unread||1) - 1); waiRenderList(); } }
@@ -45643,7 +45643,36 @@ function waiRenderSide(orders){
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><b style="font-family:Roboto,sans-serif">${escapeHtml(o.id)}</b><span style="margin-inline-start:auto;font-family:Roboto,sans-serif">${Number(o.total||0).toLocaleString('en-US')} ج</span><button class="btn btn-ghost btn-sm" style="padding:0 6px;font-size:11px" title="لينك الفاتورة على cafelax.com" onclick="event.stopPropagation();waiInvLink('${escapeHtml(o.id)}')">🧾</button></div>
         <div style="color:var(--muted);margin-top:2px">${escapeHtml(o.status||'')}${o.payment_gateway?' · '+escapeHtml(o.payment_gateway):''}${o.paid?' · ✅ مدفوع':''}</div>
         <div style="color:var(--muted);font-family:Roboto,sans-serif;font-size:10.5px">${o.created_at?_waiDay(o.created_at):''}</div></div>`).join('')
-      : '<div style="color:var(--muted)">مفيش طلبات بالرقم ده</div>'}`;
+      : '<div style="color:var(--muted)">مفيش طلبات بالرقم ده</div>'}
+    ${_waiCartsHtml()}`;
+}
+// 🛒 v1069: سلات العميل المتسابة (آخر 7 أيام — من الإعدادات)
+function _waiCartsHtml(){
+  const cs = _wai.carts || []; if(!cs.length) return '';
+  const n = v => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits:0 });
+  return `<div style="font-weight:800;margin:14px 0 6px">🛒 سلات متسابة (${cs.length})</div>` + cs.map((a, k) => {
+    const rec = a.status === 'recovered';
+    return `<div style="border:1px solid ${rec ? '#bbf7d0' : '#fed7aa'};background:${rec ? '#f0fdf4' : '#fff7ed'};border-radius:8px;padding:7px 8px;margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+        <b style="font-family:Roboto,sans-serif">${n(a.total)} ج</b>
+        <span style="font-size:10.5px;color:${rec ? '#047857' : '#c2410c'};font-weight:700">${rec ? '✅ اتعمل طلب' + (a.recovered_order ? ' ' + escapeHtml(a.recovered_order) : '') : '⏳ ماكملش'}</span></div>
+      <div style="color:var(--muted);font-family:Roboto,sans-serif;font-size:10.5px">${a.created_at ? _waiDay(a.created_at) : ''}</div>
+      <div style="margin-top:4px">${(a.items || []).map(i => `<div style="display:flex;gap:6px;align-items:center;margin:3px 0">
+        ${i.image ? `<img src="${escapeHtml(i.image)}" style="width:28px;height:28px;object-fit:cover;border-radius:4px;flex:none" loading="lazy">` : ''}
+        <span style="font-size:11.5px"><b style="font-family:Roboto,sans-serif">${Number(i.qty || 1)}×</b> ${escapeHtml(i.title || '')}${i.variant ? ' — ' + escapeHtml(i.variant) : ''}</span></div>`).join('')}</div>
+      ${!rec && a.url ? `<div style="display:flex;gap:6px;margin-top:5px">
+        <button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11px" onclick="waiCartLink(${k}, false)">🔗 نسخ لينك السلة</button>
+        <button class="btn btn-ghost btn-sm" style="padding:1px 8px;font-size:11px" onclick="waiCartLink(${k}, true)">✍️ حطه في الرد</button></div>` : ''}
+    </div>`;
+  }).join('');
+}
+function waiCartLink(k, put){
+  const a = (_wai.carts || [])[k]; if(!a?.url) return;
+  if(!put){ _waiCopy(a.url); return; }
+  const ta = $('wai-text'); if(!ta) return;
+  ta.value = (ta.value ? ta.value + '\n' : '') + 'تقدر تكمّل طلبك من هنا 👇\n' + a.url;
+  ta.style.height = 'auto'; ta.style.height = Math.min(120, ta.scrollHeight) + 'px';
+  waiSideToggle(false); ta.focus();
 }
 // 🧾 v1055: لينك الفاتورة على cafelax.com — ينفع يتبعت للعميل
 // 📱 v1056: على الموبايل اللوحة الجانبية مخفية — زرار في رأس المحادثة
