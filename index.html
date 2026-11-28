@@ -6651,6 +6651,7 @@ body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
       <div id="wai-top" style="font-size:12px;color:var(--muted)"></div>
       <a class="btn btn-ghost btn-sm wai-solo-only" href="./" style="text-decoration:none;align-items:center" title="افتح أوردر برو كامل">🏠 أوردر برو</a>
+      <button class="btn btn-primary btn-sm" onclick="waiStartOpen()" title="ابدأ محادثة مع عميل بقالب (اتصل بينا / ماكلّمناش في آخر 24 ساعة)">✉️ محادثة جديدة</button>
       <button class="btn btn-ghost btn-sm" id="wai-tplbtn" style="display:none" onclick="waiTplOpen()" title="حالة قوالب واتساب عند Meta">📋 القوالب</button>
       <button class="btn btn-ghost btn-sm" id="wai-learnbtn" style="display:none" onclick="waiLearnOpen()" title="الـ AI بيتعلّم إزاي من ردودكم">🎓 تعلّم الـ AI</button>
       <button class="btn btn-ghost btn-sm" id="wai-teachbtn" style="display:none" onclick="waiTeachOpen()" title="ضيف معلومة للـ AI في سطر">🎓 علّمه</button>
@@ -12656,7 +12657,7 @@ const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف الب
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1080';
+const UI_BUILD = 'v1081';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -45484,6 +45485,7 @@ function waiRenderChat(scroll){
         <div style="font-size:11px;color:var(--muted);font-family:Roboto,sans-serif;direction:ltr;text-align:right">${_waiMeta() ? ({fb:'📘 Messenger',ig:'📸 Instagram'}[c.channel]) + (c.handle ? ' · @' + escapeHtml(c.handle) : '') : _waiPhone(_wai.cur)}</div>
       </div>
       <span style="font-size:11px;padding:3px 8px;border-radius:10px;${locked?'background:#fee2e2;color:#b91c1c':'background:#e7f8ee;color:#047857'}">${c.standby?'👀 للعرض بس':!c.last_in_at?'⏳ مستني رد العميل':!c.window_open?'🔒 النافذة مقفولة':'⏱️ فاضل <b style="font-family:Roboto,sans-serif">'+left+'</b>'}</span>
+      ${!c.window_open && !c.standby && !_waiMeta() ? `<button class="btn btn-sm btn-primary" onclick="waiStartOpen('${escapeHtml(String(_wai.cur||''))}', ${escapeHtml(JSON.stringify(c.name||''))})" title="النافذة مقفولة — ابعت قالب عشان العميل يرد">📋 ابعت قالب</button>` : ''}
       <select class="form-input" style="width:auto;padding:4px 6px;font-size:12px" ${canAssign?'':'disabled'} onchange="waiAssign(this.value)">
         <option value="">— مش متوزعة —</option>${agents.map(a => `<option value="${escapeHtml(a.username)}" ${c.assigned_to===a.username?'selected':''}>👤 ${escapeHtml(a.name)}</option>`).join('')}
         ${c.assigned_to && !agents.find(a => a.username === c.assigned_to) ? `<option selected>${escapeHtml(c.assigned_to)}</option>` : ''}
@@ -46035,6 +46037,62 @@ async function wfTplSubmit(){
 }
 
 async function waiLearnOpen(){ openM('m-wai-learn'); waiLearnLoad(); }
+// ✉️ v1081: محادثة جديدة بقالب
+let _waiSt = { list:[], def:'' };
+async function waiStartOpen(phone, name){
+  let m = document.getElementById('m-wai-start');
+  if(!m){ m = document.createElement('div'); m.id = 'm-wai-start'; m.className = 'modal-overlay'; m.style.cssText = 'display:none;z-index:1160';
+    m.innerHTML = `<div class="modal" style="max-width:520px"><div class="modal-header"><h3 style="margin:0">✉️ محادثة جديدة</h3><button class="modal-close" onclick="closeM('m-wai-start')">×</button></div>
+      <div class="modal-body">
+        <div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:12px;font-weight:700">رقم العميل</label><input id="wst-phone" class="form-input" style="width:100%;direction:ltr;font-family:Roboto" placeholder="01xxxxxxxxx" inputmode="tel"></div>
+          <div style="flex:1"><label style="font-size:12px;font-weight:700">الاسم</label><input id="wst-name" class="form-input" style="width:100%" placeholder="اختياري" oninput="waiStartPreview()"></div></div>
+        <label style="font-size:12px;font-weight:700;margin-top:10px;display:block">القالب</label><select id="wst-tpl" class="form-input" style="width:100%" onchange="waiStartVars()"></select>
+        <div id="wst-vars"></div>
+        <div id="wst-prev" style="margin-top:10px;padding:10px 12px;background:#e7f8ee;border-radius:10px;font-size:13px;white-space:pre-wrap;line-height:1.8"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">المحادثة هتبقى متوزّعة عليك. لما العميل يدوس أول زرار، الشات يتفتح وتكمّل معاه عادي.</div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn btn-ghost btn-sm" onclick="closeM('m-wai-start')">إلغاء</button><button class="btn btn-primary btn-sm" id="wst-go" onclick="waiStartSend()">📤 ابعت</button></div>
+      </div></div>`;
+    document.body.appendChild(m); }
+  $('wst-phone').value = phone ? String(phone).replace(/^20/, '0') : ''; $('wst-name').value = name || '';
+  openM('m-wai-start');
+  const r = await apiFetch('/api/wa/start/templates', 'GET');
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
+  _waiSt.list = (r.templates || []).filter(t => !t.dynUrl); _waiSt.def = r.def;
+  const st = s => s === 'APPROVED' ? '✅' : s === 'REJECTED' ? '❌' : '⏳';
+  const sorted = [..._waiSt.list].sort((a, b) => (b.name === r.def) - (a.name === r.def) || (b.status === 'APPROVED') - (a.status === 'APPROVED'));
+  $('wst-tpl').innerHTML = sorted.map(t => `<option value="${escapeHtml(t.name)}|${t.lang}" ${t.status !== 'APPROVED' ? 'disabled' : ''}>${st(t.status)} ${escapeHtml(t.name)} (${t.lang})${t.status !== 'APPROVED' ? ' — مستني موافقة' : ''}</option>`).join('');
+  const firstOk = sorted.find(t => t.status === 'APPROVED'); if(firstOk) $('wst-tpl').value = firstOk.name + '|' + firstOk.lang;
+  waiStartVars();
+}
+function _waiStCur(){ const [n, l] = String($('wst-tpl')?.value || '').split('|'); return _waiSt.list.find(t => t.name === n && t.lang === l); }
+function waiStartVars(){
+  const t = _waiStCur(), box = $('wst-vars'); if(!box) return;
+  box.innerHTML = !t ? '<div style="color:#b45309;margin-top:8px">⏳ مفيش قالب متوافق عليه لسه — قالب «متابعة المكالمة» اتقدّم لـ Meta ومستني الموافقة</div>'
+    : Array.from({ length:t.nvars }, (_, i) => `<label style="font-size:12px;font-weight:700;margin-top:8px;display:block">{{${i + 1}}}${i === 0 ? ' (لو فاضي = الاسم)' : ''}</label><input class="form-input wst-v" style="width:100%" oninput="waiStartPreview()">`).join('');
+  waiStartPreview();
+}
+function _waiStVals(){
+  const t = _waiStCur(); if(!t) return [];
+  const ins = [...document.querySelectorAll('.wst-v')].map(i => i.value.trim());
+  return Array.from({ length:t.nvars }, (_, i) => ins[i] || (i === 0 ? ($('wst-name').value.trim().split(/\s+/)[0] || 'حضرتك') : ''));
+}
+function waiStartPreview(){
+  const t = _waiStCur(), p = $('wst-prev'); if(!p) return;
+  if(!t){ p.style.display = 'none'; return; } p.style.display = '';
+  const v = _waiStVals();
+  p.innerHTML = escapeHtml(t.body.replace(/\{\{(\d+)\}\}/g, (m, k) => v[k - 1] || m)) + (t.buttons.length ? '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">' + t.buttons.map(b => `<span style="background:#fff;border-radius:8px;padding:3px 10px;color:#0b7a5c;font-weight:700">${escapeHtml(b)}</span>`).join('') + '</div>' : '');
+}
+async function waiStartSend(){
+  const t = _waiStCur(); if(!t){ toast('اختار قالب'); return; }
+  const b = $('wst-go'); b.disabled = true;
+  try{
+    const r = await apiFetch('/api/wa/start', 'POST', { phone:$('wst-phone').value, name:$('wst-name').value, tpl:t.name, lang:t.lang, vars:_waiStVals() });
+    if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
+    toast('📤 اتبعت'); closeM('m-wai-start');
+    try{ await waiLoad(); }catch(_){}
+    if(typeof waiOpen === 'function') waiOpen(r.wa_id);
+  } finally { b.disabled = false; }
+}
 // 🎓 v1075: علّمه — سطر واحد يتضاف لـ «معلومات للـ AI»
 function waiTeachOpen(){
   const t = $('wai-teach-txt'); if(t) t.value = '';
