@@ -1939,6 +1939,7 @@ tr:hover td{background:#fafbff}
         <div class="ni" data-p="shopify-reports" onclick="goPage(this,'shopify-reports')"><span class="ni-icon">🛍️</span><span class="ni-label">تقارير Shopify</span></div>
         <div class="ni" data-p="reports" onclick="goPage(this,'reports')"><span class="ni-icon">📈</span><span class="ni-label">التقارير</span></div>
         <div class="ni" data-p="wa-inbox" onclick="goPage(this,'wa-inbox')"><span class="ni-icon">💬</span><span class="ni-label">محادثات واتساب</span><span class="nbadge" id="nb-wa-inbox" style="display:none;background:#25d366">0</span></div>
+        <div class="ni" data-p="wa-flows" onclick="goPage(this,'wa-flows')"><span class="ni-icon">🗺️</span><span class="ni-label">فلوهات واتساب</span></div>
         <div class="ni" data-p="wa-pay-review" onclick="goPage(this,'wa-pay-review')"><span class="ni-icon">🏦</span><span class="ni-label">مراجعة تحويلات InstaPay</span><span class="nbadge" id="nb-wa-pay" style="display:none">0</span></div>
         <div class="ni" data-p="orders" onclick="goPage(this,'orders')"><span class="ni-icon">📋</span><span class="ni-label">الطلبات</span><span class="nbadge" id="nb-orders">0</span></div>
         <div class="ni" data-p="tasks" onclick="goPage(this,'tasks')"><span class="ni-icon">✅</span><span class="ni-label">التاسكات</span><span class="nbadge" id="nb-tasks" style="background:var(--purple)">0</span></div>
@@ -7901,6 +7902,65 @@ body.solo #page-wa-inbox .wai{height:calc(100vh - 62px)}
     </div>
   </div>
 </div>
+<!-- 🗺️ v1078: فلوهات واتساب — Builder -->
+<div class="page" id="page-wa-flows">
+  <style>
+    #wf-wrap{display:flex;gap:12px;align-items:stretch;min-height:calc(100vh - 170px)}
+    #wf-side{width:340px;flex-shrink:0;background:var(--card,#fff);border:1px solid var(--border);border-radius:12px;padding:14px;overflow:auto;max-height:calc(100vh - 170px)}
+    #wf-canvas-box{flex:1;min-width:0;background:#f8fafc;background-image:radial-gradient(#e2e8f0 1px,transparent 1px);background-size:18px 18px;border:1px solid var(--border);border-radius:12px;overflow:auto;position:relative;max-height:calc(100vh - 170px)}
+    #wf-canvas{position:relative;transform-origin:top center;margin:0 auto}
+    .wfn{position:absolute;width:210px;border-radius:10px;background:#fff;border:1.5px solid #cbd5e1;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer;font-size:12px;overflow:hidden;transition:box-shadow .15s}
+    .wfn:hover{box-shadow:0 4px 12px rgba(0,0,0,.12)} .wfn.sel{outline:3px solid #6366f1;outline-offset:1px}
+    .wfn .hd{padding:6px 10px;font-weight:800;display:flex;align-items:center;gap:6px;font-size:12px}
+    .wfn .bd{padding:7px 10px;color:#334155;line-height:1.6;white-space:pre-wrap;max-height:74px;overflow:hidden;font-size:11.5px}
+    .wfn .st{position:absolute;top:5px;left:6px;font-size:10px;background:rgba(255,255,255,.85);border-radius:99px;padding:0 6px;font-family:Roboto,sans-serif;color:#475569}
+    .wfn.t-start{border-color:#f87171} .wfn.t-start .hd{background:#fee2e2;color:#991b1b}
+    .wfn.t-msg{border-color:#93c5fd} .wfn.t-msg .hd{background:#dbeafe;color:#1e3a8a}
+    .wfn.t-ship{border-color:#c4b5fd} .wfn.t-ship .hd{background:#ede9fe;color:#5b21b6}
+    .wfn.t-cond{border-color:#fcd34d} .wfn.t-cond .hd{background:#fef3c7;color:#92400e}
+    .wfn.t-act{border-color:#86efac} .wfn.t-act .hd{background:#dcfce7;color:#166534}
+    .wfadd{position:absolute;width:30px;height:30px;border-radius:50%;border:2px dashed #94a3b8;background:#fff;color:#64748b;font-size:18px;line-height:24px;text-align:center;cursor:pointer}
+    .wfadd:hover{border-color:#6366f1;color:#6366f1;background:#eef2ff}
+    .wfedge{position:absolute;transform:translate(-50%,-50%);background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:6px;font-size:10.5px;font-weight:700;padding:1px 7px;white-space:nowrap;max-width:190px;overflow:hidden;text-overflow:ellipsis}
+    .wfedge.yes{background:#dcfce7;border-color:#86efac;color:#166534} .wfedge.no{background:#fee2e2;border-color:#fca5a5;color:#991b1b}
+    .wf-card{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card,#fff);cursor:pointer;font-size:12.5px}
+    .wf-card.on{border-color:#6366f1;background:#eef2ff}
+    #wf-side label{display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin:10px 0 4px}
+    #wf-side textarea,#wf-side input[type=text],#wf-side select{width:100%;font-family:Cairo,sans-serif;font-size:13px}
+    .wf-opt{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+    .wf-var{display:inline-block;background:#eef2ff;color:#4338ca;border-radius:6px;padding:1px 7px;font-size:11px;margin:2px;cursor:pointer;font-family:Roboto,sans-serif}
+    .wf-menu{position:absolute;z-index:5;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:6px;width:220px}
+    .wf-menu div{padding:7px 10px;border-radius:7px;cursor:pointer;font-size:12.5px} .wf-menu div:hover{background:#f1f5f9}
+  </style>
+  <div class="card" style="padding:12px 14px;margin-bottom:12px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span style="font-weight:900;font-size:15px">🗺️ فلوهات واتساب</span>
+      <span style="color:var(--muted);font-size:12px">ارسم الفلو، جرّبه على رقمك، وبعدين انشره</span>
+      <span style="margin-inline-start:auto"></span>
+      <button class="btn btn-sm btn-ghost" onclick="wfImportWelcome()" title="ينقل الترحيبي اللي شغال دلوقتي لرسمة">⬇️ استورد الترحيبي الحالي</button>
+      <button class="btn btn-sm btn-primary" onclick="wfNew()">＋ فلو جديد</button>
+    </div>
+    <div id="wf-list" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"></div>
+  </div>
+  <div id="wf-editor" style="display:none">
+    <div class="card" style="padding:8px 12px;margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input id="wf-name" class="form-input" style="width:220px;font-weight:800" oninput="_wf.dirty=true;wfBar()">
+      <span id="wf-state" style="font-size:12px"></span>
+      <span style="margin-inline-start:auto"></span>
+      <button class="btn btn-sm btn-ghost" onclick="wfZoom(-0.1)">－</button><span id="wf-zoom" style="font-size:11px;font-family:Roboto;min-width:34px;text-align:center">100%</span><button class="btn btn-sm btn-ghost" onclick="wfZoom(0.1)">＋</button>
+      <button class="btn btn-sm btn-ghost" onclick="wfLogOpen()">📜 السجل</button>
+      <button class="btn btn-sm btn-ghost" onclick="wfTest()">🧪 جرّب على رقمي</button>
+      <button class="btn btn-sm" id="wf-save" onclick="wfSave()">💾 احفظ</button>
+      <button class="btn btn-sm btn-primary" id="wf-pub" onclick="wfPublish()">🚀 انشر</button>
+      <button class="btn btn-sm btn-ghost" id="wf-unpub" onclick="wfUnpublish()" style="color:#b45309">⏸️ وقّف</button>
+      <button class="btn btn-sm btn-ghost" onclick="wfDelete()" style="color:var(--danger)">🗑️</button>
+    </div>
+    <div id="wf-wrap">
+      <div id="wf-canvas-box" onclick="if(event.target===this||event.target.id==='wf-canvas'){wfMenuClose()}"><div id="wf-canvas"></div></div>
+      <div id="wf-side"></div>
+    </div>
+  </div>
+</div>
 <div class="page" id="page-google-feed">
   <!-- 🏷️ v972: الفيد التكميلي لجوجل — كل منتج بالـ labels بتاعته -->
   <div class="card" style="margin-bottom:14px">
@@ -12589,12 +12649,12 @@ async function safeStatusChange(orderId, newStatus) {
 }
 
 const ROLE_L={admin:'مشرف',staff:'موظف','courier-mgr':'مدير مناديب',view:'عرض فقط'};
-const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','shopify-transfers':'🚚 ترانسفيرات شوبيفاي','abandoned':'🛒 سلات متسابة','delivery-areas':'🗺️ إعدادات التوصيل','google-feed':'🏷️ فيد جوجل (Custom Labels)','winners':'🏆 تقييم المنتجات — Winners','meta-ads':'📘 أداء Meta','gads-perf':'📈 أداء Google Ads','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','inv-adjustments':'✋ التعديلات اليدوية على المخزون','wa-inbox':'💬 محادثات واتساب','wa-pay-review':'🏦 مراجعة تحويلات InstaPay','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
+const PAGE_T={'promo':'🏷️ كودات الخصم','bank':'🏦 كشف البنك','tz':'🧾 الخزنة ← زوهو','shopify-transfers':'🚚 ترانسفيرات شوبيفاي','abandoned':'🛒 سلات متسابة','delivery-areas':'🗺️ إعدادات التوصيل','google-feed':'🏷️ فيد جوجل (Custom Labels)','winners':'🏆 تقييم المنتجات — Winners','meta-ads':'📘 أداء Meta','gads-perf':'📈 أداء Google Ads','risk-queue':'📞 اتصل قبل الشحن','talabat':'🛵 طلبات (Talabat)','performance':'📊 الأداء — صافي الربح بالقناة','sales-orphans':'🧾 بيعات من غير تصفية','open-invoices':'📊 الفواتير المفتوحة في Zoho','cashier-settlements-zoho':'🏪 تصفيات الكاشيرز → Zoho','payouts':'🏦 كشوف التحويلات → Zoho','courier-settlements-zoho':'🚚 تصفيات المناديب → Zoho','app-promo':'📱 تحويل عملاء المحل للتطبيق','dead-stock':'🧊 الأصناف الراكدة','talabat-settlement':'🧾 مطابقة كشف حساب طلبات','pos-customers':'📇 عملاء المحل (Export)','returns':'↩️ مرتجعات','returns-watch':'🔎 متابعة الشحنات','photo-library':'🖼️ مكتبة الصور','sales-sources':'📊 مبيعات حسب المصدر','profit':'💹 الربح الإجمالي','top-products':'🔥 المنتجات الأكثر تكراراً','unlinked-lines':'⚠️ بنود POS بدون ربط','bought-together':'🔗 بيتشتروا مع بعض','zoho-sync':'🔗 ربط Zoho','courier-orders':'طلبات المناديب','delivery-sheet':'ورقة التوصيل','import-excel':'استيراد Excel','problems':'طلبات فيها مشكلة','addr-changes':'📍 تغييرات العناوين من Shopify','db-size':'🧹 حجم الداتابيز والتنظيف','late-orders':'⏰ طلبات متأخرة','order-tracker':'📊 متابعة الأرقام','manual-orders':'📝 طلبات يدوية','sync-failures':'⚠️ بيعات لم تتزامن','tasks':'✅ التاسكات','cart-audit':'🔍 مراقبة الكاشيرز',dashboard:'لوحة التحكم',orders:'الطلبات',couriers:'المناديب',assign:'توزيع الطلبات',pickup:'استلام من المحل',transit:'مخزن العبور',bosta:'بوسطة — طلبات المحافظات','bosta-exported':'بوسطة — مصدّرة',accounting:'محاسبة المناديب','stars-reviews':'⭐ مراجعات Cafelax Stars','shop-transfers':'🔄 تحويلات من المحل','field-cancels':'🚫 إلغاءات بانتظار الاستلام','settle-history':'سجل التسويات',reports:'التقارير',notifs:'الإشعارات',settings:'الإعدادات',expiry:'تواريخ الصلاحية','near-expiry-offers':'🏷️ عروض قرب الانتهاء — أونلاين','shop-accounting':'محاسبة المحل',treasury:'الخزنة',checks:'الشيكات',payables:'💸 الدفعات','settlements-receipts':'📥 استلام التصفيات','order-types':'🏷️ أنواع الطلبات','shipping-mappings':'🔗 ربط Shipping Methods','courier-rates':'💰 تكلفة الشحن','order-type-audit':'📜 سجل تغيير الأنواع','customer-risk':'🚨 تقييم العملاء','shipping-transfers':'🚚 تحويل الشحن','vendors':'🏢 الموردين','couriers-dashboard':'📊 إنجازات المناديب','smart-dashboard':'📊 التقارير الذكية','shopify-reports':'🛍️ تقارير Shopify','preparer-reports':'📦 تقارير المحضرين','sku-audit':'🔍 فحص SKU/باركود','margin-audit':'💰 فحص الهوامش — بيتباع تحت التكلفة؟','pm-settle':'🏦 تحويلات Paymob — وصل الصح ولا لأ؟','inventory':'📦 المخزون','image-fix':'🖼️ تظبيط الصور','collection-sort':'🔀 ترتيب الكوليكشنز','temp-price':'🏷️ تعديل سعر مؤقت','store-batches':'🏪 صلاحيات المحلات','vendor-batches':'🏭 صلاحيات الموردين','consignment':'🤝 بضاعة تحت البيع','stocktake':'🔍 الجرد','stk-report':'📋 تقرير الجرد','transfers':'🔄 تحويلات المخازن','transfer-suggestions':'🧠 ذكاء التحويلات','purchase-suggestions':'🛒 ذكاء الشراء','pos-stores':'🏪 محلات نقطة البيع','pos-promo':'🎟️ برومو كود','pos-sales':'💰 مبيعات POS','pos-team':'👨‍💼 فريق POS (الكاشيرز ومدراء المحلات)',settlements:'💵 سجل تصفيات الكاشيرز','store-offers':'🏷️ عروض المحلات',signage:'📺 إعلانات الشاشات','whatsapp':'📱 رسائل WhatsApp','audit-log':'🛡️ سجل الأمان','statements':'📑 كشوف الفيزا','purchase-orders':'📋 أوامر الشراء','purchase-returns':'↩️ مرتجعات المشتريات','suppliers':'🏭 الموردين','sales-velocity':'📊 سرعة المبيعات','replenishment':'📈 لوحة إعادة التموين','item-analysis':'🔬 أطلب منه قد إيه؟','day-analysis':'📅 تحليل يوم','snapshots':'📸 حفظ المخزون اليومي','zero-stocks':'⛔ المنتجات اللي خلصت','inv-adjustments':'✋ التعديلات اليدوية على المخزون','wa-inbox':'💬 محادثات واتساب','wa-flows':'🗺️ فلوهات واتساب','wa-pay-review':'🏦 مراجعة تحويلات InstaPay','unsynced-sales':'🔄 مزامنة POS↔Shopify','webhooks':'📡 مزامنة Shopify','hr-employees':'👥 الموظفين','hr-attendance':'🕐 البصمة','hr-payroll':'💰 كشف الرواتب','hr-advances':'💵 السلف','hr-penalties':'⚠️ الجزاءات','hr-purchases':'🛒 مشتريات الموظفين','hr-leaves':'🏖️ إجازات الموظفين','vendor-statement':'📜 كشف حساب مورد'};
 
 let API_URL=localStorage.getItem('orderpro_api')||'https://orderpro-backend-production.up.railway.app';
 // 🏷️ v803: نسخة الواجهة. بتتحدّث مع كل رفعة، وبتظهر تحت القايمة
 //   جنب نسخة السيرفر — فلو واحدة فيهم قديمة تبان على طول.
-const UI_BUILD = 'v1077';
+const UI_BUILD = 'v1078';
 let _srvVer = null;
 async function verLoad(){
   const el = document.getElementById('sb-ver');
@@ -30329,6 +30389,7 @@ async function doLogin(){
 
   applyPermissions(user.role, user.pages||null);
   try{ _tbWaSet(0); _notifOrderOff(); }catch(_){}   // 💬🔔 v1077
+  try{ const nf = document.querySelector('.ni[data-p=wa-flows]'); if(nf && !(user.username === 'admin' || user.role === 'admin')) nf.style.display = 'none'; }catch(_){}
   lkLoad();        // 🔒 v731: هات الصفحات المقفولة وعلّم عليها
 
   const userBadge = document.getElementById('user-badge');
@@ -32982,6 +33043,7 @@ window.addEventListener('load', function(){
     document.getElementById('main-app').style.display = '';
     applyPermissions(currentUser.role, currentUser.pages||null);
     try{ _tbWaSet(0); _notifOrderOff(); }catch(_){}   // 💬🔔 v1077
+    try{ const nf = document.querySelector('.ni[data-p=wa-flows]'); if(nf && !(currentUser.username === 'admin' || currentUser.role === 'admin')) nf.style.display = 'none'; }catch(_){}
     setTimeout(_deepLink, 0);
     const userBadge = document.getElementById('user-badge');
     if(userBadge) userBadge.textContent = '👤 '+currentUser.name;
@@ -45563,6 +45625,304 @@ async function waiTplAssign(name, user, el){
   toast(user ? '✅ القالب هيتوزّع على ' + (_waiTplA.agents.find(a => a.username === user)?.name || user) : '✅ القالب مش هيتوزّع على حد');
 }
 const _wl = { days:30, f:'fixes', d:null };
+// ═══ 🗺️ v1078: فلوهات واتساب — Builder ═══
+const _wf = { list:[], id:null, f:null, g:null, sel:null, dirty:false, zoom:1, stats:{}, regions:[], users:[], menu:null };
+const WF_TYPES = {
+  start:{ ic:'⚡', t:'البداية (التريجر)' },
+  msg:{ ic:'💬', t:'رسالة' },
+  ship:{ ic:'🚚', t:'مناطق الشحن' },
+  cond:{ ic:'🔀', t:'شرط' },
+  act:{ ic:'⚙️', t:'أكشن' },
+};
+const WF_ACTS = { open_human:'🧑‍💼 حوّل لخدمة العملاء (الشات يتفتح)', close:'🔒 اقفل الشات', done:'✅ خلّص (من غير انتظار رد)', assign:'👤 وزّع على موظف' };
+const WF_CONDS = { in_hours:'🕐 جوه مواعيد العمل؟', has_orders:'🛍️ العميل طلب مننا قبل كده؟' };
+const WF_TRIG = { wa_first:'👋 أول رسالة من العميل (أو بعد غياب)', wa_keyword:'🔤 العميل كتب كلمة معيّنة' };
+const _wfLen = s => [...String(s || '')].length;
+const _wfNid = p => (p || 'n') + Math.random().toString(36).slice(2, 8);
+
+async function wfPageLoad(){
+  const r = await apiFetch('/api/wf', 'GET');
+  if(!r || r.error){ $('wf-list').innerHTML = `<span style="color:var(--danger)">❌ ${escapeHtml(r?.error || 'فشل')}</span>`; return; }
+  _wf.list = r.flows || [];
+  wfListRender(r.legacy_welcome_on);
+  if(_wf.id && _wf.list.some(f => f.id === _wf.id)) return;
+  if(_wf.list.length) wfOpen(_wf.list[0].id); else $('wf-editor').style.display = 'none';
+}
+function wfListRender(legacy){
+  const L = _wf.list;
+  $('wf-list').innerHTML = (L.length ? L.map(f => `<div class="wf-card ${f.id === _wf.id ? 'on' : ''}" onclick="wfOpen(${f.id})">
+      <span>${f.live ? '🟢' : '⚪'}</span><b>${escapeHtml(f.name)}</b>
+      ${f.live && f.dirty ? '<span title="فيه تعديلات لسه ما اتنشرتش" style="color:#b45309">● تعديلات</span>' : ''}
+      <span style="color:var(--muted);font-size:11px;font-family:Roboto">${f.starts7 || 0} / 7d</span></div>`).join('')
+    : `<span style="color:var(--muted);font-size:12.5px">لسه مفيش فلوهات — ابدأ بـ «استورد الترحيبي الحالي» أو «فلو جديد»</span>`)
+    + (legacy && !L.some(f => f.live) ? `<span style="font-size:11.5px;color:#92400e;align-self:center">ℹ️ الترحيبي القديم (من الإعدادات) شغال — أول ما تنشر فلو ترحيب مرسوم، هو اللي هيشتغل بداله</span>` : '');
+}
+async function wfOpen(id){
+  if(_wf.dirty && _wf.id !== id && !confirm('فيه تعديلات ما اتحفظتش — تسيبها؟')) return;
+  const r = await apiFetch('/api/wf/' + id, 'GET');
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
+  _wf.id = id; _wf.f = r.flow; _wf.g = JSON.parse(JSON.stringify(r.flow.graph || {})); _wf.sel = _wf.g.start; _wf.dirty = false;
+  _wf.regions = r.regions || []; _wf.users = r.users || [];
+  _wf.stats = {}; for(const s of (r.stats || [])){ const k = s.node_id + '|' + s.ev + (s.ev === 'click' ? '|' + s.info : ''); _wf.stats[k] = (_wf.stats[k] || 0) + s.n; }
+  $('wf-editor').style.display = ''; $('wf-name').value = r.flow.name || '';
+  wfListRender(); wfDraw(); wfSide(); wfBar();
+}
+function wfBar(){
+  const f = _wf.f; if(!f) return;
+  const dirtyLive = f.live && JSON.stringify(f.live_graph) !== JSON.stringify(_wf.g);
+  $('wf-state').innerHTML = (f.live ? '<span style="color:#16a34a;font-weight:800">🟢 منشور</span>' : '<span style="color:var(--muted);font-weight:800">⚪ مسودة — مش شغال</span>')
+    + (_wf.dirty ? ' · <span style="color:#dc2626;font-weight:700">● مش محفوظ</span>' : dirtyLive ? ' · <span style="color:#b45309;font-weight:700">● محفوظ بس لسه ما اتنشرش</span>' : '');
+  $('wf-unpub').style.display = f.live ? '' : 'none';
+  $('wf-pub').textContent = f.live ? '🚀 انشر التعديلات' : '🚀 انشر';
+}
+function wfZoom(d){ _wf.zoom = Math.min(1.4, Math.max(0.4, +(_wf.zoom + d).toFixed(2))); $('wf-zoom').textContent = Math.round(_wf.zoom * 100) + '%'; wfDraw(); }
+
+// ── الأولاد (مخارج) لكل نود ──
+function _wfOuts(n){
+  if(!n) return [];
+  const d = n.data || {};
+  if(n.type === 'msg' && (d.mode === 'buttons' || d.mode === 'list')) return (d.buttons || []).map(b => ({ key:b.id, label:b.label || '…' }));
+  if(n.type === 'cond') return [{ key:'yes', label:'✅ آه', cls:'yes' }, { key:'no', label:'❌ لأ', cls:'no' }];
+  if(n.type === 'ship') return [{ key:'out', label:'بعد ما يختار المنطقة' }];
+  return [{ key:'out', label:'' }];
+}
+// ── رسم: layout شجري ──
+function wfDraw(){
+  const G = _wf.g, N = G.nodes || {}, W = 210, GAP = 34, VG = 70, cv = $('wf-canvas');
+  const seen = new Set(), H = {};
+  const nodeH = id => { const n = N[id]; if(!n) return 40; const t = _wfNodeBody(n); return 34 + Math.min(74, 14 + Math.ceil(t.length / 30) * 18); };
+  const width = id => {           // عدد «الخانات» اللي الشجرة بتاخدها
+    if(!id || !N[id] || seen.has(id)) return 1;
+    seen.add(id);
+    const outs = _wfOuts(N[id]);
+    const w = outs.reduce((s, o) => s + width((N[id].next || {})[o.key]), 0);
+    return Math.max(1, w);
+  };
+  const totalU = width(G.start); seen.clear();
+  const items = [], edges = [];
+  const place = (id, x0, y, parentPt, edge) => {
+    if(!id || !N[id] || seen.has(id)){
+      const cx = x0 + (W + GAP) / 2;
+      items.push(`<div class="wfadd" style="left:${cx - 15}px;top:${y + 6}px" title="ضيف خطوة" onclick="event.stopPropagation();wfAddMenu(this,'${parentPt.id}','${edge.key}')">＋</div>`);
+      edges.push({ x1:parentPt.x, y1:parentPt.y, x2:cx, y2:y + 6, label:edge.label, cls:edge.cls });
+      return;
+    }
+    seen.add(id);
+    const n = N[id], outs = _wfOuts(n);
+    const u = Math.max(1, outs.reduce((s, o) => { const s2 = new Set(seen); const w = (function wd(i){ if(!i || !N[i] || s2.has(i)) return 1; s2.add(i); return Math.max(1, _wfOuts(N[i]).reduce((a, oo) => a + wd((N[i].next || {})[oo.key]), 0)); })((n.next || {})[o.key]); return s + w; }, 0));
+    const cx = x0 + u * (W + GAP) / 2, h = nodeH(id);
+    if(parentPt) edges.push({ x1:parentPt.x, y1:parentPt.y, x2:cx, y2:y, label:edge.label, cls:edge.cls });
+    const T = WF_TYPES[n.type] || { ic:'?', t:n.type };
+    const sent = _wf.stats[id + '|sent'] || _wf.stats[id + '|start'] || 0;
+    items.push(`<div class="wfn t-${n.type} ${_wf.sel === id ? 'sel' : ''}" style="left:${cx - W / 2}px;top:${y}px" onclick="event.stopPropagation();wfSelect('${id}')">
+      <div class="hd">${T.ic} ${escapeHtml(_wfNodeTitle(n))}</div><div class="bd">${escapeHtml(_wfNodeBody(n)) || '<span style="color:#94a3b8">— فاضي —</span>'}</div>
+      ${sent ? `<span class="st" title="آخر 30 يوم">${sent}×</span>` : ''}</div>`);
+    if(n.type === 'act' && n.data?.kind !== 'assign' && !(n.next || {}).out) return;    // نهاية طبيعية
+    let xx = x0;
+    for(const o of outs){
+      const cid = (n.next || {})[o.key];
+      const s2 = new Set(seen);
+      const w = (function wd(i){ if(!i || !N[i] || s2.has(i)) return 1; s2.add(i); return Math.max(1, _wfOuts(N[i]).reduce((a, oo) => a + wd((N[i].next || {})[oo.key]), 0)); })(cid);
+      const clicks = o.key && n.type === 'msg' ? (_wf.stats[id + '|click|' + o.key] || 0) : 0;
+      place(cid, xx, y + h + VG, { x:cx, y:y + h, id }, { key:o.key, label:o.label + (clicks ? ` · ${clicks}×` : ''), cls:o.cls });
+      xx += w * (W + GAP);
+    }
+  };
+  place(G.start, 0, 20, null, {});
+  const maxX = Math.max(totalU * (W + GAP), 400);
+  let maxY = 0; for(const s of items){ const m = /top:(\d+(?:\.\d+)?)px/.exec(s); if(m) maxY = Math.max(maxY, +m[1]); }
+  const svg = `<svg width="${maxX}" height="${maxY + 200}" style="position:absolute;left:0;top:0;pointer-events:none">${edges.map(e => {
+      const my = (e.y1 + e.y2) / 2;
+      return `<path d="M${e.x1},${e.y1} C${e.x1},${my} ${e.x2},${my} ${e.x2},${e.y2}" fill="none" stroke="${e.cls === 'yes' ? '#22c55e' : e.cls === 'no' ? '#ef4444' : '#94a3b8'}" stroke-width="2"/>`; }).join('')}</svg>`;
+  const labels = edges.filter(e => e.label).map(e => `<div class="wfedge ${e.cls || ''}" style="left:${e.x2}px;top:${e.y2 - 22}px">${escapeHtml(e.label)}</div>`).join('');
+  cv.style.width = maxX + 'px'; cv.style.height = (maxY + 200) + 'px'; cv.style.transform = `scale(${_wf.zoom})`;
+  cv.innerHTML = svg + labels + items.join('');
+}
+function _wfNodeTitle(n){
+  const d = n.data || {};
+  if(n.type === 'start') return WF_TRIG[d.trigger?.type] || 'البداية';
+  if(n.type === 'msg') return ({ text:'رسالة', buttons:'رسالة بزراير', list:'رسالة بقايمة', link:'رسالة بلينك' })[d.mode || 'text'] || 'رسالة';
+  if(n.type === 'cond') return WF_CONDS[d.kind] || 'شرط';
+  if(n.type === 'act') return WF_ACTS[d.kind] || 'أكشن';
+  return (WF_TYPES[n.type] || {}).t || n.type;
+}
+function _wfNodeBody(n){
+  const d = n.data || {};
+  if(n.type === 'start'){ const t = d.trigger || {}; return t.type === 'wa_keyword' ? 'الكلمات: ' + (t.words || '—') : 'عميل جديد أو ما كلّمناش من ' + (t.days ?? 30) + ' يوم'; }
+  if(n.type === 'msg') return (d.text || '') + (d.mode === 'link' ? `\n🔗 ${d.link_label || ''}` : '');
+  if(n.type === 'ship') return (d.text || '') + `\n(${_wf.regions.length} منطقة — السعر من إعدادات التوصيل)`;
+  if(n.type === 'cond') return d.kind === 'in_hours' ? `${d.hours || '10-17'} · إجازة: ${d.off_days || '—'}` : '';
+  if(n.type === 'act') return d.kind === 'assign' ? (d.user || '— اختار موظف —') : ({ open_human:'الشات يتفتح ويبقى «مستني رد»', close:'الشات يتقفل', done:'الفلو يخلص من غير انتظار' })[d.kind] || '';
+  return '';
+}
+function wfSelect(id){ _wf.sel = id; wfMenuClose(); wfDraw(); wfSide(); }
+function wfMenuClose(){ document.querySelectorAll('.wf-menu').forEach(m => m.remove()); }
+function wfAddMenu(el, pid, key){
+  wfMenuClose();
+  const m = document.createElement('div'); m.className = 'wf-menu';
+  const add = [['msg','text','💬 رسالة نص'],['msg','buttons','🔘 رسالة بزراير (لحد 3)'],['msg','list','📋 رسالة بقايمة (لحد 10)'],['msg','link','🔗 رسالة بزرار لينك'],['ship','','🚚 مناطق الشحن والأسعار'],['cond','in_hours','🕐 شرط: مواعيد العمل'],['cond','has_orders','🛍️ شرط: طلب قبل كده؟'],['act','open_human','🧑‍💼 حوّل لخدمة العملاء'],['act','assign','👤 وزّع على موظف'],['act','done','✅ خلّص'],['act','close','🔒 اقفل الشات']];
+  m.innerHTML = add.map((a, i) => `<div onclick="wfAdd('${pid}','${key}',${i})">${a[2]}</div>`).join('');
+  m.style.left = (parseFloat(el.style.left) - 95) + 'px'; m.style.top = (parseFloat(el.style.top) + 34) + 'px';
+  $('wf-canvas').appendChild(m);
+  _wf._addDefs = add;
+}
+function wfAdd(pid, key, i){
+  const a = _wf._addDefs[i], id = _wfNid(a[0][0]);
+  let n;
+  if(a[0] === 'msg') n = { type:'msg', data:{ mode:a[1], text:'', buttons: a[1] === 'buttons' || a[1] === 'list' ? [{ id:_wfNid('o'), label:'' }] : undefined, url: a[1] === 'link' ? '{site}' : undefined, link_label: a[1] === 'link' ? 'افتح الموقع' : undefined }, next:{} };
+  else if(a[0] === 'ship') n = { type:'ship', data:{ text:'اختار منطقتك وهنقولك مصاريف الشحن ومدة التوصيل 👇', days:'1-3', days_far:'1-4', far:'BA,MT,SIN,JS' }, next:{} };
+  else if(a[0] === 'cond') n = { type:'cond', data:{ kind:a[1], hours:'10-17', off_days:'fri' }, next:{} };
+  else n = { type:'act', data:{ kind:a[1] }, next:{} };
+  _wf.g.nodes[id] = n;
+  const p = _wf.g.nodes[pid]; p.next = p.next || {}; p.next[key] = id;
+  _wf.dirty = true; wfMenuClose(); wfSelect(id); wfBar();
+}
+function _wfSet(path, v, redraw = true){
+  const n = _wf.g.nodes[_wf.sel]; if(!n) return;
+  let o = n; const ks = path.split('.'); for(let i = 0; i < ks.length - 1; i++){ o[ks[i]] = o[ks[i]] || {}; o = o[ks[i]]; }
+  o[ks[ks.length - 1]] = v; _wf.dirty = true; wfBar(); if(redraw) wfDraw();
+}
+function _wfDelSub(id, keep){
+  const N = _wf.g.nodes, n = N[id]; if(!n) return;
+  for(const c of Object.values(n.next || {})) if(c && c !== keep) _wfDelSub(c, keep);
+  delete N[id];
+}
+function wfDelNode(){
+  const id = _wf.sel; if(!id || id === _wf.g.start) return;
+  if(!confirm('تمسح الخطوة دي وكل اللي بعدها؟')) return;
+  for(const n of Object.values(_wf.g.nodes)) for(const [k, v] of Object.entries(n.next || {})) if(v === id) delete n.next[k];
+  _wfDelSub(id); _wf.sel = _wf.g.start; _wf.dirty = true; wfDraw(); wfSide(); wfBar();
+}
+function wfOptAdd(){ const n = _wf.g.nodes[_wf.sel]; const d = n.data; d.buttons = d.buttons || []; const max = d.mode === 'list' ? 10 : 3;
+  if(d.buttons.length >= max){ toast(`آخرها ${max}`); return; } d.buttons.push({ id:_wfNid('o'), label:'' }); _wf.dirty = true; wfDraw(); wfSide(); wfBar(); }
+function wfOptDel(i){ const n = _wf.g.nodes[_wf.sel]; const b = n.data.buttons[i]; if(!b) return;
+  const cid = (n.next || {})[b.id]; if(cid && !confirm('الزرار ده وراه خطوات — هتتمسح معاه. تمام؟')) return;
+  if(cid){ _wfDelSub(cid); delete n.next[b.id]; } n.data.buttons.splice(i, 1); _wf.dirty = true; wfDraw(); wfSide(); wfBar(); }
+function wfVarIns(fld, v){ const t = document.getElementById('wfx-' + fld); if(!t) return; const p = t.selectionStart ?? t.value.length; t.value = t.value.slice(0, p) + v + t.value.slice(p); t.dispatchEvent(new Event('input')); t.focus(); }
+
+function wfSide(){
+  const box = $('wf-side'), id = _wf.sel, n = _wf.g.nodes[id];
+  if(!n){ box.innerHTML = '<div style="color:var(--muted)">دوس على أي خطوة في الرسمة عشان تعدّلها، أو على ＋ عشان تضيف خطوة</div>'; return; }
+  const d = n.data || {}, T = WF_TYPES[n.type] || {};
+  const ta = (fld, lab, ph, rows = 4, max = 1024) => `<label>${lab}</label><textarea id="wfx-${fld}" class="form-input" rows="${rows}" maxlength="${max}" placeholder="${ph || ''}" style="line-height:1.8"
+      oninput="_wfSet('data.${fld}', this.value)">${escapeHtml(d[fld] || '')}</textarea>`;
+  const inp = (fld, lab, ph, max = 60, ltr) => `<label>${lab}</label><input type="text" class="form-input" maxlength="${max}" placeholder="${ph || ''}" ${ltr ? 'style="direction:ltr"' : ''} value="${escapeHtml(d[fld] ?? '')}" oninput="_wfSet('data.${fld}', this.value)">`;
+  const vars = fld => `<div style="margin-top:3px">${['{name}','{site}','{app_link}'].map(v => `<span class="wf-var" onclick="wfVarIns('${fld}','${v}')">${v}</span>`).join('')}<span style="font-size:10.5px;color:var(--muted)"> ← دوس تضيف</span></div>`;
+  const en = (inner) => `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:#4338ca">🇬🇧 نسخة إنجليزي (للعميل اللي بيكتب إنجليزي)</summary>${inner}</details>`;
+  let h = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:18px">${T.ic || ''}</span><b style="font-size:14px">${escapeHtml(_wfNodeTitle(n))}</b></div>`;
+  if(n.type === 'start'){
+    const t = d.trigger || {};
+    h += `<label>الفلو يبدأ لما…</label><select class="form-input" onchange="_wfSet('data.trigger.type', this.value);wfSide()">${Object.entries(WF_TRIG).map(([k, v]) => `<option value="${k}" ${t.type === k ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
+    if(t.type === 'wa_first') h += `<label>يعتبر «راجع» لو ما كلّمناش بقاله كام يوم</label><input type="number" class="form-input" min="1" value="${t.days ?? 30}" style="width:110px" oninput="_wfSet('data.trigger.days', Number(this.value)||30)">
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">العميل الجديد خالص بيدخل على طول. لو فيه أكتر من فلو ترحيب منشور، أقدم واحد بس اللي بيشتغل.</div>`;
+    else h += `<label>الكلمات (مفصولة بفاصلة)</label><textarea class="form-input" rows="3" oninput="_wfSet('data.trigger.words', this.value)">${escapeHtml(t.words || '')}</textarea>
+      <label style="display:flex;gap:6px;align-items:center;font-weight:600"><input type="checkbox" ${t.exact ? 'checked' : ''} onchange="_wfSet('data.trigger.exact', this.checked)"> الرسالة لازم تكون الكلمة بالظبط (مش جواها)</label>`;
+  }
+  if(n.type === 'msg'){
+    h += `<label>نوع الرسالة</label><select class="form-input" onchange="_wfSet('data.mode', this.value);if(['buttons','list'].includes(this.value)&&!(_wf.g.nodes[_wf.sel].data.buttons||[]).length)_wf.g.nodes[_wf.sel].data.buttons=[{id:_wfNid('o'),label:''}];wfDraw();wfSide()">
+      ${[['text','💬 نص بس'],['buttons','🔘 بزراير (لحد 3)'],['list','📋 بقايمة (لحد 10)'],['link','🔗 بزرار لينك']].map(([k, v]) => `<option value="${k}" ${(d.mode || 'text') === k ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
+    h += ta('text', 'نص الرسالة', 'اكتب الرسالة…', 5) + vars('text');
+    if(d.mode === 'buttons' || d.mode === 'list'){
+      const max = d.mode === 'list' ? 24 : 20;
+      h += `<label>${d.mode === 'list' ? 'الاختيارات' : 'الزراير'} — كل واحد ليه فرع في الرسمة</label>` + (d.buttons || []).map((b, i) => `<div class="wf-opt">
+          <input type="text" class="form-input" maxlength="${max + 6}" value="${escapeHtml(b.label || '')}" placeholder="اسم ${d.mode === 'list' ? 'الاختيار' : 'الزرار'}" oninput="_wf.g.nodes[_wf.sel].data.buttons[${i}].label=this.value;_wf.dirty=true;wfBar();wfDraw();this.nextElementSibling.textContent=[...this.value].length+'/${max}';this.nextElementSibling.style.color=[...this.value].length>${max}?'#dc2626':'var(--muted)'">
+          <span style="font-size:10.5px;font-family:Roboto;min-width:34px;color:${_wfLen(b.label) > max ? '#dc2626' : 'var(--muted)'}">${_wfLen(b.label)}/${max}</span>
+          <button class="btn btn-xs btn-ghost" style="color:var(--danger)" onclick="wfOptDel(${i})">✕</button></div>`).join('')
+        + `<button class="btn btn-sm btn-ghost" onclick="wfOptAdd()">＋ ضيف ${d.mode === 'list' ? 'اختيار' : 'زرار'}</button>`;
+      if(d.mode === 'list') h += inp('list_btn', 'كلمة زرار فتح القايمة', 'اختار', 20);
+    }
+    if(d.mode === 'link') h += inp('link_label', 'اسم الزرار (لحد 20 حرف)', 'حمّل التطبيق', 20) + inp('url', 'اللينك', 'https://… أو {app_link}', 500, true);
+    h += en(ta('text_en', 'Message (English)', '', 4) + ((d.mode === 'buttons' || d.mode === 'list') ? (d.buttons || []).map((b, i) => `<div class="wf-opt"><input type="text" class="form-input" style="direction:ltr" maxlength="24" placeholder="${escapeHtml(b.label || 'button')} (EN)" value="${escapeHtml(b.label_en || '')}" oninput="_wf.g.nodes[_wf.sel].data.buttons[${i}].label_en=this.value;_wf.dirty=true;wfBar()"></div>`).join('') : '')
+      + (d.mode === 'link' ? inp('link_label_en', 'Button label (EN)', 'Download the app', 20, true) : ''));
+    h += `<div style="font-size:11px;color:var(--muted);margin-top:8px">ℹ️ الرسايل دي بتتبعت جوه الـ 24 ساعة بعد رسالة العميل، فمش محتاجة موافقة Meta.</div>`;
+  }
+  if(n.type === 'ship'){
+    h += ta('text', 'الرسالة فوق القايمة', '', 3) + ta('after', 'جملة بتتضاف بعد السعر والمدة', '', 3)
+      + inp('days', 'مدة التوصيل (أيام عمل)', '1-3', 10, true) + inp('days_far', 'المدة للمناطق البعيدة', '1-4', 10, true) + inp('far', 'أكواد المحافظات البعيدة', 'BA,MT,SIN,JS', 100, true)
+      + `<div style="font-size:11px;color:var(--muted);margin-top:6px">المناطق: ${_wf.regions.map(r => r.ar).join(' · ')}<br>السعر بيتاخد تلقائي من «إعدادات التوصيل» — لو غيّرته هناك بيتغير هنا.</div>`
+      + en(ta('text_en', 'Text above the list (EN)', '', 2) + ta('after_en', 'Line after price (EN)', '', 2));
+  }
+  if(n.type === 'cond'){
+    h += `<label>الشرط</label><select class="form-input" onchange="_wfSet('data.kind', this.value);wfSide()">${Object.entries(WF_CONDS).map(([k, v]) => `<option value="${k}" ${d.kind === k ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
+    if(d.kind === 'in_hours') h += inp('hours', 'المواعيد (من-لحد بالساعة)', '10-17', 10, true) + inp('off_days', 'أيام الإجازة', 'fri', 40, true) + `<div style="font-size:11px;color:var(--muted)">sat sun mon tue wed thu fri — مفصولة بفاصلة</div>`;
+    h += `<div style="font-size:11.5px;margin-top:8px">الرسمة بتتفرع لـ <b style="color:#16a34a">✅ آه</b> و <b style="color:#dc2626">❌ لأ</b> — كمّل كل فرع من الـ ＋ اللي تحته.</div>`;
+  }
+  if(n.type === 'act'){
+    h += `<label>الأكشن</label><select class="form-input" onchange="_wfSet('data.kind', this.value);wfSide()">${Object.entries(WF_ACTS).map(([k, v]) => `<option value="${k}" ${d.kind === k ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
+    if(d.kind === 'assign'){
+      const sel = new Set(String(d.user || '').split(/[\s,،]+/).filter(Boolean));
+      h += `<label>على مين؟ (لو أكتر من واحد ← الأقل شغل)</label><div style="display:flex;flex-wrap:wrap;gap:6px">${_wf.users.map(u => `<label style="display:inline-flex;gap:5px;align-items:center;font-weight:600;color:inherit;margin:0;padding:4px 9px;border:1px solid var(--border);border-radius:99px"><input type="checkbox" ${sel.has(u.username) ? 'checked' : ''} onchange="const s=new Set(String(_wf.g.nodes[_wf.sel].data.user||'').split(/[\\s,،]+/).filter(Boolean));this.checked?s.add('${escapeHtml(u.username)}'):s.delete('${escapeHtml(u.username)}');_wfSet('data.user',[...s].join(','))"> ${escapeHtml(u.name || u.username)}</label>`).join('')}</div>`;
+    }
+    h += `<div style="font-size:11px;color:var(--muted);margin-top:8px">${d.kind === 'open_human' ? 'الشات بيتفتح ويبقى «مستني رد» — من غيره الشات بيفضل مقفول طول ما العميل بيدوس زراير.' : d.kind === 'done' ? 'الفلو يخلص والشات مش هيبان إنه مستني رد.' : ''}</div>`;
+  }
+  if(id !== _wf.g.start) h += `<hr style="margin:14px 0;border:none;border-top:1px solid var(--border)"><button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="wfDelNode()">🗑️ امسح الخطوة دي واللي بعدها</button>`;
+  box.innerHTML = h;
+}
+async function wfSave(silent){
+  const name = $('wf-name').value.trim() || 'فلو';
+  const r = await apiFetch('/api/wf', 'POST', { id:_wf.id, name, graph:_wf.g });
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل الحفظ')); return false; }
+  _wf.dirty = false; _wf.f.graph = JSON.parse(JSON.stringify(_wf.g)); _wf.f.name = name;
+  if(!silent) toast('💾 اتحفظ (مسودة)');
+  const l = _wf.list.find(f => f.id === _wf.id); if(l) l.name = name;
+  wfListRender(); wfBar(); return true;
+}
+async function wfPublish(){
+  if(_wf.dirty && !(await wfSave(true))) return;
+  if(!confirm(_wf.f.live ? 'تنشر التعديلات؟ العملاء هيشوفوها من الرسالة الجاية.' : 'تنشر الفلو ده؟ هيبدأ يشتغل على العملاء الحقيقيين على طول.')) return;
+  const r = await apiFetch(`/api/wf/${_wf.id}/publish`, 'POST', {});
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
+  toast('🚀 اتنشر'); _wf.id = null; const id = _wf.f.id; await wfPageLoad(); wfOpen(id);
+}
+async function wfUnpublish(){
+  if(!confirm('توقّف الفلو؟ مش هيشتغل على حد لحد ما تنشره تاني.')) return;
+  const r = await apiFetch(`/api/wf/${_wf.id}/publish`, 'POST', { on:false });
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
+  toast('⏸️ اتوقف'); const id = _wf.id; _wf.id = null; await wfPageLoad(); wfOpen(id);
+}
+async function wfDelete(){
+  if(!confirm(`تمسح «${_wf.f.name}» خالص؟`)) return;
+  const r = await apiFetch('/api/wf/' + _wf.id, 'DELETE');
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
+  _wf.id = null; _wf.dirty = false; toast('🗑️ اتمسح'); wfPageLoad();
+}
+async function wfTest(){
+  if(_wf.dirty && !(await wfSave(true))) return;
+  const ph = prompt('رقم الواتساب اللي هتجرّب عليه (لازم يكون بعت أي رسالة للبيزنس في آخر 24 ساعة):', localStorage.getItem('wf_test_phone') || '');
+  if(!ph) return; try{ localStorage.setItem('wf_test_phone', ph); }catch(_){}
+  const en = confirm('تجرّب النسخة الإنجليزي؟ (OK = إنجليزي، Cancel = عربي)');
+  const r = await apiFetch(`/api/wf/${_wf.id}/test`, 'POST', { phone:ph, en });
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
+  toast('🧪 اتبعت — افتح الواتساب وجرّب الزراير (التجربة بتمشي على المسودة)');
+}
+async function wfNew(){
+  const name = prompt('اسم الفلو:', 'فلو جديد'); if(!name) return;
+  const r = await apiFetch('/api/wf', 'POST', { name });
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
+  _wf.dirty = false; await wfPageLoad(); wfOpen(r.id);
+}
+async function wfImportWelcome(){
+  if(!confirm('هعمل رسمة (مسودة) من الترحيبي اللي شغال دلوقتي بنفس النصوص. مش هيتنشر غير لما تدوس «انشر». تمام؟')) return;
+  const r = await apiFetch('/api/wf', 'POST', { from:'welcome' });
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
+  _wf.dirty = false; await wfPageLoad(); wfOpen(r.id);
+}
+async function wfLogOpen(){
+  const r = await apiFetch(`/api/wf/${_wf.id}/log`, 'GET');
+  if(!r || r.error){ toast('❌ ' + (r?.error || 'فشل')); return; }
+  const EV = { start:'▶️ بدأ', sent:'💬 اتبعت', click:'👆 داس', yes:'✅ شرط آه', no:'❌ شرط لأ', act:'⚙️ أكشن', test:'🧪 تجربة' };
+  const N = _wf.g.nodes;
+  const rows = (r.rows || []).map(x => `<tr><td style="font-family:Roboto;white-space:nowrap">${new Date(x.at).toLocaleString('en-GB', { timeZone:'Africa/Cairo', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}</td>
+    <td>${escapeHtml(x.name || '')} <span style="font-family:Roboto;color:var(--muted);font-size:11px">${escapeHtml(x.wa_id || '')}</span></td><td>${EV[x.ev] || x.ev}</td>
+    <td>${escapeHtml(N[x.node_id] ? _wfNodeTitle(N[x.node_id]) : (x.node_id || ''))}${x.ev === 'click' && N[x.node_id] ? ' ← ' + escapeHtml(((N[x.node_id].data?.buttons || []).find(b => b.id === x.info) || {}).label || _wf.regions.find(g => g.id === x.info)?.ar || x.info) : ''}</td></tr>`).join('');
+  let m = document.getElementById('m-wf-log');
+  if(!m){ m = document.createElement('div'); m.id = 'm-wf-log'; m.className = 'modal-overlay'; m.style.cssText = 'display:none;z-index:1150';
+    m.innerHTML = `<div class="modal" style="max-width:760px"><div class="modal-header"><h3 style="margin:0">📜 سجل الفلو</h3><button class="modal-close" onclick="closeM('m-wf-log')">×</button></div><div class="modal-body" id="wf-log-body"></div></div>`;
+    document.body.appendChild(m); }
+  $('wf-log-body').innerHTML = rows ? `<div style="max-height:65vh;overflow:auto"><table class="tbl" style="width:100%;font-size:12px"><thead><tr><th>الوقت</th><th>العميل</th><th>إيه حصل</th><th>الخطوة</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div style="color:var(--muted)">لسه مفيش حاجة</div>';
+  openM('m-wf-log');
+}
+
 async function waiLearnOpen(){ openM('m-wai-learn'); waiLearnLoad(); }
 // 🎓 v1075: علّمه — سطر واحد يتضاف لـ «معلومات للـ AI»
 function waiTeachOpen(){
@@ -64875,6 +65235,7 @@ function goPage(el,page){
   if(page==='abandoned')acOpen();              // 🛒 v955
   if(page==='delivery-areas')daOpen();         // 🗺️ v966
   if(page==='google-feed')gffLoad();           // 🏷️ v972
+  if(page==='wa-flows')wfPageLoad();           // 🗺️ v1078
   if(page==='winners')wsLoad('live');          // 🏆 v977
   if(page==='meta-ads')mtaLoad();              // 📘 v981
   if(page==='gads-perf')gapLoad();             // 📈 v983
